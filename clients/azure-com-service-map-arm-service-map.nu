@@ -18,21 +18,32 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 }
 
 # Serialize a single query parameter based on collection style
+# Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
+# ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = ($name | url encode)
+  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
-  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
-    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
-    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
+    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
+    _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
+}
+
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Build URL from base, path, and optional query string
@@ -44,7 +55,7 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
@@ -53,13 +64,13 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
     "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "put" => { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "patch" => { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
   if ($method in ["head" "options"]) { return $resp }
-  if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
+  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
 def base-url-completer [] { ["https://management.azure.com"] }
@@ -71,8 +82,8 @@ def kind-completer-1 [] { ["clientGroup" "machine" "machineGroup" "port" "proces
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-operational-insights-workspaces-features-service-map-client-groups Get" } } | get name | first)
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-operational-insights-workspaces-features-service-map-client-groups get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -96,11 +107,11 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.OperationalInsights/workspaces/{workspaceName}/features/serviceMap/clientGroups/{clientGroupName}
 # operationId: ClientGroups_Get
-export def "subscriptions-resource-groups-providers-microsoft-operational-insights-workspaces-features-service-map-client-groups Get" [
-  subscriptionId: string
-  resourceGroupName: string
-  workspaceName: string
-  clientGroupName: string
+export def "subscriptions-resource-groups-providers-microsoft-operational-insights-workspaces-features-service-map-client-groups get" [
+  subscription_id: string
+  resource_group_name: string
+  workspace_name: string
+  client_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -108,29 +119,30 @@ export def "subscriptions-resource-groups-providers-microsoft-operational-insigh
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # API version.
-  --startTime: string # UTC date and time specifying the start time of an interval. When not specified the service uses DateTime.UtcNow - 10m (format: date-time)
-  --endTime: string # UTC date and time specifying the end time of an interval. When not specified the service uses DateTime.UtcNow (format: date-time)
+  --start-time: string # UTC date and time specifying the start time of an interval. When not specified the service uses DateTime.UtcNow - 10m (format: date-time)
+  --end-time: string # UTC date and time specifying the end time of an interval. When not specified the service uses DateTime.UtcNow (format: date-time)
 ]: nothing -> record<properties: record<clientsOf: record<id: string, kind: string, name: string, type: string>>, etag: string, kind: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "startTime" $startTime "scalar") (serialize-qp "endTime" $endTime "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.OperationalInsights/workspaces/($workspaceName)/features/serviceMap/clientGroups/($clientGroupName)" $qp)
+  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "startTime" $start_time "scalar") (serialize-qp "endTime" $end_time "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name), client_group_name: (encode-path-segment $client_group_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.OperationalInsights/workspaces/{workspace_name}/features/serviceMap/clientGroups/{client_group_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Returns the members of the client group during the specified time interval.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.OperationalInsights/workspaces/{workspaceName}/features/serviceMap/clientGroups/{clientGroupName}/members
 # operationId: ClientGroups_ListMembers
-export def "subscriptions-resource-groups-providers-microsoft-operational-insights-workspaces-features-service-map-client-groups-members ListMembers" [
-  subscriptionId: string
-  resourceGroupName: string
-  workspaceName: string
-  clientGroupName: string
+export def "subscriptions-resource-groups-providers-microsoft-operational-insights-workspaces-features-service-map-client-groups-members list" [
+  subscription_id: string
+  resource_group_name: string
+  workspace_name: string
+  client_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -138,30 +150,31 @@ export def "subscriptions-resource-groups-providers-microsoft-operational-insigh
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # API version.
-  --startTime: string # UTC date and time specifying the start time of an interval. When not specified the service uses DateTime.UtcNow - 10m (format: date-time)
-  --endTime: string # UTC date and time specifying the end time of an interval. When not specified the service uses DateTime.UtcNow (format: date-time)
+  --start-time: string # UTC date and time specifying the start time of an interval. When not specified the service uses DateTime.UtcNow - 10m (format: date-time)
+  --end-time: string # UTC date and time specifying the end time of an interval. When not specified the service uses DateTime.UtcNow (format: date-time)
   --top: int # Page size to use. When not specified, the default page size is 100 records. (format: int32)
 ]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "startTime" $startTime "scalar") (serialize-qp "endTime" $endTime "scalar") (serialize-qp "$top" $top "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.OperationalInsights/workspaces/($workspaceName)/features/serviceMap/clientGroups/($clientGroupName)/members" $qp)
+  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "startTime" $start_time "scalar") (serialize-qp "endTime" $end_time "scalar") (serialize-qp "$top" $top "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name), client_group_name: (encode-path-segment $client_group_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.OperationalInsights/workspaces/{workspace_name}/features/serviceMap/clientGroups/{client_group_name}/members") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Returns the approximate number of members in the client group.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.OperationalInsights/workspaces/{workspaceName}/features/serviceMap/clientGroups/{clientGroupName}/membersCount
 # operationId: ClientGroups_GetMembersCount
-export def "subscriptions-resource-groups-providers-microsoft-operational-insights-workspaces-features-service-map-client-groups-members-count GetMembersCount" [
-  subscriptionId: string
-  resourceGroupName: string
-  workspaceName: string
-  clientGroupName: string
+export def "subscriptions-resource-groups-providers-microsoft-operational-insights-workspaces-features-service-map-client-groups-members-count get" [
+  subscription_id: string
+  resource_group_name: string
+  workspace_name: string
+  client_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -169,18 +182,19 @@ export def "subscriptions-resource-groups-providers-microsoft-operational-insigh
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # API version.
-  --startTime: string # UTC date and time specifying the start time of an interval. When not specified the service uses DateTime.UtcNow - 10m (format: date-time)
-  --endTime: string # UTC date and time specifying the end time of an interval. When not specified the service uses DateTime.UtcNow (format: date-time)
+  --start-time: string # UTC date and time specifying the start time of an interval. When not specified the service uses DateTime.UtcNow - 10m (format: date-time)
+  --end-time: string # UTC date and time specifying the end time of an interval. When not specified the service uses DateTime.UtcNow (format: date-time)
 ]: nothing -> record<accuracy: string, count: int, endTime: string, groupId: string, startTime: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "startTime" $startTime "scalar") (serialize-qp "endTime" $endTime "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.OperationalInsights/workspaces/($workspaceName)/features/serviceMap/clientGroups/($clientGroupName)/membersCount" $qp)
+  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "startTime" $start_time "scalar") (serialize-qp "endTime" $end_time "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name), client_group_name: (encode-path-segment $client_group_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.OperationalInsights/workspaces/{workspace_name}/features/serviceMap/clientGroups/{client_group_name}/membersCount") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Generates the specified map.
@@ -188,10 +202,10 @@ export def "subscriptions-resource-groups-providers-microsoft-operational-insigh
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.OperationalInsights/workspaces/{workspaceName}/features/serviceMap/generateMap
 # Discriminator (request): kind
 # operationId: Maps_Generate
-export def "subscriptions-resource-groups-providers-microsoft-operational-insights-workspaces-features-service-map-generate-map Generate" [
-  subscriptionId: string
-  resourceGroupName: string
-  workspaceName: string
+export def "subscriptions-resource-groups-providers-microsoft-operational-insights-workspaces-features-service-map-generate-map generate" [
+  subscription_id: string
+  resource_group_name: string
+  workspace_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -199,32 +213,33 @@ export def "subscriptions-resource-groups-providers-microsoft-operational-insigh
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # API version.
-  --endTime: string # Map interval end time. (format: date-time)
+  --end-time: string # Map interval end time. (format: date-time)
   kind: string@kind-completer # The type of map to create.
-  --startTime: string # Map interval start time. (format: date-time)
+  --start-time: string # Map interval start time. (format: date-time)
 ]: any -> record<endTime: string, map: record<edges: record<acceptors: list, connections: list>, nodes: record<clientGroups: list, machines: list, ports: list, processes: list>>, startTime: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.OperationalInsights/workspaces/($workspaceName)/features/serviceMap/generateMap" $qp)
-  let body = {endTime: $endTime, kind: $kind, startTime: $startTime} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.OperationalInsights/workspaces/{workspace_name}/features/serviceMap/generateMap") $qp)
+  let req_body = {"endTime": $end_time, "kind": $kind, "startTime": $start_time} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Returns all machine groups during the specified time interval.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.OperationalInsights/workspaces/{workspaceName}/features/serviceMap/machineGroups
 # operationId: MachineGroups_ListByWorkspace
-export def "subscriptions-resource-groups-providers-microsoft-operational-insights-workspaces-features-service-map-machine-groups ListByWorkspace" [
-  subscriptionId: string
-  resourceGroupName: string
-  workspaceName: string
+export def "subscriptions-resource-groups-providers-microsoft-operational-insights-workspaces-features-service-map-machine-groups list" [
+  subscription_id: string
+  resource_group_name: string
+  workspace_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -232,18 +247,19 @@ export def "subscriptions-resource-groups-providers-microsoft-operational-insigh
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # API version.
-  --startTime: string # UTC date and time specifying the start time of an interval. When not specified the service uses DateTime.UtcNow - 10m (format: date-time)
-  --endTime: string # UTC date and time specifying the end time of an interval. When not specified the service uses DateTime.UtcNow (format: date-time)
+  --start-time: string # UTC date and time specifying the start time of an interval. When not specified the service uses DateTime.UtcNow - 10m (format: date-time)
+  --end-time: string # UTC date and time specifying the end time of an interval. When not specified the service uses DateTime.UtcNow (format: date-time)
 ]: nothing -> record<nextLink: string, value: table<etag: string, properties: record, kind: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "startTime" $startTime "scalar") (serialize-qp "endTime" $endTime "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.OperationalInsights/workspaces/($workspaceName)/features/serviceMap/machineGroups" $qp)
+  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "startTime" $start_time "scalar") (serialize-qp "endTime" $end_time "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.OperationalInsights/workspaces/{workspace_name}/features/serviceMap/machineGroups") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Creates a new machine group.
@@ -251,10 +267,10 @@ export def "subscriptions-resource-groups-providers-microsoft-operational-insigh
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.OperationalInsights/workspaces/{workspaceName}/features/serviceMap/machineGroups
 # operationId: MachineGroups_Create
 # --properties shape: {count?: int, displayName: string, groupType?: "unknown"|"azure-cs"|"azure-sf"|"azure-vmss"|"user-static", machines?: list}
-export def "subscriptions-resource-groups-providers-microsoft-operational-insights-workspaces-features-service-map-machine-groups Create" [
-  subscriptionId: string
-  resourceGroupName: string
-  workspaceName: string
+export def "subscriptions-resource-groups-providers-microsoft-operational-insights-workspaces-features-service-map-machine-groups create" [
+  subscription_id: string
+  resource_group_name: string
+  workspace_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -262,6 +278,7 @@ export def "subscriptions-resource-groups-providers-microsoft-operational-insigh
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # API version.
   --etag: string # Resource ETAG.
@@ -272,23 +289,23 @@ export def "subscriptions-resource-groups-providers-microsoft-operational-insigh
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.OperationalInsights/workspaces/($workspaceName)/features/serviceMap/machineGroups" $qp)
-  let body = {etag: $etag, properties: $properties, kind: $kind} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.OperationalInsights/workspaces/{workspace_name}/features/serviceMap/machineGroups") $qp)
+  let req_body = {"etag": $etag, "properties": $properties, "kind": $kind} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Deletes the specified Machine Group.
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.OperationalInsights/workspaces/{workspaceName}/features/serviceMap/machineGroups/{machineGroupName}
 # operationId: MachineGroups_Delete
-export def "subscriptions-resource-groups-providers-microsoft-operational-insights-workspaces-features-service-map-machine-groups Delete" [
-  subscriptionId: string
-  resourceGroupName: string
-  workspaceName: string
-  machineGroupName: string
+export def "subscriptions-resource-groups-providers-microsoft-operational-insights-workspaces-features-service-map-machine-groups delete" [
+  subscription_id: string
+  resource_group_name: string
+  workspace_name: string
+  machine_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -296,27 +313,28 @@ export def "subscriptions-resource-groups-providers-microsoft-operational-insigh
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # API version.
 ]: nothing -> record<error: record<code: string, message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.OperationalInsights/workspaces/($workspaceName)/features/serviceMap/machineGroups/($machineGroupName)" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name), machine_group_name: (encode-path-segment $machine_group_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.OperationalInsights/workspaces/{workspace_name}/features/serviceMap/machineGroups/{machine_group_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Returns the specified machine group as it existed during the specified time interval.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.OperationalInsights/workspaces/{workspaceName}/features/serviceMap/machineGroups/{machineGroupName}
 # operationId: MachineGroups_Get
-export def "subscriptions-resource-groups-providers-microsoft-operational-insights-workspaces-features-service-map-machine-groups Get" [
-  subscriptionId: string
-  resourceGroupName: string
-  workspaceName: string
-  machineGroupName: string
+export def "subscriptions-resource-groups-providers-microsoft-operational-insights-workspaces-features-service-map-machine-groups get" [
+  subscription_id: string
+  resource_group_name: string
+  workspace_name: string
+  machine_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -324,18 +342,19 @@ export def "subscriptions-resource-groups-providers-microsoft-operational-insigh
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # API version.
-  --startTime: string # UTC date and time specifying the start time of an interval. When not specified the service uses DateTime.UtcNow - 10m (format: date-time)
-  --endTime: string # UTC date and time specifying the end time of an interval. When not specified the service uses DateTime.UtcNow (format: date-time)
+  --start-time: string # UTC date and time specifying the start time of an interval. When not specified the service uses DateTime.UtcNow - 10m (format: date-time)
+  --end-time: string # UTC date and time specifying the end time of an interval. When not specified the service uses DateTime.UtcNow (format: date-time)
 ]: nothing -> record<etag: string, properties: record<count: int, displayName: string, groupType: string, machines: list<record>>, kind: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "startTime" $startTime "scalar") (serialize-qp "endTime" $endTime "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.OperationalInsights/workspaces/($workspaceName)/features/serviceMap/machineGroups/($machineGroupName)" $qp)
+  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "startTime" $start_time "scalar") (serialize-qp "endTime" $end_time "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name), machine_group_name: (encode-path-segment $machine_group_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.OperationalInsights/workspaces/{workspace_name}/features/serviceMap/machineGroups/{machine_group_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Updates a machine group.
@@ -343,11 +362,11 @@ export def "subscriptions-resource-groups-providers-microsoft-operational-insigh
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.OperationalInsights/workspaces/{workspaceName}/features/serviceMap/machineGroups/{machineGroupName}
 # operationId: MachineGroups_Update
 # --properties shape: {count?: int, displayName: string, groupType?: "unknown"|"azure-cs"|"azure-sf"|"azure-vmss"|"user-static", machines?: list}
-export def "subscriptions-resource-groups-providers-microsoft-operational-insights-workspaces-features-service-map-machine-groups Update" [
-  subscriptionId: string
-  resourceGroupName: string
-  workspaceName: string
-  machineGroupName: string
+export def "subscriptions-resource-groups-providers-microsoft-operational-insights-workspaces-features-service-map-machine-groups update" [
+  subscription_id: string
+  resource_group_name: string
+  workspace_name: string
+  machine_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -355,6 +374,7 @@ export def "subscriptions-resource-groups-providers-microsoft-operational-insigh
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # API version.
   --etag: string # Resource ETAG.
@@ -365,22 +385,22 @@ export def "subscriptions-resource-groups-providers-microsoft-operational-insigh
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.OperationalInsights/workspaces/($workspaceName)/features/serviceMap/machineGroups/($machineGroupName)" $qp)
-  let body = {etag: $etag, properties: $properties, kind: $kind} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name), machine_group_name: (encode-path-segment $machine_group_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.OperationalInsights/workspaces/{workspace_name}/features/serviceMap/machineGroups/{machine_group_name}") $qp)
+  let req_body = {"etag": $etag, "properties": $properties, "kind": $kind} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
-# Returns a collection of machines matching the specified conditions.  The returned collection represents either machines that are active/live during the specified interval  of time (`live=true` and `startTime`/`endTime` are specified) or that are known to have existed at or  some time prior to the specified point in time (`live=false` and `timestamp` is specified).
+# Returns a collection of machines matching the specified conditions. The returned collection represents either machines that are active/live during the specified interval of time (`live=true` and `startTime`/`endTime` are specified) or that are known to have existed at or some time prior to the specified point in time (`live=false` and `timestamp` is specified).
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.OperationalInsights/workspaces/{workspaceName}/features/serviceMap/machines
 # operationId: Machines_ListByWorkspace
-export def "subscriptions-resource-groups-providers-microsoft-operational-insights-workspaces-features-service-map-machines ListByWorkspace" [
-  subscriptionId: string
-  resourceGroupName: string
-  workspaceName: string
+export def "subscriptions-resource-groups-providers-microsoft-operational-insights-workspaces-features-service-map-machines list" [
+  subscription_id: string
+  resource_group_name: string
+  workspace_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -388,32 +408,33 @@ export def "subscriptions-resource-groups-providers-microsoft-operational-insigh
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # API version.
   --live: oneof<nothing, bool> # Specifies whether to return live resources (true) or inventory resources (false). Defaults to **true**. When retrieving live resources, the start time (`startTime`) and end time (`endTime`) of the desired interval should be included. When retrieving inventory resources, an optional timestamp (`timestamp`) parameter can be specified to return the version of each resource closest (not-after) that timestamp. (default: true)
-  --startTime: string # UTC date and time specifying the start time of an interval. When not specified the service uses DateTime.UtcNow - 10m (format: date-time)
-  --endTime: string # UTC date and time specifying the end time of an interval. When not specified the service uses DateTime.UtcNow (format: date-time)
+  --start-time: string # UTC date and time specifying the start time of an interval. When not specified the service uses DateTime.UtcNow - 10m (format: date-time)
+  --end-time: string # UTC date and time specifying the end time of an interval. When not specified the service uses DateTime.UtcNow (format: date-time)
   --timestamp: string # UTC date and time specifying a time instance relative to which to evaluate each machine resource. Only applies when `live=false`. When not specified, the service uses DateTime.UtcNow. (format: date-time)
   --top: int # Page size to use. When not specified, the default page size is 100 records. (format: int32)
 ]: nothing -> record<nextLink: string, value: table<properties: record, etag: string, kind: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "live" $live "scalar") (serialize-qp "startTime" $startTime "scalar") (serialize-qp "endTime" $endTime "scalar") (serialize-qp "timestamp" $timestamp "scalar") (serialize-qp "$top" $top "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.OperationalInsights/workspaces/($workspaceName)/features/serviceMap/machines" $qp)
+  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "live" $live "scalar") (serialize-qp "startTime" $start_time "scalar") (serialize-qp "endTime" $end_time "scalar") (serialize-qp "timestamp" $timestamp "scalar") (serialize-qp "$top" $top "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.OperationalInsights/workspaces/{workspace_name}/features/serviceMap/machines") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Returns the specified machine.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.OperationalInsights/workspaces/{workspaceName}/features/serviceMap/machines/{machineName}
 # operationId: Machines_Get
-export def "subscriptions-resource-groups-providers-microsoft-operational-insights-workspaces-features-service-map-machines Get" [
-  subscriptionId: string
-  resourceGroupName: string
-  workspaceName: string
-  machineName: string
+export def "subscriptions-resource-groups-providers-microsoft-operational-insights-workspaces-features-service-map-machines get" [
+  subscription_id: string
+  resource_group_name: string
+  workspace_name: string
+  machine_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -421,6 +442,7 @@ export def "subscriptions-resource-groups-providers-microsoft-operational-insigh
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # API version.
   --timestamp: string # UTC date and time specifying a time instance relative to which to evaluate the machine resource. When not specified, the service uses DateTime.UtcNow. (format: date-time)
@@ -428,21 +450,21 @@ export def "subscriptions-resource-groups-providers-microsoft-operational-insigh
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "timestamp" $timestamp "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.OperationalInsights/workspaces/($workspaceName)/features/serviceMap/machines/($machineName)" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name), machine_name: (encode-path-segment $machine_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.OperationalInsights/workspaces/{workspace_name}/features/serviceMap/machines/{machine_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Returns a collection of connections terminating or originating at the specified machine
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.OperationalInsights/workspaces/{workspaceName}/features/serviceMap/machines/{machineName}/connections
 # operationId: Machines_ListConnections
-export def "subscriptions-resource-groups-providers-microsoft-operational-insights-workspaces-features-service-map-machines-connections ListConnections" [
-  subscriptionId: string
-  resourceGroupName: string
-  workspaceName: string
-  machineName: string
+export def "subscriptions-resource-groups-providers-microsoft-operational-insights-workspaces-features-service-map-machines-connections list" [
+  subscription_id: string
+  resource_group_name: string
+  workspace_name: string
+  machine_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -450,29 +472,30 @@ export def "subscriptions-resource-groups-providers-microsoft-operational-insigh
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # API version.
-  --startTime: string # UTC date and time specifying the start time of an interval. When not specified the service uses DateTime.UtcNow - 10m (format: date-time)
-  --endTime: string # UTC date and time specifying the end time of an interval. When not specified the service uses DateTime.UtcNow (format: date-time)
+  --start-time: string # UTC date and time specifying the start time of an interval. When not specified the service uses DateTime.UtcNow - 10m (format: date-time)
+  --end-time: string # UTC date and time specifying the end time of an interval. When not specified the service uses DateTime.UtcNow (format: date-time)
 ]: nothing -> record<nextLink: string, value: table<properties: record, kind: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "startTime" $startTime "scalar") (serialize-qp "endTime" $endTime "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.OperationalInsights/workspaces/($workspaceName)/features/serviceMap/machines/($machineName)/connections" $qp)
+  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "startTime" $start_time "scalar") (serialize-qp "endTime" $end_time "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name), machine_name: (encode-path-segment $machine_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.OperationalInsights/workspaces/{workspace_name}/features/serviceMap/machines/{machine_name}/connections") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Obtains the liveness status of the machine during the specified time interval.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.OperationalInsights/workspaces/{workspaceName}/features/serviceMap/machines/{machineName}/liveness
 # operationId: Machines_GetLiveness
-export def "subscriptions-resource-groups-providers-microsoft-operational-insights-workspaces-features-service-map-machines-liveness GetLiveness" [
-  subscriptionId: string
-  resourceGroupName: string
-  workspaceName: string
-  machineName: string
+export def "subscriptions-resource-groups-providers-microsoft-operational-insights-workspaces-features-service-map-machines-liveness get" [
+  subscription_id: string
+  resource_group_name: string
+  workspace_name: string
+  machine_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -480,29 +503,30 @@ export def "subscriptions-resource-groups-providers-microsoft-operational-insigh
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # API version.
-  --startTime: string # UTC date and time specifying the start time of an interval. When not specified the service uses DateTime.UtcNow - 10m (format: date-time)
-  --endTime: string # UTC date and time specifying the end time of an interval. When not specified the service uses DateTime.UtcNow (format: date-time)
+  --start-time: string # UTC date and time specifying the start time of an interval. When not specified the service uses DateTime.UtcNow - 10m (format: date-time)
+  --end-time: string # UTC date and time specifying the end time of an interval. When not specified the service uses DateTime.UtcNow (format: date-time)
 ]: nothing -> record<endTime: string, live: bool, startTime: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "startTime" $startTime "scalar") (serialize-qp "endTime" $endTime "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.OperationalInsights/workspaces/($workspaceName)/features/serviceMap/machines/($machineName)/liveness" $qp)
+  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "startTime" $start_time "scalar") (serialize-qp "endTime" $end_time "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name), machine_name: (encode-path-segment $machine_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.OperationalInsights/workspaces/{workspace_name}/features/serviceMap/machines/{machine_name}/liveness") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Returns a collection of machine groups this machine belongs to during the specified time interval.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.OperationalInsights/workspaces/{workspaceName}/features/serviceMap/machines/{machineName}/machineGroups
 # operationId: Machines_ListMachineGroupMembership
-export def "subscriptions-resource-groups-providers-microsoft-operational-insights-workspaces-features-service-map-machines-machine-groups ListMachineGroupMembership" [
-  subscriptionId: string
-  resourceGroupName: string
-  workspaceName: string
-  machineName: string
+export def "subscriptions-resource-groups-providers-microsoft-operational-insights-workspaces-features-service-map-machines-machine-groups list-membership" [
+  subscription_id: string
+  resource_group_name: string
+  workspace_name: string
+  machine_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -510,29 +534,30 @@ export def "subscriptions-resource-groups-providers-microsoft-operational-insigh
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # API version.
-  --startTime: string # UTC date and time specifying the start time of an interval. When not specified the service uses DateTime.UtcNow - 10m (format: date-time)
-  --endTime: string # UTC date and time specifying the end time of an interval. When not specified the service uses DateTime.UtcNow (format: date-time)
+  --start-time: string # UTC date and time specifying the start time of an interval. When not specified the service uses DateTime.UtcNow - 10m (format: date-time)
+  --end-time: string # UTC date and time specifying the end time of an interval. When not specified the service uses DateTime.UtcNow (format: date-time)
 ]: nothing -> record<nextLink: string, value: table<etag: string, properties: record, kind: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "startTime" $startTime "scalar") (serialize-qp "endTime" $endTime "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.OperationalInsights/workspaces/($workspaceName)/features/serviceMap/machines/($machineName)/machineGroups" $qp)
+  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "startTime" $start_time "scalar") (serialize-qp "endTime" $end_time "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name), machine_name: (encode-path-segment $machine_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.OperationalInsights/workspaces/{workspace_name}/features/serviceMap/machines/{machine_name}/machineGroups") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Returns a collection of live ports on the specified machine during the specified time interval.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.OperationalInsights/workspaces/{workspaceName}/features/serviceMap/machines/{machineName}/ports
 # operationId: Machines_ListPorts
-export def "subscriptions-resource-groups-providers-microsoft-operational-insights-workspaces-features-service-map-machines-ports ListPorts" [
-  subscriptionId: string
-  resourceGroupName: string
-  workspaceName: string
-  machineName: string
+export def "subscriptions-resource-groups-providers-microsoft-operational-insights-workspaces-features-service-map-machines-ports list" [
+  subscription_id: string
+  resource_group_name: string
+  workspace_name: string
+  machine_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -540,30 +565,31 @@ export def "subscriptions-resource-groups-providers-microsoft-operational-insigh
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # API version.
-  --startTime: string # UTC date and time specifying the start time of an interval. When not specified the service uses DateTime.UtcNow - 10m (format: date-time)
-  --endTime: string # UTC date and time specifying the end time of an interval. When not specified the service uses DateTime.UtcNow (format: date-time)
+  --start-time: string # UTC date and time specifying the start time of an interval. When not specified the service uses DateTime.UtcNow - 10m (format: date-time)
+  --end-time: string # UTC date and time specifying the end time of an interval. When not specified the service uses DateTime.UtcNow (format: date-time)
 ]: nothing -> record<nextLink: string, value: table<properties: record, etag: string, kind: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "startTime" $startTime "scalar") (serialize-qp "endTime" $endTime "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.OperationalInsights/workspaces/($workspaceName)/features/serviceMap/machines/($machineName)/ports" $qp)
+  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "startTime" $start_time "scalar") (serialize-qp "endTime" $end_time "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name), machine_name: (encode-path-segment $machine_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.OperationalInsights/workspaces/{workspace_name}/features/serviceMap/machines/{machine_name}/ports") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Returns the specified port. The port must be live during the specified time interval. If the port is not live during the interval, status 404 (Not Found) is returned.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.OperationalInsights/workspaces/{workspaceName}/features/serviceMap/machines/{machineName}/ports/{portName}
 # operationId: Ports_Get
-export def "subscriptions-resource-groups-providers-microsoft-operational-insights-workspaces-features-service-map-machines-ports Get" [
-  subscriptionId: string
-  resourceGroupName: string
-  workspaceName: string
-  machineName: string
-  portName: string
+export def "subscriptions-resource-groups-providers-microsoft-operational-insights-workspaces-features-service-map-machines-ports get" [
+  subscription_id: string
+  resource_group_name: string
+  workspace_name: string
+  machine_name: string
+  port_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -571,30 +597,31 @@ export def "subscriptions-resource-groups-providers-microsoft-operational-insigh
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # API version.
-  --startTime: string # UTC date and time specifying the start time of an interval. When not specified the service uses DateTime.UtcNow - 10m (format: date-time)
-  --endTime: string # UTC date and time specifying the end time of an interval. When not specified the service uses DateTime.UtcNow (format: date-time)
+  --start-time: string # UTC date and time specifying the start time of an interval. When not specified the service uses DateTime.UtcNow - 10m (format: date-time)
+  --end-time: string # UTC date and time specifying the end time of an interval. When not specified the service uses DateTime.UtcNow (format: date-time)
 ]: nothing -> record<properties: record<displayName: string, ipAddress: string, machine: record<id: string, kind: string, name: string, type: string>, monitoringState: string, portNumber: int>, etag: string, kind: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "startTime" $startTime "scalar") (serialize-qp "endTime" $endTime "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.OperationalInsights/workspaces/($workspaceName)/features/serviceMap/machines/($machineName)/ports/($portName)" $qp)
+  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "startTime" $start_time "scalar") (serialize-qp "endTime" $end_time "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name), machine_name: (encode-path-segment $machine_name), port_name: (encode-path-segment $port_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.OperationalInsights/workspaces/{workspace_name}/features/serviceMap/machines/{machine_name}/ports/{port_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Returns a collection of processes accepting on the specified port
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.OperationalInsights/workspaces/{workspaceName}/features/serviceMap/machines/{machineName}/ports/{portName}/acceptingProcesses
 # operationId: Ports_ListAcceptingProcesses
-export def "subscriptions-resource-groups-providers-microsoft-operational-insights-workspaces-features-service-map-machines-ports-accepting-processes ListAcceptingProcesses" [
-  subscriptionId: string
-  resourceGroupName: string
-  workspaceName: string
-  machineName: string
-  portName: string
+export def "subscriptions-resource-groups-providers-microsoft-operational-insights-workspaces-features-service-map-machines-ports-accepting-processes list" [
+  subscription_id: string
+  resource_group_name: string
+  workspace_name: string
+  machine_name: string
+  port_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -602,30 +629,31 @@ export def "subscriptions-resource-groups-providers-microsoft-operational-insigh
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # API version.
-  --startTime: string # UTC date and time specifying the start time of an interval. When not specified the service uses DateTime.UtcNow - 10m (format: date-time)
-  --endTime: string # UTC date and time specifying the end time of an interval. When not specified the service uses DateTime.UtcNow (format: date-time)
+  --start-time: string # UTC date and time specifying the start time of an interval. When not specified the service uses DateTime.UtcNow - 10m (format: date-time)
+  --end-time: string # UTC date and time specifying the end time of an interval. When not specified the service uses DateTime.UtcNow (format: date-time)
 ]: nothing -> record<nextLink: string, value: table<properties: record, etag: string, kind: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "startTime" $startTime "scalar") (serialize-qp "endTime" $endTime "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.OperationalInsights/workspaces/($workspaceName)/features/serviceMap/machines/($machineName)/ports/($portName)/acceptingProcesses" $qp)
+  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "startTime" $start_time "scalar") (serialize-qp "endTime" $end_time "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name), machine_name: (encode-path-segment $machine_name), port_name: (encode-path-segment $port_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.OperationalInsights/workspaces/{workspace_name}/features/serviceMap/machines/{machine_name}/ports/{port_name}/acceptingProcesses") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Returns a collection of connections established via the specified port.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.OperationalInsights/workspaces/{workspaceName}/features/serviceMap/machines/{machineName}/ports/{portName}/connections
 # operationId: Ports_ListConnections
-export def "subscriptions-resource-groups-providers-microsoft-operational-insights-workspaces-features-service-map-machines-ports-connections ListConnections" [
-  subscriptionId: string
-  resourceGroupName: string
-  workspaceName: string
-  machineName: string
-  portName: string
+export def "subscriptions-resource-groups-providers-microsoft-operational-insights-workspaces-features-service-map-machines-ports-connections list" [
+  subscription_id: string
+  resource_group_name: string
+  workspace_name: string
+  machine_name: string
+  port_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -633,30 +661,31 @@ export def "subscriptions-resource-groups-providers-microsoft-operational-insigh
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # API version.
-  --startTime: string # UTC date and time specifying the start time of an interval. When not specified the service uses DateTime.UtcNow - 10m (format: date-time)
-  --endTime: string # UTC date and time specifying the end time of an interval. When not specified the service uses DateTime.UtcNow (format: date-time)
+  --start-time: string # UTC date and time specifying the start time of an interval. When not specified the service uses DateTime.UtcNow - 10m (format: date-time)
+  --end-time: string # UTC date and time specifying the end time of an interval. When not specified the service uses DateTime.UtcNow (format: date-time)
 ]: nothing -> record<nextLink: string, value: table<properties: record, kind: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "startTime" $startTime "scalar") (serialize-qp "endTime" $endTime "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.OperationalInsights/workspaces/($workspaceName)/features/serviceMap/machines/($machineName)/ports/($portName)/connections" $qp)
+  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "startTime" $start_time "scalar") (serialize-qp "endTime" $end_time "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name), machine_name: (encode-path-segment $machine_name), port_name: (encode-path-segment $port_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.OperationalInsights/workspaces/{workspace_name}/features/serviceMap/machines/{machine_name}/ports/{port_name}/connections") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Obtains the liveness status of the port during the specified time interval.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.OperationalInsights/workspaces/{workspaceName}/features/serviceMap/machines/{machineName}/ports/{portName}/liveness
 # operationId: Ports_GetLiveness
-export def "subscriptions-resource-groups-providers-microsoft-operational-insights-workspaces-features-service-map-machines-ports-liveness GetLiveness" [
-  subscriptionId: string
-  resourceGroupName: string
-  workspaceName: string
-  machineName: string
-  portName: string
+export def "subscriptions-resource-groups-providers-microsoft-operational-insights-workspaces-features-service-map-machines-ports-liveness get" [
+  subscription_id: string
+  resource_group_name: string
+  workspace_name: string
+  machine_name: string
+  port_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -664,29 +693,30 @@ export def "subscriptions-resource-groups-providers-microsoft-operational-insigh
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # API version.
-  --startTime: string # UTC date and time specifying the start time of an interval. When not specified the service uses DateTime.UtcNow - 10m (format: date-time)
-  --endTime: string # UTC date and time specifying the end time of an interval. When not specified the service uses DateTime.UtcNow (format: date-time)
+  --start-time: string # UTC date and time specifying the start time of an interval. When not specified the service uses DateTime.UtcNow - 10m (format: date-time)
+  --end-time: string # UTC date and time specifying the end time of an interval. When not specified the service uses DateTime.UtcNow (format: date-time)
 ]: nothing -> record<endTime: string, live: bool, startTime: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "startTime" $startTime "scalar") (serialize-qp "endTime" $endTime "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.OperationalInsights/workspaces/($workspaceName)/features/serviceMap/machines/($machineName)/ports/($portName)/liveness" $qp)
+  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "startTime" $start_time "scalar") (serialize-qp "endTime" $end_time "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name), machine_name: (encode-path-segment $machine_name), port_name: (encode-path-segment $port_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.OperationalInsights/workspaces/{workspace_name}/features/serviceMap/machines/{machine_name}/ports/{port_name}/liveness") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
-# Returns a collection of processes on the specified machine matching the specified conditions. The returned collection represents either processes that are active/live during the specified interval  of time (`live=true` and `startTime`/`endTime` are specified) or that are known to have existed at or  some time prior to the specified point in time (`live=false` and `timestamp` is specified).        
+# Returns a collection of processes on the specified machine matching the specified conditions. The returned collection represents either processes that are active/live during the specified interval of time (`live=true` and `startTime`/`endTime` are specified) or that are known to have existed at or some time prior to the specified point in time (`live=false` and `timestamp` is specified).
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.OperationalInsights/workspaces/{workspaceName}/features/serviceMap/machines/{machineName}/processes
 # operationId: Machines_ListProcesses
-export def "subscriptions-resource-groups-providers-microsoft-operational-insights-workspaces-features-service-map-machines-processes ListProcesses" [
-  subscriptionId: string
-  resourceGroupName: string
-  workspaceName: string
-  machineName: string
+export def "subscriptions-resource-groups-providers-microsoft-operational-insights-workspaces-features-service-map-machines-processes list" [
+  subscription_id: string
+  resource_group_name: string
+  workspace_name: string
+  machine_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -694,32 +724,33 @@ export def "subscriptions-resource-groups-providers-microsoft-operational-insigh
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # API version.
   --live: oneof<nothing, bool> # Specifies whether to return live resources (true) or inventory resources (false). Defaults to **true**. When retrieving live resources, the start time (`startTime`) and end time (`endTime`) of the desired interval should be included. When retrieving inventory resources, an optional timestamp (`timestamp`) parameter can be specified to return the version of each resource closest (not-after) that timestamp. (default: true)
-  --startTime: string # UTC date and time specifying the start time of an interval. When not specified the service uses DateTime.UtcNow - 10m (format: date-time)
-  --endTime: string # UTC date and time specifying the end time of an interval. When not specified the service uses DateTime.UtcNow (format: date-time)
+  --start-time: string # UTC date and time specifying the start time of an interval. When not specified the service uses DateTime.UtcNow - 10m (format: date-time)
+  --end-time: string # UTC date and time specifying the end time of an interval. When not specified the service uses DateTime.UtcNow (format: date-time)
   --timestamp: string # UTC date and time specifying a time instance relative to which to evaluate all process resource. Only applies when `live=false`. When not specified, the service uses DateTime.UtcNow. (format: date-time)
 ]: nothing -> record<nextLink: string, value: table<properties: record, etag: string, kind: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "live" $live "scalar") (serialize-qp "startTime" $startTime "scalar") (serialize-qp "endTime" $endTime "scalar") (serialize-qp "timestamp" $timestamp "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.OperationalInsights/workspaces/($workspaceName)/features/serviceMap/machines/($machineName)/processes" $qp)
+  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "live" $live "scalar") (serialize-qp "startTime" $start_time "scalar") (serialize-qp "endTime" $end_time "scalar") (serialize-qp "timestamp" $timestamp "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name), machine_name: (encode-path-segment $machine_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.OperationalInsights/workspaces/{workspace_name}/features/serviceMap/machines/{machine_name}/processes") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Returns the specified process.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.OperationalInsights/workspaces/{workspaceName}/features/serviceMap/machines/{machineName}/processes/{processName}
 # operationId: Processes_Get
-export def "subscriptions-resource-groups-providers-microsoft-operational-insights-workspaces-features-service-map-machines-processes Get" [
-  subscriptionId: string
-  resourceGroupName: string
-  workspaceName: string
-  machineName: string
-  processName: string
+export def "subscriptions-resource-groups-providers-microsoft-operational-insights-workspaces-features-service-map-machines-processes get" [
+  subscription_id: string
+  resource_group_name: string
+  workspace_name: string
+  machine_name: string
+  process_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -727,6 +758,7 @@ export def "subscriptions-resource-groups-providers-microsoft-operational-insigh
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # API version.
   --timestamp: string # UTC date and time specifying a time instance relative to which to evaluate a resource. When not specified, the service uses DateTime.UtcNow. (format: date-time)
@@ -734,22 +766,22 @@ export def "subscriptions-resource-groups-providers-microsoft-operational-insigh
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "timestamp" $timestamp "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.OperationalInsights/workspaces/($workspaceName)/features/serviceMap/machines/($machineName)/processes/($processName)" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name), machine_name: (encode-path-segment $machine_name), process_name: (encode-path-segment $process_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.OperationalInsights/workspaces/{workspace_name}/features/serviceMap/machines/{machine_name}/processes/{process_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Returns a collection of ports on which this process is accepting
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.OperationalInsights/workspaces/{workspaceName}/features/serviceMap/machines/{machineName}/processes/{processName}/acceptingPorts
 # operationId: Processes_ListAcceptingPorts
-export def "subscriptions-resource-groups-providers-microsoft-operational-insights-workspaces-features-service-map-machines-processes-accepting-ports ListAcceptingPorts" [
-  subscriptionId: string
-  resourceGroupName: string
-  workspaceName: string
-  machineName: string
-  processName: string
+export def "subscriptions-resource-groups-providers-microsoft-operational-insights-workspaces-features-service-map-machines-processes-accepting-ports list" [
+  subscription_id: string
+  resource_group_name: string
+  workspace_name: string
+  machine_name: string
+  process_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -757,30 +789,31 @@ export def "subscriptions-resource-groups-providers-microsoft-operational-insigh
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # API version.
-  --startTime: string # UTC date and time specifying the start time of an interval. When not specified the service uses DateTime.UtcNow - 10m (format: date-time)
-  --endTime: string # UTC date and time specifying the end time of an interval. When not specified the service uses DateTime.UtcNow (format: date-time)
+  --start-time: string # UTC date and time specifying the start time of an interval. When not specified the service uses DateTime.UtcNow - 10m (format: date-time)
+  --end-time: string # UTC date and time specifying the end time of an interval. When not specified the service uses DateTime.UtcNow (format: date-time)
 ]: nothing -> record<nextLink: string, value: table<properties: record, etag: string, kind: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "startTime" $startTime "scalar") (serialize-qp "endTime" $endTime "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.OperationalInsights/workspaces/($workspaceName)/features/serviceMap/machines/($machineName)/processes/($processName)/acceptingPorts" $qp)
+  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "startTime" $start_time "scalar") (serialize-qp "endTime" $end_time "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name), machine_name: (encode-path-segment $machine_name), process_name: (encode-path-segment $process_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.OperationalInsights/workspaces/{workspace_name}/features/serviceMap/machines/{machine_name}/processes/{process_name}/acceptingPorts") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Returns a collection of connections terminating or originating at the specified process
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.OperationalInsights/workspaces/{workspaceName}/features/serviceMap/machines/{machineName}/processes/{processName}/connections
 # operationId: Processes_ListConnections
-export def "subscriptions-resource-groups-providers-microsoft-operational-insights-workspaces-features-service-map-machines-processes-connections ListConnections" [
-  subscriptionId: string
-  resourceGroupName: string
-  workspaceName: string
-  machineName: string
-  processName: string
+export def "subscriptions-resource-groups-providers-microsoft-operational-insights-workspaces-features-service-map-machines-processes-connections list" [
+  subscription_id: string
+  resource_group_name: string
+  workspace_name: string
+  machine_name: string
+  process_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -788,30 +821,31 @@ export def "subscriptions-resource-groups-providers-microsoft-operational-insigh
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # API version.
-  --startTime: string # UTC date and time specifying the start time of an interval. When not specified the service uses DateTime.UtcNow - 10m (format: date-time)
-  --endTime: string # UTC date and time specifying the end time of an interval. When not specified the service uses DateTime.UtcNow (format: date-time)
+  --start-time: string # UTC date and time specifying the start time of an interval. When not specified the service uses DateTime.UtcNow - 10m (format: date-time)
+  --end-time: string # UTC date and time specifying the end time of an interval. When not specified the service uses DateTime.UtcNow (format: date-time)
 ]: nothing -> record<nextLink: string, value: table<properties: record, kind: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "startTime" $startTime "scalar") (serialize-qp "endTime" $endTime "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.OperationalInsights/workspaces/($workspaceName)/features/serviceMap/machines/($machineName)/processes/($processName)/connections" $qp)
+  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "startTime" $start_time "scalar") (serialize-qp "endTime" $end_time "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name), machine_name: (encode-path-segment $machine_name), process_name: (encode-path-segment $process_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.OperationalInsights/workspaces/{workspace_name}/features/serviceMap/machines/{machine_name}/processes/{process_name}/connections") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Obtains the liveness status of the process during the specified time interval.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.OperationalInsights/workspaces/{workspaceName}/features/serviceMap/machines/{machineName}/processes/{processName}/liveness
 # operationId: Processes_GetLiveness
-export def "subscriptions-resource-groups-providers-microsoft-operational-insights-workspaces-features-service-map-machines-processes-liveness GetLiveness" [
-  subscriptionId: string
-  resourceGroupName: string
-  workspaceName: string
-  machineName: string
-  processName: string
+export def "subscriptions-resource-groups-providers-microsoft-operational-insights-workspaces-features-service-map-machines-processes-liveness get" [
+  subscription_id: string
+  resource_group_name: string
+  workspace_name: string
+  machine_name: string
+  process_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -819,28 +853,29 @@ export def "subscriptions-resource-groups-providers-microsoft-operational-insigh
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # API version.
-  --startTime: string # UTC date and time specifying the start time of an interval. When not specified the service uses DateTime.UtcNow - 10m (format: date-time)
-  --endTime: string # UTC date and time specifying the end time of an interval. When not specified the service uses DateTime.UtcNow (format: date-time)
+  --start-time: string # UTC date and time specifying the start time of an interval. When not specified the service uses DateTime.UtcNow - 10m (format: date-time)
+  --end-time: string # UTC date and time specifying the end time of an interval. When not specified the service uses DateTime.UtcNow (format: date-time)
 ]: nothing -> record<endTime: string, live: bool, startTime: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "startTime" $startTime "scalar") (serialize-qp "endTime" $endTime "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.OperationalInsights/workspaces/($workspaceName)/features/serviceMap/machines/($machineName)/processes/($processName)/liveness" $qp)
+  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "startTime" $start_time "scalar") (serialize-qp "endTime" $end_time "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name), machine_name: (encode-path-segment $machine_name), process_name: (encode-path-segment $process_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.OperationalInsights/workspaces/{workspace_name}/features/serviceMap/machines/{machine_name}/processes/{process_name}/liveness") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Returns summary information about the machines in the workspace.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.OperationalInsights/workspaces/{workspaceName}/features/serviceMap/summaries/machines
 # operationId: Summaries_GetMachines
-export def "subscriptions-resource-groups-providers-microsoft-operational-insights-workspaces-features-service-map-summaries-machines GetMachines" [
-  subscriptionId: string
-  resourceGroupName: string
-  workspaceName: string
+export def "subscriptions-resource-groups-providers-microsoft-operational-insights-workspaces-features-service-map-summaries-machines get" [
+  subscription_id: string
+  resource_group_name: string
+  workspace_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -848,16 +883,17 @@ export def "subscriptions-resource-groups-providers-microsoft-operational-insigh
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # API version.
-  --startTime: string # UTC date and time specifying the start time of an interval. When not specified the service uses DateTime.UtcNow - 10m (format: date-time)
-  --endTime: string # UTC date and time specifying the end time of an interval. When not specified the service uses DateTime.UtcNow (format: date-time)
+  --start-time: string # UTC date and time specifying the start time of an interval. When not specified the service uses DateTime.UtcNow - 10m (format: date-time)
+  --end-time: string # UTC date and time specifying the end time of an interval. When not specified the service uses DateTime.UtcNow (format: date-time)
 ]: nothing -> record<properties: record<live: int, os: record<linux: int, windows: int>, total: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "startTime" $startTime "scalar") (serialize-qp "endTime" $endTime "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.OperationalInsights/workspaces/($workspaceName)/features/serviceMap/summaries/machines" $qp)
+  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "startTime" $start_time "scalar") (serialize-qp "endTime" $end_time "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.OperationalInsights/workspaces/{workspace_name}/features/serviceMap/summaries/machines") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }

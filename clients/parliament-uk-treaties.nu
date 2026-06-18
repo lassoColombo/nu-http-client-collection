@@ -17,21 +17,32 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 }
 
 # Serialize a single query parameter based on collection style
+# Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
+# ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = ($name | url encode)
+  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
-  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
-    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
-    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
+    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
+    _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
+}
+
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Build URL from base, path, and optional query string
@@ -43,7 +54,7 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
@@ -52,13 +63,13 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
     "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "put" => { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "patch" => { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
   if ($method in ["head" "options"]) { return $resp }
-  if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
+  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
 def base-url-completer [] { ["http://localhost"] }
@@ -66,14 +77,14 @@ def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
 def accept-completer [] { ["application/json" "text/json" "text/plain"] }
-def Series-completer [] { ["CountrySeriesMembership" "EuropeanUnionSeriesMembership" "MiscellaneousSeriesMembership"] }
-def ParliamentaryProcess-completer [] { ["Concluded" "NotConcluded"] }
-def House-completer [] { ["Commons" "Lords"] }
+def series-completer [] { ["CountrySeriesMembership" "EuropeanUnionSeriesMembership" "MiscellaneousSeriesMembership"] }
+def parliamentary-process-completer [] { ["Concluded" "NotConcluded"] }
+def house-completer [] { ["Commons" "Lords"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "business-item GetBusinessItemById" } } | get name | first)
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "business-item get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -97,7 +108,7 @@ export def commands []: nothing -> table {
 #
 # GET /api/BusinessItem/{id}
 # operationId: GetBusinessItemById
-export def "business-item GetBusinessItemById" [
+export def "business-item get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -106,22 +117,23 @@ export def "business-item GetBusinessItemById" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<links: table<href: string, method: string, rel: string>, value: record<businessItemUri: string, houseId: string, houseName: string, houseUri: string, houses: list<record>, id: string, itemDate: string, link: string, procedureStepId: string, procedureStepUri: string, sequence: int, stepName: string, treatyId: string, treatyUri: string, workpackageProcedureUri: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/BusinessItem/($id)")
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/BusinessItem/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Returns all government organisations.
 #
 # GET /api/GovernmentOrganisation
 # operationId: GetOrganisations
-export def "government-organisation GetOrganisations" [
+export def "government-organisation get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -129,6 +141,7 @@ export def "government-organisation GetOrganisations" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<items: table<links: list, value: record>, itemsPerPage: int, links: table<href: string, method: string, rel: string>, totalResults: int> {
@@ -137,14 +150,14 @@ export def "government-organisation GetOrganisations" [
   let full_url = (build-url $base "/api/GovernmentOrganisation")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Returns all series memberships.
 #
 # GET /api/SeriesMembership
 # operationId: GetSeriesMemberships
-export def "series-membership GetSeriesMemberships" [
+export def "series-membership get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -152,6 +165,7 @@ export def "series-membership GetSeriesMemberships" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<items: table<links: list, value: record>, itemsPerPage: int, links: table<href: string, method: string, rel: string>, totalResults: int> {
@@ -160,14 +174,14 @@ export def "series-membership GetSeriesMemberships" [
   let full_url = (build-url $base "/api/SeriesMembership")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Returns a list of treaties.
 #
 # GET /api/Treaty
 # operationId: GetTreaties
-export def "treaty GetTreaties" [
+export def "treaty get-treaties" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -175,33 +189,34 @@ export def "treaty GetTreaties" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --SearchText: string # Treaties which contains the search text specified (nullable)
-  --GovernmentOrganisationId: int # Treaties with the government organisation id specified (nullable, format: int32)
-  --Series: string@Series-completer # Treaties with the series membership type specified
-  --ParliamentaryProcess: string@ParliamentaryProcess-completer # Treaties where the parliamentary process is concluded or notconcluded
-  --DebateScheduled: oneof<nothing, bool> # Treaties which contain a scheduled debate (nullable)
-  --MotionToNotRatify: oneof<nothing, bool> # Treaties which contain a motion to not ratify (nullable)
-  --RecommendedNotRatify: oneof<nothing, bool> # Treaties which are recommended to not ratify (nullable)
-  --House: string@House-completer # Treaties which are laid in the specified house
-  --Skip: int # The number of records to skip from the first, default is 0 (format: int32)
-  --Take: int # The number of records to return, default is 20 (format: int32)
+  --search-text: string # Treaties which contains the search text specified (nullable)
+  --government-organisation-id: int # Treaties with the government organisation id specified (nullable, format: int32)
+  --series: string@series-completer # Treaties with the series membership type specified
+  --parliamentary-process: string@parliamentary-process-completer # Treaties where the parliamentary process is concluded or notconcluded
+  --debate-scheduled: oneof<nothing, bool> # Treaties which contain a scheduled debate (nullable)
+  --motion-to-not-ratify: oneof<nothing, bool> # Treaties which contain a motion to not ratify (nullable)
+  --recommended-not-ratify: oneof<nothing, bool> # Treaties which are recommended to not ratify (nullable)
+  --house: string@house-completer # Treaties which are laid in the specified house
+  --skip: int # The number of records to skip from the first, default is 0 (format: int32)
+  --take: int # The number of records to return, default is 20 (format: int32)
 ]: nothing -> record<items: table<links: list, value: record>, itemsPerPage: int, links: table<href: string, method: string, rel: string>, totalResults: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "SearchText" $SearchText "scalar") (serialize-qp "GovernmentOrganisationId" $GovernmentOrganisationId "scalar") (serialize-qp "Series" $Series "scalar") (serialize-qp "ParliamentaryProcess" $ParliamentaryProcess "scalar") (serialize-qp "DebateScheduled" $DebateScheduled "scalar") (serialize-qp "MotionToNotRatify" $MotionToNotRatify "scalar") (serialize-qp "RecommendedNotRatify" $RecommendedNotRatify "scalar") (serialize-qp "House" $House "scalar") (serialize-qp "Skip" $Skip "scalar") (serialize-qp "Take" $Take "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "SearchText" $search_text "scalar") (serialize-qp "GovernmentOrganisationId" $government_organisation_id "scalar") (serialize-qp "Series" $series "scalar") (serialize-qp "ParliamentaryProcess" $parliamentary_process "scalar") (serialize-qp "DebateScheduled" $debate_scheduled "scalar") (serialize-qp "MotionToNotRatify" $motion_to_not_ratify "scalar") (serialize-qp "RecommendedNotRatify" $recommended_not_ratify "scalar") (serialize-qp "House" $house "scalar") (serialize-qp "Skip" $skip "scalar") (serialize-qp "Take" $take "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/Treaty" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Returns a treaty by ID.
 #
 # GET /api/Treaty/{id}
 # operationId: GetTreatyById
-export def "treaty GetTreatyById" [
+export def "treaty get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -210,22 +225,23 @@ export def "treaty GetTreatyById" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<links: table<href: string, method: string, rel: string>, value: record<commandPaperNumber: int, commandPaperPrefix: string, commonsLayingDate: string, countrySeriesItemCitation: string, countrySeriesMembership: string, debateScheduled: string, europeanSeriesItemCitation: string, europeanUnionSeriesMembership: string, id: string, layingBodyDepartment: record<id: int, name: string>, layingBodyDepartmentId: int, layingBodyName: string, leadDepartment: record<id: int, name: string>, leadGovernmentOrganisationDepartmentId: int, leadGovernmentOrganisationGroupName: string, lordsLayingDate: string, miscSeriesItemCitation: string, miscellaneousSeriesMembership: string, name: string, parliamentaryConclusion: string, treatySeriesMembership: record<citation: string, seriesMembershipType: string, uri: string>, uri: string, webLink: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/Treaty/($id)")
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Treaty/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Returns business items belonging to the treaty with ID.
 #
 # GET /api/Treaty/{id}/BusinessItems
 # operationId: GetBusinessItemsByTreatyId
-export def "treaty-business-items GetBusinessItemsByTreatyId" [
+export def "treaty-business-items get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -234,13 +250,14 @@ export def "treaty-business-items GetBusinessItemsByTreatyId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<items: table<links: list, value: record>, itemsPerPage: int, links: table<href: string, method: string, rel: string>, totalResults: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/Treaty/($id)/BusinessItems")
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Treaty/{id}/BusinessItems"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }

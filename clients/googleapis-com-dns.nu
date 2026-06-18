@@ -18,21 +18,32 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 }
 
 # Serialize a single query parameter based on collection style
+# Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
+# ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = ($name | url encode)
+  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
-  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
-    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
-    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
+    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
+    _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
+}
+
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Build URL from base, path, and optional query string
@@ -44,7 +55,7 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
@@ -53,13 +64,13 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
     "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "put" => { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "patch" => { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
   if ($method in ["head" "options"]) { return $resp }
-  if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
+  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
 def base-url-completer [] { ["https://dns.googleapis.com"] }
@@ -69,15 +80,15 @@ def auth-scheme-completer [] { ["bearer"] }
 def xgafv-completer [] { ["1" "2"] }
 def alt-completer [] { ["json" "media" "proto"] }
 def visibility-completer [] { ["PRIVATE" "PUBLIC"] }
-def sortBy-completer [] { ["CHANGE_SEQUENCE"] }
+def sort-by-completer [] { ["CHANGE_SEQUENCE"] }
 def status-completer [] { ["DONE" "PENDING"] }
-def sortBy-completer-1 [] { ["ID" "START_TIME"] }
+def sort-by-completer-1 [] { ["ID" "START_TIME"] }
 def behavior-completer [] { ["BEHAVIOR_UNSPECIFIED" "BYPASS_RESPONSE_POLICY"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "dns-projects-locations dnsprojectsget" } } | get name | first)
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "dns-projects-locations get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -101,7 +112,7 @@ export def commands []: nothing -> table {
 #
 # GET /dns/v2/projects/{project}/locations/{location}
 # operationId: dns.projects.get
-export def "dns-projects-locations dnsprojectsget" [
+export def "dns-projects-locations get" [
   project: string
   location: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -111,6 +122,7 @@ export def "dns-projects-locations dnsprojectsget" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
@@ -119,26 +131,26 @@ export def "dns-projects-locations dnsprojectsget" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --clientOperationId: string # For mutating operation requests only. An optional identifier specified by the client. Must be unique for operation resources in the Operations collection.
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --client-operation-id: string # For mutating operation requests only. An optional identifier specified by the client. Must be unique for operation resources in the Operations collection.
 ]: nothing -> record<id: string, kind: string, number: string, quota: record<dnsKeysPerManagedZone: int, gkeClustersPerManagedZone: int, gkeClustersPerPolicy: int, gkeClustersPerResponsePolicy: int, itemsPerRoutingPolicy: int, kind: string, managedZones: int, managedZonesPerGkeCluster: int, managedZonesPerNetwork: int, networksPerManagedZone: int, networksPerPolicy: int, networksPerResponsePolicy: int, peeringZonesPerTargetNetwork: int, policies: int, resourceRecordsPerRrset: int, responsePolicies: int, responsePolicyRulesPerResponsePolicy: int, rrsetAdditionsPerChange: int, rrsetDeletionsPerChange: int, rrsetsPerManagedZone: int, targetNameServersPerManagedZone: int, targetNameServersPerPolicy: int, totalRrdataSizePerChange: int, whitelistedKeySpecs: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "clientOperationId" $clientOperationId "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/dns/v2/projects/($project)/locations/($location)" $qp)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "clientOperationId" $client_operation_id "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({project: (encode-path-segment $project), location: (encode-path-segment $location)} | format pattern "/dns/v2/projects/{project}/locations/{location}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Enumerates ManagedZones that have been created but not yet deleted.
 #
 # GET /dns/v2/projects/{project}/locations/{location}/managedZones
 # operationId: dns.managedZones.list
-export def "dns-projects-locations-managed-zones dnsmanagedZoneslist" [
+export def "dns-projects-locations-managed-zones list" [
   project: string
   location: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -148,6 +160,7 @@ export def "dns-projects-locations-managed-zones dnsmanagedZoneslist" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
@@ -156,21 +169,21 @@ export def "dns-projects-locations-managed-zones dnsmanagedZoneslist" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --dnsName: string # Restricts the list to return only zones with this domain name.
-  --maxResults: int # Optional. Maximum number of results to be returned. If unspecified, the server decides how many results to return.
-  --pageToken: string # Optional. A tag returned by a previous list request that was truncated. Use this parameter to continue a previous list request.
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --dns-name: string # Restricts the list to return only zones with this domain name.
+  --max-results: int # Optional. Maximum number of results to be returned. If unspecified, the server decides how many results to return.
+  --page-token: string # Optional. A tag returned by a previous list request that was truncated. Use this parameter to continue a previous list request.
 ]: nothing -> record<header: record<operationId: string>, kind: string, managedZones: table<cloudLoggingConfig: record, creationTime: string, description: string, dnsName: string, dnssecConfig: record, forwardingConfig: record, id: string, kind: string, labels: record, name: string, nameServerSet: string, nameServers: list, peeringConfig: record, privateVisibilityConfig: record, reverseLookupConfig: record, serviceDirectoryConfig: record, visibility: string>, nextPageToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "dnsName" $dnsName "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "pageToken" $pageToken "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/dns/v2/projects/($project)/locations/($location)/managedZones" $qp)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "dnsName" $dns_name "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({project: (encode-path-segment $project), location: (encode-path-segment $location)} | format pattern "/dns/v2/projects/{project}/locations/{location}/managedZones") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Creates a new ManagedZone.
@@ -184,7 +197,7 @@ export def "dns-projects-locations-managed-zones dnsmanagedZoneslist" [
 # --privateVisibilityConfig shape: {gkeClusters?: list, kind?: string, networks?: list}
 # --reverseLookupConfig shape: {kind?: string}
 # --serviceDirectoryConfig shape: {kind?: string, namespace?: record}
-export def "dns-projects-locations-managed-zones dnsmanagedZonescreate" [
+export def "dns-projects-locations-managed-zones create" [
   project: string
   location: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -194,6 +207,7 @@ export def "dns-projects-locations-managed-zones dnsmanagedZonescreate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
@@ -202,49 +216,49 @@ export def "dns-projects-locations-managed-zones dnsmanagedZonescreate" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --clientOperationId: string # For mutating operation requests only. An optional identifier specified by the client. Must be unique for operation resources in the Operations collection.
-  --cloudLoggingConfig: record # Cloud Logging configurations for publicly visible zones. — shape: {enableLogging?: bool, kind?: string}
-  --creationTime: string # The time that this resource was created on the server. This is in RFC3339 text format. Output only.
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --client-operation-id: string # For mutating operation requests only. An optional identifier specified by the client. Must be unique for operation resources in the Operations collection.
+  --cloud-logging-config: record # Cloud Logging configurations for publicly visible zones. — shape: {enableLogging?: bool, kind?: string}
+  --creation-time: string # The time that this resource was created on the server. This is in RFC3339 text format. Output only.
   --description: string # A mutable string of at most 1024 characters associated with this resource for the user's convenience. Has no effect on the managed zone's function.
-  --dnsName: string # The DNS name of this managed zone, for instance "example.com.".
-  --dnssecConfig: record # shape: {defaultKeySpecs?: list, kind?: string, nonExistence?: "NSEC"|"NSEC3", state?: "OFF"|"ON"|"TRANSFER"}
-  --forwardingConfig: record # shape: {kind?: string, targetNameServers?: list}
+  --dns-name: string # The DNS name of this managed zone, for instance "example.com.".
+  --dnssec-config: record # shape: {defaultKeySpecs?: list, kind?: string, nonExistence?: "NSEC"|"NSEC3", state?: "OFF"|"ON"|"TRANSFER"}
+  --forwarding-config: record # shape: {kind?: string, targetNameServers?: list}
   --id: string # Unique identifier for the resource; defined by the server (output only) (format: uint64)
   --kind: string # default: dns#managedZone
   --labels: record # User labels.
   --name: string # User assigned name for this resource. Must be unique within the project. The name must be 1-63 characters long, must begin with a letter, end with a letter or digit, and only contain lowercase letters, digits or dashes.
-  --nameServerSet: string # Optionally specifies the NameServerSet for this ManagedZone. A NameServerSet is a set of DNS name servers that all host the same ManagedZones. Most users leave this field unset. If you need to use this field, contact your account team.
-  --nameServers: list # Delegate your managed_zone to these virtual name servers; defined by the server (output only)
-  --peeringConfig: record # shape: {kind?: string, targetNetwork?: record}
-  --privateVisibilityConfig: record # shape: {gkeClusters?: list, kind?: string, networks?: list}
-  --reverseLookupConfig: record # shape: {kind?: string}
-  --serviceDirectoryConfig: record # Contains information about Service Directory-backed zones. — shape: {kind?: string, namespace?: record}
+  --name-server-set: string # Optionally specifies the NameServerSet for this ManagedZone. A NameServerSet is a set of DNS name servers that all host the same ManagedZones. Most users leave this field unset. If you need to use this field, contact your account team.
+  --name-servers: list<string> # Delegate your managed_zone to these virtual name servers; defined by the server (output only)
+  --peering-config: record # shape: {kind?: string, targetNetwork?: record}
+  --private-visibility-config: record # shape: {gkeClusters?: list, kind?: string, networks?: list}
+  --reverse-lookup-config: record # shape: {kind?: string}
+  --service-directory-config: record # Contains information about Service Directory-backed zones. — shape: {kind?: string, namespace?: record}
   --visibility: string@visibility-completer # The zone's visibility: public zones are exposed to the Internet, while private zones are visible only to Virtual Private Cloud resources.
 ]: any -> record<cloudLoggingConfig: record<enableLogging: bool, kind: string>, creationTime: string, description: string, dnsName: string, dnssecConfig: record<defaultKeySpecs: list<record>, kind: string, nonExistence: string, state: string>, forwardingConfig: record<kind: string, targetNameServers: list<record>>, id: string, kind: string, labels: record, name: string, nameServerSet: string, nameServers: list<string>, peeringConfig: record<kind: string, targetNetwork: record<deactivateTime: string, kind: string, networkUrl: string>>, privateVisibilityConfig: record<gkeClusters: list<record>, kind: string, networks: list<record>>, reverseLookupConfig: record<kind: string>, serviceDirectoryConfig: record<kind: string, namespace: record<deletionTime: string, kind: string, namespaceUrl: string>>, visibility: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "clientOperationId" $clientOperationId "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/dns/v2/projects/($project)/locations/($location)/managedZones" $qp)
-  let body = {cloudLoggingConfig: $cloudLoggingConfig, creationTime: $creationTime, description: $description, dnsName: $dnsName, dnssecConfig: $dnssecConfig, forwardingConfig: $forwardingConfig, id: $id, kind: $kind, labels: $labels, name: $name, nameServerSet: $nameServerSet, nameServers: $nameServers, peeringConfig: $peeringConfig, privateVisibilityConfig: $privateVisibilityConfig, reverseLookupConfig: $reverseLookupConfig, serviceDirectoryConfig: $serviceDirectoryConfig, visibility: $visibility} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "clientOperationId" $client_operation_id "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({project: (encode-path-segment $project), location: (encode-path-segment $location)} | format pattern "/dns/v2/projects/{project}/locations/{location}/managedZones") $qp)
+  let req_body = {"cloudLoggingConfig": $cloud_logging_config, "creationTime": $creation_time, "description": $description, "dnsName": $dns_name, "dnssecConfig": $dnssec_config, "forwardingConfig": $forwarding_config, "id": $id, "kind": $kind, "labels": $labels, "name": $name, "nameServerSet": $name_server_set, "nameServers": $name_servers, "peeringConfig": $peering_config, "privateVisibilityConfig": $private_visibility_config, "reverseLookupConfig": $reverse_lookup_config, "serviceDirectoryConfig": $service_directory_config, "visibility": $visibility} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Deletes a previously created ManagedZone.
 #
 # DELETE /dns/v2/projects/{project}/locations/{location}/managedZones/{managedZone}
 # operationId: dns.managedZones.delete
-export def "dns-projects-locations-managed-zones dnsmanagedZonesdelete" [
+export def "dns-projects-locations-managed-zones delete" [
   project: string
   location: string
-  managedZone: string
+  managed_zone: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -252,6 +266,7 @@ export def "dns-projects-locations-managed-zones dnsmanagedZonesdelete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
@@ -260,29 +275,29 @@ export def "dns-projects-locations-managed-zones dnsmanagedZonesdelete" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --clientOperationId: string # For mutating operation requests only. An optional identifier specified by the client. Must be unique for operation resources in the Operations collection.
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --client-operation-id: string # For mutating operation requests only. An optional identifier specified by the client. Must be unique for operation resources in the Operations collection.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "clientOperationId" $clientOperationId "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/dns/v2/projects/($project)/locations/($location)/managedZones/($managedZone)" $qp)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "clientOperationId" $client_operation_id "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({project: (encode-path-segment $project), location: (encode-path-segment $location), managed_zone: (encode-path-segment $managed_zone)} | format pattern "/dns/v2/projects/{project}/locations/{location}/managedZones/{managed_zone}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Fetches the representation of an existing ManagedZone.
 #
 # GET /dns/v2/projects/{project}/locations/{location}/managedZones/{managedZone}
 # operationId: dns.managedZones.get
-export def "dns-projects-locations-managed-zones dnsmanagedZonesget" [
+export def "dns-projects-locations-managed-zones get" [
   project: string
   location: string
-  managedZone: string
+  managed_zone: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -290,6 +305,7 @@ export def "dns-projects-locations-managed-zones dnsmanagedZonesget" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
@@ -298,19 +314,19 @@ export def "dns-projects-locations-managed-zones dnsmanagedZonesget" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --clientOperationId: string # For mutating operation requests only. An optional identifier specified by the client. Must be unique for operation resources in the Operations collection.
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --client-operation-id: string # For mutating operation requests only. An optional identifier specified by the client. Must be unique for operation resources in the Operations collection.
 ]: nothing -> record<cloudLoggingConfig: record<enableLogging: bool, kind: string>, creationTime: string, description: string, dnsName: string, dnssecConfig: record<defaultKeySpecs: list<record>, kind: string, nonExistence: string, state: string>, forwardingConfig: record<kind: string, targetNameServers: list<record>>, id: string, kind: string, labels: record, name: string, nameServerSet: string, nameServers: list<string>, peeringConfig: record<kind: string, targetNetwork: record<deactivateTime: string, kind: string, networkUrl: string>>, privateVisibilityConfig: record<gkeClusters: list<record>, kind: string, networks: list<record>>, reverseLookupConfig: record<kind: string>, serviceDirectoryConfig: record<kind: string, namespace: record<deletionTime: string, kind: string, namespaceUrl: string>>, visibility: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "clientOperationId" $clientOperationId "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/dns/v2/projects/($project)/locations/($location)/managedZones/($managedZone)" $qp)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "clientOperationId" $client_operation_id "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({project: (encode-path-segment $project), location: (encode-path-segment $location), managed_zone: (encode-path-segment $managed_zone)} | format pattern "/dns/v2/projects/{project}/locations/{location}/managedZones/{managed_zone}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Applies a partial update to an existing ManagedZone.
@@ -324,10 +340,10 @@ export def "dns-projects-locations-managed-zones dnsmanagedZonesget" [
 # --privateVisibilityConfig shape: {gkeClusters?: list, kind?: string, networks?: list}
 # --reverseLookupConfig shape: {kind?: string}
 # --serviceDirectoryConfig shape: {kind?: string, namespace?: record}
-export def "dns-projects-locations-managed-zones dnsmanagedZonespatch" [
+export def "dns-projects-locations-managed-zones update-by-project-location-managedZone" [
   project: string
   location: string
-  managedZone: string
+  managed_zone: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -335,6 +351,7 @@ export def "dns-projects-locations-managed-zones dnsmanagedZonespatch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
@@ -343,39 +360,39 @@ export def "dns-projects-locations-managed-zones dnsmanagedZonespatch" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --clientOperationId: string # For mutating operation requests only. An optional identifier specified by the client. Must be unique for operation resources in the Operations collection.
-  --cloudLoggingConfig: record # Cloud Logging configurations for publicly visible zones. — shape: {enableLogging?: bool, kind?: string}
-  --creationTime: string # The time that this resource was created on the server. This is in RFC3339 text format. Output only.
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --client-operation-id: string # For mutating operation requests only. An optional identifier specified by the client. Must be unique for operation resources in the Operations collection.
+  --cloud-logging-config: record # Cloud Logging configurations for publicly visible zones. — shape: {enableLogging?: bool, kind?: string}
+  --creation-time: string # The time that this resource was created on the server. This is in RFC3339 text format. Output only.
   --description: string # A mutable string of at most 1024 characters associated with this resource for the user's convenience. Has no effect on the managed zone's function.
-  --dnsName: string # The DNS name of this managed zone, for instance "example.com.".
-  --dnssecConfig: record # shape: {defaultKeySpecs?: list, kind?: string, nonExistence?: "NSEC"|"NSEC3", state?: "OFF"|"ON"|"TRANSFER"}
-  --forwardingConfig: record # shape: {kind?: string, targetNameServers?: list}
+  --dns-name: string # The DNS name of this managed zone, for instance "example.com.".
+  --dnssec-config: record # shape: {defaultKeySpecs?: list, kind?: string, nonExistence?: "NSEC"|"NSEC3", state?: "OFF"|"ON"|"TRANSFER"}
+  --forwarding-config: record # shape: {kind?: string, targetNameServers?: list}
   --id: string # Unique identifier for the resource; defined by the server (output only) (format: uint64)
   --kind: string # default: dns#managedZone
   --labels: record # User labels.
   --name: string # User assigned name for this resource. Must be unique within the project. The name must be 1-63 characters long, must begin with a letter, end with a letter or digit, and only contain lowercase letters, digits or dashes.
-  --nameServerSet: string # Optionally specifies the NameServerSet for this ManagedZone. A NameServerSet is a set of DNS name servers that all host the same ManagedZones. Most users leave this field unset. If you need to use this field, contact your account team.
-  --nameServers: list # Delegate your managed_zone to these virtual name servers; defined by the server (output only)
-  --peeringConfig: record # shape: {kind?: string, targetNetwork?: record}
-  --privateVisibilityConfig: record # shape: {gkeClusters?: list, kind?: string, networks?: list}
-  --reverseLookupConfig: record # shape: {kind?: string}
-  --serviceDirectoryConfig: record # Contains information about Service Directory-backed zones. — shape: {kind?: string, namespace?: record}
+  --name-server-set: string # Optionally specifies the NameServerSet for this ManagedZone. A NameServerSet is a set of DNS name servers that all host the same ManagedZones. Most users leave this field unset. If you need to use this field, contact your account team.
+  --name-servers: list<string> # Delegate your managed_zone to these virtual name servers; defined by the server (output only)
+  --peering-config: record # shape: {kind?: string, targetNetwork?: record}
+  --private-visibility-config: record # shape: {gkeClusters?: list, kind?: string, networks?: list}
+  --reverse-lookup-config: record # shape: {kind?: string}
+  --service-directory-config: record # Contains information about Service Directory-backed zones. — shape: {kind?: string, namespace?: record}
   --visibility: string@visibility-completer # The zone's visibility: public zones are exposed to the Internet, while private zones are visible only to Virtual Private Cloud resources.
 ]: any -> record<dnsKeyContext: record<newValue: record<algorithm: string, creationTime: string, description: string, digests: list, id: string, isActive: bool, keyLength: int, keyTag: int, kind: string, publicKey: string, type: string>, oldValue: record<algorithm: string, creationTime: string, description: string, digests: list, id: string, isActive: bool, keyLength: int, keyTag: int, kind: string, publicKey: string, type: string>>, id: string, kind: string, startTime: string, status: string, type: string, user: string, zoneContext: record<newValue: record<cloudLoggingConfig: record, creationTime: string, description: string, dnsName: string, dnssecConfig: record, forwardingConfig: record, id: string, kind: string, labels: record, name: string, nameServerSet: string, nameServers: list, peeringConfig: record, privateVisibilityConfig: record, reverseLookupConfig: record, serviceDirectoryConfig: record, visibility: string>, oldValue: record<cloudLoggingConfig: record, creationTime: string, description: string, dnsName: string, dnssecConfig: record, forwardingConfig: record, id: string, kind: string, labels: record, name: string, nameServerSet: string, nameServers: list, peeringConfig: record, privateVisibilityConfig: record, reverseLookupConfig: record, serviceDirectoryConfig: record, visibility: string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "clientOperationId" $clientOperationId "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/dns/v2/projects/($project)/locations/($location)/managedZones/($managedZone)" $qp)
-  let body = {cloudLoggingConfig: $cloudLoggingConfig, creationTime: $creationTime, description: $description, dnsName: $dnsName, dnssecConfig: $dnssecConfig, forwardingConfig: $forwardingConfig, id: $id, kind: $kind, labels: $labels, name: $name, nameServerSet: $nameServerSet, nameServers: $nameServers, peeringConfig: $peeringConfig, privateVisibilityConfig: $privateVisibilityConfig, reverseLookupConfig: $reverseLookupConfig, serviceDirectoryConfig: $serviceDirectoryConfig, visibility: $visibility} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "clientOperationId" $client_operation_id "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({project: (encode-path-segment $project), location: (encode-path-segment $location), managed_zone: (encode-path-segment $managed_zone)} | format pattern "/dns/v2/projects/{project}/locations/{location}/managedZones/{managed_zone}") $qp)
+  let req_body = {"cloudLoggingConfig": $cloud_logging_config, "creationTime": $creation_time, "description": $description, "dnsName": $dns_name, "dnssecConfig": $dnssec_config, "forwardingConfig": $forwarding_config, "id": $id, "kind": $kind, "labels": $labels, "name": $name, "nameServerSet": $name_server_set, "nameServers": $name_servers, "peeringConfig": $peering_config, "privateVisibilityConfig": $private_visibility_config, "reverseLookupConfig": $reverse_lookup_config, "serviceDirectoryConfig": $service_directory_config, "visibility": $visibility} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Updates an existing ManagedZone.
@@ -389,10 +406,10 @@ export def "dns-projects-locations-managed-zones dnsmanagedZonespatch" [
 # --privateVisibilityConfig shape: {gkeClusters?: list, kind?: string, networks?: list}
 # --reverseLookupConfig shape: {kind?: string}
 # --serviceDirectoryConfig shape: {kind?: string, namespace?: record}
-export def "dns-projects-locations-managed-zones dnsmanagedZonesupdate" [
+export def "dns-projects-locations-managed-zones update-by-project-location-managedZone-1" [
   project: string
   location: string
-  managedZone: string
+  managed_zone: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -400,6 +417,7 @@ export def "dns-projects-locations-managed-zones dnsmanagedZonesupdate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
@@ -408,49 +426,49 @@ export def "dns-projects-locations-managed-zones dnsmanagedZonesupdate" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --clientOperationId: string # For mutating operation requests only. An optional identifier specified by the client. Must be unique for operation resources in the Operations collection.
-  --cloudLoggingConfig: record # Cloud Logging configurations for publicly visible zones. — shape: {enableLogging?: bool, kind?: string}
-  --creationTime: string # The time that this resource was created on the server. This is in RFC3339 text format. Output only.
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --client-operation-id: string # For mutating operation requests only. An optional identifier specified by the client. Must be unique for operation resources in the Operations collection.
+  --cloud-logging-config: record # Cloud Logging configurations for publicly visible zones. — shape: {enableLogging?: bool, kind?: string}
+  --creation-time: string # The time that this resource was created on the server. This is in RFC3339 text format. Output only.
   --description: string # A mutable string of at most 1024 characters associated with this resource for the user's convenience. Has no effect on the managed zone's function.
-  --dnsName: string # The DNS name of this managed zone, for instance "example.com.".
-  --dnssecConfig: record # shape: {defaultKeySpecs?: list, kind?: string, nonExistence?: "NSEC"|"NSEC3", state?: "OFF"|"ON"|"TRANSFER"}
-  --forwardingConfig: record # shape: {kind?: string, targetNameServers?: list}
+  --dns-name: string # The DNS name of this managed zone, for instance "example.com.".
+  --dnssec-config: record # shape: {defaultKeySpecs?: list, kind?: string, nonExistence?: "NSEC"|"NSEC3", state?: "OFF"|"ON"|"TRANSFER"}
+  --forwarding-config: record # shape: {kind?: string, targetNameServers?: list}
   --id: string # Unique identifier for the resource; defined by the server (output only) (format: uint64)
   --kind: string # default: dns#managedZone
   --labels: record # User labels.
   --name: string # User assigned name for this resource. Must be unique within the project. The name must be 1-63 characters long, must begin with a letter, end with a letter or digit, and only contain lowercase letters, digits or dashes.
-  --nameServerSet: string # Optionally specifies the NameServerSet for this ManagedZone. A NameServerSet is a set of DNS name servers that all host the same ManagedZones. Most users leave this field unset. If you need to use this field, contact your account team.
-  --nameServers: list # Delegate your managed_zone to these virtual name servers; defined by the server (output only)
-  --peeringConfig: record # shape: {kind?: string, targetNetwork?: record}
-  --privateVisibilityConfig: record # shape: {gkeClusters?: list, kind?: string, networks?: list}
-  --reverseLookupConfig: record # shape: {kind?: string}
-  --serviceDirectoryConfig: record # Contains information about Service Directory-backed zones. — shape: {kind?: string, namespace?: record}
+  --name-server-set: string # Optionally specifies the NameServerSet for this ManagedZone. A NameServerSet is a set of DNS name servers that all host the same ManagedZones. Most users leave this field unset. If you need to use this field, contact your account team.
+  --name-servers: list<string> # Delegate your managed_zone to these virtual name servers; defined by the server (output only)
+  --peering-config: record # shape: {kind?: string, targetNetwork?: record}
+  --private-visibility-config: record # shape: {gkeClusters?: list, kind?: string, networks?: list}
+  --reverse-lookup-config: record # shape: {kind?: string}
+  --service-directory-config: record # Contains information about Service Directory-backed zones. — shape: {kind?: string, namespace?: record}
   --visibility: string@visibility-completer # The zone's visibility: public zones are exposed to the Internet, while private zones are visible only to Virtual Private Cloud resources.
 ]: any -> record<dnsKeyContext: record<newValue: record<algorithm: string, creationTime: string, description: string, digests: list, id: string, isActive: bool, keyLength: int, keyTag: int, kind: string, publicKey: string, type: string>, oldValue: record<algorithm: string, creationTime: string, description: string, digests: list, id: string, isActive: bool, keyLength: int, keyTag: int, kind: string, publicKey: string, type: string>>, id: string, kind: string, startTime: string, status: string, type: string, user: string, zoneContext: record<newValue: record<cloudLoggingConfig: record, creationTime: string, description: string, dnsName: string, dnssecConfig: record, forwardingConfig: record, id: string, kind: string, labels: record, name: string, nameServerSet: string, nameServers: list, peeringConfig: record, privateVisibilityConfig: record, reverseLookupConfig: record, serviceDirectoryConfig: record, visibility: string>, oldValue: record<cloudLoggingConfig: record, creationTime: string, description: string, dnsName: string, dnssecConfig: record, forwardingConfig: record, id: string, kind: string, labels: record, name: string, nameServerSet: string, nameServers: list, peeringConfig: record, privateVisibilityConfig: record, reverseLookupConfig: record, serviceDirectoryConfig: record, visibility: string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "clientOperationId" $clientOperationId "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/dns/v2/projects/($project)/locations/($location)/managedZones/($managedZone)" $qp)
-  let body = {cloudLoggingConfig: $cloudLoggingConfig, creationTime: $creationTime, description: $description, dnsName: $dnsName, dnssecConfig: $dnssecConfig, forwardingConfig: $forwardingConfig, id: $id, kind: $kind, labels: $labels, name: $name, nameServerSet: $nameServerSet, nameServers: $nameServers, peeringConfig: $peeringConfig, privateVisibilityConfig: $privateVisibilityConfig, reverseLookupConfig: $reverseLookupConfig, serviceDirectoryConfig: $serviceDirectoryConfig, visibility: $visibility} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "clientOperationId" $client_operation_id "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({project: (encode-path-segment $project), location: (encode-path-segment $location), managed_zone: (encode-path-segment $managed_zone)} | format pattern "/dns/v2/projects/{project}/locations/{location}/managedZones/{managed_zone}") $qp)
+  let req_body = {"cloudLoggingConfig": $cloud_logging_config, "creationTime": $creation_time, "description": $description, "dnsName": $dns_name, "dnssecConfig": $dnssec_config, "forwardingConfig": $forwarding_config, "id": $id, "kind": $kind, "labels": $labels, "name": $name, "nameServerSet": $name_server_set, "nameServers": $name_servers, "peeringConfig": $peering_config, "privateVisibilityConfig": $private_visibility_config, "reverseLookupConfig": $reverse_lookup_config, "serviceDirectoryConfig": $service_directory_config, "visibility": $visibility} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Enumerates Changes to a ResourceRecordSet collection.
 #
 # GET /dns/v2/projects/{project}/locations/{location}/managedZones/{managedZone}/changes
 # operationId: dns.changes.list
-export def "dns-projects-locations-managed-zones-changes dnschangeslist" [
+export def "dns-projects-locations-managed-zones-changes list" [
   project: string
   location: string
-  managedZone: string
+  managed_zone: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -458,6 +476,7 @@ export def "dns-projects-locations-managed-zones-changes dnschangeslist" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
@@ -466,34 +485,34 @@ export def "dns-projects-locations-managed-zones-changes dnschangeslist" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --maxResults: int # Optional. Maximum number of results to be returned. If unspecified, the server decides how many results to return.
-  --pageToken: string # Optional. A tag returned by a previous list request that was truncated. Use this parameter to continue a previous list request.
-  --sortBy: string@sortBy-completer # Sorting criterion. The only supported value is change sequence.
-  --sortOrder: string # Sorting order direction: 'ascending' or 'descending'.
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --max-results: int # Optional. Maximum number of results to be returned. If unspecified, the server decides how many results to return.
+  --page-token: string # Optional. A tag returned by a previous list request that was truncated. Use this parameter to continue a previous list request.
+  --sort-by: string@sort-by-completer # Sorting criterion. The only supported value is change sequence.
+  --sort-order: string # Sorting order direction: 'ascending' or 'descending'.
 ]: nothing -> record<changes: table<additions: list, deletions: list, id: string, isServing: bool, kind: string, startTime: string, status: string>, header: record<operationId: string>, kind: string, nextPageToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "pageToken" $pageToken "scalar") (serialize-qp "sortBy" $sortBy "scalar") (serialize-qp "sortOrder" $sortOrder "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/dns/v2/projects/($project)/locations/($location)/managedZones/($managedZone)/changes" $qp)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "sortBy" $sort_by "scalar") (serialize-qp "sortOrder" $sort_order "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({project: (encode-path-segment $project), location: (encode-path-segment $location), managed_zone: (encode-path-segment $managed_zone)} | format pattern "/dns/v2/projects/{project}/locations/{location}/managedZones/{managed_zone}/changes") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Atomically updates the ResourceRecordSet collection.
 #
 # POST /dns/v2/projects/{project}/locations/{location}/managedZones/{managedZone}/changes
 # operationId: dns.changes.create
-# --additions item shape: {kind?: string, name?: string, routingPolicy?: record, rrdatas?: list, signatureRrdatas?: list, ttl?: int, type?: string}
-# --deletions item shape: {kind?: string, name?: string, routingPolicy?: record, rrdatas?: list, signatureRrdatas?: list, ttl?: int, type?: string}
-export def "dns-projects-locations-managed-zones-changes dnschangescreate" [
+# --additions item shape: {kind?: string, name?: string, routingPolicy?: record, rrdatas?: list<string>, signatureRrdatas?: list<string>, ttl?: int, type?: string}
+# --deletions item shape: {kind?: string, name?: string, routingPolicy?: record, rrdatas?: list<string>, signatureRrdatas?: list<string>, ttl?: int, type?: string}
+export def "dns-projects-locations-managed-zones-changes create" [
   project: string
   location: string
-  managedZone: string
+  managed_zone: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -501,6 +520,7 @@ export def "dns-projects-locations-managed-zones-changes dnschangescreate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
@@ -509,40 +529,40 @@ export def "dns-projects-locations-managed-zones-changes dnschangescreate" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --clientOperationId: string # For mutating operation requests only. An optional identifier specified by the client. Must be unique for operation resources in the Operations collection.
-  --additions: list # Which ResourceRecordSets to add? — item shape: {kind?: string, name?: string, routingPolicy?: record, rrdatas?: list, signatureRrdatas?: list, ttl?: int, type?: string}
-  --deletions: list # Which ResourceRecordSets to remove? Must match existing data exactly. — item shape: {kind?: string, name?: string, routingPolicy?: record, rrdatas?: list, signatureRrdatas?: list, ttl?: int, type?: string}
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --client-operation-id: string # For mutating operation requests only. An optional identifier specified by the client. Must be unique for operation resources in the Operations collection.
+  --additions: list # Which ResourceRecordSets to add? — item shape: {kind?: string, name?: string, routingPolicy?: record, rrdatas?: list<string>, signatureRrdatas?: list<string>, ttl?: int, type?: string}
+  --deletions: list # Which ResourceRecordSets to remove? Must match existing data exactly. — item shape: {kind?: string, name?: string, routingPolicy?: record, rrdatas?: list<string>, signatureRrdatas?: list<string>, ttl?: int, type?: string}
   --id: string # Unique identifier for the resource; defined by the server (output only).
-  --isServing: oneof<nothing, bool> # If the DNS queries for the zone will be served.
+  --is-serving: oneof<nothing, bool> # If the DNS queries for the zone will be served.
   --kind: string # default: dns#change
-  --startTime: string # The time that this operation was started by the server (output only). This is in RFC3339 text format.
+  --start-time: string # The time that this operation was started by the server (output only). This is in RFC3339 text format.
   --status: string@status-completer # Status of the operation (output only). A status of "done" means that the request to update the authoritative servers has been sent, but the servers might not be updated yet.
 ]: any -> record<additions: table<kind: string, name: string, routingPolicy: record, rrdatas: list, signatureRrdatas: list, ttl: int, type: string>, deletions: table<kind: string, name: string, routingPolicy: record, rrdatas: list, signatureRrdatas: list, ttl: int, type: string>, id: string, isServing: bool, kind: string, startTime: string, status: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "clientOperationId" $clientOperationId "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/dns/v2/projects/($project)/locations/($location)/managedZones/($managedZone)/changes" $qp)
-  let body = {additions: $additions, deletions: $deletions, id: $id, isServing: $isServing, kind: $kind, startTime: $startTime, status: $status} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "clientOperationId" $client_operation_id "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({project: (encode-path-segment $project), location: (encode-path-segment $location), managed_zone: (encode-path-segment $managed_zone)} | format pattern "/dns/v2/projects/{project}/locations/{location}/managedZones/{managed_zone}/changes") $qp)
+  let req_body = {"additions": $additions, "deletions": $deletions, "id": $id, "isServing": $is_serving, "kind": $kind, "startTime": $start_time, "status": $status} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Fetches the representation of an existing Change.
 #
 # GET /dns/v2/projects/{project}/locations/{location}/managedZones/{managedZone}/changes/{changeId}
 # operationId: dns.changes.get
-export def "dns-projects-locations-managed-zones-changes dnschangesget" [
+export def "dns-projects-locations-managed-zones-changes get" [
   project: string
   location: string
-  managedZone: string
-  changeId: string
+  managed_zone: string
+  change_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -550,6 +570,7 @@ export def "dns-projects-locations-managed-zones-changes dnschangesget" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
@@ -558,29 +579,29 @@ export def "dns-projects-locations-managed-zones-changes dnschangesget" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --clientOperationId: string # For mutating operation requests only. An optional identifier specified by the client. Must be unique for operation resources in the Operations collection.
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --client-operation-id: string # For mutating operation requests only. An optional identifier specified by the client. Must be unique for operation resources in the Operations collection.
 ]: nothing -> record<additions: table<kind: string, name: string, routingPolicy: record, rrdatas: list, signatureRrdatas: list, ttl: int, type: string>, deletions: table<kind: string, name: string, routingPolicy: record, rrdatas: list, signatureRrdatas: list, ttl: int, type: string>, id: string, isServing: bool, kind: string, startTime: string, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "clientOperationId" $clientOperationId "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/dns/v2/projects/($project)/locations/($location)/managedZones/($managedZone)/changes/($changeId)" $qp)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "clientOperationId" $client_operation_id "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({project: (encode-path-segment $project), location: (encode-path-segment $location), managed_zone: (encode-path-segment $managed_zone), change_id: (encode-path-segment $change_id)} | format pattern "/dns/v2/projects/{project}/locations/{location}/managedZones/{managed_zone}/changes/{change_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Enumerates DnsKeys to a ResourceRecordSet collection.
 #
 # GET /dns/v2/projects/{project}/locations/{location}/managedZones/{managedZone}/dnsKeys
 # operationId: dns.dnsKeys.list
-export def "dns-projects-locations-managed-zones-dns-keys dnsdnsKeyslist" [
+export def "dns-projects-locations-managed-zones-dns-keys list" [
   project: string
   location: string
-  managedZone: string
+  managed_zone: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -588,6 +609,7 @@ export def "dns-projects-locations-managed-zones-dns-keys dnsdnsKeyslist" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
@@ -596,32 +618,32 @@ export def "dns-projects-locations-managed-zones-dns-keys dnsdnsKeyslist" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --digestType: string # An optional comma-separated list of digest types to compute and display for key signing keys. If omitted, the recommended digest type is computed and displayed.
-  --maxResults: int # Optional. Maximum number of results to be returned. If unspecified, the server decides how many results to return.
-  --pageToken: string # Optional. A tag returned by a previous list request that was truncated. Use this parameter to continue a previous list request.
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --digest-type: string # An optional comma-separated list of digest types to compute and display for key signing keys. If omitted, the recommended digest type is computed and displayed.
+  --max-results: int # Optional. Maximum number of results to be returned. If unspecified, the server decides how many results to return.
+  --page-token: string # Optional. A tag returned by a previous list request that was truncated. Use this parameter to continue a previous list request.
 ]: nothing -> record<dnsKeys: table<algorithm: string, creationTime: string, description: string, digests: list, id: string, isActive: bool, keyLength: int, keyTag: int, kind: string, publicKey: string, type: string>, header: record<operationId: string>, kind: string, nextPageToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "digestType" $digestType "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "pageToken" $pageToken "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/dns/v2/projects/($project)/locations/($location)/managedZones/($managedZone)/dnsKeys" $qp)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "digestType" $digest_type "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({project: (encode-path-segment $project), location: (encode-path-segment $location), managed_zone: (encode-path-segment $managed_zone)} | format pattern "/dns/v2/projects/{project}/locations/{location}/managedZones/{managed_zone}/dnsKeys") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Fetches the representation of an existing DnsKey.
 #
 # GET /dns/v2/projects/{project}/locations/{location}/managedZones/{managedZone}/dnsKeys/{dnsKeyId}
 # operationId: dns.dnsKeys.get
-export def "dns-projects-locations-managed-zones-dns-keys dnsdnsKeysget" [
+export def "dns-projects-locations-managed-zones-dns-keys get" [
   project: string
   location: string
-  managedZone: string
-  dnsKeyId: string
+  managed_zone: string
+  dns_key_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -629,6 +651,7 @@ export def "dns-projects-locations-managed-zones-dns-keys dnsdnsKeysget" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
@@ -637,30 +660,30 @@ export def "dns-projects-locations-managed-zones-dns-keys dnsdnsKeysget" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --clientOperationId: string # For mutating operation requests only. An optional identifier specified by the client. Must be unique for operation resources in the Operations collection.
-  --digestType: string # An optional comma-separated list of digest types to compute and display for key signing keys. If omitted, the recommended digest type is computed and displayed.
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --client-operation-id: string # For mutating operation requests only. An optional identifier specified by the client. Must be unique for operation resources in the Operations collection.
+  --digest-type: string # An optional comma-separated list of digest types to compute and display for key signing keys. If omitted, the recommended digest type is computed and displayed.
 ]: nothing -> record<algorithm: string, creationTime: string, description: string, digests: table<digest: string, type: string>, id: string, isActive: bool, keyLength: int, keyTag: int, kind: string, publicKey: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "clientOperationId" $clientOperationId "scalar") (serialize-qp "digestType" $digestType "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/dns/v2/projects/($project)/locations/($location)/managedZones/($managedZone)/dnsKeys/($dnsKeyId)" $qp)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "clientOperationId" $client_operation_id "scalar") (serialize-qp "digestType" $digest_type "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({project: (encode-path-segment $project), location: (encode-path-segment $location), managed_zone: (encode-path-segment $managed_zone), dns_key_id: (encode-path-segment $dns_key_id)} | format pattern "/dns/v2/projects/{project}/locations/{location}/managedZones/{managed_zone}/dnsKeys/{dns_key_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Enumerates Operations for the given ManagedZone.
 #
 # GET /dns/v2/projects/{project}/locations/{location}/managedZones/{managedZone}/operations
 # operationId: dns.managedZoneOperations.list
-export def "dns-projects-locations-managed-zones-operations dnsmanagedZoneOperationslist" [
+export def "dns-projects-locations-managed-zones-operations list" [
   project: string
   location: string
-  managedZone: string
+  managed_zone: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -668,6 +691,7 @@ export def "dns-projects-locations-managed-zones-operations dnsmanagedZoneOperat
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
@@ -676,31 +700,31 @@ export def "dns-projects-locations-managed-zones-operations dnsmanagedZoneOperat
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --maxResults: int # Optional. Maximum number of results to be returned. If unspecified, the server decides how many results to return.
-  --pageToken: string # Optional. A tag returned by a previous list request that was truncated. Use this parameter to continue a previous list request.
-  --sortBy: string@sortBy-completer-1 # Sorting criterion. The only supported values are START_TIME and ID.
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --max-results: int # Optional. Maximum number of results to be returned. If unspecified, the server decides how many results to return.
+  --page-token: string # Optional. A tag returned by a previous list request that was truncated. Use this parameter to continue a previous list request.
+  --sort-by: string@sort-by-completer-1 # Sorting criterion. The only supported values are START_TIME and ID.
 ]: nothing -> record<header: record<operationId: string>, kind: string, nextPageToken: string, operations: table<dnsKeyContext: record, id: string, kind: string, startTime: string, status: string, type: string, user: string, zoneContext: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "pageToken" $pageToken "scalar") (serialize-qp "sortBy" $sortBy "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/dns/v2/projects/($project)/locations/($location)/managedZones/($managedZone)/operations" $qp)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "sortBy" $sort_by "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({project: (encode-path-segment $project), location: (encode-path-segment $location), managed_zone: (encode-path-segment $managed_zone)} | format pattern "/dns/v2/projects/{project}/locations/{location}/managedZones/{managed_zone}/operations") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Fetches the representation of an existing Operation.
 #
 # GET /dns/v2/projects/{project}/locations/{location}/managedZones/{managedZone}/operations/{operation}
 # operationId: dns.managedZoneOperations.get
-export def "dns-projects-locations-managed-zones-operations dnsmanagedZoneOperationsget" [
+export def "dns-projects-locations-managed-zones-operations get" [
   project: string
   location: string
-  managedZone: string
+  managed_zone: string
   operation: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -709,6 +733,7 @@ export def "dns-projects-locations-managed-zones-operations dnsmanagedZoneOperat
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
@@ -717,29 +742,29 @@ export def "dns-projects-locations-managed-zones-operations dnsmanagedZoneOperat
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --clientOperationId: string # For mutating operation requests only. An optional identifier specified by the client. Must be unique for operation resources in the Operations collection.
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --client-operation-id: string # For mutating operation requests only. An optional identifier specified by the client. Must be unique for operation resources in the Operations collection.
 ]: nothing -> record<dnsKeyContext: record<newValue: record<algorithm: string, creationTime: string, description: string, digests: list, id: string, isActive: bool, keyLength: int, keyTag: int, kind: string, publicKey: string, type: string>, oldValue: record<algorithm: string, creationTime: string, description: string, digests: list, id: string, isActive: bool, keyLength: int, keyTag: int, kind: string, publicKey: string, type: string>>, id: string, kind: string, startTime: string, status: string, type: string, user: string, zoneContext: record<newValue: record<cloudLoggingConfig: record, creationTime: string, description: string, dnsName: string, dnssecConfig: record, forwardingConfig: record, id: string, kind: string, labels: record, name: string, nameServerSet: string, nameServers: list, peeringConfig: record, privateVisibilityConfig: record, reverseLookupConfig: record, serviceDirectoryConfig: record, visibility: string>, oldValue: record<cloudLoggingConfig: record, creationTime: string, description: string, dnsName: string, dnssecConfig: record, forwardingConfig: record, id: string, kind: string, labels: record, name: string, nameServerSet: string, nameServers: list, peeringConfig: record, privateVisibilityConfig: record, reverseLookupConfig: record, serviceDirectoryConfig: record, visibility: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "clientOperationId" $clientOperationId "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/dns/v2/projects/($project)/locations/($location)/managedZones/($managedZone)/operations/($operation)" $qp)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "clientOperationId" $client_operation_id "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({project: (encode-path-segment $project), location: (encode-path-segment $location), managed_zone: (encode-path-segment $managed_zone), operation: (encode-path-segment $operation)} | format pattern "/dns/v2/projects/{project}/locations/{location}/managedZones/{managed_zone}/operations/{operation}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Enumerates ResourceRecordSets that you have created but not yet deleted.
 #
 # GET /dns/v2/projects/{project}/locations/{location}/managedZones/{managedZone}/rrsets
 # operationId: dns.resourceRecordSets.list
-export def "dns-projects-locations-managed-zones-rrsets dnsresourceRecordSetslist" [
+export def "dns-projects-locations-managed-zones-rrsets list" [
   project: string
   location: string
-  managedZone: string
+  managed_zone: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -747,6 +772,7 @@ export def "dns-projects-locations-managed-zones-rrsets dnsresourceRecordSetslis
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
@@ -755,22 +781,22 @@ export def "dns-projects-locations-managed-zones-rrsets dnsresourceRecordSetslis
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --maxResults: int # Optional. Maximum number of results to be returned. If unspecified, the server decides how many results to return.
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --max-results: int # Optional. Maximum number of results to be returned. If unspecified, the server decides how many results to return.
   --name: string # Restricts the list to return only records with this fully qualified domain name.
-  --pageToken: string # Optional. A tag returned by a previous list request that was truncated. Use this parameter to continue a previous list request.
+  --page-token: string # Optional. A tag returned by a previous list request that was truncated. Use this parameter to continue a previous list request.
   --type: string # Restricts the list to return only records of this type. If present, the "name" parameter must also be present.
 ]: nothing -> record<header: record<operationId: string>, kind: string, nextPageToken: string, rrsets: table<kind: string, name: string, routingPolicy: record, rrdatas: list, signatureRrdatas: list, ttl: int, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "pageToken" $pageToken "scalar") (serialize-qp "type" $type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/dns/v2/projects/($project)/locations/($location)/managedZones/($managedZone)/rrsets" $qp)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "type" $type "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({project: (encode-path-segment $project), location: (encode-path-segment $location), managed_zone: (encode-path-segment $managed_zone)} | format pattern "/dns/v2/projects/{project}/locations/{location}/managedZones/{managed_zone}/rrsets") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Creates a new ResourceRecordSet.
@@ -778,10 +804,10 @@ export def "dns-projects-locations-managed-zones-rrsets dnsresourceRecordSetslis
 # POST /dns/v2/projects/{project}/locations/{location}/managedZones/{managedZone}/rrsets
 # operationId: dns.resourceRecordSets.create
 # --routingPolicy shape: {geo?: record, kind?: string, primaryBackup?: record, wrr?: record}
-export def "dns-projects-locations-managed-zones-rrsets dnsresourceRecordSetscreate" [
+export def "dns-projects-locations-managed-zones-rrsets create" [
   project: string
   location: string
-  managedZone: string
+  managed_zone: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -789,6 +815,7 @@ export def "dns-projects-locations-managed-zones-rrsets dnsresourceRecordSetscre
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
@@ -797,39 +824,39 @@ export def "dns-projects-locations-managed-zones-rrsets dnsresourceRecordSetscre
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --clientOperationId: string # For mutating operation requests only. An optional identifier specified by the client. Must be unique for operation resources in the Operations collection.
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --client-operation-id: string # For mutating operation requests only. An optional identifier specified by the client. Must be unique for operation resources in the Operations collection.
   --kind: string # default: dns#resourceRecordSet
   --name: string # For example, www.example.com.
-  --routingPolicy: record # A RRSetRoutingPolicy represents ResourceRecordSet data that is returned dynamically with the response varying based on configured properties such as geolocation or by weighted random selection. — shape: {geo?: record, kind?: string, primaryBackup?: record, wrr?: record}
-  --rrdatas: list # As defined in RFC 1035 (section 5) and RFC 1034 (section 3.6.1) -- see examples.
-  --signatureRrdatas: list # As defined in RFC 4034 (section 3.2).
+  --routing-policy: record # A RRSetRoutingPolicy represents ResourceRecordSet data that is returned dynamically with the response varying based on configured properties such as geolocation or by weighted random selection. — shape: {geo?: record, kind?: string, primaryBackup?: record, wrr?: record}
+  --rrdatas: list<string> # As defined in RFC 1035 (section 5) and RFC 1034 (section 3.6.1) -- see examples.
+  --signature-rrdatas: list<string> # As defined in RFC 4034 (section 3.2).
   --ttl: int # Number of seconds that this ResourceRecordSet can be cached by resolvers. (format: int32)
   --type: string # The identifier of a supported record type. See the list of Supported DNS record types.
 ]: any -> record<kind: string, name: string, routingPolicy: record<geo: record<enableFencing: bool, items: list, kind: string>, kind: string, primaryBackup: record<backupGeoTargets: record, kind: string, primaryTargets: record, trickleTraffic: float>, wrr: record<items: list, kind: string>>, rrdatas: list<string>, signatureRrdatas: list<string>, ttl: int, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "clientOperationId" $clientOperationId "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/dns/v2/projects/($project)/locations/($location)/managedZones/($managedZone)/rrsets" $qp)
-  let body = {kind: $kind, name: $name, routingPolicy: $routingPolicy, rrdatas: $rrdatas, signatureRrdatas: $signatureRrdatas, ttl: $ttl, type: $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "clientOperationId" $client_operation_id "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({project: (encode-path-segment $project), location: (encode-path-segment $location), managed_zone: (encode-path-segment $managed_zone)} | format pattern "/dns/v2/projects/{project}/locations/{location}/managedZones/{managed_zone}/rrsets") $qp)
+  let req_body = {"kind": $kind, "name": $name, "routingPolicy": $routing_policy, "rrdatas": $rrdatas, "signatureRrdatas": $signature_rrdatas, "ttl": $ttl, "type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Deletes a previously created ResourceRecordSet.
 #
 # DELETE /dns/v2/projects/{project}/locations/{location}/managedZones/{managedZone}/rrsets/{name}/{type}
 # operationId: dns.resourceRecordSets.delete
-export def "dns-projects-locations-managed-zones-rrsets dnsresourceRecordSetsdelete" [
+export def "dns-projects-locations-managed-zones-rrsets delete" [
   project: string
   location: string
-  managedZone: string
+  managed_zone: string
   name: string
   type: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -839,6 +866,7 @@ export def "dns-projects-locations-managed-zones-rrsets dnsresourceRecordSetsdel
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
@@ -847,29 +875,29 @@ export def "dns-projects-locations-managed-zones-rrsets dnsresourceRecordSetsdel
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --clientOperationId: string # For mutating operation requests only. An optional identifier specified by the client. Must be unique for operation resources in the Operations collection.
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --client-operation-id: string # For mutating operation requests only. An optional identifier specified by the client. Must be unique for operation resources in the Operations collection.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "clientOperationId" $clientOperationId "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/dns/v2/projects/($project)/locations/($location)/managedZones/($managedZone)/rrsets/($name)/($type)" $qp)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "clientOperationId" $client_operation_id "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({project: (encode-path-segment $project), location: (encode-path-segment $location), managed_zone: (encode-path-segment $managed_zone), name: (encode-path-segment $name), type: (encode-path-segment $type)} | format pattern "/dns/v2/projects/{project}/locations/{location}/managedZones/{managed_zone}/rrsets/{name}/{type}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Fetches the representation of an existing ResourceRecordSet.
 #
 # GET /dns/v2/projects/{project}/locations/{location}/managedZones/{managedZone}/rrsets/{name}/{type}
 # operationId: dns.resourceRecordSets.get
-export def "dns-projects-locations-managed-zones-rrsets dnsresourceRecordSetsget" [
+export def "dns-projects-locations-managed-zones-rrsets get" [
   project: string
   location: string
-  managedZone: string
+  managed_zone: string
   name: string
   type: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -879,6 +907,7 @@ export def "dns-projects-locations-managed-zones-rrsets dnsresourceRecordSetsget
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
@@ -887,19 +916,19 @@ export def "dns-projects-locations-managed-zones-rrsets dnsresourceRecordSetsget
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --clientOperationId: string # For mutating operation requests only. An optional identifier specified by the client. Must be unique for operation resources in the Operations collection.
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --client-operation-id: string # For mutating operation requests only. An optional identifier specified by the client. Must be unique for operation resources in the Operations collection.
 ]: nothing -> record<kind: string, name: string, routingPolicy: record<geo: record<enableFencing: bool, items: list, kind: string>, kind: string, primaryBackup: record<backupGeoTargets: record, kind: string, primaryTargets: record, trickleTraffic: float>, wrr: record<items: list, kind: string>>, rrdatas: list<string>, signatureRrdatas: list<string>, ttl: int, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "clientOperationId" $clientOperationId "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/dns/v2/projects/($project)/locations/($location)/managedZones/($managedZone)/rrsets/($name)/($type)" $qp)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "clientOperationId" $client_operation_id "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({project: (encode-path-segment $project), location: (encode-path-segment $location), managed_zone: (encode-path-segment $managed_zone), name: (encode-path-segment $name), type: (encode-path-segment $type)} | format pattern "/dns/v2/projects/{project}/locations/{location}/managedZones/{managed_zone}/rrsets/{name}/{type}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Applies a partial update to an existing ResourceRecordSet.
@@ -907,10 +936,10 @@ export def "dns-projects-locations-managed-zones-rrsets dnsresourceRecordSetsget
 # PATCH /dns/v2/projects/{project}/locations/{location}/managedZones/{managedZone}/rrsets/{name}/{type}
 # operationId: dns.resourceRecordSets.patch
 # --routingPolicy shape: {geo?: record, kind?: string, primaryBackup?: record, wrr?: record}
-export def "dns-projects-locations-managed-zones-rrsets dnsresourceRecordSetspatch" [
+export def "dns-projects-locations-managed-zones-rrsets update" [
   project: string
   location: string
-  managedZone: string
+  managed_zone: string
   name: string
   type: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -920,6 +949,7 @@ export def "dns-projects-locations-managed-zones-rrsets dnsresourceRecordSetspat
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
@@ -928,36 +958,36 @@ export def "dns-projects-locations-managed-zones-rrsets dnsresourceRecordSetspat
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --clientOperationId: string # For mutating operation requests only. An optional identifier specified by the client. Must be unique for operation resources in the Operations collection.
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --client-operation-id: string # For mutating operation requests only. An optional identifier specified by the client. Must be unique for operation resources in the Operations collection.
   --kind: string # default: dns#resourceRecordSet
   --body-name: string # For example, www.example.com.
-  --routingPolicy: record # A RRSetRoutingPolicy represents ResourceRecordSet data that is returned dynamically with the response varying based on configured properties such as geolocation or by weighted random selection. — shape: {geo?: record, kind?: string, primaryBackup?: record, wrr?: record}
-  --rrdatas: list # As defined in RFC 1035 (section 5) and RFC 1034 (section 3.6.1) -- see examples.
-  --signatureRrdatas: list # As defined in RFC 4034 (section 3.2).
+  --routing-policy: record # A RRSetRoutingPolicy represents ResourceRecordSet data that is returned dynamically with the response varying based on configured properties such as geolocation or by weighted random selection. — shape: {geo?: record, kind?: string, primaryBackup?: record, wrr?: record}
+  --rrdatas: list<string> # As defined in RFC 1035 (section 5) and RFC 1034 (section 3.6.1) -- see examples.
+  --signature-rrdatas: list<string> # As defined in RFC 4034 (section 3.2).
   --ttl: int # Number of seconds that this ResourceRecordSet can be cached by resolvers. (format: int32)
   --body-type: string # The identifier of a supported record type. See the list of Supported DNS record types.
 ]: any -> record<kind: string, name: string, routingPolicy: record<geo: record<enableFencing: bool, items: list, kind: string>, kind: string, primaryBackup: record<backupGeoTargets: record, kind: string, primaryTargets: record, trickleTraffic: float>, wrr: record<items: list, kind: string>>, rrdatas: list<string>, signatureRrdatas: list<string>, ttl: int, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "clientOperationId" $clientOperationId "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/dns/v2/projects/($project)/locations/($location)/managedZones/($managedZone)/rrsets/($name)/($type)" $qp)
-  let body = {kind: $kind, name: $body_name, routingPolicy: $routingPolicy, rrdatas: $rrdatas, signatureRrdatas: $signatureRrdatas, ttl: $ttl, type: $body_type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "clientOperationId" $client_operation_id "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({project: (encode-path-segment $project), location: (encode-path-segment $location), managed_zone: (encode-path-segment $managed_zone), name: (encode-path-segment $name), type: (encode-path-segment $type)} | format pattern "/dns/v2/projects/{project}/locations/{location}/managedZones/{managed_zone}/rrsets/{name}/{type}") $qp)
+  let req_body = {"kind": $kind, "name": $body_name, "routingPolicy": $routing_policy, "rrdatas": $rrdatas, "signatureRrdatas": $signature_rrdatas, "ttl": $ttl, "type": $body_type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Enumerates all Policies associated with a project.
 #
 # GET /dns/v2/projects/{project}/locations/{location}/policies
 # operationId: dns.policies.list
-export def "dns-projects-locations-policies dnspolicieslist" [
+export def "dns-projects-locations-policies list" [
   project: string
   location: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -967,6 +997,7 @@ export def "dns-projects-locations-policies dnspolicieslist" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
@@ -975,20 +1006,20 @@ export def "dns-projects-locations-policies dnspolicieslist" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --maxResults: int # Optional. Maximum number of results to be returned. If unspecified, the server decides how many results to return.
-  --pageToken: string # Optional. A tag returned by a previous list request that was truncated. Use this parameter to continue a previous list request.
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --max-results: int # Optional. Maximum number of results to be returned. If unspecified, the server decides how many results to return.
+  --page-token: string # Optional. A tag returned by a previous list request that was truncated. Use this parameter to continue a previous list request.
 ]: nothing -> record<header: record<operationId: string>, kind: string, nextPageToken: string, policies: table<alternativeNameServerConfig: record, description: string, enableInboundForwarding: bool, enableLogging: bool, id: string, kind: string, name: string, networks: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "pageToken" $pageToken "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/dns/v2/projects/($project)/locations/($location)/policies" $qp)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({project: (encode-path-segment $project), location: (encode-path-segment $location)} | format pattern "/dns/v2/projects/{project}/locations/{location}/policies") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Creates a new Policy.
@@ -997,7 +1028,7 @@ export def "dns-projects-locations-policies dnspolicieslist" [
 # operationId: dns.policies.create
 # --alternativeNameServerConfig shape: {kind?: string, targetNameServers?: list}
 # --networks item shape: {kind?: string, networkUrl?: string}
-export def "dns-projects-locations-policies dnspoliciescreate" [
+export def "dns-projects-locations-policies create" [
   project: string
   location: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1007,6 +1038,7 @@ export def "dns-projects-locations-policies dnspoliciescreate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
@@ -1015,15 +1047,15 @@ export def "dns-projects-locations-policies dnspoliciescreate" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --clientOperationId: string # For mutating operation requests only. An optional identifier specified by the client. Must be unique for operation resources in the Operations collection.
-  --alternativeNameServerConfig: record # shape: {kind?: string, targetNameServers?: list}
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --client-operation-id: string # For mutating operation requests only. An optional identifier specified by the client. Must be unique for operation resources in the Operations collection.
+  --alternative-name-server-config: record # shape: {kind?: string, targetNameServers?: list}
   --description: string # A mutable string of at most 1024 characters associated with this resource for the user's convenience. Has no effect on the policy's function.
-  --enableInboundForwarding: oneof<nothing, bool> # Allows networks bound to this policy to receive DNS queries sent by VMs or applications over VPN connections. When enabled, a virtual IP address is allocated from each of the subnetworks that are bound to this policy.
-  --enableLogging: oneof<nothing, bool> # Controls whether logging is enabled for the networks bound to this policy. Defaults to no logging if not set.
+  --enable-inbound-forwarding: oneof<nothing, bool> # Allows networks bound to this policy to receive DNS queries sent by VMs or applications over VPN connections. When enabled, a virtual IP address is allocated from each of the subnetworks that are bound to this policy.
+  --enable-logging: oneof<nothing, bool> # Controls whether logging is enabled for the networks bound to this policy. Defaults to no logging if not set.
   --id: string # Unique identifier for the resource; defined by the server (output only). (format: uint64)
   --kind: string # default: dns#policy
   --name: string # User-assigned name for this policy.
@@ -1032,20 +1064,20 @@ export def "dns-projects-locations-policies dnspoliciescreate" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "clientOperationId" $clientOperationId "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/dns/v2/projects/($project)/locations/($location)/policies" $qp)
-  let body = {alternativeNameServerConfig: $alternativeNameServerConfig, description: $description, enableInboundForwarding: $enableInboundForwarding, enableLogging: $enableLogging, id: $id, kind: $kind, name: $name, networks: $networks} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "clientOperationId" $client_operation_id "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({project: (encode-path-segment $project), location: (encode-path-segment $location)} | format pattern "/dns/v2/projects/{project}/locations/{location}/policies") $qp)
+  let req_body = {"alternativeNameServerConfig": $alternative_name_server_config, "description": $description, "enableInboundForwarding": $enable_inbound_forwarding, "enableLogging": $enable_logging, "id": $id, "kind": $kind, "name": $name, "networks": $networks} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Deletes a previously created Policy. Fails if the policy is still being referenced by a network.
 #
 # DELETE /dns/v2/projects/{project}/locations/{location}/policies/{policy}
 # operationId: dns.policies.delete
-export def "dns-projects-locations-policies dnspoliciesdelete" [
+export def "dns-projects-locations-policies delete" [
   project: string
   location: string
   policy: string
@@ -1056,6 +1088,7 @@ export def "dns-projects-locations-policies dnspoliciesdelete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
@@ -1064,26 +1097,26 @@ export def "dns-projects-locations-policies dnspoliciesdelete" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --clientOperationId: string # For mutating operation requests only. An optional identifier specified by the client. Must be unique for operation resources in the Operations collection.
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --client-operation-id: string # For mutating operation requests only. An optional identifier specified by the client. Must be unique for operation resources in the Operations collection.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "clientOperationId" $clientOperationId "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/dns/v2/projects/($project)/locations/($location)/policies/($policy)" $qp)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "clientOperationId" $client_operation_id "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({project: (encode-path-segment $project), location: (encode-path-segment $location), policy: (encode-path-segment $policy)} | format pattern "/dns/v2/projects/{project}/locations/{location}/policies/{policy}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Fetches the representation of an existing Policy.
 #
 # GET /dns/v2/projects/{project}/locations/{location}/policies/{policy}
 # operationId: dns.policies.get
-export def "dns-projects-locations-policies dnspoliciesget" [
+export def "dns-projects-locations-policies get" [
   project: string
   location: string
   policy: string
@@ -1094,6 +1127,7 @@ export def "dns-projects-locations-policies dnspoliciesget" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
@@ -1102,19 +1136,19 @@ export def "dns-projects-locations-policies dnspoliciesget" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --clientOperationId: string # For mutating operation requests only. An optional identifier specified by the client. Must be unique for operation resources in the Operations collection.
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --client-operation-id: string # For mutating operation requests only. An optional identifier specified by the client. Must be unique for operation resources in the Operations collection.
 ]: nothing -> record<alternativeNameServerConfig: record<kind: string, targetNameServers: list<record>>, description: string, enableInboundForwarding: bool, enableLogging: bool, id: string, kind: string, name: string, networks: table<kind: string, networkUrl: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "clientOperationId" $clientOperationId "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/dns/v2/projects/($project)/locations/($location)/policies/($policy)" $qp)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "clientOperationId" $client_operation_id "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({project: (encode-path-segment $project), location: (encode-path-segment $location), policy: (encode-path-segment $policy)} | format pattern "/dns/v2/projects/{project}/locations/{location}/policies/{policy}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Applies a partial update to an existing Policy.
@@ -1123,7 +1157,7 @@ export def "dns-projects-locations-policies dnspoliciesget" [
 # operationId: dns.policies.patch
 # --alternativeNameServerConfig shape: {kind?: string, targetNameServers?: list}
 # --networks item shape: {kind?: string, networkUrl?: string}
-export def "dns-projects-locations-policies dnspoliciespatch" [
+export def "dns-projects-locations-policies update-by-project-location-policy" [
   project: string
   location: string
   policy: string
@@ -1134,6 +1168,7 @@ export def "dns-projects-locations-policies dnspoliciespatch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
@@ -1142,15 +1177,15 @@ export def "dns-projects-locations-policies dnspoliciespatch" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --clientOperationId: string # For mutating operation requests only. An optional identifier specified by the client. Must be unique for operation resources in the Operations collection.
-  --alternativeNameServerConfig: record # shape: {kind?: string, targetNameServers?: list}
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --client-operation-id: string # For mutating operation requests only. An optional identifier specified by the client. Must be unique for operation resources in the Operations collection.
+  --alternative-name-server-config: record # shape: {kind?: string, targetNameServers?: list}
   --description: string # A mutable string of at most 1024 characters associated with this resource for the user's convenience. Has no effect on the policy's function.
-  --enableInboundForwarding: oneof<nothing, bool> # Allows networks bound to this policy to receive DNS queries sent by VMs or applications over VPN connections. When enabled, a virtual IP address is allocated from each of the subnetworks that are bound to this policy.
-  --enableLogging: oneof<nothing, bool> # Controls whether logging is enabled for the networks bound to this policy. Defaults to no logging if not set.
+  --enable-inbound-forwarding: oneof<nothing, bool> # Allows networks bound to this policy to receive DNS queries sent by VMs or applications over VPN connections. When enabled, a virtual IP address is allocated from each of the subnetworks that are bound to this policy.
+  --enable-logging: oneof<nothing, bool> # Controls whether logging is enabled for the networks bound to this policy. Defaults to no logging if not set.
   --id: string # Unique identifier for the resource; defined by the server (output only). (format: uint64)
   --kind: string # default: dns#policy
   --name: string # User-assigned name for this policy.
@@ -1159,13 +1194,13 @@ export def "dns-projects-locations-policies dnspoliciespatch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "clientOperationId" $clientOperationId "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/dns/v2/projects/($project)/locations/($location)/policies/($policy)" $qp)
-  let body = {alternativeNameServerConfig: $alternativeNameServerConfig, description: $description, enableInboundForwarding: $enableInboundForwarding, enableLogging: $enableLogging, id: $id, kind: $kind, name: $name, networks: $networks} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "clientOperationId" $client_operation_id "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({project: (encode-path-segment $project), location: (encode-path-segment $location), policy: (encode-path-segment $policy)} | format pattern "/dns/v2/projects/{project}/locations/{location}/policies/{policy}") $qp)
+  let req_body = {"alternativeNameServerConfig": $alternative_name_server_config, "description": $description, "enableInboundForwarding": $enable_inbound_forwarding, "enableLogging": $enable_logging, "id": $id, "kind": $kind, "name": $name, "networks": $networks} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Updates an existing Policy.
@@ -1174,7 +1209,7 @@ export def "dns-projects-locations-policies dnspoliciespatch" [
 # operationId: dns.policies.update
 # --alternativeNameServerConfig shape: {kind?: string, targetNameServers?: list}
 # --networks item shape: {kind?: string, networkUrl?: string}
-export def "dns-projects-locations-policies dnspoliciesupdate" [
+export def "dns-projects-locations-policies update-by-project-location-policy-1" [
   project: string
   location: string
   policy: string
@@ -1185,6 +1220,7 @@ export def "dns-projects-locations-policies dnspoliciesupdate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
@@ -1193,15 +1229,15 @@ export def "dns-projects-locations-policies dnspoliciesupdate" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --clientOperationId: string # For mutating operation requests only. An optional identifier specified by the client. Must be unique for operation resources in the Operations collection.
-  --alternativeNameServerConfig: record # shape: {kind?: string, targetNameServers?: list}
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --client-operation-id: string # For mutating operation requests only. An optional identifier specified by the client. Must be unique for operation resources in the Operations collection.
+  --alternative-name-server-config: record # shape: {kind?: string, targetNameServers?: list}
   --description: string # A mutable string of at most 1024 characters associated with this resource for the user's convenience. Has no effect on the policy's function.
-  --enableInboundForwarding: oneof<nothing, bool> # Allows networks bound to this policy to receive DNS queries sent by VMs or applications over VPN connections. When enabled, a virtual IP address is allocated from each of the subnetworks that are bound to this policy.
-  --enableLogging: oneof<nothing, bool> # Controls whether logging is enabled for the networks bound to this policy. Defaults to no logging if not set.
+  --enable-inbound-forwarding: oneof<nothing, bool> # Allows networks bound to this policy to receive DNS queries sent by VMs or applications over VPN connections. When enabled, a virtual IP address is allocated from each of the subnetworks that are bound to this policy.
+  --enable-logging: oneof<nothing, bool> # Controls whether logging is enabled for the networks bound to this policy. Defaults to no logging if not set.
   --id: string # Unique identifier for the resource; defined by the server (output only). (format: uint64)
   --kind: string # default: dns#policy
   --name: string # User-assigned name for this policy.
@@ -1210,20 +1246,20 @@ export def "dns-projects-locations-policies dnspoliciesupdate" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "clientOperationId" $clientOperationId "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/dns/v2/projects/($project)/locations/($location)/policies/($policy)" $qp)
-  let body = {alternativeNameServerConfig: $alternativeNameServerConfig, description: $description, enableInboundForwarding: $enableInboundForwarding, enableLogging: $enableLogging, id: $id, kind: $kind, name: $name, networks: $networks} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "clientOperationId" $client_operation_id "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({project: (encode-path-segment $project), location: (encode-path-segment $location), policy: (encode-path-segment $policy)} | format pattern "/dns/v2/projects/{project}/locations/{location}/policies/{policy}") $qp)
+  let req_body = {"alternativeNameServerConfig": $alternative_name_server_config, "description": $description, "enableInboundForwarding": $enable_inbound_forwarding, "enableLogging": $enable_logging, "id": $id, "kind": $kind, "name": $name, "networks": $networks} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Enumerates all Response Policies associated with a project.
 #
 # GET /dns/v2/projects/{project}/locations/{location}/responsePolicies
 # operationId: dns.responsePolicies.list
-export def "dns-projects-locations-response-policies dnsresponsePolicieslist" [
+export def "dns-projects-locations-response-policies list" [
   project: string
   location: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1233,6 +1269,7 @@ export def "dns-projects-locations-response-policies dnsresponsePolicieslist" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
@@ -1241,20 +1278,20 @@ export def "dns-projects-locations-response-policies dnsresponsePolicieslist" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --maxResults: int # Optional. Maximum number of results to be returned. If unspecified, the server decides how many results to return.
-  --pageToken: string # Optional. A tag returned by a previous list request that was truncated. Use this parameter to continue a previous list request.
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --max-results: int # Optional. Maximum number of results to be returned. If unspecified, the server decides how many results to return.
+  --page-token: string # Optional. A tag returned by a previous list request that was truncated. Use this parameter to continue a previous list request.
 ]: nothing -> record<header: record<operationId: string>, nextPageToken: string, responsePolicies: table<description: string, gkeClusters: list, id: string, kind: string, labels: record, networks: list, responsePolicyName: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "pageToken" $pageToken "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/dns/v2/projects/($project)/locations/($location)/responsePolicies" $qp)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({project: (encode-path-segment $project), location: (encode-path-segment $location)} | format pattern "/dns/v2/projects/{project}/locations/{location}/responsePolicies") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Creates a new Response Policy
@@ -1263,7 +1300,7 @@ export def "dns-projects-locations-response-policies dnsresponsePolicieslist" [
 # operationId: dns.responsePolicies.create
 # --gkeClusters item shape: {gkeClusterName?: string, kind?: string}
 # --networks item shape: {kind?: string, networkUrl?: string}
-export def "dns-projects-locations-response-policies dnsresponsePoliciescreate" [
+export def "dns-projects-locations-response-policies create" [
   project: string
   location: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1273,6 +1310,7 @@ export def "dns-projects-locations-response-policies dnsresponsePoliciescreate" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
@@ -1281,39 +1319,39 @@ export def "dns-projects-locations-response-policies dnsresponsePoliciescreate" 
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --clientOperationId: string # For mutating operation requests only. An optional identifier specified by the client. Must be unique for operation resources in the Operations collection.
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --client-operation-id: string # For mutating operation requests only. An optional identifier specified by the client. Must be unique for operation resources in the Operations collection.
   --description: string # User-provided description for this Response Policy.
-  --gkeClusters: list # The list of Google Kubernetes Engine clusters to which this response policy is applied. — item shape: {gkeClusterName?: string, kind?: string}
+  --gke-clusters: list # The list of Google Kubernetes Engine clusters to which this response policy is applied. — item shape: {gkeClusterName?: string, kind?: string}
   --id: string # Unique identifier for the resource; defined by the server (output only). (format: int64)
   --kind: string # default: dns#responsePolicy
   --labels: record # User labels.
   --networks: list # List of network names specifying networks to which this policy is applied. — item shape: {kind?: string, networkUrl?: string}
-  --responsePolicyName: string # User assigned name for this Response Policy.
+  --response-policy-name: string # User assigned name for this Response Policy.
 ]: any -> record<description: string, gkeClusters: table<gkeClusterName: string, kind: string>, id: string, kind: string, labels: record, networks: table<kind: string, networkUrl: string>, responsePolicyName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "clientOperationId" $clientOperationId "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/dns/v2/projects/($project)/locations/($location)/responsePolicies" $qp)
-  let body = {description: $description, gkeClusters: $gkeClusters, id: $id, kind: $kind, labels: $labels, networks: $networks, responsePolicyName: $responsePolicyName} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "clientOperationId" $client_operation_id "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({project: (encode-path-segment $project), location: (encode-path-segment $location)} | format pattern "/dns/v2/projects/{project}/locations/{location}/responsePolicies") $qp)
+  let req_body = {"description": $description, "gkeClusters": $gke_clusters, "id": $id, "kind": $kind, "labels": $labels, "networks": $networks, "responsePolicyName": $response_policy_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Deletes a previously created Response Policy. Fails if the response policy is non-empty or still being referenced by a network.
 #
 # DELETE /dns/v2/projects/{project}/locations/{location}/responsePolicies/{responsePolicy}
 # operationId: dns.responsePolicies.delete
-export def "dns-projects-locations-response-policies dnsresponsePoliciesdelete" [
+export def "dns-projects-locations-response-policies delete" [
   project: string
   location: string
-  responsePolicy: string
+  response_policy: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1321,6 +1359,7 @@ export def "dns-projects-locations-response-policies dnsresponsePoliciesdelete" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
@@ -1329,29 +1368,29 @@ export def "dns-projects-locations-response-policies dnsresponsePoliciesdelete" 
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --clientOperationId: string # For mutating operation requests only. An optional identifier specified by the client. Must be unique for operation resources in the Operations collection.
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --client-operation-id: string # For mutating operation requests only. An optional identifier specified by the client. Must be unique for operation resources in the Operations collection.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "clientOperationId" $clientOperationId "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/dns/v2/projects/($project)/locations/($location)/responsePolicies/($responsePolicy)" $qp)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "clientOperationId" $client_operation_id "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({project: (encode-path-segment $project), location: (encode-path-segment $location), response_policy: (encode-path-segment $response_policy)} | format pattern "/dns/v2/projects/{project}/locations/{location}/responsePolicies/{response_policy}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Fetches the representation of an existing Response Policy.
 #
 # GET /dns/v2/projects/{project}/locations/{location}/responsePolicies/{responsePolicy}
 # operationId: dns.responsePolicies.get
-export def "dns-projects-locations-response-policies dnsresponsePoliciesget" [
+export def "dns-projects-locations-response-policies get" [
   project: string
   location: string
-  responsePolicy: string
+  response_policy: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1359,6 +1398,7 @@ export def "dns-projects-locations-response-policies dnsresponsePoliciesget" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
@@ -1367,19 +1407,19 @@ export def "dns-projects-locations-response-policies dnsresponsePoliciesget" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --clientOperationId: string # For mutating operation requests only. An optional identifier specified by the client. Must be unique for operation resources in the Operations collection.
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --client-operation-id: string # For mutating operation requests only. An optional identifier specified by the client. Must be unique for operation resources in the Operations collection.
 ]: nothing -> record<description: string, gkeClusters: table<gkeClusterName: string, kind: string>, id: string, kind: string, labels: record, networks: table<kind: string, networkUrl: string>, responsePolicyName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "clientOperationId" $clientOperationId "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/dns/v2/projects/($project)/locations/($location)/responsePolicies/($responsePolicy)" $qp)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "clientOperationId" $client_operation_id "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({project: (encode-path-segment $project), location: (encode-path-segment $location), response_policy: (encode-path-segment $response_policy)} | format pattern "/dns/v2/projects/{project}/locations/{location}/responsePolicies/{response_policy}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Applies a partial update to an existing Response Policy.
@@ -1388,10 +1428,10 @@ export def "dns-projects-locations-response-policies dnsresponsePoliciesget" [
 # operationId: dns.responsePolicies.patch
 # --gkeClusters item shape: {gkeClusterName?: string, kind?: string}
 # --networks item shape: {kind?: string, networkUrl?: string}
-export def "dns-projects-locations-response-policies dnsresponsePoliciespatch" [
+export def "dns-projects-locations-response-policies update-by-project-location-responsePolicy" [
   project: string
   location: string
-  responsePolicy: string
+  response_policy: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1399,6 +1439,7 @@ export def "dns-projects-locations-response-policies dnsresponsePoliciespatch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
@@ -1407,29 +1448,29 @@ export def "dns-projects-locations-response-policies dnsresponsePoliciespatch" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --clientOperationId: string # For mutating operation requests only. An optional identifier specified by the client. Must be unique for operation resources in the Operations collection.
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --client-operation-id: string # For mutating operation requests only. An optional identifier specified by the client. Must be unique for operation resources in the Operations collection.
   --description: string # User-provided description for this Response Policy.
-  --gkeClusters: list # The list of Google Kubernetes Engine clusters to which this response policy is applied. — item shape: {gkeClusterName?: string, kind?: string}
+  --gke-clusters: list # The list of Google Kubernetes Engine clusters to which this response policy is applied. — item shape: {gkeClusterName?: string, kind?: string}
   --id: string # Unique identifier for the resource; defined by the server (output only). (format: int64)
   --kind: string # default: dns#responsePolicy
   --labels: record # User labels.
   --networks: list # List of network names specifying networks to which this policy is applied. — item shape: {kind?: string, networkUrl?: string}
-  --responsePolicyName: string # User assigned name for this Response Policy.
+  --response-policy-name: string # User assigned name for this Response Policy.
 ]: any -> record<header: record<operationId: string>, responsePolicy: record<description: string, gkeClusters: list<record>, id: string, kind: string, labels: record, networks: list<record>, responsePolicyName: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "clientOperationId" $clientOperationId "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/dns/v2/projects/($project)/locations/($location)/responsePolicies/($responsePolicy)" $qp)
-  let body = {description: $description, gkeClusters: $gkeClusters, id: $id, kind: $kind, labels: $labels, networks: $networks, responsePolicyName: $responsePolicyName} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "clientOperationId" $client_operation_id "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({project: (encode-path-segment $project), location: (encode-path-segment $location), response_policy: (encode-path-segment $response_policy)} | format pattern "/dns/v2/projects/{project}/locations/{location}/responsePolicies/{response_policy}") $qp)
+  let req_body = {"description": $description, "gkeClusters": $gke_clusters, "id": $id, "kind": $kind, "labels": $labels, "networks": $networks, "responsePolicyName": $response_policy_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Updates an existing Response Policy.
@@ -1438,10 +1479,10 @@ export def "dns-projects-locations-response-policies dnsresponsePoliciespatch" [
 # operationId: dns.responsePolicies.update
 # --gkeClusters item shape: {gkeClusterName?: string, kind?: string}
 # --networks item shape: {kind?: string, networkUrl?: string}
-export def "dns-projects-locations-response-policies dnsresponsePoliciesupdate" [
+export def "dns-projects-locations-response-policies update-by-project-location-responsePolicy-1" [
   project: string
   location: string
-  responsePolicy: string
+  response_policy: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1449,6 +1490,7 @@ export def "dns-projects-locations-response-policies dnsresponsePoliciesupdate" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
@@ -1457,39 +1499,39 @@ export def "dns-projects-locations-response-policies dnsresponsePoliciesupdate" 
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --clientOperationId: string # For mutating operation requests only. An optional identifier specified by the client. Must be unique for operation resources in the Operations collection.
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --client-operation-id: string # For mutating operation requests only. An optional identifier specified by the client. Must be unique for operation resources in the Operations collection.
   --description: string # User-provided description for this Response Policy.
-  --gkeClusters: list # The list of Google Kubernetes Engine clusters to which this response policy is applied. — item shape: {gkeClusterName?: string, kind?: string}
+  --gke-clusters: list # The list of Google Kubernetes Engine clusters to which this response policy is applied. — item shape: {gkeClusterName?: string, kind?: string}
   --id: string # Unique identifier for the resource; defined by the server (output only). (format: int64)
   --kind: string # default: dns#responsePolicy
   --labels: record # User labels.
   --networks: list # List of network names specifying networks to which this policy is applied. — item shape: {kind?: string, networkUrl?: string}
-  --responsePolicyName: string # User assigned name for this Response Policy.
+  --response-policy-name: string # User assigned name for this Response Policy.
 ]: any -> record<header: record<operationId: string>, responsePolicy: record<description: string, gkeClusters: list<record>, id: string, kind: string, labels: record, networks: list<record>, responsePolicyName: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "clientOperationId" $clientOperationId "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/dns/v2/projects/($project)/locations/($location)/responsePolicies/($responsePolicy)" $qp)
-  let body = {description: $description, gkeClusters: $gkeClusters, id: $id, kind: $kind, labels: $labels, networks: $networks, responsePolicyName: $responsePolicyName} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "clientOperationId" $client_operation_id "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({project: (encode-path-segment $project), location: (encode-path-segment $location), response_policy: (encode-path-segment $response_policy)} | format pattern "/dns/v2/projects/{project}/locations/{location}/responsePolicies/{response_policy}") $qp)
+  let req_body = {"description": $description, "gkeClusters": $gke_clusters, "id": $id, "kind": $kind, "labels": $labels, "networks": $networks, "responsePolicyName": $response_policy_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Enumerates all Response Policy Rules associated with a project.
 #
 # GET /dns/v2/projects/{project}/locations/{location}/responsePolicies/{responsePolicy}/rules
 # operationId: dns.responsePolicyRules.list
-export def "dns-projects-locations-response-policies-rules dnsresponsePolicyRuleslist" [
+export def "dns-projects-locations-response-policies-rules list" [
   project: string
   location: string
-  responsePolicy: string
+  response_policy: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1497,6 +1539,7 @@ export def "dns-projects-locations-response-policies-rules dnsresponsePolicyRule
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
@@ -1505,20 +1548,20 @@ export def "dns-projects-locations-response-policies-rules dnsresponsePolicyRule
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --maxResults: int # Optional. Maximum number of results to be returned. If unspecified, the server decides how many results to return.
-  --pageToken: string # Optional. A tag returned by a previous list request that was truncated. Use this parameter to continue a previous list request.
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --max-results: int # Optional. Maximum number of results to be returned. If unspecified, the server decides how many results to return.
+  --page-token: string # Optional. A tag returned by a previous list request that was truncated. Use this parameter to continue a previous list request.
 ]: nothing -> record<header: record<operationId: string>, nextPageToken: string, responsePolicyRules: table<behavior: string, dnsName: string, kind: string, localData: record, ruleName: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "pageToken" $pageToken "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/dns/v2/projects/($project)/locations/($location)/responsePolicies/($responsePolicy)/rules" $qp)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({project: (encode-path-segment $project), location: (encode-path-segment $location), response_policy: (encode-path-segment $response_policy)} | format pattern "/dns/v2/projects/{project}/locations/{location}/responsePolicies/{response_policy}/rules") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Creates a new Response Policy Rule.
@@ -1526,10 +1569,10 @@ export def "dns-projects-locations-response-policies-rules dnsresponsePolicyRule
 # POST /dns/v2/projects/{project}/locations/{location}/responsePolicies/{responsePolicy}/rules
 # operationId: dns.responsePolicyRules.create
 # --localData shape: {localDatas?: list}
-export def "dns-projects-locations-response-policies-rules dnsresponsePolicyRulescreate" [
+export def "dns-projects-locations-response-policies-rules create" [
   project: string
   location: string
-  responsePolicy: string
+  response_policy: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1537,6 +1580,7 @@ export def "dns-projects-locations-response-policies-rules dnsresponsePolicyRule
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
@@ -1545,38 +1589,38 @@ export def "dns-projects-locations-response-policies-rules dnsresponsePolicyRule
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --clientOperationId: string # For mutating operation requests only. An optional identifier specified by the client. Must be unique for operation resources in the Operations collection.
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --client-operation-id: string # For mutating operation requests only. An optional identifier specified by the client. Must be unique for operation resources in the Operations collection.
   --behavior: string@behavior-completer # Answer this query with a behavior rather than DNS data.
-  --dnsName: string # The DNS name (wildcard or exact) to apply this rule to. Must be unique within the Response Policy Rule.
+  --dns-name: string # The DNS name (wildcard or exact) to apply this rule to. Must be unique within the Response Policy Rule.
   --kind: string # default: dns#responsePolicyRule
-  --localData: record # shape: {localDatas?: list}
-  --ruleName: string # An identifier for this rule. Must be unique with the ResponsePolicy.
+  --local-data: record # shape: {localDatas?: list}
+  --rule-name: string # An identifier for this rule. Must be unique with the ResponsePolicy.
 ]: any -> record<behavior: string, dnsName: string, kind: string, localData: record<localDatas: list<record>>, ruleName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "clientOperationId" $clientOperationId "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/dns/v2/projects/($project)/locations/($location)/responsePolicies/($responsePolicy)/rules" $qp)
-  let body = {behavior: $behavior, dnsName: $dnsName, kind: $kind, localData: $localData, ruleName: $ruleName} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "clientOperationId" $client_operation_id "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({project: (encode-path-segment $project), location: (encode-path-segment $location), response_policy: (encode-path-segment $response_policy)} | format pattern "/dns/v2/projects/{project}/locations/{location}/responsePolicies/{response_policy}/rules") $qp)
+  let req_body = {"behavior": $behavior, "dnsName": $dns_name, "kind": $kind, "localData": $local_data, "ruleName": $rule_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Deletes a previously created Response Policy Rule.
 #
 # DELETE /dns/v2/projects/{project}/locations/{location}/responsePolicies/{responsePolicy}/rules/{responsePolicyRule}
 # operationId: dns.responsePolicyRules.delete
-export def "dns-projects-locations-response-policies-rules dnsresponsePolicyRulesdelete" [
+export def "dns-projects-locations-response-policies-rules delete" [
   project: string
   location: string
-  responsePolicy: string
-  responsePolicyRule: string
+  response_policy: string
+  response_policy_rule: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1584,6 +1628,7 @@ export def "dns-projects-locations-response-policies-rules dnsresponsePolicyRule
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
@@ -1592,30 +1637,30 @@ export def "dns-projects-locations-response-policies-rules dnsresponsePolicyRule
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --clientOperationId: string # For mutating operation requests only. An optional identifier specified by the client. Must be unique for operation resources in the Operations collection.
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --client-operation-id: string # For mutating operation requests only. An optional identifier specified by the client. Must be unique for operation resources in the Operations collection.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "clientOperationId" $clientOperationId "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/dns/v2/projects/($project)/locations/($location)/responsePolicies/($responsePolicy)/rules/($responsePolicyRule)" $qp)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "clientOperationId" $client_operation_id "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({project: (encode-path-segment $project), location: (encode-path-segment $location), response_policy: (encode-path-segment $response_policy), response_policy_rule: (encode-path-segment $response_policy_rule)} | format pattern "/dns/v2/projects/{project}/locations/{location}/responsePolicies/{response_policy}/rules/{response_policy_rule}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Fetches the representation of an existing Response Policy Rule.
 #
 # GET /dns/v2/projects/{project}/locations/{location}/responsePolicies/{responsePolicy}/rules/{responsePolicyRule}
 # operationId: dns.responsePolicyRules.get
-export def "dns-projects-locations-response-policies-rules dnsresponsePolicyRulesget" [
+export def "dns-projects-locations-response-policies-rules get" [
   project: string
   location: string
-  responsePolicy: string
-  responsePolicyRule: string
+  response_policy: string
+  response_policy_rule: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1623,6 +1668,7 @@ export def "dns-projects-locations-response-policies-rules dnsresponsePolicyRule
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
@@ -1631,19 +1677,19 @@ export def "dns-projects-locations-response-policies-rules dnsresponsePolicyRule
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --clientOperationId: string # For mutating operation requests only. An optional identifier specified by the client. Must be unique for operation resources in the Operations collection.
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --client-operation-id: string # For mutating operation requests only. An optional identifier specified by the client. Must be unique for operation resources in the Operations collection.
 ]: nothing -> record<behavior: string, dnsName: string, kind: string, localData: record<localDatas: list<record>>, ruleName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "clientOperationId" $clientOperationId "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/dns/v2/projects/($project)/locations/($location)/responsePolicies/($responsePolicy)/rules/($responsePolicyRule)" $qp)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "clientOperationId" $client_operation_id "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({project: (encode-path-segment $project), location: (encode-path-segment $location), response_policy: (encode-path-segment $response_policy), response_policy_rule: (encode-path-segment $response_policy_rule)} | format pattern "/dns/v2/projects/{project}/locations/{location}/responsePolicies/{response_policy}/rules/{response_policy_rule}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Applies a partial update to an existing Response Policy Rule.
@@ -1651,11 +1697,11 @@ export def "dns-projects-locations-response-policies-rules dnsresponsePolicyRule
 # PATCH /dns/v2/projects/{project}/locations/{location}/responsePolicies/{responsePolicy}/rules/{responsePolicyRule}
 # operationId: dns.responsePolicyRules.patch
 # --localData shape: {localDatas?: list}
-export def "dns-projects-locations-response-policies-rules dnsresponsePolicyRulespatch" [
+export def "dns-projects-locations-response-policies-rules update-by-project-location-responsePolicy-responsePolicyRule" [
   project: string
   location: string
-  responsePolicy: string
-  responsePolicyRule: string
+  response_policy: string
+  response_policy_rule: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1663,6 +1709,7 @@ export def "dns-projects-locations-response-policies-rules dnsresponsePolicyRule
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
@@ -1671,27 +1718,27 @@ export def "dns-projects-locations-response-policies-rules dnsresponsePolicyRule
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --clientOperationId: string # For mutating operation requests only. An optional identifier specified by the client. Must be unique for operation resources in the Operations collection.
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --client-operation-id: string # For mutating operation requests only. An optional identifier specified by the client. Must be unique for operation resources in the Operations collection.
   --behavior: string@behavior-completer # Answer this query with a behavior rather than DNS data.
-  --dnsName: string # The DNS name (wildcard or exact) to apply this rule to. Must be unique within the Response Policy Rule.
+  --dns-name: string # The DNS name (wildcard or exact) to apply this rule to. Must be unique within the Response Policy Rule.
   --kind: string # default: dns#responsePolicyRule
-  --localData: record # shape: {localDatas?: list}
-  --ruleName: string # An identifier for this rule. Must be unique with the ResponsePolicy.
+  --local-data: record # shape: {localDatas?: list}
+  --rule-name: string # An identifier for this rule. Must be unique with the ResponsePolicy.
 ]: any -> record<header: record<operationId: string>, responsePolicyRule: record<behavior: string, dnsName: string, kind: string, localData: record<localDatas: list>, ruleName: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "clientOperationId" $clientOperationId "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/dns/v2/projects/($project)/locations/($location)/responsePolicies/($responsePolicy)/rules/($responsePolicyRule)" $qp)
-  let body = {behavior: $behavior, dnsName: $dnsName, kind: $kind, localData: $localData, ruleName: $ruleName} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "clientOperationId" $client_operation_id "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({project: (encode-path-segment $project), location: (encode-path-segment $location), response_policy: (encode-path-segment $response_policy), response_policy_rule: (encode-path-segment $response_policy_rule)} | format pattern "/dns/v2/projects/{project}/locations/{location}/responsePolicies/{response_policy}/rules/{response_policy_rule}") $qp)
+  let req_body = {"behavior": $behavior, "dnsName": $dns_name, "kind": $kind, "localData": $local_data, "ruleName": $rule_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Updates an existing Response Policy Rule.
@@ -1699,11 +1746,11 @@ export def "dns-projects-locations-response-policies-rules dnsresponsePolicyRule
 # PUT /dns/v2/projects/{project}/locations/{location}/responsePolicies/{responsePolicy}/rules/{responsePolicyRule}
 # operationId: dns.responsePolicyRules.update
 # --localData shape: {localDatas?: list}
-export def "dns-projects-locations-response-policies-rules dnsresponsePolicyRulesupdate" [
+export def "dns-projects-locations-response-policies-rules update-by-project-location-responsePolicy-responsePolicyRule-1" [
   project: string
   location: string
-  responsePolicy: string
-  responsePolicyRule: string
+  response_policy: string
+  response_policy_rule: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1711,6 +1758,7 @@ export def "dns-projects-locations-response-policies-rules dnsresponsePolicyRule
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
@@ -1719,27 +1767,27 @@ export def "dns-projects-locations-response-policies-rules dnsresponsePolicyRule
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --clientOperationId: string # For mutating operation requests only. An optional identifier specified by the client. Must be unique for operation resources in the Operations collection.
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --client-operation-id: string # For mutating operation requests only. An optional identifier specified by the client. Must be unique for operation resources in the Operations collection.
   --behavior: string@behavior-completer # Answer this query with a behavior rather than DNS data.
-  --dnsName: string # The DNS name (wildcard or exact) to apply this rule to. Must be unique within the Response Policy Rule.
+  --dns-name: string # The DNS name (wildcard or exact) to apply this rule to. Must be unique within the Response Policy Rule.
   --kind: string # default: dns#responsePolicyRule
-  --localData: record # shape: {localDatas?: list}
-  --ruleName: string # An identifier for this rule. Must be unique with the ResponsePolicy.
+  --local-data: record # shape: {localDatas?: list}
+  --rule-name: string # An identifier for this rule. Must be unique with the ResponsePolicy.
 ]: any -> record<header: record<operationId: string>, responsePolicyRule: record<behavior: string, dnsName: string, kind: string, localData: record<localDatas: list>, ruleName: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "clientOperationId" $clientOperationId "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/dns/v2/projects/($project)/locations/($location)/responsePolicies/($responsePolicy)/rules/($responsePolicyRule)" $qp)
-  let body = {behavior: $behavior, dnsName: $dnsName, kind: $kind, localData: $localData, ruleName: $ruleName} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "clientOperationId" $client_operation_id "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({project: (encode-path-segment $project), location: (encode-path-segment $location), response_policy: (encode-path-segment $response_policy), response_policy_rule: (encode-path-segment $response_policy_rule)} | format pattern "/dns/v2/projects/{project}/locations/{location}/responsePolicies/{response_policy}/rules/{response_policy_rule}") $qp)
+  let req_body = {"behavior": $behavior, "dnsName": $dns_name, "kind": $kind, "localData": $local_data, "ruleName": $rule_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Gets the access control policy for a resource. Returns an empty policy if the resource exists and does not have a policy set.
@@ -1747,7 +1795,7 @@ export def "dns-projects-locations-response-policies-rules dnsresponsePolicyRule
 # POST /dns/v2/{resource}:getIamPolicy
 # operationId: dns.managedZones.getIamPolicy
 # --options shape: {requestedPolicyVersion?: int}
-export def "dns dnsmanagedZonesgetIamPolicy" [
+export def "dns get-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1756,6 +1804,7 @@ export def "dns dnsmanagedZonesgetIamPolicy" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
@@ -1764,22 +1813,22 @@ export def "dns dnsmanagedZonesgetIamPolicy" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --options: record # Encapsulates settings provided to GetIamPolicy. — shape: {requestedPolicyVersion?: int}
 ]: any -> record<auditConfigs: table<auditLogConfigs: list, service: string>, bindings: table<condition: record, members: list, role: string>, etag: string, version: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/dns/v2/($resource):getIamPolicy" $qp)
-  let body = {options: $options} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({resource: (encode-path-segment $resource)} | format pattern "/dns/v2/{resource}:getIamPolicy") $qp)
+  let req_body = {"options": $options} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Sets the access control policy on the specified resource. Replaces any existing policy. Can return `NOT_FOUND`, `INVALID_ARGUMENT`, and `PERMISSION_DENIED` errors.
@@ -1787,7 +1836,7 @@ export def "dns dnsmanagedZonesgetIamPolicy" [
 # POST /dns/v2/{resource}:setIamPolicy
 # operationId: dns.managedZones.setIamPolicy
 # --policy shape: {auditConfigs?: list, bindings?: list, etag?: string, version?: int}
-export def "dns dnsmanagedZonessetIamPolicy" [
+export def "dns update-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1796,6 +1845,7 @@ export def "dns dnsmanagedZonessetIamPolicy" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
@@ -1804,30 +1854,30 @@ export def "dns dnsmanagedZonessetIamPolicy" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --policy: record # An Identity and Access Management (IAM) policy, which specifies access controls for Google Cloud resources. A `Policy` is a collection of `bindings`. A `binding` binds one or more `members`, or principals, to a single `role`. Principals can be user accounts, service accounts, Google groups, and domains (such as G Suite). A `role` is a named list of permissions; each `role` can be an IAM predefined role or a user-created custom role. For some types of Google Cloud resources, a `binding` can also specify a `condition`, which is a logical expression that allows access to a resource only if the expression evaluates to `true`. A condition can add constraints based on attributes of the request, the resource, or both. To learn which resources support conditions in their IAM policies, see the [IAM documentation](https://cloud.google.com/iam/help/conditions/resource-policies). **JSON example:** { "bindings": [ { "role": "roles/resourcemanager.organizationAdmin", "members": [ "user:mike@example.com", "group:admins@example.com", "domain:google.com", "serviceAccount:my-project-id@appspot.gserviceaccount.com" ] }, { "role": "roles/resourcemanager.organizationViewer", "members": [ "user:eve@example.com" ], "condition": { "title": "expirable access", "description": "Does not grant access after Sep 2020", "expression": "request.time < timestamp('2020-10-01T00:00:00.000Z')", } } ], "etag": "BwWWja0YfJA=", "version": 3 } **YAML example:** bindings: - members: - user:mike@example.com - group:admins@example.com - domain:google.com - serviceAccount:my-project-id@appspot.gserviceaccount.com role: roles/resourcemanager.organizationAdmin - members: - user:eve@example.com role: roles/resourcemanager.organizationViewer condition: title: expirable access description: Does not grant access after Sep 2020 expression: request.time < timestamp('2020-10-01T00:00:00.000Z') etag: BwWWja0YfJA= version: 3 For a description of IAM and its features, see the [IAM documentation](https://cloud.google.com/iam/docs/). — shape: {auditConfigs?: list, bindings?: list, etag?: string, version?: int}
-  --updateMask: string # OPTIONAL: A FieldMask specifying which fields of the policy to modify. Only the fields in the mask will be modified. If no mask is provided, the following default mask is used: `paths: "bindings, etag"` (format: google-fieldmask)
+  --update-mask: string # OPTIONAL: A FieldMask specifying which fields of the policy to modify. Only the fields in the mask will be modified. If no mask is provided, the following default mask is used: `paths: "bindings, etag"` (format: google-fieldmask)
 ]: any -> record<auditConfigs: table<auditLogConfigs: list, service: string>, bindings: table<condition: record, members: list, role: string>, etag: string, version: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/dns/v2/($resource):setIamPolicy" $qp)
-  let body = {policy: $policy, updateMask: $updateMask} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({resource: (encode-path-segment $resource)} | format pattern "/dns/v2/{resource}:setIamPolicy") $qp)
+  let req_body = {"policy": $policy, "updateMask": $update_mask} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Returns permissions that a caller has on the specified resource. If the resource does not exist, this returns an empty set of permissions, not a `NOT_FOUND` error. Note: This operation is designed to be used for building permission-aware UIs and command-line tools, not for authorization checking. This operation may "fail open" without warning.
 #
 # POST /dns/v2/{resource}:testIamPermissions
 # operationId: dns.managedZones.testIamPermissions
-export def "dns dnsmanagedZonestestIamPermissions" [
+export def "dns test-iam-permissions" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1836,6 +1886,7 @@ export def "dns dnsmanagedZonestestIamPermissions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
@@ -1844,20 +1895,20 @@ export def "dns dnsmanagedZonestestIamPermissions" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --permissions: list # The set of permissions to check for the `resource`. Permissions with wildcards (such as `*` or `storage.*`) are not allowed. For more information see [IAM Overview](https://cloud.google.com/iam/docs/overview#permissions).
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --permissions: list<string> # The set of permissions to check for the `resource`. Permissions with wildcards (such as `*` or `storage.*`) are not allowed. For more information see [IAM Overview](https://cloud.google.com/iam/docs/overview#permissions).
 ]: any -> record<permissions: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/dns/v2/($resource):testIamPermissions" $qp)
-  let body = {permissions: $permissions} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({resource: (encode-path-segment $resource)} | format pattern "/dns/v2/{resource}:testIamPermissions") $qp)
+  let req_body = {"permissions": $permissions} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }

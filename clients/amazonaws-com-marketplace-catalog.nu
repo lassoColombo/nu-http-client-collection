@@ -18,21 +18,32 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 }
 
 # Serialize a single query parameter based on collection style
+# Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
+# ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = ($name | url encode)
+  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
-  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
-    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
-    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
+    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
+    _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
+}
+
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Build URL from base, path, and optional query string
@@ -44,7 +55,7 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
@@ -53,25 +64,25 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
     "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "put" => { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "patch" => { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
   if ($method in ["head" "options"]) { return $resp }
-  if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
+  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
 def base-url-completer [] { ["http://catalog.marketplace.us-east-1.amazonaws.com" "http://catalog.marketplace.us-east-2.amazonaws.com" "http://catalog.marketplace.us-west-1.amazonaws.com" "http://catalog.marketplace.us-west-2.amazonaws.com" "http://catalog.marketplace.us-gov-west-1.amazonaws.com" "http://catalog.marketplace.us-gov-east-1.amazonaws.com" "http://catalog.marketplace.ca-central-1.amazonaws.com" "http://catalog.marketplace.eu-north-1.amazonaws.com" "http://catalog.marketplace.eu-west-1.amazonaws.com" "http://catalog.marketplace.eu-west-2.amazonaws.com" "http://catalog.marketplace.eu-west-3.amazonaws.com" "http://catalog.marketplace.eu-central-1.amazonaws.com" "http://catalog.marketplace.eu-south-1.amazonaws.com" "http://catalog.marketplace.af-south-1.amazonaws.com" "http://catalog.marketplace.ap-northeast-1.amazonaws.com" "http://catalog.marketplace.ap-northeast-2.amazonaws.com" "http://catalog.marketplace.ap-northeast-3.amazonaws.com" "http://catalog.marketplace.ap-southeast-1.amazonaws.com" "http://catalog.marketplace.ap-southeast-2.amazonaws.com" "http://catalog.marketplace.ap-east-1.amazonaws.com" "http://catalog.marketplace.ap-south-1.amazonaws.com" "http://catalog.marketplace.sa-east-1.amazonaws.com" "http://catalog.marketplace.me-south-1.amazonaws.com" "https://catalog.marketplace.us-east-1.amazonaws.com" "https://catalog.marketplace.us-east-2.amazonaws.com" "https://catalog.marketplace.us-west-1.amazonaws.com" "https://catalog.marketplace.us-west-2.amazonaws.com" "https://catalog.marketplace.us-gov-west-1.amazonaws.com" "https://catalog.marketplace.us-gov-east-1.amazonaws.com" "https://catalog.marketplace.ca-central-1.amazonaws.com" "https://catalog.marketplace.eu-north-1.amazonaws.com" "https://catalog.marketplace.eu-west-1.amazonaws.com" "https://catalog.marketplace.eu-west-2.amazonaws.com" "https://catalog.marketplace.eu-west-3.amazonaws.com" "https://catalog.marketplace.eu-central-1.amazonaws.com" "https://catalog.marketplace.eu-south-1.amazonaws.com" "https://catalog.marketplace.af-south-1.amazonaws.com" "https://catalog.marketplace.ap-northeast-1.amazonaws.com" "https://catalog.marketplace.ap-northeast-2.amazonaws.com" "https://catalog.marketplace.ap-northeast-3.amazonaws.com" "https://catalog.marketplace.ap-southeast-1.amazonaws.com" "https://catalog.marketplace.ap-southeast-2.amazonaws.com" "https://catalog.marketplace.ap-east-1.amazonaws.com" "https://catalog.marketplace.ap-south-1.amazonaws.com" "https://catalog.marketplace.sa-east-1.amazonaws.com" "https://catalog.marketplace.me-south-1.amazonaws.com" "http://catalog.marketplace.cn-north-1.amazonaws.com.cn" "http://catalog.marketplace.cn-northwest-1.amazonaws.com.cn" "https://catalog.marketplace.cn-north-1.amazonaws.com.cn" "https://catalog.marketplace.cn-northwest-1.amazonaws.com.cn"] }
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
-def OwnershipType-completer [] { ["SELF" "SHARED"] }
+def ownership-type-completer [] { ["SELF" "SHARED"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "cancel-change-setcatalogchange-set-id CancelChangeSet" } } | get name | first)
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "cancel-change-setcatalogchange-set-id cancel" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -91,11 +102,11 @@ export def commands []: nothing -> table {
   }
 }
 
-# Used to cancel an open change request. Must be sent before the status of the request changes to <code>APPLYING</code>, the final stage of completing your change request. You can describe a change during the 60-day request history retention period for API calls.
+# Used to cancel an open change request. Must be sent before the status of the request changes to APPLYING, the final stage of completing your change request. You can describe a change during the 60-day request history retention period for API calls.
 #
 # PATCH /CancelChangeSet#catalog&changeSetId
 # operationId: CancelChangeSet
-export def "cancel-change-setcatalogchange-set-id CancelChangeSet" [
+export def "cancel-change-setcatalogchange-set-id cancel" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -103,33 +114,34 @@ export def "cancel-change-setcatalogchange-set-id CancelChangeSet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --catalog: string # Required. The catalog related to the request. Fixed value: <code>AWSMarketplace</code>.
-  --changeSetId: string # Required. The unique identifier of the <code>StartChangeSet</code> request that you want to cancel.
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --catalog: string # Required. The catalog related to the request. Fixed value: AWSMarketplace.
+  --change-set-id: string # Required. The unique identifier of the StartChangeSet request that you want to cancel.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<ChangeSetId: record, ChangeSetArn: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "catalog" $catalog "scalar") (serialize-qp "changeSetId" $changeSetId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "catalog" $catalog "scalar") (serialize-qp "changeSetId" $change_set_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/CancelChangeSet#catalog&changeSetId" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Deletes a resource-based policy on an Entity that is identified by its resource ARN.
 #
 # DELETE /DeleteResourcePolicy#resourceArn
 # operationId: DeleteResourcePolicy
-export def "delete-resource-policyresource-arn DeleteResourcePolicy" [
+export def "delete-resource-policyresource-arn delete-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -137,32 +149,33 @@ export def "delete-resource-policyresource-arn DeleteResourcePolicy" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --resourceArn: string # The Amazon Resource Name (ARN) of the Entity resource that is associated with the resource policy.
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --resource-arn: string # The Amazon Resource Name (ARN) of the Entity resource that is associated with the resource policy.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "resourceArn" $resourceArn "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "resourceArn" $resource_arn "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/DeleteResourcePolicy#resourceArn" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Provides information about a given change set.
 #
 # GET /DescribeChangeSet#catalog&changeSetId
 # operationId: DescribeChangeSet
-export def "describe-change-setcatalogchange-set-id DescribeChangeSet" [
+export def "describe-change-setcatalogchange-set-id get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -170,33 +183,34 @@ export def "describe-change-setcatalogchange-set-id DescribeChangeSet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --catalog: string # Required. The catalog related to the request. Fixed value: <code>AWSMarketplace</code> 
-  --changeSetId: string # Required. The unique identifier for the <code>StartChangeSet</code> request that you want to describe the details for.
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --catalog: string # Required. The catalog related to the request. Fixed value: AWSMarketplace
+  --change-set-id: string # Required. The unique identifier for the StartChangeSet request that you want to describe the details for.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<ChangeSetId: record, ChangeSetArn: record, ChangeSetName: record, StartTime: record, EndTime: record, Status: record, FailureCode: record, FailureDescription: record, ChangeSet: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "catalog" $catalog "scalar") (serialize-qp "changeSetId" $changeSetId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "catalog" $catalog "scalar") (serialize-qp "changeSetId" $change_set_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/DescribeChangeSet#catalog&changeSetId" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Returns the metadata and content of the entity.
 #
 # GET /DescribeEntity#catalog&entityId
 # operationId: DescribeEntity
-export def "describe-entitycatalogentity-id DescribeEntity" [
+export def "describe-entitycatalogentity-id get-entity" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -204,33 +218,34 @@ export def "describe-entitycatalogentity-id DescribeEntity" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --catalog: string # Required. The catalog related to the request. Fixed value: <code>AWSMarketplace</code> 
-  --entityId: string # Required. The unique ID of the entity to describe.
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --catalog: string # Required. The catalog related to the request. Fixed value: AWSMarketplace
+  --entity-id: string # Required. The unique ID of the entity to describe.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<EntityType: record, EntityIdentifier: record, EntityArn: record, LastModifiedDate: record, Details: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "catalog" $catalog "scalar") (serialize-qp "entityId" $entityId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "catalog" $catalog "scalar") (serialize-qp "entityId" $entity_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/DescribeEntity#catalog&entityId" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Gets a resource-based policy of an Entity that is identified by its resource ARN.
 #
 # GET /GetResourcePolicy#resourceArn
 # operationId: GetResourcePolicy
-export def "get-resource-policyresource-arn GetResourcePolicy" [
+export def "get-resource-policyresource-arn get-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -238,34 +253,35 @@ export def "get-resource-policyresource-arn GetResourcePolicy" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --resourceArn: string # The Amazon Resource Name (ARN) of the Entity resource that is associated with the resource policy.
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --resource-arn: string # The Amazon Resource Name (ARN) of the Entity resource that is associated with the resource policy.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<Policy: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "resourceArn" $resourceArn "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "resourceArn" $resource_arn "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/GetResourcePolicy#resourceArn" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
-# <p>Returns the list of change sets owned by the account being used to make the call. You can filter this list by providing any combination of <code>entityId</code>, <code>ChangeSetName</code>, and status. If you provide more than one filter, the API operation applies a logical AND between the filters.</p> <p>You can describe a change during the 60-day request history retention period for API calls.</p>
+# Returns the list of change sets owned by the account being used to make the call. You can filter this list by providing any combination of entityId, ChangeSetName, and status. If you provide more than one filter, the API operation applies a logical AND between the filters. You can describe a change during the 60-day request history retention period for API calls.
 #
 # POST /ListChangeSets
 # operationId: ListChangeSets
 # --FilterList item shape: {Name?: any, ValueList?: any}
 # --Sort shape: {SortBy?: any, SortOrder?: any}
-export def "list-change-sets ListChangeSets" [
+export def "list-change-sets list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -273,34 +289,35 @@ export def "list-change-sets ListChangeSets" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  Catalog: string # The catalog related to the request. Fixed value: <code>AWSMarketplace</code> 
-  --FilterList: list # An array of filter objects. — item shape: {Name?: any, ValueList?: any}
-  --Sort: record # An object that contains two attributes, <code>SortBy</code> and <code>SortOrder</code>. — shape: {SortBy?: any, SortOrder?: any}
-  --MaxResults: int # The maximum number of results returned by a single call. This value must be provided in the next call to retrieve the next set of results. By default, this value is 20.
-  --NextToken: string # The token value retrieved from a previous call to access the next page of results.
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  catalog: string # The catalog related to the request. Fixed value: AWSMarketplace
+  --filter-list: list # An array of filter objects. — item shape: {Name?: any, ValueList?: any}
+  --body-sort: record # An object that contains two attributes, SortBy and SortOrder. — shape: {SortBy?: any, SortOrder?: any}
+  --max-results: int # The maximum number of results returned by a single call. This value must be provided in the next call to retrieve the next set of results. By default, this value is 20.
+  --next-token: string # The token value retrieved from a previous call to access the next page of results.
 ]: any -> record<ChangeSetSummaryList: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/ListChangeSets" $qp)
-  let body = {Catalog: $Catalog, FilterList: $FilterList, Sort: $Sort, MaxResults: $MaxResults, NextToken: $NextToken} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"Catalog": $catalog, "FilterList": $filter_list, "Sort": $body_sort, "MaxResults": $max_results, "NextToken": $next_token} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Provides the list of entities of a given type.
@@ -309,7 +326,7 @@ export def "list-change-sets ListChangeSets" [
 # operationId: ListEntities
 # --FilterList item shape: {Name?: any, ValueList?: any}
 # --Sort shape: {SortBy?: any, SortOrder?: any}
-export def "list-entities ListEntities" [
+export def "list-entities list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -317,43 +334,44 @@ export def "list-entities ListEntities" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  Catalog: string # The catalog related to the request. Fixed value: <code>AWSMarketplace</code> 
-  EntityType: string # The type of entities to retrieve.
-  --FilterList: list # An array of filter objects. Each filter object contains two attributes, <code>filterName</code> and <code>filterValues</code>. — item shape: {Name?: any, ValueList?: any}
-  --Sort: record # An object that contains two attributes, <code>SortBy</code> and <code>SortOrder</code>. — shape: {SortBy?: any, SortOrder?: any}
-  --NextToken: string # The value of the next token, if it exists. Null if there are no more results.
-  --MaxResults: int # Specifies the upper limit of the elements on a single page. If a value isn't provided, the default value is 20.
-  --OwnershipType: string@OwnershipType-completer
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  catalog: string # The catalog related to the request. Fixed value: AWSMarketplace
+  entity_type: string # The type of entities to retrieve.
+  --filter-list: list # An array of filter objects. Each filter object contains two attributes, filterName and filterValues. — item shape: {Name?: any, ValueList?: any}
+  --body-sort: record # An object that contains two attributes, SortBy and SortOrder. — shape: {SortBy?: any, SortOrder?: any}
+  --next-token: string # The value of the next token, if it exists. Null if there are no more results.
+  --max-results: int # Specifies the upper limit of the elements on a single page. If a value isn't provided, the default value is 20.
+  --ownership-type: string@ownership-type-completer
 ]: any -> record<EntitySummaryList: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/ListEntities" $qp)
-  let body = {Catalog: $Catalog, EntityType: $EntityType, FilterList: $FilterList, Sort: $Sort, NextToken: $NextToken, MaxResults: $MaxResults, OwnershipType: $OwnershipType} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"Catalog": $catalog, "EntityType": $entity_type, "FilterList": $filter_list, "Sort": $body_sort, "NextToken": $next_token, "MaxResults": $max_results, "OwnershipType": $ownership_type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
-# Lists all tags that have been added to a resource (either an <a href="https://docs.aws.amazon.com/marketplace-catalog/latest/api-reference/welcome.html#catalog-api-entities">entity</a> or <a href="https://docs.aws.amazon.com/marketplace-catalog/latest/api-reference/welcome.html#working-with-change-sets">change set</a>).
+# Lists all tags that have been added to a resource (either an entity (https://docs.aws.amazon.com/marketplace-catalog/latest/api-reference/welcome.html#catalog-api-entities) or change set (https://docs.aws.amazon.com/marketplace-catalog/latest/api-reference/welcome.html#working-with-change-sets)).
 #
 # POST /ListTagsForResource
 # operationId: ListTagsForResource
-export def "list-tags-for-resource ListTagsForResource" [
+export def "list-tags-for-resource list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -361,34 +379,35 @@ export def "list-tags-for-resource ListTagsForResource" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  ResourceArn: string # Required. The Amazon Resource Name (ARN) associated with the resource you want to list tags on.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  resource_arn: string # Required. The Amazon Resource Name (ARN) associated with the resource you want to list tags on.
 ]: any -> record<ResourceArn: record, Tags: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/ListTagsForResource")
-  let body = {ResourceArn: $ResourceArn} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"ResourceArn": $resource_arn} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
-# Attaches a resource-based policy to an Entity. Examples of an entity include: <code>AmiProduct</code> and <code>ContainerProduct</code>.
+# Attaches a resource-based policy to an Entity. Examples of an entity include: AmiProduct and ContainerProduct.
 #
 # POST /PutResourcePolicy
 # operationId: PutResourcePolicy
-export def "put-resource-policy PutResourcePolicy" [
+export def "put-resource-policy update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -396,37 +415,38 @@ export def "put-resource-policy PutResourcePolicy" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  ResourceArn: string # The Amazon Resource Name (ARN) of the Entity resource you want to associate with a resource policy. 
-  Policy: string # The policy document to set; formatted in JSON.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  resource_arn: string # The Amazon Resource Name (ARN) of the Entity resource you want to associate with a resource policy.
+  policy: string # The policy document to set; formatted in JSON.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/PutResourcePolicy")
-  let body = {ResourceArn: $ResourceArn, Policy: $Policy} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"ResourceArn": $resource_arn, "Policy": $policy} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
-# <p>Allows you to request changes for your entities. Within a single <code>ChangeSet</code>, you can't start the same change type against the same entity multiple times. Additionally, when a <code>ChangeSet</code> is running, all the entities targeted by the different changes are locked until the change set has completed (either succeeded, cancelled, or failed). If you try to start a change set containing a change against an entity that is already locked, you will receive a <code>ResourceInUseException</code> error.</p> <p>For example, you can't start the <code>ChangeSet</code> described in the <a href="https://docs.aws.amazon.com/marketplace-catalog/latest/api-reference/API_StartChangeSet.html#API_StartChangeSet_Examples">example</a> later in this topic because it contains two changes to run the same change type (<code>AddRevisions</code>) against the same entity (<code>entity-id@1</code>).</p> <p>For more information about working with change sets, see <a href="https://docs.aws.amazon.com/marketplace-catalog/latest/api-reference/welcome.html#working-with-change-sets"> Working with change sets</a>. For information on change types for single-AMI products, see <a href="https://docs.aws.amazon.com/marketplace-catalog/latest/api-reference/ami-products.html#working-with-single-AMI-products">Working with single-AMI products</a>. Als, for more information on change types available for container-based products, see <a href="https://docs.aws.amazon.com/marketplace-catalog/latest/api-reference/container-products.html#working-with-container-products">Working with container products</a>.</p>
+# Allows you to request changes for your entities. Within a single ChangeSet, you can't start the same change type against the same entity multiple times. Additionally, when a ChangeSet is running, all the entities targeted by the different changes are locked until the change set has completed (either succeeded, cancelled, or failed). If you try to start a change set containing a change against an entity that is already locked, you will receive a ResourceInUseException error. For example, you can't start the ChangeSet described in the example (https://docs.aws.amazon.com/marketplace-catalog/latest/api-reference/API_StartChangeSet.html#API_StartChangeSet_Examples) later in this topic because it contains two changes to run the same change type (AddRevisions) against the same entity (entity-id@1). For more information about working with change sets, see Working with change sets (https://docs.aws.amazon.com/marketplace-catalog/latest/api-reference/welcome.html#working-with-change-sets). For information on change types for single-AMI products, see Working with single-AMI products (https://docs.aws.amazon.com/marketplace-catalog/latest/api-reference/ami-products.html#working-with-single-AMI-products). Als, for more information on change types available for container-based products, see Working with container products (https://docs.aws.amazon.com/marketplace-catalog/latest/api-reference/container-products.html#working-with-container-products).
 #
 # POST /StartChangeSet
 # operationId: StartChangeSet
 # --ChangeSet item shape: {ChangeType: any, Entity: any, EntityTags?: any, Details: any, ChangeName?: any}
 # --ChangeSetTags item shape: {Key: any, Value: any}
-export def "start-change-set StartChangeSet" [
+export def "start-change-set start" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -434,39 +454,40 @@ export def "start-change-set StartChangeSet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  Catalog: string # The catalog related to the request. Fixed value: <code>AWSMarketplace</code> 
-  ChangeSet: list # Array of <code>change</code> object. — item shape: {ChangeType: any, Entity: any, EntityTags?: any, Details: any, ChangeName?: any}
-  --ChangeSetName: string # Optional case sensitive string of up to 100 ASCII characters. The change set name can be used to filter the list of change sets. 
-  --ClientRequestToken: string # A unique token to identify the request to ensure idempotency.
-  --ChangeSetTags: list # A list of objects specifying each key name and value for the <code>ChangeSetTags</code> property. — item shape: {Key: any, Value: any}
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  catalog: string # The catalog related to the request. Fixed value: AWSMarketplace
+  change_set: list # Array of change object. — item shape: {ChangeType: any, Entity: any, EntityTags?: any, Details: any, ChangeName?: any}
+  --change-set-name: string # Optional case sensitive string of up to 100 ASCII characters. The change set name can be used to filter the list of change sets.
+  --client-request-token: string # A unique token to identify the request to ensure idempotency.
+  --change-set-tags: list # A list of objects specifying each key name and value for the ChangeSetTags property. — item shape: {Key: any, Value: any}
 ]: any -> record<ChangeSetId: record, ChangeSetArn: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/StartChangeSet")
-  let body = {Catalog: $Catalog, ChangeSet: $ChangeSet, ChangeSetName: $ChangeSetName, ClientRequestToken: $ClientRequestToken, ChangeSetTags: $ChangeSetTags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"Catalog": $catalog, "ChangeSet": $change_set, "ChangeSetName": $change_set_name, "ClientRequestToken": $client_request_token, "ChangeSetTags": $change_set_tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
-# Tags a resource (either an <a href="https://docs.aws.amazon.com/marketplace-catalog/latest/api-reference/welcome.html#catalog-api-entities">entity</a> or <a href="https://docs.aws.amazon.com/marketplace-catalog/latest/api-reference/welcome.html#working-with-change-sets">change set</a>).
+# Tags a resource (either an entity (https://docs.aws.amazon.com/marketplace-catalog/latest/api-reference/welcome.html#catalog-api-entities) or change set (https://docs.aws.amazon.com/marketplace-catalog/latest/api-reference/welcome.html#working-with-change-sets)).
 #
 # POST /TagResource
 # operationId: TagResource
 # --Tags item shape: {Key: any, Value: any}
-export def "tag-resource TagResource" [
+export def "tag-resource tag" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -474,35 +495,36 @@ export def "tag-resource TagResource" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  ResourceArn: string # Required. The Amazon Resource Name (ARN) associated with the resource you want to tag.
-  Tags: list # Required. A list of objects specifying each key name and value. Number of objects allowed: 1-50. — item shape: {Key: any, Value: any}
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  resource_arn: string # Required. The Amazon Resource Name (ARN) associated with the resource you want to tag.
+  tags: list # Required. A list of objects specifying each key name and value. Number of objects allowed: 1-50. — item shape: {Key: any, Value: any}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/TagResource")
-  let body = {ResourceArn: $ResourceArn, Tags: $Tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"ResourceArn": $resource_arn, "Tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
-# Removes a tag or list of tags from a resource (either an <a href="https://docs.aws.amazon.com/marketplace-catalog/latest/api-reference/welcome.html#catalog-api-entities">entity</a> or <a href="https://docs.aws.amazon.com/marketplace-catalog/latest/api-reference/welcome.html#working-with-change-sets">change set</a>).
+# Removes a tag or list of tags from a resource (either an entity (https://docs.aws.amazon.com/marketplace-catalog/latest/api-reference/welcome.html#catalog-api-entities) or change set (https://docs.aws.amazon.com/marketplace-catalog/latest/api-reference/welcome.html#working-with-change-sets)).
 #
 # POST /UntagResource
 # operationId: UntagResource
-export def "untag-resource UntagResource" [
+export def "untag-resource untag" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -510,26 +532,27 @@ export def "untag-resource UntagResource" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  ResourceArn: string # Required. The Amazon Resource Name (ARN) associated with the resource you want to remove the tag from.
-  TagKeys: list # Required. A list of key names of tags to be removed. Number of strings allowed: 0-256.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  resource_arn: string # Required. The Amazon Resource Name (ARN) associated with the resource you want to remove the tag from.
+  tag_keys: list<string> # Required. A list of key names of tags to be removed. Number of strings allowed: 0-256.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/UntagResource")
-  let body = {ResourceArn: $ResourceArn, TagKeys: $TagKeys} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"ResourceArn": $resource_arn, "TagKeys": $tag_keys} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }

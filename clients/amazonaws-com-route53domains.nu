@@ -18,21 +18,32 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 }
 
 # Serialize a single query parameter based on collection style
+# Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
+# ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = ($name | url encode)
+  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
-  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
-    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
-    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
+    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
+    _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
+}
+
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Build URL from base, path, and optional query string
@@ -44,7 +55,7 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
@@ -53,58 +64,58 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
     "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "put" => { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "patch" => { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
   if ($method in ["head" "options"]) { return $resp }
-  if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
+  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
 def base-url-completer [] { ["http://route53domains.us-east-1.amazonaws.com" "http://route53domains.us-east-2.amazonaws.com" "http://route53domains.us-west-1.amazonaws.com" "http://route53domains.us-west-2.amazonaws.com" "http://route53domains.us-gov-west-1.amazonaws.com" "http://route53domains.us-gov-east-1.amazonaws.com" "http://route53domains.ca-central-1.amazonaws.com" "http://route53domains.eu-north-1.amazonaws.com" "http://route53domains.eu-west-1.amazonaws.com" "http://route53domains.eu-west-2.amazonaws.com" "http://route53domains.eu-west-3.amazonaws.com" "http://route53domains.eu-central-1.amazonaws.com" "http://route53domains.eu-south-1.amazonaws.com" "http://route53domains.af-south-1.amazonaws.com" "http://route53domains.ap-northeast-1.amazonaws.com" "http://route53domains.ap-northeast-2.amazonaws.com" "http://route53domains.ap-northeast-3.amazonaws.com" "http://route53domains.ap-southeast-1.amazonaws.com" "http://route53domains.ap-southeast-2.amazonaws.com" "http://route53domains.ap-east-1.amazonaws.com" "http://route53domains.ap-south-1.amazonaws.com" "http://route53domains.sa-east-1.amazonaws.com" "http://route53domains.me-south-1.amazonaws.com" "https://route53domains.us-east-1.amazonaws.com" "https://route53domains.us-east-2.amazonaws.com" "https://route53domains.us-west-1.amazonaws.com" "https://route53domains.us-west-2.amazonaws.com" "https://route53domains.us-gov-west-1.amazonaws.com" "https://route53domains.us-gov-east-1.amazonaws.com" "https://route53domains.ca-central-1.amazonaws.com" "https://route53domains.eu-north-1.amazonaws.com" "https://route53domains.eu-west-1.amazonaws.com" "https://route53domains.eu-west-2.amazonaws.com" "https://route53domains.eu-west-3.amazonaws.com" "https://route53domains.eu-central-1.amazonaws.com" "https://route53domains.eu-south-1.amazonaws.com" "https://route53domains.af-south-1.amazonaws.com" "https://route53domains.ap-northeast-1.amazonaws.com" "https://route53domains.ap-northeast-2.amazonaws.com" "https://route53domains.ap-northeast-3.amazonaws.com" "https://route53domains.ap-southeast-1.amazonaws.com" "https://route53domains.ap-southeast-2.amazonaws.com" "https://route53domains.ap-east-1.amazonaws.com" "https://route53domains.ap-south-1.amazonaws.com" "https://route53domains.sa-east-1.amazonaws.com" "https://route53domains.me-south-1.amazonaws.com" "http://route53domains.cn-north-1.amazonaws.com.cn" "http://route53domains.cn-northwest-1.amazonaws.com.cn" "https://route53domains.cn-north-1.amazonaws.com.cn" "https://route53domains.cn-northwest-1.amazonaws.com.cn"] }
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
-def X-Amz-Target-completer [] { ["Route53Domains_v20140515.AcceptDomainTransferFromAnotherAwsAccount"] }
-def X-Amz-Target-completer-1 [] { ["Route53Domains_v20140515.AssociateDelegationSignerToDomain"] }
-def X-Amz-Target-completer-2 [] { ["Route53Domains_v20140515.CancelDomainTransferToAnotherAwsAccount"] }
-def X-Amz-Target-completer-3 [] { ["Route53Domains_v20140515.CheckDomainAvailability"] }
-def X-Amz-Target-completer-4 [] { ["Route53Domains_v20140515.CheckDomainTransferability"] }
-def X-Amz-Target-completer-5 [] { ["Route53Domains_v20140515.DeleteDomain"] }
-def X-Amz-Target-completer-6 [] { ["Route53Domains_v20140515.DeleteTagsForDomain"] }
-def X-Amz-Target-completer-7 [] { ["Route53Domains_v20140515.DisableDomainAutoRenew"] }
-def X-Amz-Target-completer-8 [] { ["Route53Domains_v20140515.DisableDomainTransferLock"] }
-def X-Amz-Target-completer-9 [] { ["Route53Domains_v20140515.DisassociateDelegationSignerFromDomain"] }
-def X-Amz-Target-completer-10 [] { ["Route53Domains_v20140515.EnableDomainAutoRenew"] }
-def X-Amz-Target-completer-11 [] { ["Route53Domains_v20140515.EnableDomainTransferLock"] }
-def X-Amz-Target-completer-12 [] { ["Route53Domains_v20140515.GetContactReachabilityStatus"] }
-def X-Amz-Target-completer-13 [] { ["Route53Domains_v20140515.GetDomainDetail"] }
-def X-Amz-Target-completer-14 [] { ["Route53Domains_v20140515.GetDomainSuggestions"] }
-def X-Amz-Target-completer-15 [] { ["Route53Domains_v20140515.GetOperationDetail"] }
-def X-Amz-Target-completer-16 [] { ["Route53Domains_v20140515.ListDomains"] }
-def X-Amz-Target-completer-17 [] { ["Route53Domains_v20140515.ListOperations"] }
-def X-Amz-Target-completer-18 [] { ["Route53Domains_v20140515.ListPrices"] }
-def X-Amz-Target-completer-19 [] { ["Route53Domains_v20140515.ListTagsForDomain"] }
-def X-Amz-Target-completer-20 [] { ["Route53Domains_v20140515.PushDomain"] }
-def X-Amz-Target-completer-21 [] { ["Route53Domains_v20140515.RegisterDomain"] }
-def X-Amz-Target-completer-22 [] { ["Route53Domains_v20140515.RejectDomainTransferFromAnotherAwsAccount"] }
-def X-Amz-Target-completer-23 [] { ["Route53Domains_v20140515.RenewDomain"] }
-def X-Amz-Target-completer-24 [] { ["Route53Domains_v20140515.ResendContactReachabilityEmail"] }
-def X-Amz-Target-completer-25 [] { ["Route53Domains_v20140515.ResendOperationAuthorization"] }
-def X-Amz-Target-completer-26 [] { ["Route53Domains_v20140515.RetrieveDomainAuthCode"] }
-def X-Amz-Target-completer-27 [] { ["Route53Domains_v20140515.TransferDomain"] }
-def X-Amz-Target-completer-28 [] { ["Route53Domains_v20140515.TransferDomainToAnotherAwsAccount"] }
-def X-Amz-Target-completer-29 [] { ["Route53Domains_v20140515.UpdateDomainContact"] }
-def X-Amz-Target-completer-30 [] { ["Route53Domains_v20140515.UpdateDomainContactPrivacy"] }
-def X-Amz-Target-completer-31 [] { ["Route53Domains_v20140515.UpdateDomainNameservers"] }
-def X-Amz-Target-completer-32 [] { ["Route53Domains_v20140515.UpdateTagsForDomain"] }
-def X-Amz-Target-completer-33 [] { ["Route53Domains_v20140515.ViewBilling"] }
+def x-amz-target-completer [] { ["Route53Domains_v20140515.AcceptDomainTransferFromAnotherAwsAccount"] }
+def x-amz-target-completer-1 [] { ["Route53Domains_v20140515.AssociateDelegationSignerToDomain"] }
+def x-amz-target-completer-2 [] { ["Route53Domains_v20140515.CancelDomainTransferToAnotherAwsAccount"] }
+def x-amz-target-completer-3 [] { ["Route53Domains_v20140515.CheckDomainAvailability"] }
+def x-amz-target-completer-4 [] { ["Route53Domains_v20140515.CheckDomainTransferability"] }
+def x-amz-target-completer-5 [] { ["Route53Domains_v20140515.DeleteDomain"] }
+def x-amz-target-completer-6 [] { ["Route53Domains_v20140515.DeleteTagsForDomain"] }
+def x-amz-target-completer-7 [] { ["Route53Domains_v20140515.DisableDomainAutoRenew"] }
+def x-amz-target-completer-8 [] { ["Route53Domains_v20140515.DisableDomainTransferLock"] }
+def x-amz-target-completer-9 [] { ["Route53Domains_v20140515.DisassociateDelegationSignerFromDomain"] }
+def x-amz-target-completer-10 [] { ["Route53Domains_v20140515.EnableDomainAutoRenew"] }
+def x-amz-target-completer-11 [] { ["Route53Domains_v20140515.EnableDomainTransferLock"] }
+def x-amz-target-completer-12 [] { ["Route53Domains_v20140515.GetContactReachabilityStatus"] }
+def x-amz-target-completer-13 [] { ["Route53Domains_v20140515.GetDomainDetail"] }
+def x-amz-target-completer-14 [] { ["Route53Domains_v20140515.GetDomainSuggestions"] }
+def x-amz-target-completer-15 [] { ["Route53Domains_v20140515.GetOperationDetail"] }
+def x-amz-target-completer-16 [] { ["Route53Domains_v20140515.ListDomains"] }
+def x-amz-target-completer-17 [] { ["Route53Domains_v20140515.ListOperations"] }
+def x-amz-target-completer-18 [] { ["Route53Domains_v20140515.ListPrices"] }
+def x-amz-target-completer-19 [] { ["Route53Domains_v20140515.ListTagsForDomain"] }
+def x-amz-target-completer-20 [] { ["Route53Domains_v20140515.PushDomain"] }
+def x-amz-target-completer-21 [] { ["Route53Domains_v20140515.RegisterDomain"] }
+def x-amz-target-completer-22 [] { ["Route53Domains_v20140515.RejectDomainTransferFromAnotherAwsAccount"] }
+def x-amz-target-completer-23 [] { ["Route53Domains_v20140515.RenewDomain"] }
+def x-amz-target-completer-24 [] { ["Route53Domains_v20140515.ResendContactReachabilityEmail"] }
+def x-amz-target-completer-25 [] { ["Route53Domains_v20140515.ResendOperationAuthorization"] }
+def x-amz-target-completer-26 [] { ["Route53Domains_v20140515.RetrieveDomainAuthCode"] }
+def x-amz-target-completer-27 [] { ["Route53Domains_v20140515.TransferDomain"] }
+def x-amz-target-completer-28 [] { ["Route53Domains_v20140515.TransferDomainToAnotherAwsAccount"] }
+def x-amz-target-completer-29 [] { ["Route53Domains_v20140515.UpdateDomainContact"] }
+def x-amz-target-completer-30 [] { ["Route53Domains_v20140515.UpdateDomainContactPrivacy"] }
+def x-amz-target-completer-31 [] { ["Route53Domains_v20140515.UpdateDomainNameservers"] }
+def x-amz-target-completer-32 [] { ["Route53Domains_v20140515.UpdateTagsForDomain"] }
+def x-amz-target-completer-33 [] { ["Route53Domains_v20140515.ViewBilling"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "x-amz-target-route53-domains-v20140515-accept-domain-transfer-from-another-aws-account AcceptDomainTransferFromAnotherAwsAccount" } } | get name | first)
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "x-amz-target-route53-domains-v20140515-accept-domain-transfer-from-another-aws-account create" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -124,11 +135,11 @@ export def commands []: nothing -> table {
   }
 }
 
-# <p>Accepts the transfer of a domain from another Amazon Web Services account to the currentAmazon Web Services account. You initiate a transfer between Amazon Web Services accounts using <a href="https://docs.aws.amazon.com/Route53/latest/APIReference/API_domains_TransferDomainToAnotherAwsAccount.html">TransferDomainToAnotherAwsAccount</a>.</p> <p>If you use the CLI command at <a href="https://docs.aws.amazon.com/cli/latest/reference/route53domains/accept-domain-transfer-from-another-aws-account.html">accept-domain-transfer-from-another-aws-account</a>, use JSON format as input instead of text because otherwise CLI will throw an error from domain transfer input that includes single quotes.</p> <p>Use either <a href="https://docs.aws.amazon.com/Route53/latest/APIReference/API_domains_ListOperations.html">ListOperations</a> or <a href="https://docs.aws.amazon.com/Route53/latest/APIReference/API_domains_GetOperationDetail.html">GetOperationDetail</a> to determine whether the operation succeeded. <a href="https://docs.aws.amazon.com/Route53/latest/APIReference/API_domains_GetOperationDetail.html">GetOperationDetail</a> provides additional information, for example, <code>Domain Transfer from Aws Account 111122223333 has been cancelled</code>. </p>
+# Accepts the transfer of a domain from another Amazon Web Services account to the currentAmazon Web Services account. You initiate a transfer between Amazon Web Services accounts using TransferDomainToAnotherAwsAccount (https://docs.aws.amazon.com/Route53/latest/APIReference/API_domains_TransferDomainToAnotherAwsAccount.html). If you use the CLI command at accept-domain-transfer-from-another-aws-account (https://docs.aws.amazon.com/cli/latest/reference/route53domains/accept-domain-transfer-from-another-aws-account.html), use JSON format as input instead of text because otherwise CLI will throw an error from domain transfer input that includes single quotes. Use either ListOperations (https://docs.aws.amazon.com/Route53/latest/APIReference/API_domains_ListOperations.html) or GetOperationDetail (https://docs.aws.amazon.com/Route53/latest/APIReference/API_domains_GetOperationDetail.html) to determine whether the operation succeeded. GetOperationDetail (https://docs.aws.amazon.com/Route53/latest/APIReference/API_domains_GetOperationDetail.html) provides additional information, for example, Domain Transfer from Aws Account 111122223333 has been cancelled.
 #
 # POST /#X-Amz-Target=Route53Domains_v20140515.AcceptDomainTransferFromAnotherAwsAccount
 # operationId: AcceptDomainTransferFromAnotherAwsAccount
-export def "x-amz-target-route53-domains-v20140515-accept-domain-transfer-from-another-aws-account AcceptDomainTransferFromAnotherAwsAccount" [
+export def "x-amz-target-route53-domains-v20140515-accept-domain-transfer-from-another-aws-account create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -136,36 +147,37 @@ export def "x-amz-target-route53-domains-v20140515-accept-domain-transfer-from-a
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer
-  DomainName: any
-  Password: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer
+  domain_name: any
+  password: any
 ]: any -> record<OperationId: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Route53Domains_v20140515.AcceptDomainTransferFromAnotherAwsAccount")
-  let body = {DomainName: $DomainName, Password: $Password} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"DomainName": $domain_name, "Password": $password} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
-# <p> Creates a delegation signer (DS) record in the registry zone for this domain name.</p> <p>Note that creating DS record at the registry impacts DNSSEC validation of your DNS records. This action may render your domain name unavailable on the internet if the steps are completed in the wrong order, or with incorrect timing. For more information about DNSSEC signing, see <a href="https://docs.aws.amazon.com/Route53/latest/DeveloperGuide/dns-configuring-dnssec.html">Configuring DNSSEC signing</a> in the <i>Route 53 developer guide</i>.</p>
+# Creates a delegation signer (DS) record in the registry zone for this domain name. Note that creating DS record at the registry impacts DNSSEC validation of your DNS records. This action may render your domain name unavailable on the internet if the steps are completed in the wrong order, or with incorrect timing. For more information about DNSSEC signing, see Configuring DNSSEC signing (https://docs.aws.amazon.com/Route53/latest/DeveloperGuide/dns-configuring-dnssec.html) in the Route 53 developer guide.
 #
 # POST /#X-Amz-Target=Route53Domains_v20140515.AssociateDelegationSignerToDomain
 # operationId: AssociateDelegationSignerToDomain
-export def "x-amz-target-route53-domains-v20140515-associate-delegation-signer-to-domain AssociateDelegationSignerToDomain" [
+export def "x-amz-target-route53-domains-v20140515-associate-delegation-signer-to-domain create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -173,36 +185,37 @@ export def "x-amz-target-route53-domains-v20140515-associate-delegation-signer-t
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-1
-  DomainName: any
-  SigningAttributes: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-1
+  domain_name: any
+  signing_attributes: any
 ]: any -> record<OperationId: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Route53Domains_v20140515.AssociateDelegationSignerToDomain")
-  let body = {DomainName: $DomainName, SigningAttributes: $SigningAttributes} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"DomainName": $domain_name, "SigningAttributes": $signing_attributes} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
-# <p>Cancels the transfer of a domain from the current Amazon Web Services account to another Amazon Web Services account. You initiate a transfer betweenAmazon Web Services accounts using <a href="https://docs.aws.amazon.com/Route53/latest/APIReference/API_domains_TransferDomainToAnotherAwsAccount.html">TransferDomainToAnotherAwsAccount</a>. </p> <important> <p>You must cancel the transfer before the other Amazon Web Services account accepts the transfer using <a href="https://docs.aws.amazon.com/Route53/latest/APIReference/API_domains_AcceptDomainTransferFromAnotherAwsAccount.html">AcceptDomainTransferFromAnotherAwsAccount</a>.</p> </important> <p>Use either <a href="https://docs.aws.amazon.com/Route53/latest/APIReference/API_domains_ListOperations.html">ListOperations</a> or <a href="https://docs.aws.amazon.com/Route53/latest/APIReference/API_domains_GetOperationDetail.html">GetOperationDetail</a> to determine whether the operation succeeded. <a href="https://docs.aws.amazon.com/Route53/latest/APIReference/API_domains_GetOperationDetail.html">GetOperationDetail</a> provides additional information, for example, <code>Domain Transfer from Aws Account 111122223333 has been cancelled</code>. </p>
+# Cancels the transfer of a domain from the current Amazon Web Services account to another Amazon Web Services account. You initiate a transfer betweenAmazon Web Services accounts using TransferDomainToAnotherAwsAccount (https://docs.aws.amazon.com/Route53/latest/APIReference/API_domains_TransferDomainToAnotherAwsAccount.html). You must cancel the transfer before the other Amazon Web Services account accepts the transfer using AcceptDomainTransferFromAnotherAwsAccount (https://docs.aws.amazon.com/Route53/latest/APIReference/API_domains_AcceptDomainTransferFromAnotherAwsAccount.html). Use either ListOperations (https://docs.aws.amazon.com/Route53/latest/APIReference/API_domains_ListOperations.html) or GetOperationDetail (https://docs.aws.amazon.com/Route53/latest/APIReference/API_domains_GetOperationDetail.html) to determine whether the operation succeeded. GetOperationDetail (https://docs.aws.amazon.com/Route53/latest/APIReference/API_domains_GetOperationDetail.html) provides additional information, for example, Domain Transfer from Aws Account 111122223333 has been cancelled.
 #
 # POST /#X-Amz-Target=Route53Domains_v20140515.CancelDomainTransferToAnotherAwsAccount
 # operationId: CancelDomainTransferToAnotherAwsAccount
-export def "x-amz-target-route53-domains-v20140515-cancel-domain-transfer-to-another-aws-account CancelDomainTransferToAnotherAwsAccount" [
+export def "x-amz-target-route53-domains-v20140515-cancel-domain-transfer-to-another-aws-account cancel" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -210,35 +223,36 @@ export def "x-amz-target-route53-domains-v20140515-cancel-domain-transfer-to-ano
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-2
-  DomainName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-2
+  domain_name: any
 ]: any -> record<OperationId: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Route53Domains_v20140515.CancelDomainTransferToAnotherAwsAccount")
-  let body = {DomainName: $DomainName} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"DomainName": $domain_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # This operation checks the availability of one domain name. Note that if the availability status of a domain is pending, you must submit another request to determine the availability of the domain name.
 #
 # POST /#X-Amz-Target=Route53Domains_v20140515.CheckDomainAvailability
 # operationId: CheckDomainAvailability
-export def "x-amz-target-route53-domains-v20140515-check-domain-availability CheckDomainAvailability" [
+export def "x-amz-target-route53-domains-v20140515-check-domain-availability check" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -246,36 +260,37 @@ export def "x-amz-target-route53-domains-v20140515-check-domain-availability Che
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-3
-  DomainName: any
-  --IdnLangCode: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-3
+  domain_name: any
+  --idn-lang-code: any
 ]: any -> record<Availability: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Route53Domains_v20140515.CheckDomainAvailability")
-  let body = {DomainName: $DomainName, IdnLangCode: $IdnLangCode} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"DomainName": $domain_name, "IdnLangCode": $idn_lang_code} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
-# Checks whether a domain name can be transferred to Amazon Route 53. 
+# Checks whether a domain name can be transferred to Amazon Route 53.
 #
 # POST /#X-Amz-Target=Route53Domains_v20140515.CheckDomainTransferability
 # operationId: CheckDomainTransferability
-export def "x-amz-target-route53-domains-v20140515-check-domain-transferability CheckDomainTransferability" [
+export def "x-amz-target-route53-domains-v20140515-check-domain-transferability check" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -283,36 +298,37 @@ export def "x-amz-target-route53-domains-v20140515-check-domain-transferability 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-4
-  DomainName: any
-  --AuthCode: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-4
+  domain_name: any
+  --auth-code: any
 ]: any -> record<Transferability: record<Transferable: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Route53Domains_v20140515.CheckDomainTransferability")
-  let body = {DomainName: $DomainName, AuthCode: $AuthCode} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"DomainName": $domain_name, "AuthCode": $auth_code} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
-# <p>This operation deletes the specified domain. This action is permanent. For more information, see <a href="https://docs.aws.amazon.com/Route53/latest/DeveloperGuide/domain-delete.html">Deleting a domain name registration</a>.</p> <p>To transfer the domain registration to another registrar, use the transfer process that’s provided by the registrar to which you want to transfer the registration. Otherwise, the following apply:</p> <ol> <li> <p>You can’t get a refund for the cost of a deleted domain registration.</p> </li> <li> <p>The registry for the top-level domain might hold the domain name for a brief time before releasing it for other users to register (varies by registry). </p> </li> <li> <p>When the registration has been deleted, we'll send you a confirmation to the registrant contact. The email will come from <code>noreply@domainnameverification.net</code> or <code>noreply@registrar.amazon.com</code>.</p> </li> </ol>
+# This operation deletes the specified domain. This action is permanent. For more information, see Deleting a domain name registration (https://docs.aws.amazon.com/Route53/latest/DeveloperGuide/domain-delete.html). To transfer the domain registration to another registrar, use the transfer process that’s provided by the registrar to which you want to transfer the registration. Otherwise, the following apply: You can’t get a refund for the cost of a deleted domain registration. The registry for the top-level domain might hold the domain name for a brief time before releasing it for other users to register (varies by registry). When the registration has been deleted, we'll send you a confirmation to the registrant contact. The email will come from noreply@domainnameverification.net or noreply@registrar.amazon.com.
 #
 # POST /#X-Amz-Target=Route53Domains_v20140515.DeleteDomain
 # operationId: DeleteDomain
-export def "x-amz-target-route53-domains-v20140515-delete-domain DeleteDomain" [
+export def "x-amz-target-route53-domains-v20140515-delete-domain delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -320,35 +336,36 @@ export def "x-amz-target-route53-domains-v20140515-delete-domain DeleteDomain" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-5
-  DomainName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-5
+  domain_name: any
 ]: any -> record<OperationId: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Route53Domains_v20140515.DeleteDomain")
-  let body = {DomainName: $DomainName} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"DomainName": $domain_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
-# <p>This operation deletes the specified tags for a domain.</p> <p>All tag operations are eventually consistent; subsequent operations might not immediately represent all issued operations.</p>
+# This operation deletes the specified tags for a domain. All tag operations are eventually consistent; subsequent operations might not immediately represent all issued operations.
 #
 # POST /#X-Amz-Target=Route53Domains_v20140515.DeleteTagsForDomain
 # operationId: DeleteTagsForDomain
-export def "x-amz-target-route53-domains-v20140515-delete-tags-for-domain DeleteTagsForDomain" [
+export def "x-amz-target-route53-domains-v20140515-delete-tags-for-domain delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -356,36 +373,37 @@ export def "x-amz-target-route53-domains-v20140515-delete-tags-for-domain Delete
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-6
-  DomainName: any
-  TagsToDelete: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-6
+  domain_name: any
+  tags_to_delete: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Route53Domains_v20140515.DeleteTagsForDomain")
-  let body = {DomainName: $DomainName, TagsToDelete: $TagsToDelete} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"DomainName": $domain_name, "TagsToDelete": $tags_to_delete} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # This operation disables automatic renewal of domain registration for the specified domain.
 #
 # POST /#X-Amz-Target=Route53Domains_v20140515.DisableDomainAutoRenew
 # operationId: DisableDomainAutoRenew
-export def "x-amz-target-route53-domains-v20140515-disable-domain-auto-renew DisableDomainAutoRenew" [
+export def "x-amz-target-route53-domains-v20140515-disable-domain-auto-renew disable" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -393,35 +411,36 @@ export def "x-amz-target-route53-domains-v20140515-disable-domain-auto-renew Dis
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-7
-  DomainName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-7
+  domain_name: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Route53Domains_v20140515.DisableDomainAutoRenew")
-  let body = {DomainName: $DomainName} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"DomainName": $domain_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
-# This operation removes the transfer lock on the domain (specifically the <code>clientTransferProhibited</code> status) to allow domain transfers. We recommend you refrain from performing this action unless you intend to transfer the domain to a different registrar. Successful submission returns an operation ID that you can use to track the progress and completion of the action. If the request is not completed successfully, the domain registrant will be notified by email.
+# This operation removes the transfer lock on the domain (specifically the clientTransferProhibited status) to allow domain transfers. We recommend you refrain from performing this action unless you intend to transfer the domain to a different registrar. Successful submission returns an operation ID that you can use to track the progress and completion of the action. If the request is not completed successfully, the domain registrant will be notified by email.
 #
 # POST /#X-Amz-Target=Route53Domains_v20140515.DisableDomainTransferLock
 # operationId: DisableDomainTransferLock
-export def "x-amz-target-route53-domains-v20140515-disable-domain-transfer-lock DisableDomainTransferLock" [
+export def "x-amz-target-route53-domains-v20140515-disable-domain-transfer-lock disable" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -429,35 +448,36 @@ export def "x-amz-target-route53-domains-v20140515-disable-domain-transfer-lock 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-8
-  DomainName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-8
+  domain_name: any
 ]: any -> record<OperationId: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Route53Domains_v20140515.DisableDomainTransferLock")
-  let body = {DomainName: $DomainName} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"DomainName": $domain_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Deletes a delegation signer (DS) record in the registry zone for this domain name.
 #
 # POST /#X-Amz-Target=Route53Domains_v20140515.DisassociateDelegationSignerFromDomain
 # operationId: DisassociateDelegationSignerFromDomain
-export def "x-amz-target-route53-domains-v20140515-disassociate-delegation-signer-from-domain DisassociateDelegationSignerFromDomain" [
+export def "x-amz-target-route53-domains-v20140515-disassociate-delegation-signer-from-domain create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -465,36 +485,37 @@ export def "x-amz-target-route53-domains-v20140515-disassociate-delegation-signe
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-9
-  DomainName: any
-  Id: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-9
+  domain_name: any
+  id: any
 ]: any -> record<OperationId: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Route53Domains_v20140515.DisassociateDelegationSignerFromDomain")
-  let body = {DomainName: $DomainName, Id: $Id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"DomainName": $domain_name, "Id": $id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
-# <p>This operation configures Amazon Route 53 to automatically renew the specified domain before the domain registration expires. The cost of renewing your domain registration is billed to your Amazon Web Services account.</p> <p>The period during which you can renew a domain name varies by TLD. For a list of TLDs and their renewal policies, see <a href="https://docs.aws.amazon.com/Route53/latest/DeveloperGuide/registrar-tld-list.html">Domains That You Can Register with Amazon Route 53</a> in the <i>Amazon Route 53 Developer Guide</i>. Route 53 requires that you renew before the end of the renewal period so we can complete processing before the deadline.</p>
+# This operation configures Amazon Route 53 to automatically renew the specified domain before the domain registration expires. The cost of renewing your domain registration is billed to your Amazon Web Services account. The period during which you can renew a domain name varies by TLD. For a list of TLDs and their renewal policies, see Domains That You Can Register with Amazon Route 53 (https://docs.aws.amazon.com/Route53/latest/DeveloperGuide/registrar-tld-list.html) in the Amazon Route 53 Developer Guide. Route 53 requires that you renew before the end of the renewal period so we can complete processing before the deadline.
 #
 # POST /#X-Amz-Target=Route53Domains_v20140515.EnableDomainAutoRenew
 # operationId: EnableDomainAutoRenew
-export def "x-amz-target-route53-domains-v20140515-enable-domain-auto-renew EnableDomainAutoRenew" [
+export def "x-amz-target-route53-domains-v20140515-enable-domain-auto-renew enable" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -502,35 +523,36 @@ export def "x-amz-target-route53-domains-v20140515-enable-domain-auto-renew Enab
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-10
-  DomainName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-10
+  domain_name: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Route53Domains_v20140515.EnableDomainAutoRenew")
-  let body = {DomainName: $DomainName} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"DomainName": $domain_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
-# This operation sets the transfer lock on the domain (specifically the <code>clientTransferProhibited</code> status) to prevent domain transfers. Successful submission returns an operation ID that you can use to track the progress and completion of the action. If the request is not completed successfully, the domain registrant will be notified by email.
+# This operation sets the transfer lock on the domain (specifically the clientTransferProhibited status) to prevent domain transfers. Successful submission returns an operation ID that you can use to track the progress and completion of the action. If the request is not completed successfully, the domain registrant will be notified by email.
 #
 # POST /#X-Amz-Target=Route53Domains_v20140515.EnableDomainTransferLock
 # operationId: EnableDomainTransferLock
-export def "x-amz-target-route53-domains-v20140515-enable-domain-transfer-lock EnableDomainTransferLock" [
+export def "x-amz-target-route53-domains-v20140515-enable-domain-transfer-lock enable" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -538,35 +560,36 @@ export def "x-amz-target-route53-domains-v20140515-enable-domain-transfer-lock E
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-11
-  DomainName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-11
+  domain_name: any
 ]: any -> record<OperationId: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Route53Domains_v20140515.EnableDomainTransferLock")
-  let body = {DomainName: $DomainName} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"DomainName": $domain_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
-# <p>For operations that require confirmation that the email address for the registrant contact is valid, such as registering a new domain, this operation returns information about whether the registrant contact has responded.</p> <p>If you want us to resend the email, use the <code>ResendContactReachabilityEmail</code> operation.</p>
+# For operations that require confirmation that the email address for the registrant contact is valid, such as registering a new domain, this operation returns information about whether the registrant contact has responded. If you want us to resend the email, use the ResendContactReachabilityEmail operation.
 #
 # POST /#X-Amz-Target=Route53Domains_v20140515.GetContactReachabilityStatus
 # operationId: GetContactReachabilityStatus
-export def "x-amz-target-route53-domains-v20140515-get-contact-reachability-status GetContactReachabilityStatus" [
+export def "x-amz-target-route53-domains-v20140515-get-contact-reachability-status get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -574,35 +597,36 @@ export def "x-amz-target-route53-domains-v20140515-get-contact-reachability-stat
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-12
-  --domainName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-12
+  --domain-name: any
 ]: any -> record<domainName: record, status: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Route53Domains_v20140515.GetContactReachabilityStatus")
-  let body = {domainName: $domainName} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"domainName": $domain_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # This operation returns detailed information about a specified domain that is associated with the current Amazon Web Services account. Contact information for the domain is also returned as part of the output.
 #
 # POST /#X-Amz-Target=Route53Domains_v20140515.GetDomainDetail
 # operationId: GetDomainDetail
-export def "x-amz-target-route53-domains-v20140515-get-domain-detail GetDomainDetail" [
+export def "x-amz-target-route53-domains-v20140515-get-domain-detail get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -610,35 +634,36 @@ export def "x-amz-target-route53-domains-v20140515-get-domain-detail GetDomainDe
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-13
-  DomainName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-13
+  domain_name: any
 ]: any -> record<DomainName: record, Nameservers: record, AutoRenew: record, AdminContact: record<FirstName: record, LastName: record, ContactType: record, OrganizationName: record, AddressLine1: record, AddressLine2: record, City: record, State: record, CountryCode: record, ZipCode: record, PhoneNumber: record, Email: record, Fax: record, ExtraParams: record>, RegistrantContact: record<FirstName: record, LastName: record, ContactType: record, OrganizationName: record, AddressLine1: record, AddressLine2: record, City: record, State: record, CountryCode: record, ZipCode: record, PhoneNumber: record, Email: record, Fax: record, ExtraParams: record>, TechContact: record<FirstName: record, LastName: record, ContactType: record, OrganizationName: record, AddressLine1: record, AddressLine2: record, City: record, State: record, CountryCode: record, ZipCode: record, PhoneNumber: record, Email: record, Fax: record, ExtraParams: record>, AdminPrivacy: record, RegistrantPrivacy: record, TechPrivacy: record, RegistrarName: record, WhoIsServer: record, RegistrarUrl: record, AbuseContactEmail: record, AbuseContactPhone: record, RegistryDomainId: record, CreationDate: record, UpdatedDate: record, ExpirationDate: record, Reseller: record, DnsSec: record, StatusList: record, DnssecKeys: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Route53Domains_v20140515.GetDomainDetail")
-  let body = {DomainName: $DomainName} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"DomainName": $domain_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # The GetDomainSuggestions operation returns a list of suggested domain names.
 #
 # POST /#X-Amz-Target=Route53Domains_v20140515.GetDomainSuggestions
 # operationId: GetDomainSuggestions
-export def "x-amz-target-route53-domains-v20140515-get-domain-suggestions GetDomainSuggestions" [
+export def "x-amz-target-route53-domains-v20140515-get-domain-suggestions get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -646,37 +671,38 @@ export def "x-amz-target-route53-domains-v20140515-get-domain-suggestions GetDom
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-14
-  DomainName: any
-  SuggestionCount: any
-  OnlyAvailable: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-14
+  domain_name: any
+  suggestion_count: any
+  only_available: any
 ]: any -> record<SuggestionsList: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Route53Domains_v20140515.GetDomainSuggestions")
-  let body = {DomainName: $DomainName, SuggestionCount: $SuggestionCount, OnlyAvailable: $OnlyAvailable} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"DomainName": $domain_name, "SuggestionCount": $suggestion_count, "OnlyAvailable": $only_available} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # This operation returns the current status of an operation that is not completed.
 #
 # POST /#X-Amz-Target=Route53Domains_v20140515.GetOperationDetail
 # operationId: GetOperationDetail
-export def "x-amz-target-route53-domains-v20140515-get-operation-detail GetOperationDetail" [
+export def "x-amz-target-route53-domains-v20140515-get-operation-detail get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -684,35 +710,36 @@ export def "x-amz-target-route53-domains-v20140515-get-operation-detail GetOpera
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-15
-  OperationId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-15
+  operation_id: any
 ]: any -> record<OperationId: record, Status: record, Message: record, DomainName: record, Type: record, SubmittedDate: record, LastUpdatedDate: record, StatusFlag: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Route53Domains_v20140515.GetOperationDetail")
-  let body = {OperationId: $OperationId} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"OperationId": $operation_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # This operation returns all the domain names registered with Amazon Route 53 for the current Amazon Web Services account if no filtering conditions are used.
 #
 # POST /#X-Amz-Target=Route53Domains_v20140515.ListDomains
 # operationId: ListDomains
-export def "x-amz-target-route53-domains-v20140515-list-domains ListDomains" [
+export def "x-amz-target-route53-domains-v20140515-list-domains list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -720,41 +747,42 @@ export def "x-amz-target-route53-domains-v20140515-list-domains ListDomains" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxItems: string # Pagination limit
-  --Marker: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-16
-  --FilterConditions: any
-  --SortCondition: any
-  --Marker: any
-  --MaxItems: any
+  --max-items: string # Pagination limit
+  --marker: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-16
+  --filter-conditions: any
+  --sort-condition: any
+  --marker: any
+  --max-items: any
 ]: any -> record<Domains: record, NextPageMarker: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxItems" $MaxItems "scalar") (serialize-qp "Marker" $Marker "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxItems" $max_items "scalar") (serialize-qp "Marker" $marker "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=Route53Domains_v20140515.ListDomains" $qp)
-  let body = {FilterConditions: $FilterConditions, SortCondition: $SortCondition, Marker: $Marker, MaxItems: $MaxItems} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"FilterConditions": $filter_conditions, "SortCondition": $sort_condition, "Marker": $marker, "MaxItems": $max_items} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
-# <p>Returns information about all of the operations that return an operation ID and that have ever been performed on domains that were registered by the current account. </p> <p>This command runs only in the us-east-1 Region.</p>
+# Returns information about all of the operations that return an operation ID and that have ever been performed on domains that were registered by the current account. This command runs only in the us-east-1 Region.
 #
 # POST /#X-Amz-Target=Route53Domains_v20140515.ListOperations
 # operationId: ListOperations
-export def "x-amz-target-route53-domains-v20140515-list-operations ListOperations" [
+export def "x-amz-target-route53-domains-v20140515-list-operations list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -762,44 +790,45 @@ export def "x-amz-target-route53-domains-v20140515-list-operations ListOperation
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxItems: string # Pagination limit
-  --Marker: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-17
-  --SubmittedSince: any
-  --Marker: any
-  --MaxItems: any
-  --Status: any
-  --Type: any
-  --SortBy: any
-  --SortOrder: any
+  --max-items: string # Pagination limit
+  --marker: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-17
+  --submitted-since: any
+  --marker: any
+  --max-items: any
+  --status: any
+  --type: any
+  --sort-by: any
+  --sort-order: any
 ]: any -> record<Operations: record, NextPageMarker: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxItems" $MaxItems "scalar") (serialize-qp "Marker" $Marker "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxItems" $max_items "scalar") (serialize-qp "Marker" $marker "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=Route53Domains_v20140515.ListOperations" $qp)
-  let body = {SubmittedSince: $SubmittedSince, Marker: $Marker, MaxItems: $MaxItems, Status: $Status, Type: $Type, SortBy: $SortBy, SortOrder: $SortOrder} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"SubmittedSince": $submitted_since, "Marker": $marker, "MaxItems": $max_items, "Status": $status, "Type": $type, "SortBy": $sort_by, "SortOrder": $sort_order} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
-# <p>Lists the following prices for either all the TLDs supported by Route 53, or the specified TLD:</p> <ul> <li> <p>Registration</p> </li> <li> <p>Transfer</p> </li> <li> <p>Owner change</p> </li> <li> <p>Domain renewal</p> </li> <li> <p>Domain restoration</p> </li> </ul>
+# Lists the following prices for either all the TLDs supported by Route 53, or the specified TLD: Registration Transfer Owner change Domain renewal Domain restoration
 #
 # POST /#X-Amz-Target=Route53Domains_v20140515.ListPrices
 # operationId: ListPrices
-export def "x-amz-target-route53-domains-v20140515-list-prices ListPrices" [
+export def "x-amz-target-route53-domains-v20140515-list-prices list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -807,40 +836,41 @@ export def "x-amz-target-route53-domains-v20140515-list-prices ListPrices" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxItems: string # Pagination limit
-  --Marker: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-18
-  --Tld: any
-  --Marker: any
-  --MaxItems: any
+  --max-items: string # Pagination limit
+  --marker: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-18
+  --tld: any
+  --marker: any
+  --max-items: any
 ]: any -> record<Prices: record, NextPageMarker: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxItems" $MaxItems "scalar") (serialize-qp "Marker" $Marker "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxItems" $max_items "scalar") (serialize-qp "Marker" $marker "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=Route53Domains_v20140515.ListPrices" $qp)
-  let body = {Tld: $Tld, Marker: $Marker, MaxItems: $MaxItems} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"Tld": $tld, "Marker": $marker, "MaxItems": $max_items} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
-# <p>This operation returns all of the tags that are associated with the specified domain.</p> <p>All tag operations are eventually consistent; subsequent operations might not immediately represent all issued operations.</p>
+# This operation returns all of the tags that are associated with the specified domain. All tag operations are eventually consistent; subsequent operations might not immediately represent all issued operations.
 #
 # POST /#X-Amz-Target=Route53Domains_v20140515.ListTagsForDomain
 # operationId: ListTagsForDomain
-export def "x-amz-target-route53-domains-v20140515-list-tags-for-domain ListTagsForDomain" [
+export def "x-amz-target-route53-domains-v20140515-list-tags-for-domain list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -848,35 +878,36 @@ export def "x-amz-target-route53-domains-v20140515-list-tags-for-domain ListTags
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-19
-  DomainName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-19
+  domain_name: any
 ]: any -> record<TagList: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Route53Domains_v20140515.ListTagsForDomain")
-  let body = {DomainName: $DomainName} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"DomainName": $domain_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
-# <p> Moves a domain from Amazon Web Services to another registrar. </p> <p>Supported actions:</p> <ul> <li> <p>Changes the IPS tags of a .uk domain, and pushes it to transit. Transit means that the domain is ready to be transferred to another registrar.</p> </li> </ul>
+# Moves a domain from Amazon Web Services to another registrar. Supported actions: Changes the IPS tags of a .uk domain, and pushes it to transit. Transit means that the domain is ready to be transferred to another registrar.
 #
 # POST /#X-Amz-Target=Route53Domains_v20140515.PushDomain
 # operationId: PushDomain
-export def "x-amz-target-route53-domains-v20140515-push-domain PushDomain" [
+export def "x-amz-target-route53-domains-v20140515-push-domain push" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -884,36 +915,37 @@ export def "x-amz-target-route53-domains-v20140515-push-domain PushDomain" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-20
-  DomainName: any
-  Target: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-20
+  domain_name: any
+  target: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Route53Domains_v20140515.PushDomain")
-  let body = {DomainName: $DomainName, Target: $Target} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"DomainName": $domain_name, "Target": $target} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
-# <p>This operation registers a domain. Domains are registered either by Amazon Registrar (for .com, .net, and .org domains) or by our registrar associate, Gandi (for all other domains). For some top-level domains (TLDs), this operation requires extra parameters.</p> <p>When you register a domain, Amazon Route 53 does the following:</p> <ul> <li> <p>Creates a Route 53 hosted zone that has the same name as the domain. Route 53 assigns four name servers to your hosted zone and automatically updates your domain registration with the names of these name servers.</p> </li> <li> <p>Enables auto renew, so your domain registration will renew automatically each year. We'll notify you in advance of the renewal date so you can choose whether to renew the registration.</p> </li> <li> <p>Optionally enables privacy protection, so WHOIS queries return contact information either for Amazon Registrar (for .com, .net, and .org domains) or for our registrar associate, Gandi (for all other TLDs). If you don't enable privacy protection, WHOIS queries return the information that you entered for the administrative, registrant, and technical contacts.</p> <note> <p>You must specify the same privacy setting for the administrative, registrant, and technical contacts.</p> </note> </li> <li> <p>If registration is successful, returns an operation ID that you can use to track the progress and completion of the action. If the request is not completed successfully, the domain registrant is notified by email.</p> </li> <li> <p>Charges your Amazon Web Services account an amount based on the top-level domain. For more information, see <a href="http://aws.amazon.com/route53/pricing/">Amazon Route 53 Pricing</a>.</p> </li> </ul>
+# This operation registers a domain. Domains are registered either by Amazon Registrar (for .com, .net, and .org domains) or by our registrar associate, Gandi (for all other domains). For some top-level domains (TLDs), this operation requires extra parameters. When you register a domain, Amazon Route 53 does the following: Creates a Route 53 hosted zone that has the same name as the domain. Route 53 assigns four name servers to your hosted zone and automatically updates your domain registration with the names of these name servers. Enables auto renew, so your domain registration will renew automatically each year. We'll notify you in advance of the renewal date so you can choose whether to renew the registration. Optionally enables privacy protection, so WHOIS queries return contact information either for Amazon Registrar (for .com, .net, and .org domains) or for our registrar associate, Gandi (for all other TLDs). If you don't enable privacy protection, WHOIS queries return the information that you entered for the administrative, registrant, and technical contacts. You must specify the same privacy setting for the administrative, registrant, and technical contacts. If registration is successful, returns an operation ID that you can use to track the progress and completion of the action. If the request is not completed successfully, the domain registrant is notified by email. Charges your Amazon Web Services account an amount based on the top-level domain. For more information, see Amazon Route 53 Pricing (http://aws.amazon.com/route53/pricing/).
 #
 # POST /#X-Amz-Target=Route53Domains_v20140515.RegisterDomain
 # operationId: RegisterDomain
-export def "x-amz-target-route53-domains-v20140515-register-domain RegisterDomain" [
+export def "x-amz-target-route53-domains-v20140515-register-domain create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -921,44 +953,45 @@ export def "x-amz-target-route53-domains-v20140515-register-domain RegisterDomai
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-21
-  DomainName: any
-  --IdnLangCode: any
-  DurationInYears: any
-  --AutoRenew: any
-  AdminContact: any
-  RegistrantContact: any
-  TechContact: any
-  --PrivacyProtectAdminContact: any
-  --PrivacyProtectRegistrantContact: any
-  --PrivacyProtectTechContact: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-21
+  domain_name: any
+  --idn-lang-code: any
+  duration_in_years: any
+  --auto-renew: any
+  admin_contact: any
+  registrant_contact: any
+  tech_contact: any
+  --privacy-protect-admin-contact: any
+  --privacy-protect-registrant-contact: any
+  --privacy-protect-tech-contact: any
 ]: any -> record<OperationId: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Route53Domains_v20140515.RegisterDomain")
-  let body = {DomainName: $DomainName, IdnLangCode: $IdnLangCode, DurationInYears: $DurationInYears, AutoRenew: $AutoRenew, AdminContact: $AdminContact, RegistrantContact: $RegistrantContact, TechContact: $TechContact, PrivacyProtectAdminContact: $PrivacyProtectAdminContact, PrivacyProtectRegistrantContact: $PrivacyProtectRegistrantContact, PrivacyProtectTechContact: $PrivacyProtectTechContact} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"DomainName": $domain_name, "IdnLangCode": $idn_lang_code, "DurationInYears": $duration_in_years, "AutoRenew": $auto_renew, "AdminContact": $admin_contact, "RegistrantContact": $registrant_contact, "TechContact": $tech_contact, "PrivacyProtectAdminContact": $privacy_protect_admin_contact, "PrivacyProtectRegistrantContact": $privacy_protect_registrant_contact, "PrivacyProtectTechContact": $privacy_protect_tech_contact} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
-# <p>Rejects the transfer of a domain from another Amazon Web Services account to the current Amazon Web Services account. You initiate a transfer betweenAmazon Web Services accounts using <a href="https://docs.aws.amazon.com/Route53/latest/APIReference/API_domains_TransferDomainToAnotherAwsAccount.html">TransferDomainToAnotherAwsAccount</a>. </p> <p>Use either <a href="https://docs.aws.amazon.com/Route53/latest/APIReference/API_domains_ListOperations.html">ListOperations</a> or <a href="https://docs.aws.amazon.com/Route53/latest/APIReference/API_domains_GetOperationDetail.html">GetOperationDetail</a> to determine whether the operation succeeded. <a href="https://docs.aws.amazon.com/Route53/latest/APIReference/API_domains_GetOperationDetail.html">GetOperationDetail</a> provides additional information, for example, <code>Domain Transfer from Aws Account 111122223333 has been cancelled</code>. </p>
+# Rejects the transfer of a domain from another Amazon Web Services account to the current Amazon Web Services account. You initiate a transfer betweenAmazon Web Services accounts using TransferDomainToAnotherAwsAccount (https://docs.aws.amazon.com/Route53/latest/APIReference/API_domains_TransferDomainToAnotherAwsAccount.html). Use either ListOperations (https://docs.aws.amazon.com/Route53/latest/APIReference/API_domains_ListOperations.html) or GetOperationDetail (https://docs.aws.amazon.com/Route53/latest/APIReference/API_domains_GetOperationDetail.html) to determine whether the operation succeeded. GetOperationDetail (https://docs.aws.amazon.com/Route53/latest/APIReference/API_domains_GetOperationDetail.html) provides additional information, for example, Domain Transfer from Aws Account 111122223333 has been cancelled.
 #
 # POST /#X-Amz-Target=Route53Domains_v20140515.RejectDomainTransferFromAnotherAwsAccount
 # operationId: RejectDomainTransferFromAnotherAwsAccount
-export def "x-amz-target-route53-domains-v20140515-reject-domain-transfer-from-another-aws-account RejectDomainTransferFromAnotherAwsAccount" [
+export def "x-amz-target-route53-domains-v20140515-reject-domain-transfer-from-another-aws-account reject" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -966,35 +999,36 @@ export def "x-amz-target-route53-domains-v20140515-reject-domain-transfer-from-a
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-22
-  DomainName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-22
+  domain_name: any
 ]: any -> record<OperationId: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Route53Domains_v20140515.RejectDomainTransferFromAnotherAwsAccount")
-  let body = {DomainName: $DomainName} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"DomainName": $domain_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
-# <p>This operation renews a domain for the specified number of years. The cost of renewing your domain is billed to your Amazon Web Services account.</p> <p>We recommend that you renew your domain several weeks before the expiration date. Some TLD registries delete domains before the expiration date if you haven't renewed far enough in advance. For more information about renewing domain registration, see <a href="https://docs.aws.amazon.com/Route53/latest/DeveloperGuide/domain-renew.html">Renewing Registration for a Domain</a> in the <i>Amazon Route 53 Developer Guide</i>.</p>
+# This operation renews a domain for the specified number of years. The cost of renewing your domain is billed to your Amazon Web Services account. We recommend that you renew your domain several weeks before the expiration date. Some TLD registries delete domains before the expiration date if you haven't renewed far enough in advance. For more information about renewing domain registration, see Renewing Registration for a Domain (https://docs.aws.amazon.com/Route53/latest/DeveloperGuide/domain-renew.html) in the Amazon Route 53 Developer Guide.
 #
 # POST /#X-Amz-Target=Route53Domains_v20140515.RenewDomain
 # operationId: RenewDomain
-export def "x-amz-target-route53-domains-v20140515-renew-domain RenewDomain" [
+export def "x-amz-target-route53-domains-v20140515-renew-domain create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1002,37 +1036,38 @@ export def "x-amz-target-route53-domains-v20140515-renew-domain RenewDomain" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-23
-  DomainName: any
-  --DurationInYears: any
-  CurrentExpiryYear: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-23
+  domain_name: any
+  --duration-in-years: any
+  current_expiry_year: any
 ]: any -> record<OperationId: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Route53Domains_v20140515.RenewDomain")
-  let body = {DomainName: $DomainName, DurationInYears: $DurationInYears, CurrentExpiryYear: $CurrentExpiryYear} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"DomainName": $domain_name, "DurationInYears": $duration_in_years, "CurrentExpiryYear": $current_expiry_year} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # For operations that require confirmation that the email address for the registrant contact is valid, such as registering a new domain, this operation resends the confirmation email to the current email address for the registrant contact.
 #
 # POST /#X-Amz-Target=Route53Domains_v20140515.ResendContactReachabilityEmail
 # operationId: ResendContactReachabilityEmail
-export def "x-amz-target-route53-domains-v20140515-resend-contact-reachability-email ResendContactReachabilityEmail" [
+export def "x-amz-target-route53-domains-v20140515-resend-contact-reachability-email resend" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1040,35 +1075,36 @@ export def "x-amz-target-route53-domains-v20140515-resend-contact-reachability-e
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-24
-  --domainName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-24
+  --domain-name: any
 ]: any -> record<domainName: record, emailAddress: record, isAlreadyVerified: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Route53Domains_v20140515.ResendContactReachabilityEmail")
-  let body = {domainName: $domainName} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"domainName": $domain_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
-#  Resend the form of authorization email for this operation. 
+# Resend the form of authorization email for this operation.
 #
 # POST /#X-Amz-Target=Route53Domains_v20140515.ResendOperationAuthorization
 # operationId: ResendOperationAuthorization
-export def "x-amz-target-route53-domains-v20140515-resend-operation-authorization ResendOperationAuthorization" [
+export def "x-amz-target-route53-domains-v20140515-resend-operation-authorization resend" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1076,35 +1112,36 @@ export def "x-amz-target-route53-domains-v20140515-resend-operation-authorizatio
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-25
-  OperationId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-25
+  operation_id: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Route53Domains_v20140515.ResendOperationAuthorization")
-  let body = {OperationId: $OperationId} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"OperationId": $operation_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # This operation returns the authorization code for the domain. To transfer a domain to another registrar, you provide this value to the new registrar.
 #
 # POST /#X-Amz-Target=Route53Domains_v20140515.RetrieveDomainAuthCode
 # operationId: RetrieveDomainAuthCode
-export def "x-amz-target-route53-domains-v20140515-retrieve-domain-auth-code RetrieveDomainAuthCode" [
+export def "x-amz-target-route53-domains-v20140515-retrieve-domain-auth-code get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1112,35 +1149,36 @@ export def "x-amz-target-route53-domains-v20140515-retrieve-domain-auth-code Ret
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-26
-  DomainName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-26
+  domain_name: any
 ]: any -> record<AuthCode: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Route53Domains_v20140515.RetrieveDomainAuthCode")
-  let body = {DomainName: $DomainName} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"DomainName": $domain_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
-# <p>Transfers a domain from another registrar to Amazon Route 53. When the transfer is complete, the domain is registered either with Amazon Registrar (for .com, .net, and .org domains) or with our registrar associate, Gandi (for all other TLDs).</p> <p>For more information about transferring domains, see the following topics:</p> <ul> <li> <p>For transfer requirements, a detailed procedure, and information about viewing the status of a domain that you're transferring to Route 53, see <a href="https://docs.aws.amazon.com/Route53/latest/DeveloperGuide/domain-transfer-to-route-53.html">Transferring Registration for a Domain to Amazon Route 53</a> in the <i>Amazon Route 53 Developer Guide</i>.</p> </li> <li> <p>For information about how to transfer a domain from one Amazon Web Services account to another, see <a href="https://docs.aws.amazon.com/Route53/latest/APIReference/API_domains_TransferDomainToAnotherAwsAccount.html">TransferDomainToAnotherAwsAccount</a>. </p> </li> <li> <p>For information about how to transfer a domain to another domain registrar, see <a href="https://docs.aws.amazon.com/Route53/latest/DeveloperGuide/domain-transfer-from-route-53.html">Transferring a Domain from Amazon Route 53 to Another Registrar</a> in the <i>Amazon Route 53 Developer Guide</i>.</p> </li> </ul> <p>If the registrar for your domain is also the DNS service provider for the domain, we highly recommend that you transfer your DNS service to Route 53 or to another DNS service provider before you transfer your registration. Some registrars provide free DNS service when you purchase a domain registration. When you transfer the registration, the previous registrar will not renew your domain registration and could end your DNS service at any time.</p> <important> <p>If the registrar for your domain is also the DNS service provider for the domain and you don't transfer DNS service to another provider, your website, email, and the web applications associated with the domain might become unavailable.</p> </important> <p>If the transfer is successful, this method returns an operation ID that you can use to track the progress and completion of the action. If the transfer doesn't complete successfully, the domain registrant will be notified by email.</p>
+# Transfers a domain from another registrar to Amazon Route 53. When the transfer is complete, the domain is registered either with Amazon Registrar (for .com, .net, and .org domains) or with our registrar associate, Gandi (for all other TLDs). For more information about transferring domains, see the following topics: For transfer requirements, a detailed procedure, and information about viewing the status of a domain that you're transferring to Route 53, see Transferring Registration for a Domain to Amazon Route 53 (https://docs.aws.amazon.com/Route53/latest/DeveloperGuide/domain-transfer-to-route-53.html) in the Amazon Route 53 Developer Guide. For information about how to transfer a domain from one Amazon Web Services account to another, see TransferDomainToAnotherAwsAccount (https://docs.aws.amazon.com/Route53/latest/APIReference/API_domains_TransferDomainToAnotherAwsAccount.html). For information about how to transfer a domain to another domain registrar, see Transferring a Domain from Amazon Route 53 to Another Registrar (https://docs.aws.amazon.com/Route53/latest/DeveloperGuide/domain-transfer-from-route-53.html) in the Amazon Route 53 Developer Guide. If the registrar for your domain is also the DNS service provider for the domain, we highly recommend that you transfer your DNS service to Route 53 or to another DNS service provider before you transfer your registration. Some registrars provide free DNS service when you purchase a domain registration. When you transfer the registration, the previous registrar will not renew your domain registration and could end your DNS service at any time. If the registrar for your domain is also the DNS service provider for the domain and you don't transfer DNS service to another provider, your website, email, and the web applications associated with the domain might become unavailable. If the transfer is successful, this method returns an operation ID that you can use to track the progress and completion of the action. If the transfer doesn't complete successfully, the domain registrant will be notified by email.
 #
 # POST /#X-Amz-Target=Route53Domains_v20140515.TransferDomain
 # operationId: TransferDomain
-export def "x-amz-target-route53-domains-v20140515-transfer-domain TransferDomain" [
+export def "x-amz-target-route53-domains-v20140515-transfer-domain create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1148,46 +1186,47 @@ export def "x-amz-target-route53-domains-v20140515-transfer-domain TransferDomai
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-27
-  DomainName: any
-  --IdnLangCode: any
-  DurationInYears: any
-  --Nameservers: any
-  --AuthCode: any
-  --AutoRenew: any
-  AdminContact: any
-  RegistrantContact: any
-  TechContact: any
-  --PrivacyProtectAdminContact: any
-  --PrivacyProtectRegistrantContact: any
-  --PrivacyProtectTechContact: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-27
+  domain_name: any
+  --idn-lang-code: any
+  duration_in_years: any
+  --nameservers: any
+  --auth-code: any
+  --auto-renew: any
+  admin_contact: any
+  registrant_contact: any
+  tech_contact: any
+  --privacy-protect-admin-contact: any
+  --privacy-protect-registrant-contact: any
+  --privacy-protect-tech-contact: any
 ]: any -> record<OperationId: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Route53Domains_v20140515.TransferDomain")
-  let body = {DomainName: $DomainName, IdnLangCode: $IdnLangCode, DurationInYears: $DurationInYears, Nameservers: $Nameservers, AuthCode: $AuthCode, AutoRenew: $AutoRenew, AdminContact: $AdminContact, RegistrantContact: $RegistrantContact, TechContact: $TechContact, PrivacyProtectAdminContact: $PrivacyProtectAdminContact, PrivacyProtectRegistrantContact: $PrivacyProtectRegistrantContact, PrivacyProtectTechContact: $PrivacyProtectTechContact} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"DomainName": $domain_name, "IdnLangCode": $idn_lang_code, "DurationInYears": $duration_in_years, "Nameservers": $nameservers, "AuthCode": $auth_code, "AutoRenew": $auto_renew, "AdminContact": $admin_contact, "RegistrantContact": $registrant_contact, "TechContact": $tech_contact, "PrivacyProtectAdminContact": $privacy_protect_admin_contact, "PrivacyProtectRegistrantContact": $privacy_protect_registrant_contact, "PrivacyProtectTechContact": $privacy_protect_tech_contact} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
-# <p>Transfers a domain from the current Amazon Web Services account to another Amazon Web Services account. Note the following:</p> <ul> <li> <p>The Amazon Web Services account that you're transferring the domain to must accept the transfer. If the other account doesn't accept the transfer within 3 days, we cancel the transfer. See <a href="https://docs.aws.amazon.com/Route53/latest/APIReference/API_domains_AcceptDomainTransferFromAnotherAwsAccount.html">AcceptDomainTransferFromAnotherAwsAccount</a>. </p> </li> <li> <p>You can cancel the transfer before the other account accepts it. See <a href="https://docs.aws.amazon.com/Route53/latest/APIReference/API_domains_CancelDomainTransferToAnotherAwsAccount.html">CancelDomainTransferToAnotherAwsAccount</a>. </p> </li> <li> <p>The other account can reject the transfer. See <a href="https://docs.aws.amazon.com/Route53/latest/APIReference/API_domains_RejectDomainTransferFromAnotherAwsAccount.html">RejectDomainTransferFromAnotherAwsAccount</a>. </p> </li> </ul> <important> <p>When you transfer a domain from one Amazon Web Services account to another, Route 53 doesn't transfer the hosted zone that is associated with the domain. DNS resolution isn't affected if the domain and the hosted zone are owned by separate accounts, so transferring the hosted zone is optional. For information about transferring the hosted zone to another Amazon Web Services account, see <a href="https://docs.aws.amazon.com/Route53/latest/DeveloperGuide/hosted-zones-migrating.html">Migrating a Hosted Zone to a Different Amazon Web Services Account</a> in the <i>Amazon Route 53 Developer Guide</i>.</p> </important> <p>Use either <a href="https://docs.aws.amazon.com/Route53/latest/APIReference/API_domains_ListOperations.html">ListOperations</a> or <a href="https://docs.aws.amazon.com/Route53/latest/APIReference/API_domains_GetOperationDetail.html">GetOperationDetail</a> to determine whether the operation succeeded. <a href="https://docs.aws.amazon.com/Route53/latest/APIReference/API_domains_GetOperationDetail.html">GetOperationDetail</a> provides additional information, for example, <code>Domain Transfer from Aws Account 111122223333 has been cancelled</code>. </p>
+# Transfers a domain from the current Amazon Web Services account to another Amazon Web Services account. Note the following: The Amazon Web Services account that you're transferring the domain to must accept the transfer. If the other account doesn't accept the transfer within 3 days, we cancel the transfer. See AcceptDomainTransferFromAnotherAwsAccount (https://docs.aws.amazon.com/Route53/latest/APIReference/API_domains_AcceptDomainTransferFromAnotherAwsAccount.html). You can cancel the transfer before the other account accepts it. See CancelDomainTransferToAnotherAwsAccount (https://docs.aws.amazon.com/Route53/latest/APIReference/API_domains_CancelDomainTransferToAnotherAwsAccount.html). The other account can reject the transfer. See RejectDomainTransferFromAnotherAwsAccount (https://docs.aws.amazon.com/Route53/latest/APIReference/API_domains_RejectDomainTransferFromAnotherAwsAccount.html). When you transfer a domain from one Amazon Web Services account to another, Route 53 doesn't transfer the hosted zone that is associated with the domain. DNS resolution isn't affected if the domain and the hosted zone are owned by separate accounts, so transferring the hosted zone is optional. For information about transferring the hosted zone to another Amazon Web Services account, see Migrating a Hosted Zone to a Different Amazon Web Services Account (https://docs.aws.amazon.com/Route53/latest/DeveloperGuide/hosted-zones-migrating.html) in the Amazon Route 53 Developer Guide. Use either ListOperations (https://docs.aws.amazon.com/Route53/latest/APIReference/API_domains_ListOperations.html) or GetOperationDetail (https://docs.aws.amazon.com/Route53/latest/APIReference/API_domains_GetOperationDetail.html) to determine whether the operation succeeded. GetOperationDetail (https://docs.aws.amazon.com/Route53/latest/APIReference/API_domains_GetOperationDetail.html) provides additional information, for example, Domain Transfer from Aws Account 111122223333 has been cancelled.
 #
 # POST /#X-Amz-Target=Route53Domains_v20140515.TransferDomainToAnotherAwsAccount
 # operationId: TransferDomainToAnotherAwsAccount
-export def "x-amz-target-route53-domains-v20140515-transfer-domain-to-another-aws-account TransferDomainToAnotherAwsAccount" [
+export def "x-amz-target-route53-domains-v20140515-transfer-domain-to-another-aws-account create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1195,36 +1234,37 @@ export def "x-amz-target-route53-domains-v20140515-transfer-domain-to-another-aw
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-28
-  DomainName: any
-  AccountId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-28
+  domain_name: any
+  account_id: any
 ]: any -> record<OperationId: record, Password: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Route53Domains_v20140515.TransferDomainToAnotherAwsAccount")
-  let body = {DomainName: $DomainName, AccountId: $AccountId} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"DomainName": $domain_name, "AccountId": $account_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
-# <p>This operation updates the contact information for a particular domain. You must specify information for at least one contact: registrant, administrator, or technical.</p> <p>If the update is successful, this method returns an operation ID that you can use to track the progress and completion of the operation. If the request is not completed successfully, the domain registrant will be notified by email.</p>
+# This operation updates the contact information for a particular domain. You must specify information for at least one contact: registrant, administrator, or technical. If the update is successful, this method returns an operation ID that you can use to track the progress and completion of the operation. If the request is not completed successfully, the domain registrant will be notified by email.
 #
 # POST /#X-Amz-Target=Route53Domains_v20140515.UpdateDomainContact
 # operationId: UpdateDomainContact
-export def "x-amz-target-route53-domains-v20140515-update-domain-contact UpdateDomainContact" [
+export def "x-amz-target-route53-domains-v20140515-update-domain-contact update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1232,39 +1272,40 @@ export def "x-amz-target-route53-domains-v20140515-update-domain-contact UpdateD
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-29
-  DomainName: any
-  --AdminContact: any
-  --RegistrantContact: any
-  --TechContact: any
-  --Consent: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-29
+  domain_name: any
+  --admin-contact: any
+  --registrant-contact: any
+  --tech-contact: any
+  --consent: any
 ]: any -> record<OperationId: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Route53Domains_v20140515.UpdateDomainContact")
-  let body = {DomainName: $DomainName, AdminContact: $AdminContact, RegistrantContact: $RegistrantContact, TechContact: $TechContact, Consent: $Consent} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"DomainName": $domain_name, "AdminContact": $admin_contact, "RegistrantContact": $registrant_contact, "TechContact": $tech_contact, "Consent": $consent} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
-# <p>This operation updates the specified domain contact's privacy setting. When privacy protection is enabled, contact information such as email address is replaced either with contact information for Amazon Registrar (for .com, .net, and .org domains) or with contact information for our registrar associate, Gandi.</p> <note> <p>You must specify the same privacy setting for the administrative, registrant, and technical contacts.</p> </note> <p>This operation affects only the contact information for the specified contact type (administrative, registrant, or technical). If the request succeeds, Amazon Route 53 returns an operation ID that you can use with <a href="https://docs.aws.amazon.com/Route53/latest/APIReference/API_domains_GetOperationDetail.html">GetOperationDetail</a> to track the progress and completion of the action. If the request doesn't complete successfully, the domain registrant will be notified by email.</p> <important> <p>By disabling the privacy service via API, you consent to the publication of the contact information provided for this domain via the public WHOIS database. You certify that you are the registrant of this domain name and have the authority to make this decision. You may withdraw your consent at any time by enabling privacy protection using either <code>UpdateDomainContactPrivacy</code> or the Route 53 console. Enabling privacy protection removes the contact information provided for this domain from the WHOIS database. For more information on our privacy practices, see <a href="https://aws.amazon.com/privacy/">https://aws.amazon.com/privacy/</a>.</p> </important>
+# This operation updates the specified domain contact's privacy setting. When privacy protection is enabled, contact information such as email address is replaced either with contact information for Amazon Registrar (for .com, .net, and .org domains) or with contact information for our registrar associate, Gandi. You must specify the same privacy setting for the administrative, registrant, and technical contacts. This operation affects only the contact information for the specified contact type (administrative, registrant, or technical). If the request succeeds, Amazon Route 53 returns an operation ID that you can use with GetOperationDetail (https://docs.aws.amazon.com/Route53/latest/APIReference/API_domains_GetOperationDetail.html) to track the progress and completion of the action. If the request doesn't complete successfully, the domain registrant will be notified by email. By disabling the privacy service via API, you consent to the publication of the contact information provided for this domain via the public WHOIS database. You certify that you are the registrant of this domain name and have the authority to make this decision. You may withdraw your consent at any time by enabling privacy protection using either UpdateDomainContactPrivacy or the Route 53 console. Enabling privacy protection removes the contact information provided for this domain from the WHOIS database. For more information on our privacy practices, see https://aws.amazon.com/privacy/ (https://aws.amazon.com/privacy/).
 #
 # POST /#X-Amz-Target=Route53Domains_v20140515.UpdateDomainContactPrivacy
 # operationId: UpdateDomainContactPrivacy
-export def "x-amz-target-route53-domains-v20140515-update-domain-contact-privacy UpdateDomainContactPrivacy" [
+export def "x-amz-target-route53-domains-v20140515-update-domain-contact-privacy update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1272,38 +1313,39 @@ export def "x-amz-target-route53-domains-v20140515-update-domain-contact-privacy
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-30
-  DomainName: any
-  --AdminPrivacy: any
-  --RegistrantPrivacy: any
-  --TechPrivacy: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-30
+  domain_name: any
+  --admin-privacy: any
+  --registrant-privacy: any
+  --tech-privacy: any
 ]: any -> record<OperationId: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Route53Domains_v20140515.UpdateDomainContactPrivacy")
-  let body = {DomainName: $DomainName, AdminPrivacy: $AdminPrivacy, RegistrantPrivacy: $RegistrantPrivacy, TechPrivacy: $TechPrivacy} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"DomainName": $domain_name, "AdminPrivacy": $admin_privacy, "RegistrantPrivacy": $registrant_privacy, "TechPrivacy": $tech_privacy} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
-# <p>This operation replaces the current set of name servers for the domain with the specified set of name servers. If you use Amazon Route 53 as your DNS service, specify the four name servers in the delegation set for the hosted zone for the domain.</p> <p>If successful, this operation returns an operation ID that you can use to track the progress and completion of the action. If the request is not completed successfully, the domain registrant will be notified by email.</p>
+# This operation replaces the current set of name servers for the domain with the specified set of name servers. If you use Amazon Route 53 as your DNS service, specify the four name servers in the delegation set for the hosted zone for the domain. If successful, this operation returns an operation ID that you can use to track the progress and completion of the action. If the request is not completed successfully, the domain registrant will be notified by email.
 #
 # POST /#X-Amz-Target=Route53Domains_v20140515.UpdateDomainNameservers
 # operationId: UpdateDomainNameservers
-export def "x-amz-target-route53-domains-v20140515-update-domain-nameservers UpdateDomainNameservers" [
+export def "x-amz-target-route53-domains-v20140515-update-domain-nameservers update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1311,37 +1353,38 @@ export def "x-amz-target-route53-domains-v20140515-update-domain-nameservers Upd
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-31
-  DomainName: any
-  --FIAuthKey: any
-  Nameservers: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-31
+  domain_name: any
+  --fi-auth-key: any
+  nameservers: any
 ]: any -> record<OperationId: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Route53Domains_v20140515.UpdateDomainNameservers")
-  let body = {DomainName: $DomainName, FIAuthKey: $FIAuthKey, Nameservers: $Nameservers} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"DomainName": $domain_name, "FIAuthKey": $fi_auth_key, "Nameservers": $nameservers} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
-# <p>This operation adds or updates tags for a specified domain.</p> <p>All tag operations are eventually consistent; subsequent operations might not immediately represent all issued operations.</p>
+# This operation adds or updates tags for a specified domain. All tag operations are eventually consistent; subsequent operations might not immediately represent all issued operations.
 #
 # POST /#X-Amz-Target=Route53Domains_v20140515.UpdateTagsForDomain
 # operationId: UpdateTagsForDomain
-export def "x-amz-target-route53-domains-v20140515-update-tags-for-domain UpdateTagsForDomain" [
+export def "x-amz-target-route53-domains-v20140515-update-tags-for-domain update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1349,36 +1392,37 @@ export def "x-amz-target-route53-domains-v20140515-update-tags-for-domain Update
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-32
-  DomainName: any
-  --TagsToUpdate: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-32
+  domain_name: any
+  --tags-to-update: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Route53Domains_v20140515.UpdateTagsForDomain")
-  let body = {DomainName: $DomainName, TagsToUpdate: $TagsToUpdate} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"DomainName": $domain_name, "TagsToUpdate": $tags_to_update} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Returns all the domain-related billing records for the current Amazon Web Services account for a specified period
 #
 # POST /#X-Amz-Target=Route53Domains_v20140515.ViewBilling
 # operationId: ViewBilling
-export def "x-amz-target-route53-domains-v20140515-view-billing ViewBilling" [
+export def "x-amz-target-route53-domains-v20140515-view-billing create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1386,32 +1430,33 @@ export def "x-amz-target-route53-domains-v20140515-view-billing ViewBilling" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxItems: string # Pagination limit
-  --Marker: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-33
-  --Start: any
-  --End: any
-  --Marker: any
-  --MaxItems: any
+  --max-items: string # Pagination limit
+  --marker: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-33
+  --start: any
+  --end: any
+  --marker: any
+  --max-items: any
 ]: any -> record<NextPageMarker: record, BillingRecords: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxItems" $MaxItems "scalar") (serialize-qp "Marker" $Marker "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxItems" $max_items "scalar") (serialize-qp "Marker" $marker "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=Route53Domains_v20140515.ViewBilling" $qp)
-  let body = {Start: $Start, End: $End, Marker: $Marker, MaxItems: $MaxItems} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"Start": $start, "End": $end, "Marker": $marker, "MaxItems": $max_items} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }

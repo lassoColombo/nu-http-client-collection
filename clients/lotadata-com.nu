@@ -11,28 +11,39 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {headers: {}, query: ""} }
   match $scheme {
-    "query-api_key" => { {headers: {}, query: $"api_key=($token_val)"} }
+    "query-api_key" => { {headers: {}, query: $"(encode-path-segment "api_key")=(encode-path-segment $token_val)"} }
     "none" => { {headers: {}, query: ""} }
     _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
   }
 }
 
 # Serialize a single query parameter based on collection style
+# Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
+# ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = ($name | url encode)
+  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
-  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
-    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
-    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
+    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
+    _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
+}
+
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Build URL from base, path, and optional query string
@@ -44,7 +55,7 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
@@ -53,13 +64,13 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
     "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "put" => { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "patch" => { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
   if ($method in ["head" "options"]) { return $resp }
-  if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
+  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
 def base-url-completer [] { ["https://api2.lotadata.com/v2"] }
@@ -71,7 +82,7 @@ def fieldset-completer-1 [] { ["context" "detail" "summary"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "events list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -103,8 +114,9 @@ export def "events list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --category: list # List of required EventCategory ids (Tier 1)
+  --category: list<string> # List of required EventCategory ids (Tier 1)
   --activity: string # List of required activity type ids (compliment to category)
   --ambience: string # List of required ambience ids
   --genre: string # List of required genre ids
@@ -116,8 +128,8 @@ export def "events list" [
   --capacity-max: float # Min capacity at location (format: integer)
   --center: string # latitude,longitude of the origin point
   --radius: int # Distance from origin in meters
-  --bbox: list # Corner of a bounding box (lat,lng). Requires 0 or 2 pairs
-  --polygon: list # Closed custom polygon. Ordered list of lat,lng pairs
+  --bbox: list<string> # Corner of a bounding box (lat,lng). Requires 0 or 2 pairs
+  --polygon: list<string> # Closed custom polygon. Ordered list of lat,lng pairs
   --within: string # Search within specified geopolitical place id
   --offset: int # Return results starting at specified offset
   --limit: int # Max results to return
@@ -129,7 +141,7 @@ export def "events list" [
   let full_url = (build-url $base "/events" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get Specific event details.
@@ -144,16 +156,17 @@ export def "events get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --fieldset: string@fieldset-completer # default: summary
 ]: nothing -> record<_id: string, _type: string, activity: table<_id: string, _type: string, name: string>, ambience: table<_id: string, _type: string, name: string>, at: record<_id: string, _type: string, address: record<country: string, formatted: string, locality: string, postalCode: string, region: string, street: string, unit: string>, geo: record<lat: float, lon: float>, geometry: any, location: record<domain: string, platform: string, url: string>, logo: record<_id: string, caption: string, height: int, url: string, width: int>, name: string, tag: list<record>>, awayTeam: record<_id: string, _type: string, name: string>, category: table<_id: string, _type: string, name: string>, contactPoint: record<displayPhone: string, email: string, facebookUrl: string, instagramName: string, lastfmUrl: string, soundcloudUrl: string, spotifyUrl: string, twitterName: string, url: string, youtubeUrl: string>, description: string, doorTime: string, duration: string, endApprox: bool, endDate: string, extTaxonomy: table<_id: string, _type: string, name: string>, genre: table<_id: string, _type: string, name: string>, headline: string, homeTeam: record<_id: string, _type: string, name: string>, htmlDescription: string, image: record<_id: string, caption: string, height: int, url: string, width: int>, inLanguage: record<_id: string, _type: string, name: string>, name: string, noTime: bool, offers: table<availability: string, category: string, donation: bool, fee: float, highPrice: float, inventory: record, name: string, price: float, priceCurrency: string, priceUnknown: bool, url: string>, onDemand: bool, performer: table<_id: string, _type: string, name: string>, photo: table<_id: string, caption: string, height: int, url: string, width: int>, startDate: string, superEvent: record<_id: string, name: string, startDate: string>, updated: string, url: string, workPerformed: table<_id: string, _type: string, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fieldset" $fieldset "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/events/($id)" $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/events/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Venues, landmarks, regions, these are all places to search.
@@ -167,11 +180,12 @@ export def "places list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --category: list # List of required PlaceCategory ids (Tier 1)
-  --function: list # List of required PlaceFunction ids (Tier 2)
-  --ambience: list # List of required ambience ids
-  --tag: list # List of required tags
+  --category: list<string> # List of required PlaceCategory ids (Tier 1)
+  --function: list<string> # List of required PlaceFunction ids (Tier 2)
+  --ambience: list<string> # List of required ambience ids
+  --tag: list<string> # List of required tags
   --type: string # Specific PlaceType to return
   --name: string # Match on place names
   --exact: oneof<nothing, bool> # Require an exact name match
@@ -184,8 +198,8 @@ export def "places list" [
   --country: string # country component of the address
   --center: string # latitude,longitude of the origin point
   --radius: int # Distance from origin in meters
-  --bbox: list # Corner of a bounding box (lat,lng). Requires 0 or 2 pairs
-  --polygon: list # Closed custom polygon. Ordered list of lat,lng pairs
+  --bbox: list<string> # Corner of a bounding box (lat,lng). Requires 0 or 2 pairs
+  --polygon: list<string> # Closed custom polygon. Ordered list of lat,lng pairs
   --within: string # Search within specified geopolitical place id
   --offset: int # Return results starting at specified offset
   --limit: int # Max results to return
@@ -197,7 +211,7 @@ export def "places list" [
   let full_url = (build-url $base "/places" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get specific place details
@@ -212,14 +226,15 @@ export def "places get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --fieldset: string@fieldset-completer # default: summary
 ]: nothing -> record<ambience: table<_id: string, _type: string, name: string>, category: table<_id: string, _type: string, name: string>, contact: record<displayPhone: string, email: string, facebookUrl: string, instagramName: string, lastfmUrl: string, soundcloudUrl: string, spotifyUrl: string, twitterName: string, url: string, youtubeUrl: string>, function: table<_id: string, _type: string, name: string>, openingHours: table<closes: string, dayOfWeek: list, open247: bool, opens: string>, photo: table<_id: string, caption: string, height: int, url: string, width: int>, _id: string, _type: string, address: record<country: string, formatted: string, locality: string, postalCode: string, region: string, street: string, unit: string>, geo: record<lat: float, lon: float>, geometry: any, location: record<domain: string, platform: string, url: string>, logo: record<_id: string, caption: string, height: int, url: string, width: int>, name: string, tag: table<_id: string, _type: string, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fieldset" $fieldset "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/places/($id)" $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/places/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }

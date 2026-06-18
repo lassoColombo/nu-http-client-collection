@@ -18,21 +18,32 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 }
 
 # Serialize a single query parameter based on collection style
+# Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
+# ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = ($name | url encode)
+  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
-  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
-    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
-    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
+    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
+    _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
+}
+
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Build URL from base, path, and optional query string
@@ -44,7 +55,7 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
@@ -53,13 +64,13 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
     "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "put" => { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "patch" => { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
   if ($method in ["head" "options"]) { return $resp }
-  if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
+  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
 def base-url-completer [] { ["https://androidmanagement.googleapis.com"] }
@@ -69,15 +80,15 @@ def auth-scheme-completer [] { ["bearer"] }
 def xgafv-completer [] { ["1" "2"] }
 def alt-completer [] { ["json" "media" "proto"] }
 def view-completer [] { ["BASIC" "ENTERPRISE_VIEW_UNSPECIFIED"] }
-def displayMode-completer [] { ["DISPLAY_MODE_UNSPECIFIED" "FULL_SCREEN" "MINIMAL_UI" "STANDALONE"] }
-def errorCode-completer [] { ["API_LEVEL" "COMMAND_ERROR_CODE_UNSPECIFIED" "INVALID_VALUE" "MANAGEMENT_MODE" "UNKNOWN" "UNSUPPORTED"] }
+def display-mode-completer [] { ["DISPLAY_MODE_UNSPECIFIED" "FULL_SCREEN" "MINIMAL_UI" "STANDALONE"] }
+def error-code-completer [] { ["API_LEVEL" "COMMAND_ERROR_CODE_UNSPECIFIED" "INVALID_VALUE" "MANAGEMENT_MODE" "UNKNOWN" "UNSUPPORTED"] }
 def type-completer [] { ["CLEAR_APP_DATA" "COMMAND_TYPE_UNSPECIFIED" "LOCK" "REBOOT" "RELINQUISH_OWNERSHIP" "RESET_PASSWORD"] }
-def allowPersonalUsage-completer [] { ["ALLOW_PERSONAL_USAGE_UNSPECIFIED" "PERSONAL_USAGE_ALLOWED" "PERSONAL_USAGE_DISALLOWED"] }
+def allow-personal-usage-completer [] { ["ALLOW_PERSONAL_USAGE_UNSPECIFIED" "PERSONAL_USAGE_ALLOWED" "PERSONAL_USAGE_DISALLOWED"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "enterprises androidmanagemententerpriseslist" } } | get name | first)
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "enterprises list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -101,7 +112,7 @@ export def commands []: nothing -> table {
 #
 # GET /v1/enterprises
 # operationId: androidmanagement.enterprises.list
-export def "enterprises androidmanagemententerpriseslist" [
+export def "enterprises list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -109,6 +120,7 @@ export def "enterprises androidmanagemententerpriseslist" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
@@ -117,22 +129,22 @@ export def "enterprises androidmanagemententerpriseslist" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --pageSize: int # The requested page size. The actual page size may be fixed to a min or max value.
-  --pageToken: string # A token identifying a page of results returned by the server.
-  --projectId: string # Required. The Cloud project ID of the EMM managing the enterprises.
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --page-size: int # The requested page size. The actual page size may be fixed to a min or max value.
+  --page-token: string # A token identifying a page of results returned by the server.
+  --project-id: string # Required. The Cloud project ID of the EMM managing the enterprises.
   --view: string@view-completer # Specifies which Enterprise fields to return. This method only supports BASIC.
 ]: nothing -> record<enterprises: table<appAutoApprovalEnabled: bool, contactInfo: record, enabledNotificationTypes: list, enterpriseDisplayName: string, logo: record, name: string, primaryColor: int, pubsubTopic: string, signinDetails: list, termsAndConditions: list>, nextPageToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar") (serialize-qp "projectId" $projectId "scalar") (serialize-qp "view" $view "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "projectId" $project_id "scalar") (serialize-qp "view" $view "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/enterprises" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Creates an enterprise. This is the last step in the enterprise signup flow. See also: SigninDetail
@@ -143,7 +155,7 @@ export def "enterprises androidmanagemententerpriseslist" [
 # --logo shape: {sha256Hash?: string, url?: string}
 # --signinDetails item shape: {allowPersonalUsage?: "ALLOW_PERSONAL_USAGE_UNSPECIFIED"|"PERSONAL_USAGE_ALLOWED"|"PERSONAL_USAGE_DISALLOWED", qrCode?: string, signinEnrollmentToken?: string, signinUrl?: string}
 # --termsAndConditions item shape: {content?: record, header?: record}
-export def "enterprises androidmanagemententerprisescreate" [
+export def "enterprises create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -151,6 +163,7 @@ export def "enterprises androidmanagemententerprisescreate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
@@ -159,42 +172,42 @@ export def "enterprises androidmanagemententerprisescreate" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --agreementAccepted: oneof<nothing, bool> # Whether the enterprise admin has seen and agreed to the managed Google Play Agreement (https://www.android.com/enterprise/terms/). Do not set this field for any customer-managed enterprise (https://developers.google.com/android/management/create-enterprise#customer-managed_enterprises). Set this to field to true for all EMM-managed enterprises (https://developers.google.com/android/management/create-enterprise#emm-managed_enterprises).
-  --enterpriseToken: string # The enterprise token appended to the callback URL. Set this when creating a customer-managed enterprise (https://developers.google.com/android/management/create-enterprise#customer-managed_enterprises) and not when creating a deprecated EMM-managed enterprise (https://developers.google.com/android/management/create-enterprise#emm-managed_enterprises).
-  --projectId: string # The ID of the Google Cloud Platform project which will own the enterprise.
-  --signupUrlName: string # The name of the SignupUrl used to sign up for the enterprise. Set this when creating a customer-managed enterprise (https://developers.google.com/android/management/create-enterprise#customer-managed_enterprises) and not when creating a deprecated EMM-managed enterprise (https://developers.google.com/android/management/create-enterprise#emm-managed_enterprises).
-  --appAutoApprovalEnabled: oneof<nothing, bool> # Deprecated and unused.
-  --contactInfo: record # Contact details for managed Google Play enterprises. — shape: {contactEmail?: string, dataProtectionOfficerEmail?: string, dataProtectionOfficerName?: string, dataProtectionOfficerPhone?: string, euRepresentativeEmail?: string, euRepresentativeName?: string, euRepresentativePhone?: string}
-  --enabledNotificationTypes: list # The types of Google Pub/Sub notifications enabled for the enterprise.
-  --enterpriseDisplayName: string # The name of the enterprise displayed to users. This field has a maximum length of 100 characters.
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --agreement-accepted: oneof<nothing, bool> # Whether the enterprise admin has seen and agreed to the managed Google Play Agreement (https://www.android.com/enterprise/terms/). Do not set this field for any customer-managed enterprise (https://developers.google.com/android/management/create-enterprise#customer-managed_enterprises). Set this to field to true for all EMM-managed enterprises (https://developers.google.com/android/management/create-enterprise#emm-managed_enterprises).
+  --enterprise-token: string # The enterprise token appended to the callback URL. Set this when creating a customer-managed enterprise (https://developers.google.com/android/management/create-enterprise#customer-managed_enterprises) and not when creating a deprecated EMM-managed enterprise (https://developers.google.com/android/management/create-enterprise#emm-managed_enterprises).
+  --project-id: string # The ID of the Google Cloud Platform project which will own the enterprise.
+  --signup-url-name: string # The name of the SignupUrl used to sign up for the enterprise. Set this when creating a customer-managed enterprise (https://developers.google.com/android/management/create-enterprise#customer-managed_enterprises) and not when creating a deprecated EMM-managed enterprise (https://developers.google.com/android/management/create-enterprise#emm-managed_enterprises).
+  --app-auto-approval-enabled: oneof<nothing, bool> # Deprecated and unused.
+  --contact-info: record # Contact details for managed Google Play enterprises. — shape: {contactEmail?: string, dataProtectionOfficerEmail?: string, dataProtectionOfficerName?: string, dataProtectionOfficerPhone?: string, euRepresentativeEmail?: string, euRepresentativeName?: string, euRepresentativePhone?: string}
+  --enabled-notification-types: list<string> # The types of Google Pub/Sub notifications enabled for the enterprise.
+  --enterprise-display-name: string # The name of the enterprise displayed to users. This field has a maximum length of 100 characters.
   --logo: record # Data hosted at an external location. The data is to be downloaded by Android Device Policy and verified against the hash. — shape: {sha256Hash?: string, url?: string}
   --name: string # The name of the enterprise which is generated by the server during creation, in the form enterprises/{enterpriseId}.
-  --primaryColor: int # A color in RGB format that indicates the predominant color to display in the device management app UI. The color components are stored as follows: (red << 16) | (green << 8) | blue, where the value of each component is between 0 and 255, inclusive. (format: int32)
-  --pubsubTopic: string # The topic which Pub/Sub notifications are published to, in the form projects/{project}/topics/{topic}. This field is only required if Pub/Sub notifications are enabled.
-  --signinDetails: list # Sign-in details of the enterprise. — item shape: {allowPersonalUsage?: "ALLOW_PERSONAL_USAGE_UNSPECIFIED"|"PERSONAL_USAGE_ALLOWED"|"PERSONAL_USAGE_DISALLOWED", qrCode?: string, signinEnrollmentToken?: string, signinUrl?: string}
-  --termsAndConditions: list # Terms and conditions that must be accepted when provisioning a device for this enterprise. A page of terms is generated for each value in this list. — item shape: {content?: record, header?: record}
+  --primary-color: int # A color in RGB format that indicates the predominant color to display in the device management app UI. The color components are stored as follows: (red << 16) | (green << 8) | blue, where the value of each component is between 0 and 255, inclusive. (format: int32)
+  --pubsub-topic: string # The topic which Pub/Sub notifications are published to, in the form projects/{project}/topics/{topic}. This field is only required if Pub/Sub notifications are enabled.
+  --signin-details: list # Sign-in details of the enterprise. — item shape: {allowPersonalUsage?: "ALLOW_PERSONAL_USAGE_UNSPECIFIED"|"PERSONAL_USAGE_ALLOWED"|"PERSONAL_USAGE_DISALLOWED", qrCode?: string, signinEnrollmentToken?: string, signinUrl?: string}
+  --terms-and-conditions: list # Terms and conditions that must be accepted when provisioning a device for this enterprise. A page of terms is generated for each value in this list. — item shape: {content?: record, header?: record}
 ]: any -> record<appAutoApprovalEnabled: bool, contactInfo: record<contactEmail: string, dataProtectionOfficerEmail: string, dataProtectionOfficerName: string, dataProtectionOfficerPhone: string, euRepresentativeEmail: string, euRepresentativeName: string, euRepresentativePhone: string>, enabledNotificationTypes: list<string>, enterpriseDisplayName: string, logo: record<sha256Hash: string, url: string>, name: string, primaryColor: int, pubsubTopic: string, signinDetails: table<allowPersonalUsage: string, qrCode: string, signinEnrollmentToken: string, signinUrl: string>, termsAndConditions: table<content: record, header: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "agreementAccepted" $agreementAccepted "scalar") (serialize-qp "enterpriseToken" $enterpriseToken "scalar") (serialize-qp "projectId" $projectId "scalar") (serialize-qp "signupUrlName" $signupUrlName "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "agreementAccepted" $agreement_accepted "scalar") (serialize-qp "enterpriseToken" $enterprise_token "scalar") (serialize-qp "projectId" $project_id "scalar") (serialize-qp "signupUrlName" $signup_url_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/enterprises" $qp)
-  let body = {appAutoApprovalEnabled: $appAutoApprovalEnabled, contactInfo: $contactInfo, enabledNotificationTypes: $enabledNotificationTypes, enterpriseDisplayName: $enterpriseDisplayName, logo: $logo, name: $name, primaryColor: $primaryColor, pubsubTopic: $pubsubTopic, signinDetails: $signinDetails, termsAndConditions: $termsAndConditions} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"appAutoApprovalEnabled": $app_auto_approval_enabled, "contactInfo": $contact_info, "enabledNotificationTypes": $enabled_notification_types, "enterpriseDisplayName": $enterprise_display_name, "logo": $logo, "name": $name, "primaryColor": $primary_color, "pubsubTopic": $pubsub_topic, "signinDetails": $signin_details, "termsAndConditions": $terms_and_conditions} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Creates an enterprise signup URL.
 #
 # POST /v1/signupUrls
 # operationId: androidmanagement.signupUrls.create
-export def "signup-urls androidmanagementsignupUrlscreate" [
+export def "signup-urls create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -202,6 +215,7 @@ export def "signup-urls androidmanagementsignupUrlscreate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
@@ -210,27 +224,27 @@ export def "signup-urls androidmanagementsignupUrlscreate" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --callbackUrl: string # The callback URL that the admin will be redirected to after successfully creating an enterprise. Before redirecting there the system will add a query parameter to this URL named enterpriseToken which will contain an opaque token to be used for the create enterprise request. The URL will be parsed then reformatted in order to add the enterpriseToken parameter, so there may be some minor formatting changes.
-  --projectId: string # The ID of the Google Cloud Platform project which will own the enterprise.
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --callback-url: string # The callback URL that the admin will be redirected to after successfully creating an enterprise. Before redirecting there the system will add a query parameter to this URL named enterpriseToken which will contain an opaque token to be used for the create enterprise request. The URL will be parsed then reformatted in order to add the enterpriseToken parameter, so there may be some minor formatting changes.
+  --project-id: string # The ID of the Google Cloud Platform project which will own the enterprise.
 ]: nothing -> record<name: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "callbackUrl" $callbackUrl "scalar") (serialize-qp "projectId" $projectId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "callbackUrl" $callback_url "scalar") (serialize-qp "projectId" $project_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/signupUrls" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Deletes a web app.
 #
 # DELETE /v1/{name}
 # operationId: androidmanagement.enterprises.webApps.delete
-export def "enterprises androidmanagemententerpriseswebAppsdelete" [
+export def "enterprises delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -239,6 +253,7 @@ export def "enterprises androidmanagemententerpriseswebAppsdelete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
@@ -247,27 +262,27 @@ export def "enterprises androidmanagemententerpriseswebAppsdelete" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --wipeDataFlags: list # Optional flags that control the device wiping behavior.
-  --wipeReasonMessage: string # Optional. A short message displayed to the user before wiping the work profile on personal devices. This has no effect on company owned devices. The maximum message length is 200 characters.
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --wipe-data-flags: list<string> # Optional flags that control the device wiping behavior.
+  --wipe-reason-message: string # Optional. A short message displayed to the user before wiping the work profile on personal devices. This has no effect on company owned devices. The maximum message length is 200 characters.
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "wipeDataFlags" $wipeDataFlags "multi") (serialize-qp "wipeReasonMessage" $wipeReasonMessage "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/($name)" $qp)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "wipeDataFlags" $wipe_data_flags "multi") (serialize-qp "wipeReasonMessage" $wipe_reason_message "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Gets a web app.
 #
 # GET /v1/{name}
 # operationId: androidmanagement.enterprises.webApps.get
-export def "enterprises androidmanagemententerpriseswebAppsget" [
+export def "enterprises get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -276,6 +291,7 @@ export def "enterprises androidmanagemententerpriseswebAppsget" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
@@ -284,21 +300,21 @@ export def "enterprises androidmanagemententerpriseswebAppsget" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --filter: string # The standard list filter.
-  --pageSize: int # The standard list page size.
-  --pageToken: string # The standard list page token.
+  --page-size: int # The standard list page size.
+  --page-token: string # The standard list page token.
 ]: nothing -> record<displayMode: string, icons: table<imageData: string>, name: string, startUrl: string, title: string, versionCode: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/($name)" $qp)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Updates a web app.
@@ -306,7 +322,7 @@ export def "enterprises androidmanagemententerpriseswebAppsget" [
 # PATCH /v1/{name}
 # operationId: androidmanagement.enterprises.webApps.patch
 # --icons item shape: {imageData?: string}
-export def "enterprises androidmanagemententerpriseswebAppspatch" [
+export def "enterprises update" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -315,6 +331,7 @@ export def "enterprises androidmanagemententerpriseswebAppspatch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
@@ -323,35 +340,35 @@ export def "enterprises androidmanagemententerpriseswebAppspatch" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --updateMask: string # The field mask indicating the fields to update. If not set, all modifiable fields will be modified.
-  --displayMode: string@displayMode-completer # The display mode of the web app.
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --update-mask: string # The field mask indicating the fields to update. If not set, all modifiable fields will be modified.
+  --display-mode: string@display-mode-completer # The display mode of the web app.
   --icons: list # A list of icons for the web app. Must have at least one element. — item shape: {imageData?: string}
   --body-name: string # The name of the web app, which is generated by the server during creation in the form enterprises/{enterpriseId}/webApps/{packageName}.
-  --startUrl: string # The start URL, i.e. the URL that should load when the user opens the application.
+  --start-url: string # The start URL, i.e. the URL that should load when the user opens the application.
   --title: string # The title of the web app as displayed to the user (e.g., amongst a list of other applications, or as a label for an icon).
-  --versionCode: string # The current version of the app.Note that the version can automatically increase during the lifetime of the web app, while Google does internal housekeeping to keep the web app up-to-date. (format: int64)
+  --version-code: string # The current version of the app.Note that the version can automatically increase during the lifetime of the web app, while Google does internal housekeeping to keep the web app up-to-date. (format: int64)
 ]: any -> record<displayMode: string, icons: table<imageData: string>, name: string, startUrl: string, title: string, versionCode: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "updateMask" $updateMask "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/($name)" $qp)
-  let body = {displayMode: $displayMode, icons: $icons, name: $body_name, startUrl: $startUrl, title: $title, versionCode: $versionCode} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "updateMask" $update_mask "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/{name}") $qp)
+  let req_body = {"displayMode": $display_mode, "icons": $icons, "name": $body_name, "startUrl": $start_url, "title": $title, "versionCode": $version_code} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Starts asynchronous cancellation on a long-running operation. The server makes a best effort to cancel the operation, but success is not guaranteed. If the server doesn't support this method, it returns google.rpc.Code.UNIMPLEMENTED. Clients can use Operations.GetOperation or other methods to check whether the cancellation succeeded or whether the operation completed despite cancellation. On successful cancellation, the operation is not deleted; instead, it becomes an operation with an Operation.error value with a google.rpc.Status.code of 1, corresponding to Code.CANCELLED.
 #
 # POST /v1/{name}:cancel
 # operationId: androidmanagement.enterprises.devices.operations.cancel
-export def "enterprises androidmanagemententerprisesdevicesoperationscancel" [
+export def "enterprises cancel" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -360,6 +377,7 @@ export def "enterprises androidmanagemententerprisesdevicesoperationscancel" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
@@ -368,27 +386,27 @@ export def "enterprises androidmanagemententerprisesdevicesoperationscancel" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/($name):cancel" $qp)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/{name}:cancel") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Issues a command to a device. The Operation resource returned contains a Command in its metadata field. Use the get operation method to get the status of the command.
 #
 # POST /v1/{name}:issueCommand
 # operationId: androidmanagement.enterprises.devices.issueCommand
-# --clearAppsDataParams shape: {packageNames?: list}
+# --clearAppsDataParams shape: {packageNames?: list<string>}
 # --clearAppsDataStatus shape: {results?: record}
-export def "enterprises androidmanagemententerprisesdevicesissueCommand" [
+export def "enterprises create-issue-command" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -397,6 +415,7 @@ export def "enterprises androidmanagemententerprisesdevicesissueCommand" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
@@ -405,37 +424,37 @@ export def "enterprises androidmanagemententerprisesdevicesissueCommand" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --clearAppsDataParams: record # Parameters associated with the CLEAR_APP_DATA command to clear the data of specified apps from the device. — shape: {packageNames?: list}
-  --clearAppsDataStatus: record # Status of the CLEAR_APP_DATA command to clear the data of specified apps from the device. — shape: {results?: record}
-  --createTime: string # The timestamp at which the command was created. The timestamp is automatically generated by the server. (format: google-datetime)
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --clear-apps-data-params: record # Parameters associated with the CLEAR_APP_DATA command to clear the data of specified apps from the device. — shape: {packageNames?: list<string>}
+  --clear-apps-data-status: record # Status of the CLEAR_APP_DATA command to clear the data of specified apps from the device. — shape: {results?: record}
+  --create-time: string # The timestamp at which the command was created. The timestamp is automatically generated by the server. (format: google-datetime)
   --duration: string # The duration for which the command is valid. The command will expire if not executed by the device during this time. The default duration if unspecified is ten minutes. There is no maximum duration. (format: google-duration)
-  --errorCode: string@errorCode-completer # If the command failed, an error code explaining the failure. This is not set when the command is cancelled by the caller.
-  --newPassword: string # For commands of type RESET_PASSWORD, optionally specifies the new password.
-  --resetPasswordFlags: list # For commands of type RESET_PASSWORD, optionally specifies flags.
+  --error-code: string@error-code-completer # If the command failed, an error code explaining the failure. This is not set when the command is cancelled by the caller.
+  --new-password: string # For commands of type RESET_PASSWORD, optionally specifies the new password.
+  --reset-password-flags: list<string> # For commands of type RESET_PASSWORD, optionally specifies flags.
   --type: string@type-completer # The type of the command.
-  --userName: string # The resource name of the user that owns the device in the form enterprises/{enterpriseId}/users/{userId}. This is automatically generated by the server based on the device the command is sent to.
+  --user-name: string # The resource name of the user that owns the device in the form enterprises/{enterpriseId}/users/{userId}. This is automatically generated by the server based on the device the command is sent to.
 ]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/($name):issueCommand" $qp)
-  let body = {clearAppsDataParams: $clearAppsDataParams, clearAppsDataStatus: $clearAppsDataStatus, createTime: $createTime, duration: $duration, errorCode: $errorCode, newPassword: $newPassword, resetPasswordFlags: $resetPasswordFlags, type: $type, userName: $userName} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/{name}:issueCommand") $qp)
+  let req_body = {"clearAppsDataParams": $clear_apps_data_params, "clearAppsDataStatus": $clear_apps_data_status, "createTime": $create_time, "duration": $duration, "errorCode": $error_code, "newPassword": $new_password, "resetPasswordFlags": $reset_password_flags, "type": $type, "userName": $user_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Lists devices for a given enterprise. Deleted devices are not returned in the response.
 #
 # GET /v1/{parent}/devices
 # operationId: androidmanagement.enterprises.devices.list
-export def "devices androidmanagemententerprisesdeviceslist" [
+export def "devices list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -444,6 +463,7 @@ export def "devices androidmanagemententerprisesdeviceslist" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
@@ -452,27 +472,27 @@ export def "devices androidmanagemententerprisesdeviceslist" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --pageSize: int # The requested page size. The actual page size may be fixed to a min or max value.
-  --pageToken: string # A token identifying a page of results returned by the server.
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --page-size: int # The requested page size. The actual page size may be fixed to a min or max value.
+  --page-token: string # A token identifying a page of results returned by the server.
 ]: nothing -> record<devices: table<apiLevel: int, applicationReports: list, appliedPasswordPolicies: list, appliedPolicyName: string, appliedPolicyVersion: string, appliedState: string, commonCriteriaModeInfo: record, deviceSettings: record, disabledReason: record, displays: list, enrollmentTime: string, enrollmentTokenData: string, enrollmentTokenName: string, hardwareInfo: record, hardwareStatusSamples: list, lastPolicyComplianceReportTime: string, lastPolicySyncTime: string, lastStatusReportTime: string, managementMode: string, memoryEvents: list, memoryInfo: record, name: string, networkInfo: record, nonComplianceDetails: list, ownership: string, policyCompliant: bool, policyName: string, powerManagementEvents: list, previousDeviceNames: list, securityPosture: record, softwareInfo: record, state: string, systemProperties: record, user: record, userName: string>, nextPageToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/($parent)/devices" $qp)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/devices") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Lists active, unexpired enrollment tokens for a given enterprise. The list items contain only a partial view of EnrollmentToken: all the fields but name and expiration_timestamp are empty. This method is meant to help manage active enrollment tokens lifecycle. For security reasons, it's recommended to delete active enrollment tokens as soon as they're not intended to be used anymore.
 #
 # GET /v1/{parent}/enrollmentTokens
 # operationId: androidmanagement.enterprises.enrollmentTokens.list
-export def "enrollment-tokens androidmanagemententerprisesenrollmentTokenslist" [
+export def "enrollment-tokens list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -481,6 +501,7 @@ export def "enrollment-tokens androidmanagemententerprisesenrollmentTokenslist" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
@@ -489,20 +510,20 @@ export def "enrollment-tokens androidmanagemententerprisesenrollmentTokenslist" 
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --pageSize: int # The requested page size. The service may return fewer than this value. If unspecified, at most 10 items will be returned. The maximum value is 100; values above 100 will be coerced to 100.
-  --pageToken: string # A token identifying a page of results returned by the server.
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --page-size: int # The requested page size. The service may return fewer than this value. If unspecified, at most 10 items will be returned. The maximum value is 100; values above 100 will be coerced to 100.
+  --page-token: string # A token identifying a page of results returned by the server.
 ]: nothing -> record<enrollmentTokens: table<additionalData: string, allowPersonalUsage: string, duration: string, expirationTimestamp: string, name: string, oneTimeOnly: bool, policyName: string, qrCode: string, user: record, value: string>, nextPageToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/($parent)/enrollmentTokens" $qp)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/enrollmentTokens") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Creates an enrollment token for a given enterprise. It's up to the caller's responsibility to manage the lifecycle of newly created tokens and deleting them when they're not intended to be used anymore. Once an enrollment token has been created, it's not possible to retrieve the token's content anymore using AM API. It is recommended for EMMs to securely store the token if it's intended to be reused.
@@ -510,7 +531,7 @@ export def "enrollment-tokens androidmanagemententerprisesenrollmentTokenslist" 
 # POST /v1/{parent}/enrollmentTokens
 # operationId: androidmanagement.enterprises.enrollmentTokens.create
 # --user shape: {accountIdentifier?: string}
-export def "enrollment-tokens androidmanagemententerprisesenrollmentTokenscreate" [
+export def "enrollment-tokens create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -519,6 +540,7 @@ export def "enrollment-tokens androidmanagemententerprisesenrollmentTokenscreate
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
@@ -527,38 +549,38 @@ export def "enrollment-tokens androidmanagemententerprisesenrollmentTokenscreate
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --additionalData: string # Optional, arbitrary data associated with the enrollment token. This could contain, for example, the ID of an org unit the device is assigned to after enrollment. After a device enrolls with the token, this data will be exposed in the enrollment_token_data field of the Device resource. The data must be 1024 characters or less; otherwise, the creation request will fail.
-  --allowPersonalUsage: string@allowPersonalUsage-completer # Controls whether personal usage is allowed on a device provisioned with this enrollment token.For company-owned devices: Enabling personal usage allows the user to set up a work profile on the device. Disabling personal usage requires the user provision the device as a fully managed device.For personally-owned devices: Enabling personal usage allows the user to set up a work profile on the device. Disabling personal usage will prevent the device from provisioning. Personal usage cannot be disabled on personally-owned device.
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --additional-data: string # Optional, arbitrary data associated with the enrollment token. This could contain, for example, the ID of an org unit the device is assigned to after enrollment. After a device enrolls with the token, this data will be exposed in the enrollment_token_data field of the Device resource. The data must be 1024 characters or less; otherwise, the creation request will fail.
+  --allow-personal-usage: string@allow-personal-usage-completer # Controls whether personal usage is allowed on a device provisioned with this enrollment token.For company-owned devices: Enabling personal usage allows the user to set up a work profile on the device. Disabling personal usage requires the user provision the device as a fully managed device.For personally-owned devices: Enabling personal usage allows the user to set up a work profile on the device. Disabling personal usage will prevent the device from provisioning. Personal usage cannot be disabled on personally-owned device.
   --duration: string # The length of time the enrollment token is valid, ranging from 1 minute to Durations.MAX_VALUE (https://developers.google.com/protocol-buffers/docs/reference/java/com/google/protobuf/util/Durations.html#MAX_VALUE), approximately 10,000 years. If not specified, the default duration is 1 hour. Please note that if requested duration causes the resulting expiration_timestamp to exceed Timestamps.MAX_VALUE (https://developers.google.com/protocol-buffers/docs/reference/java/com/google/protobuf/util/Timestamps.html#MAX_VALUE), then expiration_timestamp is coerced to Timestamps.MAX_VALUE. (format: google-duration)
-  --expirationTimestamp: string # The expiration time of the token. This is a read-only field generated by the server. (format: google-datetime)
+  --expiration-timestamp: string # The expiration time of the token. This is a read-only field generated by the server. (format: google-datetime)
   --name: string # The name of the enrollment token, which is generated by the server during creation, in the form enterprises/{enterpriseId}/enrollmentTokens/{enrollmentTokenId}.
-  --oneTimeOnly: oneof<nothing, bool> # Whether the enrollment token is for one time use only. If the flag is set to true, only one device can use it for registration.
-  --policyName: string # The name of the policy initially applied to the enrolled device, in the form enterprises/{enterpriseId}/policies/{policyId}. If not specified, the policy_name for the device’s user is applied. If user_name is also not specified, enterprises/{enterpriseId}/policies/default is applied by default. When updating this field, you can specify only the policyId as long as the policyId doesn’t contain any slashes. The rest of the policy name will be inferred.
-  --qrCode: string # A JSON string whose UTF-8 representation can be used to generate a QR code to enroll a device with this enrollment token. To enroll a device using NFC, the NFC record must contain a serialized java.util.Properties representation of the properties in the JSON.
+  --one-time-only: oneof<nothing, bool> # Whether the enrollment token is for one time use only. If the flag is set to true, only one device can use it for registration.
+  --policy-name: string # The name of the policy initially applied to the enrolled device, in the form enterprises/{enterpriseId}/policies/{policyId}. If not specified, the policy_name for the device’s user is applied. If user_name is also not specified, enterprises/{enterpriseId}/policies/default is applied by default. When updating this field, you can specify only the policyId as long as the policyId doesn’t contain any slashes. The rest of the policy name will be inferred.
+  --qr-code: string # A JSON string whose UTF-8 representation can be used to generate a QR code to enroll a device with this enrollment token. To enroll a device using NFC, the NFC record must contain a serialized java.util.Properties representation of the properties in the JSON.
   --user: record # A user belonging to an enterprise. — shape: {accountIdentifier?: string}
   --value: string # The token value that's passed to the device and authorizes the device to enroll. This is a read-only field generated by the server.
 ]: any -> record<additionalData: string, allowPersonalUsage: string, duration: string, expirationTimestamp: string, name: string, oneTimeOnly: bool, policyName: string, qrCode: string, user: record<accountIdentifier: string>, value: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/($parent)/enrollmentTokens" $qp)
-  let body = {additionalData: $additionalData, allowPersonalUsage: $allowPersonalUsage, duration: $duration, expirationTimestamp: $expirationTimestamp, name: $name, oneTimeOnly: $oneTimeOnly, policyName: $policyName, qrCode: $qrCode, user: $user, value: $value} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/enrollmentTokens") $qp)
+  let req_body = {"additionalData": $additional_data, "allowPersonalUsage": $allow_personal_usage, "duration": $duration, "expirationTimestamp": $expiration_timestamp, "name": $name, "oneTimeOnly": $one_time_only, "policyName": $policy_name, "qrCode": $qr_code, "user": $user, "value": $value} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Lists policies for a given enterprise.
 #
 # GET /v1/{parent}/policies
 # operationId: androidmanagement.enterprises.policies.list
-export def "policies androidmanagemententerprisespolicieslist" [
+export def "policies list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -567,6 +589,7 @@ export def "policies androidmanagemententerprisespolicieslist" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
@@ -575,27 +598,27 @@ export def "policies androidmanagemententerprisespolicieslist" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --pageSize: int # The requested page size. The actual page size may be fixed to a min or max value.
-  --pageToken: string # A token identifying a page of results returned by the server.
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --page-size: int # The requested page size. The actual page size may be fixed to a min or max value.
+  --page-token: string # A token identifying a page of results returned by the server.
 ]: nothing -> record<nextPageToken: string, policies: table<accountTypesWithManagementDisabled: list, addUserDisabled: bool, adjustVolumeDisabled: bool, advancedSecurityOverrides: record, alwaysOnVpnPackage: record, androidDevicePolicyTracks: list, appAutoUpdatePolicy: string, applications: list, autoDateAndTimeZone: string, autoTimeRequired: bool, blockApplicationsEnabled: bool, bluetoothConfigDisabled: bool, bluetoothContactSharingDisabled: bool, bluetoothDisabled: bool, cameraAccess: string, cameraDisabled: bool, cellBroadcastsConfigDisabled: bool, choosePrivateKeyRules: list, complianceRules: list, createWindowsDisabled: bool, credentialsConfigDisabled: bool, crossProfilePolicies: record, dataRoamingDisabled: bool, debuggingFeaturesAllowed: bool, defaultPermissionPolicy: string, deviceOwnerLockScreenInfo: record, encryptionPolicy: string, ensureVerifyAppsEnabled: bool, factoryResetDisabled: bool, frpAdminEmails: list, funDisabled: bool, installAppsDisabled: bool, installUnknownSourcesAllowed: bool, keyguardDisabled: bool, keyguardDisabledFeatures: list, kioskCustomLauncherEnabled: bool, kioskCustomization: record, locationMode: string, longSupportMessage: record, maximumTimeToLock: string, microphoneAccess: string, minimumApiLevel: int, mobileNetworksConfigDisabled: bool, modifyAccountsDisabled: bool, mountPhysicalMediaDisabled: bool, name: string, networkEscapeHatchEnabled: bool, networkResetDisabled: bool, oncCertificateProviders: list, openNetworkConfiguration: record, outgoingBeamDisabled: bool, outgoingCallsDisabled: bool, passwordPolicies: list, passwordRequirements: record, permissionGrants: list, permittedAccessibilityServices: record, permittedInputMethods: record, persistentPreferredActivities: list, personalUsagePolicies: record, playStoreMode: string, policyEnforcementRules: list, preferentialNetworkService: string, privateKeySelectionEnabled: bool, recommendedGlobalProxy: record, removeUserDisabled: bool, safeBootDisabled: bool, screenCaptureDisabled: bool, setUserIconDisabled: bool, setWallpaperDisabled: bool, setupActions: list, shareLocationDisabled: bool, shortSupportMessage: record, skipFirstUseHintsEnabled: bool, smsDisabled: bool, statusBarDisabled: bool, statusReportingSettings: record, stayOnPluggedModes: list, systemUpdate: record, tetheringConfigDisabled: bool, uninstallAppsDisabled: bool, unmuteMicrophoneDisabled: bool, usageLog: record, usbFileTransferDisabled: bool, usbMassStorageEnabled: bool, version: string, vpnConfigDisabled: bool, wifiConfigDisabled: bool, wifiConfigsLockdownEnabled: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/($parent)/policies" $qp)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/policies") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Lists web apps for a given enterprise.
 #
 # GET /v1/{parent}/webApps
 # operationId: androidmanagement.enterprises.webApps.list
-export def "web-apps androidmanagemententerpriseswebAppslist" [
+export def "web-apps list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -604,6 +627,7 @@ export def "web-apps androidmanagemententerpriseswebAppslist" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
@@ -612,20 +636,20 @@ export def "web-apps androidmanagemententerpriseswebAppslist" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --pageSize: int # The requested page size. This is a hint and the actual page size in the response may be different.
-  --pageToken: string # A token identifying a page of results returned by the server.
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --page-size: int # The requested page size. This is a hint and the actual page size in the response may be different.
+  --page-token: string # A token identifying a page of results returned by the server.
 ]: nothing -> record<nextPageToken: string, webApps: table<displayMode: string, icons: list, name: string, startUrl: string, title: string, versionCode: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/($parent)/webApps" $qp)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/webApps") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Creates a web app.
@@ -633,7 +657,7 @@ export def "web-apps androidmanagemententerpriseswebAppslist" [
 # POST /v1/{parent}/webApps
 # operationId: androidmanagement.enterprises.webApps.create
 # --icons item shape: {imageData?: string}
-export def "web-apps androidmanagemententerpriseswebAppscreate" [
+export def "web-apps create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -642,6 +666,7 @@ export def "web-apps androidmanagemententerpriseswebAppscreate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
@@ -650,34 +675,34 @@ export def "web-apps androidmanagemententerpriseswebAppscreate" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --displayMode: string@displayMode-completer # The display mode of the web app.
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --display-mode: string@display-mode-completer # The display mode of the web app.
   --icons: list # A list of icons for the web app. Must have at least one element. — item shape: {imageData?: string}
   --name: string # The name of the web app, which is generated by the server during creation in the form enterprises/{enterpriseId}/webApps/{packageName}.
-  --startUrl: string # The start URL, i.e. the URL that should load when the user opens the application.
+  --start-url: string # The start URL, i.e. the URL that should load when the user opens the application.
   --title: string # The title of the web app as displayed to the user (e.g., amongst a list of other applications, or as a label for an icon).
-  --versionCode: string # The current version of the app.Note that the version can automatically increase during the lifetime of the web app, while Google does internal housekeeping to keep the web app up-to-date. (format: int64)
+  --version-code: string # The current version of the app.Note that the version can automatically increase during the lifetime of the web app, while Google does internal housekeeping to keep the web app up-to-date. (format: int64)
 ]: any -> record<displayMode: string, icons: table<imageData: string>, name: string, startUrl: string, title: string, versionCode: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/($parent)/webApps" $qp)
-  let body = {displayMode: $displayMode, icons: $icons, name: $name, startUrl: $startUrl, title: $title, versionCode: $versionCode} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/webApps") $qp)
+  let req_body = {"displayMode": $display_mode, "icons": $icons, "name": $name, "startUrl": $start_url, "title": $title, "versionCode": $version_code} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Creates a web token to access an embeddable managed Google Play web UI for a given enterprise.
 #
 # POST /v1/{parent}/webTokens
 # operationId: androidmanagement.enterprises.webTokens.create
-export def "web-tokens androidmanagemententerpriseswebTokenscreate" [
+export def "web-tokens create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -686,6 +711,7 @@ export def "web-tokens androidmanagemententerpriseswebTokenscreate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
@@ -694,24 +720,24 @@ export def "web-tokens androidmanagemententerpriseswebTokenscreate" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --enabledFeatures: list # The features to enable. Use this if you want to control exactly which feature(s) will be activated; leave empty to allow all features.Restrictions / things to note: - If no features are listed here, all features are enabled — this is the default behavior where you give access to all features to your admins. - This must not contain any FEATURE_UNSPECIFIED values. - Repeated values are ignored 
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --enabled-features: list<string> # The features to enable. Use this if you want to control exactly which feature(s) will be activated; leave empty to allow all features.Restrictions / things to note: - If no features are listed here, all features are enabled — this is the default behavior where you give access to all features to your admins. - This must not contain any FEATURE_UNSPECIFIED values. - Repeated values are ignored
   --name: string # The name of the web token, which is generated by the server during creation in the form enterprises/{enterpriseId}/webTokens/{webTokenId}.
-  --parentFrameUrl: string # The URL of the parent frame hosting the iframe with the embedded UI. To prevent XSS, the iframe may not be hosted at other URLs. The URL must use the https scheme.
-  --permissions: list # Permissions available to an admin in the embedded UI. An admin must have all of these permissions in order to view the UI. This field is deprecated.
+  --parent-frame-url: string # The URL of the parent frame hosting the iframe with the embedded UI. To prevent XSS, the iframe may not be hosted at other URLs. The URL must use the https scheme.
+  --permissions: list<string> # Permissions available to an admin in the embedded UI. An admin must have all of these permissions in order to view the UI. This field is deprecated.
   --value: string # The token value which is used in the hosting page to generate the iframe with the embedded UI. This is a read-only field generated by the server.
 ]: any -> record<enabledFeatures: list<string>, name: string, parentFrameUrl: string, permissions: list<string>, value: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/($parent)/webTokens" $qp)
-  let body = {enabledFeatures: $enabledFeatures, name: $name, parentFrameUrl: $parentFrameUrl, permissions: $permissions, value: $value} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/webTokens") $qp)
+  let req_body = {"enabledFeatures": $enabled_features, "name": $name, "parentFrameUrl": $parent_frame_url, "permissions": $permissions, "value": $value} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }

@@ -18,21 +18,32 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 }
 
 # Serialize a single query parameter based on collection style
+# Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
+# ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = ($name | url encode)
+  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
-  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
-    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
-    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
+    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
+    _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
+}
+
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Build URL from base, path, and optional query string
@@ -44,7 +55,7 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
@@ -53,38 +64,38 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
     "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "put" => { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "patch" => { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
   if ($method in ["head" "options"]) { return $resp }
-  if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
+  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
 def base-url-completer [] { ["http://importexport.amazonaws.com" "https://importexport.amazonaws.com" "http://importexport.cn-north-1.amazonaws.com.cn" "http://importexport.cn-northwest-1.amazonaws.com.cn" "https://importexport.cn-north-1.amazonaws.com.cn" "https://importexport.cn-northwest-1.amazonaws.com.cn"] }
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
-def Operation-completer [] { ["CancelJob"] }
-def Action-completer [] { ["CancelJob"] }
-def Version-completer [] { ["2010-06-01"] }
-def JobType-completer [] { ["Export" "Import"] }
-def Operation-completer-1 [] { ["CreateJob"] }
-def Action-completer-1 [] { ["CreateJob"] }
-def Operation-completer-2 [] { ["GetShippingLabel"] }
-def Action-completer-2 [] { ["GetShippingLabel"] }
-def Operation-completer-3 [] { ["GetStatus"] }
-def Action-completer-3 [] { ["GetStatus"] }
-def Operation-completer-4 [] { ["ListJobs"] }
-def Action-completer-4 [] { ["ListJobs"] }
-def Operation-completer-5 [] { ["UpdateJob"] }
-def Action-completer-5 [] { ["UpdateJob"] }
+def operation-completer [] { ["CancelJob"] }
+def action-completer [] { ["CancelJob"] }
+def version-completer [] { ["2010-06-01"] }
+def job-type-completer [] { ["Export" "Import"] }
+def operation-completer-1 [] { ["CreateJob"] }
+def action-completer-1 [] { ["CreateJob"] }
+def operation-completer-2 [] { ["GetShippingLabel"] }
+def action-completer-2 [] { ["GetShippingLabel"] }
+def operation-completer-3 [] { ["GetStatus"] }
+def action-completer-3 [] { ["GetStatus"] }
+def operation-completer-4 [] { ["ListJobs"] }
+def action-completer-4 [] { ["ListJobs"] }
+def operation-completer-5 [] { ["UpdateJob"] }
+def action-completer-5 [] { ["UpdateJob"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "operation-cancel-job-action-cancel-job CancelJob" } } | get name | first)
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "operation-cancel-job-action-cancel-job get-cancel" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -108,7 +119,7 @@ export def commands []: nothing -> table {
 #
 # GET /#Operation=CancelJob&Action=CancelJob
 # operationId: GET_CancelJob
-export def "operation-cancel-job-action-cancel-job CancelJob" [
+export def "operation-cancel-job-action-cancel-job get-cancel" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -116,34 +127,35 @@ export def "operation-cancel-job-action-cancel-job CancelJob" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --AWSAccessKeyId: string
-  --Action: string
-  --SignatureMethod: string
-  --SignatureVersion: string
-  --Timestamp: string
-  --Version: string
-  --Signature: string
-  --JobId: string
-  --APIVersion: string
-  --Operation: string@Operation-completer
-  --Action: string@Action-completer
-  --Version: string@Version-completer
+  --aws-access-key-id: string
+  --action: string
+  --signature-method: string
+  --signature-version: string
+  --timestamp: string
+  --version: string
+  --signature: string
+  --job-id: string
+  --api-version: string
+  --operation: string@operation-completer
+  --action: string@action-completer
+  --version: string@version-completer
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "AWSAccessKeyId" $AWSAccessKeyId "scalar") (serialize-qp "Action" $Action "scalar") (serialize-qp "SignatureMethod" $SignatureMethod "scalar") (serialize-qp "SignatureVersion" $SignatureVersion "scalar") (serialize-qp "Timestamp" $Timestamp "scalar") (serialize-qp "Version" $Version "scalar") (serialize-qp "Signature" $Signature "scalar") (serialize-qp "JobId" $JobId "scalar") (serialize-qp "APIVersion" $APIVersion "scalar") (serialize-qp "Operation" $Operation "scalar") (serialize-qp "Action" $Action "scalar") (serialize-qp "Version" $Version "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "AWSAccessKeyId" $aws_access_key_id "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "SignatureMethod" $signature_method "scalar") (serialize-qp "SignatureVersion" $signature_version "scalar") (serialize-qp "Timestamp" $timestamp "scalar") (serialize-qp "Version" $version "scalar") (serialize-qp "Signature" $signature "scalar") (serialize-qp "JobId" $job_id "scalar") (serialize-qp "APIVersion" $api_version "scalar") (serialize-qp "Operation" $operation "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#Operation=CancelJob&Action=CancelJob" $qp)
   let accept_val = "text/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # This operation cancels a specified job. Only the job owner can cancel it. The operation fails if the job has already started or is complete.
 #
 # POST /#Operation=CancelJob&Action=CancelJob
 # operationId: POST_CancelJob
-export def "operation-cancel-job-action-cancel-job CancelJob-1" [
+export def "operation-cancel-job-action-cancel-job create-cancel" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -151,35 +163,37 @@ export def "operation-cancel-job-action-cancel-job CancelJob-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --AWSAccessKeyId: string
-  --Action: string
-  --SignatureMethod: string
-  --SignatureVersion: string
-  --Timestamp: string
-  --Version: string
-  --Signature: string
-  --Operation: string@Operation-completer
-  --Action: string@Action-completer
-  --Version: string@Version-completer
-  --body: record
+  --aws-access-key-id: string
+  --action: string
+  --signature-method: string
+  --signature-version: string
+  --timestamp: string
+  --version: string
+  --signature: string
+  --operation: string@operation-completer
+  --action: string@action-completer
+  --version: string@version-completer
+  --body: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "AWSAccessKeyId" $AWSAccessKeyId "scalar") (serialize-qp "Action" $Action "scalar") (serialize-qp "SignatureMethod" $SignatureMethod "scalar") (serialize-qp "SignatureVersion" $SignatureVersion "scalar") (serialize-qp "Timestamp" $Timestamp "scalar") (serialize-qp "Version" $Version "scalar") (serialize-qp "Signature" $Signature "scalar") (serialize-qp "Operation" $Operation "scalar") (serialize-qp "Action" $Action "scalar") (serialize-qp "Version" $Version "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "AWSAccessKeyId" $aws_access_key_id "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "SignatureMethod" $signature_method "scalar") (serialize-qp "SignatureVersion" $signature_version "scalar") (serialize-qp "Timestamp" $timestamp "scalar") (serialize-qp "Version" $version "scalar") (serialize-qp "Signature" $signature "scalar") (serialize-qp "Operation" $operation "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#Operation=CancelJob&Action=CancelJob" $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "text/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "text/xml" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "text/xml" $req_body
 }
 
 # This operation initiates the process of scheduling an upload or download of your data. You include in the request a manifest that describes the data transfer specifics. The response to the request includes a job ID, which you can use in other operations, a signature that you use to identify your storage device, and the address where you should ship your storage device.
 #
 # GET /#Operation=CreateJob&Action=CreateJob
 # operationId: GET_CreateJob
-export def "operation-create-job-action-create-job CreateJob" [
+export def "operation-create-job-action-create-job get-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -187,37 +201,38 @@ export def "operation-create-job-action-create-job CreateJob" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --AWSAccessKeyId: string
-  --Action: string
-  --SignatureMethod: string
-  --SignatureVersion: string
-  --Timestamp: string
-  --Version: string
-  --Signature: string
-  --JobType: string@JobType-completer
-  --Manifest: string
-  --ManifestAddendum: string
-  --ValidateOnly: oneof<nothing, bool>
-  --APIVersion: string
-  --Operation: string@Operation-completer-1
-  --Action: string@Action-completer-1
-  --Version: string@Version-completer
+  --aws-access-key-id: string
+  --action: string
+  --signature-method: string
+  --signature-version: string
+  --timestamp: string
+  --version: string
+  --signature: string
+  --job-type: string@job-type-completer
+  --manifest: string
+  --manifest-addendum: string
+  --validate-only: oneof<nothing, bool>
+  --api-version: string
+  --operation: string@operation-completer-1
+  --action: string@action-completer-1
+  --version: string@version-completer
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "AWSAccessKeyId" $AWSAccessKeyId "scalar") (serialize-qp "Action" $Action "scalar") (serialize-qp "SignatureMethod" $SignatureMethod "scalar") (serialize-qp "SignatureVersion" $SignatureVersion "scalar") (serialize-qp "Timestamp" $Timestamp "scalar") (serialize-qp "Version" $Version "scalar") (serialize-qp "Signature" $Signature "scalar") (serialize-qp "JobType" $JobType "scalar") (serialize-qp "Manifest" $Manifest "scalar") (serialize-qp "ManifestAddendum" $ManifestAddendum "scalar") (serialize-qp "ValidateOnly" $ValidateOnly "scalar") (serialize-qp "APIVersion" $APIVersion "scalar") (serialize-qp "Operation" $Operation "scalar") (serialize-qp "Action" $Action "scalar") (serialize-qp "Version" $Version "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "AWSAccessKeyId" $aws_access_key_id "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "SignatureMethod" $signature_method "scalar") (serialize-qp "SignatureVersion" $signature_version "scalar") (serialize-qp "Timestamp" $timestamp "scalar") (serialize-qp "Version" $version "scalar") (serialize-qp "Signature" $signature "scalar") (serialize-qp "JobType" $job_type "scalar") (serialize-qp "Manifest" $manifest "scalar") (serialize-qp "ManifestAddendum" $manifest_addendum "scalar") (serialize-qp "ValidateOnly" $validate_only "scalar") (serialize-qp "APIVersion" $api_version "scalar") (serialize-qp "Operation" $operation "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#Operation=CreateJob&Action=CreateJob" $qp)
   let accept_val = "text/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # This operation initiates the process of scheduling an upload or download of your data. You include in the request a manifest that describes the data transfer specifics. The response to the request includes a job ID, which you can use in other operations, a signature that you use to identify your storage device, and the address where you should ship your storage device.
 #
 # POST /#Operation=CreateJob&Action=CreateJob
 # operationId: POST_CreateJob
-export def "operation-create-job-action-create-job CreateJob-1" [
+export def "operation-create-job-action-create-job create-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -225,35 +240,37 @@ export def "operation-create-job-action-create-job CreateJob-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --AWSAccessKeyId: string
-  --Action: string
-  --SignatureMethod: string
-  --SignatureVersion: string
-  --Timestamp: string
-  --Version: string
-  --Signature: string
-  --Operation: string@Operation-completer-1
-  --Action: string@Action-completer-1
-  --Version: string@Version-completer
-  --body: record
+  --aws-access-key-id: string
+  --action: string
+  --signature-method: string
+  --signature-version: string
+  --timestamp: string
+  --version: string
+  --signature: string
+  --operation: string@operation-completer-1
+  --action: string@action-completer-1
+  --version: string@version-completer
+  --body: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "AWSAccessKeyId" $AWSAccessKeyId "scalar") (serialize-qp "Action" $Action "scalar") (serialize-qp "SignatureMethod" $SignatureMethod "scalar") (serialize-qp "SignatureVersion" $SignatureVersion "scalar") (serialize-qp "Timestamp" $Timestamp "scalar") (serialize-qp "Version" $Version "scalar") (serialize-qp "Signature" $Signature "scalar") (serialize-qp "Operation" $Operation "scalar") (serialize-qp "Action" $Action "scalar") (serialize-qp "Version" $Version "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "AWSAccessKeyId" $aws_access_key_id "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "SignatureMethod" $signature_method "scalar") (serialize-qp "SignatureVersion" $signature_version "scalar") (serialize-qp "Timestamp" $timestamp "scalar") (serialize-qp "Version" $version "scalar") (serialize-qp "Signature" $signature "scalar") (serialize-qp "Operation" $operation "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#Operation=CreateJob&Action=CreateJob" $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "text/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "text/xml" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "text/xml" $req_body
 }
 
 # This operation generates a pre-paid UPS shipping label that you will use to ship your device to AWS for processing.
 #
 # GET /#Operation=GetShippingLabel&Action=GetShippingLabel
 # operationId: GET_GetShippingLabel
-export def "operation-get-shipping-label-action-get-shipping-label GetShippingLabel" [
+export def "operation-get-shipping-label-action-get-shipping-label get-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -261,44 +278,45 @@ export def "operation-get-shipping-label-action-get-shipping-label GetShippingLa
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --AWSAccessKeyId: string
-  --Action: string
-  --SignatureMethod: string
-  --SignatureVersion: string
-  --Timestamp: string
-  --Version: string
-  --Signature: string
-  --jobIds: list
+  --aws-access-key-id: string
+  --action: string
+  --signature-method: string
+  --signature-version: string
+  --timestamp: string
+  --version: string
+  --signature: string
+  --job-ids: list
   --name: string
   --company: string
-  --phoneNumber: string
+  --phone-number: string
   --country: string
-  --stateOrProvince: string
+  --state-or-province: string
   --city: string
-  --postalCode: string
+  --postal-code: string
   --street1: string
   --street2: string
   --street3: string
-  --APIVersion: string
-  --Operation: string@Operation-completer-2
-  --Action: string@Action-completer-2
-  --Version: string@Version-completer
+  --api-version: string
+  --operation: string@operation-completer-2
+  --action: string@action-completer-2
+  --version: string@version-completer
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "AWSAccessKeyId" $AWSAccessKeyId "scalar") (serialize-qp "Action" $Action "scalar") (serialize-qp "SignatureMethod" $SignatureMethod "scalar") (serialize-qp "SignatureVersion" $SignatureVersion "scalar") (serialize-qp "Timestamp" $Timestamp "scalar") (serialize-qp "Version" $Version "scalar") (serialize-qp "Signature" $Signature "scalar") (serialize-qp "jobIds" $jobIds "multi") (serialize-qp "name" $name "scalar") (serialize-qp "company" $company "scalar") (serialize-qp "phoneNumber" $phoneNumber "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "stateOrProvince" $stateOrProvince "scalar") (serialize-qp "city" $city "scalar") (serialize-qp "postalCode" $postalCode "scalar") (serialize-qp "street1" $street1 "scalar") (serialize-qp "street2" $street2 "scalar") (serialize-qp "street3" $street3 "scalar") (serialize-qp "APIVersion" $APIVersion "scalar") (serialize-qp "Operation" $Operation "scalar") (serialize-qp "Action" $Action "scalar") (serialize-qp "Version" $Version "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "AWSAccessKeyId" $aws_access_key_id "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "SignatureMethod" $signature_method "scalar") (serialize-qp "SignatureVersion" $signature_version "scalar") (serialize-qp "Timestamp" $timestamp "scalar") (serialize-qp "Version" $version "scalar") (serialize-qp "Signature" $signature "scalar") (serialize-qp "jobIds" $job_ids "multi") (serialize-qp "name" $name "scalar") (serialize-qp "company" $company "scalar") (serialize-qp "phoneNumber" $phone_number "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "stateOrProvince" $state_or_province "scalar") (serialize-qp "city" $city "scalar") (serialize-qp "postalCode" $postal_code "scalar") (serialize-qp "street1" $street1 "scalar") (serialize-qp "street2" $street2 "scalar") (serialize-qp "street3" $street3 "scalar") (serialize-qp "APIVersion" $api_version "scalar") (serialize-qp "Operation" $operation "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#Operation=GetShippingLabel&Action=GetShippingLabel" $qp)
   let accept_val = "text/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # This operation generates a pre-paid UPS shipping label that you will use to ship your device to AWS for processing.
 #
 # POST /#Operation=GetShippingLabel&Action=GetShippingLabel
 # operationId: POST_GetShippingLabel
-export def "operation-get-shipping-label-action-get-shipping-label GetShippingLabel-1" [
+export def "operation-get-shipping-label-action-get-shipping-label create-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -306,35 +324,37 @@ export def "operation-get-shipping-label-action-get-shipping-label GetShippingLa
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --AWSAccessKeyId: string
-  --Action: string
-  --SignatureMethod: string
-  --SignatureVersion: string
-  --Timestamp: string
-  --Version: string
-  --Signature: string
-  --Operation: string@Operation-completer-2
-  --Action: string@Action-completer-2
-  --Version: string@Version-completer
-  --body: record
+  --aws-access-key-id: string
+  --action: string
+  --signature-method: string
+  --signature-version: string
+  --timestamp: string
+  --version: string
+  --signature: string
+  --operation: string@operation-completer-2
+  --action: string@action-completer-2
+  --version: string@version-completer
+  --body: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "AWSAccessKeyId" $AWSAccessKeyId "scalar") (serialize-qp "Action" $Action "scalar") (serialize-qp "SignatureMethod" $SignatureMethod "scalar") (serialize-qp "SignatureVersion" $SignatureVersion "scalar") (serialize-qp "Timestamp" $Timestamp "scalar") (serialize-qp "Version" $Version "scalar") (serialize-qp "Signature" $Signature "scalar") (serialize-qp "Operation" $Operation "scalar") (serialize-qp "Action" $Action "scalar") (serialize-qp "Version" $Version "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "AWSAccessKeyId" $aws_access_key_id "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "SignatureMethod" $signature_method "scalar") (serialize-qp "SignatureVersion" $signature_version "scalar") (serialize-qp "Timestamp" $timestamp "scalar") (serialize-qp "Version" $version "scalar") (serialize-qp "Signature" $signature "scalar") (serialize-qp "Operation" $operation "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#Operation=GetShippingLabel&Action=GetShippingLabel" $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "text/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "text/xml" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "text/xml" $req_body
 }
 
 # This operation returns information about a job, including where the job is in the processing pipeline, the status of the results, and the signature value associated with the job. You can only return information about jobs you own.
 #
 # GET /#Operation=GetStatus&Action=GetStatus
 # operationId: GET_GetStatus
-export def "operation-get-status-action-get-status GetStatus" [
+export def "operation-get-status-action-get-status get-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -342,34 +362,35 @@ export def "operation-get-status-action-get-status GetStatus" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --AWSAccessKeyId: string
-  --Action: string
-  --SignatureMethod: string
-  --SignatureVersion: string
-  --Timestamp: string
-  --Version: string
-  --Signature: string
-  --JobId: string
-  --APIVersion: string
-  --Operation: string@Operation-completer-3
-  --Action: string@Action-completer-3
-  --Version: string@Version-completer
+  --aws-access-key-id: string
+  --action: string
+  --signature-method: string
+  --signature-version: string
+  --timestamp: string
+  --version: string
+  --signature: string
+  --job-id: string
+  --api-version: string
+  --operation: string@operation-completer-3
+  --action: string@action-completer-3
+  --version: string@version-completer
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "AWSAccessKeyId" $AWSAccessKeyId "scalar") (serialize-qp "Action" $Action "scalar") (serialize-qp "SignatureMethod" $SignatureMethod "scalar") (serialize-qp "SignatureVersion" $SignatureVersion "scalar") (serialize-qp "Timestamp" $Timestamp "scalar") (serialize-qp "Version" $Version "scalar") (serialize-qp "Signature" $Signature "scalar") (serialize-qp "JobId" $JobId "scalar") (serialize-qp "APIVersion" $APIVersion "scalar") (serialize-qp "Operation" $Operation "scalar") (serialize-qp "Action" $Action "scalar") (serialize-qp "Version" $Version "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "AWSAccessKeyId" $aws_access_key_id "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "SignatureMethod" $signature_method "scalar") (serialize-qp "SignatureVersion" $signature_version "scalar") (serialize-qp "Timestamp" $timestamp "scalar") (serialize-qp "Version" $version "scalar") (serialize-qp "Signature" $signature "scalar") (serialize-qp "JobId" $job_id "scalar") (serialize-qp "APIVersion" $api_version "scalar") (serialize-qp "Operation" $operation "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#Operation=GetStatus&Action=GetStatus" $qp)
   let accept_val = "text/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # This operation returns information about a job, including where the job is in the processing pipeline, the status of the results, and the signature value associated with the job. You can only return information about jobs you own.
 #
 # POST /#Operation=GetStatus&Action=GetStatus
 # operationId: POST_GetStatus
-export def "operation-get-status-action-get-status GetStatus-1" [
+export def "operation-get-status-action-get-status create-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -377,35 +398,37 @@ export def "operation-get-status-action-get-status GetStatus-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --AWSAccessKeyId: string
-  --Action: string
-  --SignatureMethod: string
-  --SignatureVersion: string
-  --Timestamp: string
-  --Version: string
-  --Signature: string
-  --Operation: string@Operation-completer-3
-  --Action: string@Action-completer-3
-  --Version: string@Version-completer
-  --body: record
+  --aws-access-key-id: string
+  --action: string
+  --signature-method: string
+  --signature-version: string
+  --timestamp: string
+  --version: string
+  --signature: string
+  --operation: string@operation-completer-3
+  --action: string@action-completer-3
+  --version: string@version-completer
+  --body: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "AWSAccessKeyId" $AWSAccessKeyId "scalar") (serialize-qp "Action" $Action "scalar") (serialize-qp "SignatureMethod" $SignatureMethod "scalar") (serialize-qp "SignatureVersion" $SignatureVersion "scalar") (serialize-qp "Timestamp" $Timestamp "scalar") (serialize-qp "Version" $Version "scalar") (serialize-qp "Signature" $Signature "scalar") (serialize-qp "Operation" $Operation "scalar") (serialize-qp "Action" $Action "scalar") (serialize-qp "Version" $Version "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "AWSAccessKeyId" $aws_access_key_id "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "SignatureMethod" $signature_method "scalar") (serialize-qp "SignatureVersion" $signature_version "scalar") (serialize-qp "Timestamp" $timestamp "scalar") (serialize-qp "Version" $version "scalar") (serialize-qp "Signature" $signature "scalar") (serialize-qp "Operation" $operation "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#Operation=GetStatus&Action=GetStatus" $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "text/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "text/xml" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "text/xml" $req_body
 }
 
 # This operation returns the jobs associated with the requester. AWS Import/Export lists the jobs in reverse chronological order based on the date of creation. For example if Job Test1 was created 2009Dec30 and Test2 was created 2010Feb05, the ListJobs operation would return Test2 followed by Test1.
 #
 # GET /#Operation=ListJobs&Action=ListJobs
 # operationId: GET_ListJobs
-export def "operation-list-jobs-action-list-jobs ListJobs" [
+export def "operation-list-jobs-action-list-jobs get-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -413,35 +436,36 @@ export def "operation-list-jobs-action-list-jobs ListJobs" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --AWSAccessKeyId: string
-  --Action: string
-  --SignatureMethod: string
-  --SignatureVersion: string
-  --Timestamp: string
-  --Version: string
-  --Signature: string
-  --MaxJobs: int
-  --Marker: string
-  --APIVersion: string
-  --Operation: string@Operation-completer-4
-  --Action: string@Action-completer-4
-  --Version: string@Version-completer
+  --aws-access-key-id: string
+  --action: string
+  --signature-method: string
+  --signature-version: string
+  --timestamp: string
+  --version: string
+  --signature: string
+  --max-jobs: int
+  --marker: string
+  --api-version: string
+  --operation: string@operation-completer-4
+  --action: string@action-completer-4
+  --version: string@version-completer
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "AWSAccessKeyId" $AWSAccessKeyId "scalar") (serialize-qp "Action" $Action "scalar") (serialize-qp "SignatureMethod" $SignatureMethod "scalar") (serialize-qp "SignatureVersion" $SignatureVersion "scalar") (serialize-qp "Timestamp" $Timestamp "scalar") (serialize-qp "Version" $Version "scalar") (serialize-qp "Signature" $Signature "scalar") (serialize-qp "MaxJobs" $MaxJobs "scalar") (serialize-qp "Marker" $Marker "scalar") (serialize-qp "APIVersion" $APIVersion "scalar") (serialize-qp "Operation" $Operation "scalar") (serialize-qp "Action" $Action "scalar") (serialize-qp "Version" $Version "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "AWSAccessKeyId" $aws_access_key_id "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "SignatureMethod" $signature_method "scalar") (serialize-qp "SignatureVersion" $signature_version "scalar") (serialize-qp "Timestamp" $timestamp "scalar") (serialize-qp "Version" $version "scalar") (serialize-qp "Signature" $signature "scalar") (serialize-qp "MaxJobs" $max_jobs "scalar") (serialize-qp "Marker" $marker "scalar") (serialize-qp "APIVersion" $api_version "scalar") (serialize-qp "Operation" $operation "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#Operation=ListJobs&Action=ListJobs" $qp)
   let accept_val = "text/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # This operation returns the jobs associated with the requester. AWS Import/Export lists the jobs in reverse chronological order based on the date of creation. For example if Job Test1 was created 2009Dec30 and Test2 was created 2010Feb05, the ListJobs operation would return Test2 followed by Test1.
 #
 # POST /#Operation=ListJobs&Action=ListJobs
 # operationId: POST_ListJobs
-export def "operation-list-jobs-action-list-jobs ListJobs-1" [
+export def "operation-list-jobs-action-list-jobs create-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -449,37 +473,39 @@ export def "operation-list-jobs-action-list-jobs ListJobs-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --AWSAccessKeyId: string
-  --Action: string
-  --SignatureMethod: string
-  --SignatureVersion: string
-  --Timestamp: string
-  --Version: string
-  --Signature: string
-  --MaxJobs: string # Pagination limit
-  --Marker: string # Pagination token
-  --Operation: string@Operation-completer-4
-  --Action: string@Action-completer-4
-  --Version: string@Version-completer
-  --body: record
+  --aws-access-key-id: string
+  --action: string
+  --signature-method: string
+  --signature-version: string
+  --timestamp: string
+  --version: string
+  --signature: string
+  --max-jobs: string # Pagination limit
+  --marker: string # Pagination token
+  --operation: string@operation-completer-4
+  --action: string@action-completer-4
+  --version: string@version-completer
+  --body: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "AWSAccessKeyId" $AWSAccessKeyId "scalar") (serialize-qp "Action" $Action "scalar") (serialize-qp "SignatureMethod" $SignatureMethod "scalar") (serialize-qp "SignatureVersion" $SignatureVersion "scalar") (serialize-qp "Timestamp" $Timestamp "scalar") (serialize-qp "Version" $Version "scalar") (serialize-qp "Signature" $Signature "scalar") (serialize-qp "MaxJobs" $MaxJobs "scalar") (serialize-qp "Marker" $Marker "scalar") (serialize-qp "Operation" $Operation "scalar") (serialize-qp "Action" $Action "scalar") (serialize-qp "Version" $Version "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "AWSAccessKeyId" $aws_access_key_id "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "SignatureMethod" $signature_method "scalar") (serialize-qp "SignatureVersion" $signature_version "scalar") (serialize-qp "Timestamp" $timestamp "scalar") (serialize-qp "Version" $version "scalar") (serialize-qp "Signature" $signature "scalar") (serialize-qp "MaxJobs" $max_jobs "scalar") (serialize-qp "Marker" $marker "scalar") (serialize-qp "Operation" $operation "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#Operation=ListJobs&Action=ListJobs" $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "text/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "text/xml" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "text/xml" $req_body
 }
 
 # You use this operation to change the parameters specified in the original manifest file by supplying a new manifest file. The manifest file attached to this request replaces the original manifest file. You can only use the operation after a CreateJob request but before the data transfer starts and you can only use it on jobs you own.
 #
 # GET /#Operation=UpdateJob&Action=UpdateJob
 # operationId: GET_UpdateJob
-export def "operation-update-job-action-update-job UpdateJob" [
+export def "operation-update-job-action-update-job get-update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -487,37 +513,38 @@ export def "operation-update-job-action-update-job UpdateJob" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --AWSAccessKeyId: string
-  --Action: string
-  --SignatureMethod: string
-  --SignatureVersion: string
-  --Timestamp: string
-  --Version: string
-  --Signature: string
-  --JobId: string
-  --Manifest: string
-  --JobType: string@JobType-completer
-  --ValidateOnly: oneof<nothing, bool>
-  --APIVersion: string
-  --Operation: string@Operation-completer-5
-  --Action: string@Action-completer-5
-  --Version: string@Version-completer
+  --aws-access-key-id: string
+  --action: string
+  --signature-method: string
+  --signature-version: string
+  --timestamp: string
+  --version: string
+  --signature: string
+  --job-id: string
+  --manifest: string
+  --job-type: string@job-type-completer
+  --validate-only: oneof<nothing, bool>
+  --api-version: string
+  --operation: string@operation-completer-5
+  --action: string@action-completer-5
+  --version: string@version-completer
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "AWSAccessKeyId" $AWSAccessKeyId "scalar") (serialize-qp "Action" $Action "scalar") (serialize-qp "SignatureMethod" $SignatureMethod "scalar") (serialize-qp "SignatureVersion" $SignatureVersion "scalar") (serialize-qp "Timestamp" $Timestamp "scalar") (serialize-qp "Version" $Version "scalar") (serialize-qp "Signature" $Signature "scalar") (serialize-qp "JobId" $JobId "scalar") (serialize-qp "Manifest" $Manifest "scalar") (serialize-qp "JobType" $JobType "scalar") (serialize-qp "ValidateOnly" $ValidateOnly "scalar") (serialize-qp "APIVersion" $APIVersion "scalar") (serialize-qp "Operation" $Operation "scalar") (serialize-qp "Action" $Action "scalar") (serialize-qp "Version" $Version "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "AWSAccessKeyId" $aws_access_key_id "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "SignatureMethod" $signature_method "scalar") (serialize-qp "SignatureVersion" $signature_version "scalar") (serialize-qp "Timestamp" $timestamp "scalar") (serialize-qp "Version" $version "scalar") (serialize-qp "Signature" $signature "scalar") (serialize-qp "JobId" $job_id "scalar") (serialize-qp "Manifest" $manifest "scalar") (serialize-qp "JobType" $job_type "scalar") (serialize-qp "ValidateOnly" $validate_only "scalar") (serialize-qp "APIVersion" $api_version "scalar") (serialize-qp "Operation" $operation "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#Operation=UpdateJob&Action=UpdateJob" $qp)
   let accept_val = "text/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # You use this operation to change the parameters specified in the original manifest file by supplying a new manifest file. The manifest file attached to this request replaces the original manifest file. You can only use the operation after a CreateJob request but before the data transfer starts and you can only use it on jobs you own.
 #
 # POST /#Operation=UpdateJob&Action=UpdateJob
 # operationId: POST_UpdateJob
-export def "operation-update-job-action-update-job UpdateJob-1" [
+export def "operation-update-job-action-update-job create-update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -525,26 +552,28 @@ export def "operation-update-job-action-update-job UpdateJob-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --AWSAccessKeyId: string
-  --Action: string
-  --SignatureMethod: string
-  --SignatureVersion: string
-  --Timestamp: string
-  --Version: string
-  --Signature: string
-  --Operation: string@Operation-completer-5
-  --Action: string@Action-completer-5
-  --Version: string@Version-completer
-  --body: record
+  --aws-access-key-id: string
+  --action: string
+  --signature-method: string
+  --signature-version: string
+  --timestamp: string
+  --version: string
+  --signature: string
+  --operation: string@operation-completer-5
+  --action: string@action-completer-5
+  --version: string@version-completer
+  --body: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "AWSAccessKeyId" $AWSAccessKeyId "scalar") (serialize-qp "Action" $Action "scalar") (serialize-qp "SignatureMethod" $SignatureMethod "scalar") (serialize-qp "SignatureVersion" $SignatureVersion "scalar") (serialize-qp "Timestamp" $Timestamp "scalar") (serialize-qp "Version" $Version "scalar") (serialize-qp "Signature" $Signature "scalar") (serialize-qp "Operation" $Operation "scalar") (serialize-qp "Action" $Action "scalar") (serialize-qp "Version" $Version "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "AWSAccessKeyId" $aws_access_key_id "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "SignatureMethod" $signature_method "scalar") (serialize-qp "SignatureVersion" $signature_version "scalar") (serialize-qp "Timestamp" $timestamp "scalar") (serialize-qp "Version" $version "scalar") (serialize-qp "Signature" $signature "scalar") (serialize-qp "Operation" $operation "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#Operation=UpdateJob&Action=UpdateJob" $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "text/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "text/xml" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "text/xml" $req_body
 }

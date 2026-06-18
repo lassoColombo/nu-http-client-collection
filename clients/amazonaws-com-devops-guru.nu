@@ -18,21 +18,32 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 }
 
 # Serialize a single query parameter based on collection style
+# Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
+# ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = ($name | url encode)
+  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
-  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
-    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
-    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
+    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
+    _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
+}
+
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Build URL from base, path, and optional query string
@@ -44,7 +55,7 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
@@ -53,28 +64,28 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
     "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "put" => { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "patch" => { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
   if ($method in ["head" "options"]) { return $resp }
-  if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
+  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
 def base-url-completer [] { ["http://devops-guru.us-east-1.amazonaws.com" "http://devops-guru.us-east-2.amazonaws.com" "http://devops-guru.us-west-1.amazonaws.com" "http://devops-guru.us-west-2.amazonaws.com" "http://devops-guru.us-gov-west-1.amazonaws.com" "http://devops-guru.us-gov-east-1.amazonaws.com" "http://devops-guru.ca-central-1.amazonaws.com" "http://devops-guru.eu-north-1.amazonaws.com" "http://devops-guru.eu-west-1.amazonaws.com" "http://devops-guru.eu-west-2.amazonaws.com" "http://devops-guru.eu-west-3.amazonaws.com" "http://devops-guru.eu-central-1.amazonaws.com" "http://devops-guru.eu-south-1.amazonaws.com" "http://devops-guru.af-south-1.amazonaws.com" "http://devops-guru.ap-northeast-1.amazonaws.com" "http://devops-guru.ap-northeast-2.amazonaws.com" "http://devops-guru.ap-northeast-3.amazonaws.com" "http://devops-guru.ap-southeast-1.amazonaws.com" "http://devops-guru.ap-southeast-2.amazonaws.com" "http://devops-guru.ap-east-1.amazonaws.com" "http://devops-guru.ap-south-1.amazonaws.com" "http://devops-guru.sa-east-1.amazonaws.com" "http://devops-guru.me-south-1.amazonaws.com" "https://devops-guru.us-east-1.amazonaws.com" "https://devops-guru.us-east-2.amazonaws.com" "https://devops-guru.us-west-1.amazonaws.com" "https://devops-guru.us-west-2.amazonaws.com" "https://devops-guru.us-gov-west-1.amazonaws.com" "https://devops-guru.us-gov-east-1.amazonaws.com" "https://devops-guru.ca-central-1.amazonaws.com" "https://devops-guru.eu-north-1.amazonaws.com" "https://devops-guru.eu-west-1.amazonaws.com" "https://devops-guru.eu-west-2.amazonaws.com" "https://devops-guru.eu-west-3.amazonaws.com" "https://devops-guru.eu-central-1.amazonaws.com" "https://devops-guru.eu-south-1.amazonaws.com" "https://devops-guru.af-south-1.amazonaws.com" "https://devops-guru.ap-northeast-1.amazonaws.com" "https://devops-guru.ap-northeast-2.amazonaws.com" "https://devops-guru.ap-northeast-3.amazonaws.com" "https://devops-guru.ap-southeast-1.amazonaws.com" "https://devops-guru.ap-southeast-2.amazonaws.com" "https://devops-guru.ap-east-1.amazonaws.com" "https://devops-guru.ap-south-1.amazonaws.com" "https://devops-guru.sa-east-1.amazonaws.com" "https://devops-guru.me-south-1.amazonaws.com" "http://devops-guru.cn-north-1.amazonaws.com.cn" "http://devops-guru.cn-northwest-1.amazonaws.com.cn" "https://devops-guru.cn-north-1.amazonaws.com.cn" "https://devops-guru.cn-northwest-1.amazonaws.com.cn"] }
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
-def OrganizationResourceCollectionType-completer [] { ["AWS_ACCOUNT" "AWS_CLOUD_FORMATION" "AWS_SERVICE" "AWS_TAGS"] }
-def Locale-completer [] { ["DE_DE" "EN_GB" "EN_US" "ES_ES" "FR_FR" "IT_IT" "JA_JP" "KO_KR" "PT_BR" "ZH_CN" "ZH_TW"] }
-def Type-completer [] { ["PROACTIVE" "REACTIVE"] }
-def Action-completer [] { ["ADD" "REMOVE"] }
+def organization-resource-collection-type-completer [] { ["AWS_ACCOUNT" "AWS_CLOUD_FORMATION" "AWS_SERVICE" "AWS_TAGS"] }
+def locale-completer [] { ["DE_DE" "EN_GB" "EN_US" "ES_ES" "FR_FR" "IT_IT" "JA_JP" "KO_KR" "PT_BR" "ZH_CN" "ZH_TW"] }
+def type-completer [] { ["PROACTIVE" "REACTIVE"] }
+def action-completer [] { ["ADD" "REMOVE"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "channels AddNotificationChannel" } } | get name | first)
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "channels create-notification" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -94,12 +105,12 @@ export def commands []: nothing -> table {
   }
 }
 
-# <p> Adds a notification channel to DevOps Guru. A notification channel is used to notify you about important DevOps Guru events, such as when an insight is generated. </p> <p>If you use an Amazon SNS topic in another account, you must attach a policy to it that grants DevOps Guru permission to it notifications. DevOps Guru adds the required policy on your behalf to send notifications using Amazon SNS in your account. DevOps Guru only supports standard SNS topics. For more information, see <a href="https://docs.aws.amazon.com/devops-guru/latest/userguide/sns-required-permissions.html">Permissions for cross account Amazon SNS topics</a>.</p> <p>If you use an Amazon SNS topic in another account, you must attach a policy to it that grants DevOps Guru permission to it notifications. DevOps Guru adds the required policy on your behalf to send notifications using Amazon SNS in your account. For more information, see Permissions for cross account Amazon SNS topics.</p> <p>If you use an Amazon SNS topic that is encrypted by an Amazon Web Services Key Management Service customer-managed key (CMK), then you must add permissions to the CMK. For more information, see <a href="https://docs.aws.amazon.com/devops-guru/latest/userguide/sns-kms-permissions.html">Permissions for Amazon Web Services KMS–encrypted Amazon SNS topics</a>.</p>
+# Adds a notification channel to DevOps Guru. A notification channel is used to notify you about important DevOps Guru events, such as when an insight is generated. If you use an Amazon SNS topic in another account, you must attach a policy to it that grants DevOps Guru permission to it notifications. DevOps Guru adds the required policy on your behalf to send notifications using Amazon SNS in your account. DevOps Guru only supports standard SNS topics. For more information, see Permissions for cross account Amazon SNS topics (https://docs.aws.amazon.com/devops-guru/latest/userguide/sns-required-permissions.html). If you use an Amazon SNS topic in another account, you must attach a policy to it that grants DevOps Guru permission to it notifications. DevOps Guru adds the required policy on your behalf to send notifications using Amazon SNS in your account. For more information, see Permissions for cross account Amazon SNS topics. If you use an Amazon SNS topic that is encrypted by an Amazon Web Services Key Management Service customer-managed key (CMK), then you must add permissions to the CMK. For more information, see Permissions for Amazon Web Services KMS–encrypted Amazon SNS topics (https://docs.aws.amazon.com/devops-guru/latest/userguide/sns-kms-permissions.html).
 #
 # PUT /channels
 # operationId: AddNotificationChannel
 # --Config shape: {Sns?: any, Filters?: any}
-export def "channels AddNotificationChannel" [
+export def "channels create-notification" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -107,34 +118,35 @@ export def "channels AddNotificationChannel" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  Config: record #  Information about notification channels you have configured with DevOps Guru. The one supported notification channel is Amazon Simple Notification Service (Amazon SNS). — shape: {Sns?: any, Filters?: any}
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  config: record # Information about notification channels you have configured with DevOps Guru. The one supported notification channel is Amazon Simple Notification Service (Amazon SNS). — shape: {Sns?: any, Filters?: any}
 ]: any -> record<Id: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/channels")
-  let body = {Config: $Config} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"Config": $config} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
-#  Returns a list of notification channels configured for DevOps Guru. Each notification channel is used to notify you when DevOps Guru generates an insight that contains information about how to improve your operations. The one supported notification channel is Amazon Simple Notification Service (Amazon SNS). 
+# Returns a list of notification channels configured for DevOps Guru. Each notification channel is used to notify you when DevOps Guru generates an insight that contains information about how to improve your operations. The one supported notification channel is Amazon Simple Notification Service (Amazon SNS).
 #
 # POST /channels
 # operationId: ListNotificationChannels
-export def "channels ListNotificationChannels" [
+export def "channels list-notification" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -142,37 +154,38 @@ export def "channels ListNotificationChannels" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --NextToken: string # The pagination token to use to retrieve the next page of results for this operation. If this value is null, it retrieves the first page.
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --next-token: string # The pagination token to use to retrieve the next page of results for this operation. If this value is null, it retrieves the first page.
 ]: any -> record<Channels: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/channels" $qp)
-  let body = {NextToken: $NextToken} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"NextToken": $next_token} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Deletes the insight along with the associated anomalies, events and recommendations.
 #
 # DELETE /insights/{Id}
 # operationId: DeleteInsight
-export def "insights DeleteInsight" [
-  Id: string
+export def "insights delete" [
+  id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -180,31 +193,32 @@ export def "insights DeleteInsight" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/insights/($Id)")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/insights/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
-#  Returns details about an insight that you specify using its ID. 
+# Returns details about an insight that you specify using its ID.
 #
 # GET /insights/{Id}
 # operationId: DescribeInsight
-export def "insights DescribeInsight" [
-  Id: string
+export def "insights get" [
+  id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -212,32 +226,33 @@ export def "insights DescribeInsight" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --AccountId: string # The ID of the member account in the organization.
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --account-id: string # The ID of the member account in the organization.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<ProactiveInsight: record<Id: record, Name: record, Severity: record, Status: record, InsightTimeRange: record<StartTime: record, EndTime: record>, PredictionTimeRange: record<StartTime: record, EndTime: record>, ResourceCollection: record<CloudFormation: record, Tags: record>, SsmOpsItemId: record, Description: record>, ReactiveInsight: record<Id: record, Name: record, Severity: record, Status: record, InsightTimeRange: record<StartTime: record, EndTime: record>, ResourceCollection: record<CloudFormation: record, Tags: record>, SsmOpsItemId: record, Description: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "AccountId" $AccountId "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/insights/($Id)" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let qp = [(serialize-qp "AccountId" $account_id "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/insights/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
-#  Returns the number of open reactive insights, the number of open proactive insights, and the number of metrics analyzed in your Amazon Web Services account. Use these numbers to gauge the health of operations in your Amazon Web Services account. 
+# Returns the number of open reactive insights, the number of open proactive insights, and the number of metrics analyzed in your Amazon Web Services account. Use these numbers to gauge the health of operations in your Amazon Web Services account.
 #
 # GET /accounts/health
 # operationId: DescribeAccountHealth
-export def "accounts-health DescribeAccountHealth" [
+export def "accounts-health get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -245,30 +260,31 @@ export def "accounts-health DescribeAccountHealth" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<OpenReactiveInsights: record, OpenProactiveInsights: record, MetricsAnalyzed: record, ResourceHours: record, AnalyzedResourceCount: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/accounts/health")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
-#  For the time range passed in, returns the number of open reactive insight that were created, the number of open proactive insights that were created, and the Mean Time to Recover (MTTR) for all closed reactive insights. 
+# For the time range passed in, returns the number of open reactive insight that were created, the number of open proactive insights that were created, and the Mean Time to Recover (MTTR) for all closed reactive insights.
 #
 # POST /accounts/overview
 # operationId: DescribeAccountOverview
-export def "accounts-overview DescribeAccountOverview" [
+export def "accounts-overview get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -276,36 +292,37 @@ export def "accounts-overview DescribeAccountOverview" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  FromTime: string #  The start of the time range passed in. The start time granularity is at the day level. The floor of the start time is used. Returned information occurred after this day.  (format: date-time)
-  --ToTime: string #  The end of the time range passed in. The start time granularity is at the day level. The floor of the start time is used. Returned information occurred before this day. If this is not specified, then the current day is used.  (format: date-time)
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  from_time: string # The start of the time range passed in. The start time granularity is at the day level. The floor of the start time is used. Returned information occurred after this day. (format: date-time)
+  --to-time: string # The end of the time range passed in. The start time granularity is at the day level. The floor of the start time is used. Returned information occurred before this day. If this is not specified, then the current day is used. (format: date-time)
 ]: any -> record<ReactiveInsights: record, ProactiveInsights: record, MeanTimeToRecoverInMilliseconds: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/accounts/overview")
-  let body = {FromTime: $FromTime, ToTime: $ToTime} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"FromTime": $from_time, "ToTime": $to_time} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
-#  Returns details about an anomaly that you specify using its ID. 
+# Returns details about an anomaly that you specify using its ID.
 #
 # GET /anomalies/{Id}
 # operationId: DescribeAnomaly
-export def "anomalies DescribeAnomaly" [
-  Id: string
+export def "anomalies get-anomaly" [
+  id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -313,32 +330,33 @@ export def "anomalies DescribeAnomaly" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --AccountId: string # The ID of the member account.
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --account-id: string # The ID of the member account.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<ProactiveAnomaly: record<Id: record, Severity: record, Status: record, UpdateTime: record, AnomalyTimeRange: record<StartTime: record, EndTime: record>, AnomalyReportedTimeRange: record<OpenTime: record, CloseTime: record>, PredictionTimeRange: record<StartTime: record, EndTime: record>, SourceDetails: record<CloudWatchMetrics: record, PerformanceInsightsMetrics: record>, AssociatedInsightId: record, ResourceCollection: record<CloudFormation: record, Tags: record>, Limit: record, SourceMetadata: record<Source: record, SourceResourceName: record, SourceResourceType: record>, AnomalyResources: record, Description: record>, ReactiveAnomaly: record<Id: record, Severity: record, Status: record, AnomalyTimeRange: record<StartTime: record, EndTime: record>, AnomalyReportedTimeRange: record<OpenTime: record, CloseTime: record>, SourceDetails: record<CloudWatchMetrics: record, PerformanceInsightsMetrics: record>, AssociatedInsightId: record, ResourceCollection: record<CloudFormation: record, Tags: record>, Type: record, Name: record, Description: record, CausalAnomalyId: record, AnomalyResources: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "AccountId" $AccountId "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/anomalies/($Id)" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let qp = [(serialize-qp "AccountId" $account_id "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/anomalies/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Returns the integration status of services that are integrated with DevOps Guru as Consumer via EventBridge. The one service that can be integrated with DevOps Guru is Amazon CodeGuru Profiler, which can produce proactive recommendations which can be stored and viewed in DevOps Guru.
 #
 # POST /event-sources
 # operationId: DescribeEventSourcesConfig
-export def "event-sources DescribeEventSourcesConfig" [
+export def "event-sources get-config" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -346,23 +364,24 @@ export def "event-sources DescribeEventSourcesConfig" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<EventSources: record<AmazonCodeGuruProfiler: record<Status: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/event-sources")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Enables or disables integration with a service that can be integrated with DevOps Guru. The one service that can be integrated with DevOps Guru is Amazon CodeGuru Profiler, which can produce proactive recommendations which can be stored and viewed in DevOps Guru.
@@ -370,7 +389,7 @@ export def "event-sources DescribeEventSourcesConfig" [
 # PUT /event-sources
 # operationId: UpdateEventSourcesConfig
 # --EventSources shape: {AmazonCodeGuruProfiler?: any}
-export def "event-sources UpdateEventSourcesConfig" [
+export def "event-sources update-config" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -378,34 +397,35 @@ export def "event-sources UpdateEventSourcesConfig" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --EventSources: record # Information about the integration of DevOps Guru as consumer with another AWS service, such as AWS CodeGuru Profiler via EventBridge. — shape: {AmazonCodeGuruProfiler?: any}
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --event-sources: record # Information about the integration of DevOps Guru as consumer with another AWS service, such as AWS CodeGuru Profiler via EventBridge. — shape: {AmazonCodeGuruProfiler?: any}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/event-sources")
-  let body = {EventSources: $EventSources} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"EventSources": $event_sources} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
-#  Returns the most recent feedback submitted in the current Amazon Web Services account and Region. 
+# Returns the most recent feedback submitted in the current Amazon Web Services account and Region.
 #
 # POST /feedback
 # operationId: DescribeFeedback
-export def "feedback DescribeFeedback" [
+export def "feedback get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -413,35 +433,36 @@ export def "feedback DescribeFeedback" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --InsightId: string #  The ID of the insight for which the feedback was provided. 
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --insight-id: string # The ID of the insight for which the feedback was provided.
 ]: any -> record<InsightFeedback: record<Id: record, Feedback: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/feedback")
-  let body = {InsightId: $InsightId} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"InsightId": $insight_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
-#  Collects customer feedback about the specified insight. 
+# Collects customer feedback about the specified insight.
 #
 # PUT /feedback
 # operationId: PutFeedback
 # --InsightFeedback shape: {Id?: any, Feedback?: any}
-export def "feedback PutFeedback" [
+export def "feedback update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -449,34 +470,35 @@ export def "feedback PutFeedback" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --InsightFeedback: record #  Information about insight feedback received from a customer.  — shape: {Id?: any, Feedback?: any}
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --insight-feedback: record # Information about insight feedback received from a customer. — shape: {Id?: any, Feedback?: any}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/feedback")
-  let body = {InsightFeedback: $InsightFeedback} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"InsightFeedback": $insight_feedback} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Returns active insights, predictive insights, and resource hours analyzed in last hour.
 #
 # POST /organization/health
 # operationId: DescribeOrganizationHealth
-export def "organization-health DescribeOrganizationHealth" [
+export def "organization-health get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -484,35 +506,36 @@ export def "organization-health DescribeOrganizationHealth" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --AccountIds: list # The ID of the Amazon Web Services account.
-  --OrganizationalUnitIds: list # The ID of the organizational unit.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --account-ids: list<string> # The ID of the Amazon Web Services account.
+  --organizational-unit-ids: list<string> # The ID of the organizational unit.
 ]: any -> record<OpenReactiveInsights: record, OpenProactiveInsights: record, MetricsAnalyzed: record, ResourceHours: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/organization/health")
-  let body = {AccountIds: $AccountIds, OrganizationalUnitIds: $OrganizationalUnitIds} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"AccountIds": $account_ids, "OrganizationalUnitIds": $organizational_unit_ids} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Returns an overview of your organization's history based on the specified time range. The overview includes the total reactive and proactive insights.
 #
 # POST /organization/overview
 # operationId: DescribeOrganizationOverview
-export def "organization-overview DescribeOrganizationOverview" [
+export def "organization-overview get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -520,37 +543,38 @@ export def "organization-overview DescribeOrganizationOverview" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  FromTime: string #  The start of the time range passed in. The start time granularity is at the day level. The floor of the start time is used. Returned information occurred after this day.  (format: date-time)
-  --ToTime: string #  The end of the time range passed in. The start time granularity is at the day level. The floor of the start time is used. Returned information occurred before this day. If this is not specified, then the current day is used.  (format: date-time)
-  --AccountIds: list # The ID of the Amazon Web Services account.
-  --OrganizationalUnitIds: list # The ID of the organizational unit.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  from_time: string # The start of the time range passed in. The start time granularity is at the day level. The floor of the start time is used. Returned information occurred after this day. (format: date-time)
+  --to-time: string # The end of the time range passed in. The start time granularity is at the day level. The floor of the start time is used. Returned information occurred before this day. If this is not specified, then the current day is used. (format: date-time)
+  --account-ids: list<string> # The ID of the Amazon Web Services account.
+  --organizational-unit-ids: list<string> # The ID of the organizational unit.
 ]: any -> record<ReactiveInsights: record, ProactiveInsights: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/organization/overview")
-  let body = {FromTime: $FromTime, ToTime: $ToTime, AccountIds: $AccountIds, OrganizationalUnitIds: $OrganizationalUnitIds} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"FromTime": $from_time, "ToTime": $to_time, "AccountIds": $account_ids, "OrganizationalUnitIds": $organizational_unit_ids} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
-# Provides an overview of your system's health. If additional member accounts are part of your organization, you can filter those accounts using the <code>AccountIds</code> field.
+# Provides an overview of your system's health. If additional member accounts are part of your organization, you can filter those accounts using the AccountIds field.
 #
 # POST /organization/health/resource-collection
 # operationId: DescribeOrganizationResourceCollectionHealth
-export def "organization-health-resource-collection DescribeOrganizationResourceCollectionHealth" [
+export def "organization-health-resource-collection get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -558,41 +582,42 @@ export def "organization-health-resource-collection DescribeOrganizationResource
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  OrganizationResourceCollectionType: string@OrganizationResourceCollectionType-completer #  An Amazon Web Services resource collection type. This type specifies how analyzed Amazon Web Services resources are defined. The two types of Amazon Web Services resource collections supported are Amazon Web Services CloudFormation stacks and Amazon Web Services resources that contain the same Amazon Web Services tag. DevOps Guru can be configured to analyze the Amazon Web Services resources that are defined in the stacks or that are tagged using the same tag <i>key</i>. You can specify up to 500 Amazon Web Services CloudFormation stacks. 
-  --AccountIds: list # The ID of the Amazon Web Services account.
-  --OrganizationalUnitIds: list # The ID of the organizational unit.
-  --NextToken: string # The pagination token to use to retrieve the next page of results for this operation. If this value is null, it retrieves the first page.
-  --MaxResults: int # The maximum number of results to return with a single call. To retrieve the remaining results, make another call with the returned <code>nextToken</code> value.
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  organization_resource_collection_type: string@organization-resource-collection-type-completer # An Amazon Web Services resource collection type. This type specifies how analyzed Amazon Web Services resources are defined. The two types of Amazon Web Services resource collections supported are Amazon Web Services CloudFormation stacks and Amazon Web Services resources that contain the same Amazon Web Services tag. DevOps Guru can be configured to analyze the Amazon Web Services resources that are defined in the stacks or that are tagged using the same tag key. You can specify up to 500 Amazon Web Services CloudFormation stacks.
+  --account-ids: list<string> # The ID of the Amazon Web Services account.
+  --organizational-unit-ids: list<string> # The ID of the organizational unit.
+  --next-token: string # The pagination token to use to retrieve the next page of results for this operation. If this value is null, it retrieves the first page.
+  --max-results: int # The maximum number of results to return with a single call. To retrieve the remaining results, make another call with the returned nextToken value.
 ]: any -> record<CloudFormation: record, Service: record, Account: record, NextToken: record, Tags: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/organization/health/resource-collection" $qp)
-  let body = {OrganizationResourceCollectionType: $OrganizationResourceCollectionType, AccountIds: $AccountIds, OrganizationalUnitIds: $OrganizationalUnitIds, NextToken: $NextToken, MaxResults: $MaxResults} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"OrganizationResourceCollectionType": $organization_resource_collection_type, "AccountIds": $account_ids, "OrganizationalUnitIds": $organizational_unit_ids, "NextToken": $next_token, "MaxResults": $max_results} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
-#  Returns the number of open proactive insights, open reactive insights, and the Mean Time to Recover (MTTR) for all closed insights in resource collections in your account. You specify the type of Amazon Web Services resources collection. The two types of Amazon Web Services resource collections supported are Amazon Web Services CloudFormation stacks and Amazon Web Services resources that contain the same Amazon Web Services tag. DevOps Guru can be configured to analyze the Amazon Web Services resources that are defined in the stacks or that are tagged using the same tag <i>key</i>. You can specify up to 500 Amazon Web Services CloudFormation stacks. 
+# Returns the number of open proactive insights, open reactive insights, and the Mean Time to Recover (MTTR) for all closed insights in resource collections in your account. You specify the type of Amazon Web Services resources collection. The two types of Amazon Web Services resource collections supported are Amazon Web Services CloudFormation stacks and Amazon Web Services resources that contain the same Amazon Web Services tag. DevOps Guru can be configured to analyze the Amazon Web Services resources that are defined in the stacks or that are tagged using the same tag key. You can specify up to 500 Amazon Web Services CloudFormation stacks.
 #
 # GET /accounts/health/resource-collection/{ResourceCollectionType}
 # operationId: DescribeResourceCollectionHealth
-export def "accounts-health-resource-collection DescribeResourceCollectionHealth" [
-  ResourceCollectionType: string
+export def "accounts-health-resource-collection get" [
+  resource_collection_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -600,32 +625,33 @@ export def "accounts-health-resource-collection DescribeResourceCollectionHealth
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --NextToken: string # The pagination token to use to retrieve the next page of results for this operation. If this value is null, it retrieves the first page.
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --next-token: string # The pagination token to use to retrieve the next page of results for this operation. If this value is null, it retrieves the first page.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<CloudFormation: record, Service: record, NextToken: record, Tags: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/accounts/health/resource-collection/($ResourceCollectionType)" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let qp = [(serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({resource_collection_type: (encode-path-segment $resource_collection_type)} | format pattern "/accounts/health/resource-collection/{resource_collection_type}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
-#  Returns the integration status of services that are integrated with DevOps Guru. The one service that can be integrated with DevOps Guru is Amazon Web Services Systems Manager, which can be used to create an OpsItem for each generated insight. 
+# Returns the integration status of services that are integrated with DevOps Guru. The one service that can be integrated with DevOps Guru is Amazon Web Services Systems Manager, which can be used to create an OpsItem for each generated insight.
 #
 # GET /service-integrations
 # operationId: DescribeServiceIntegration
-export def "service-integrations DescribeServiceIntegration" [
+export def "service-integrations get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -633,31 +659,32 @@ export def "service-integrations DescribeServiceIntegration" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<ServiceIntegration: record<OpsCenter: record<OptInStatus: record>, LogsAnomalyDetection: record<OptInStatus: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/service-integrations")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
-#  Enables or disables integration with a service that can be integrated with DevOps Guru. The one service that can be integrated with DevOps Guru is Amazon Web Services Systems Manager, which can be used to create an OpsItem for each generated insight. 
+# Enables or disables integration with a service that can be integrated with DevOps Guru. The one service that can be integrated with DevOps Guru is Amazon Web Services Systems Manager, which can be used to create an OpsItem for each generated insight.
 #
 # PUT /service-integrations
 # operationId: UpdateServiceIntegration
 # --ServiceIntegration shape: {OpsCenter?: record, LogsAnomalyDetection?: any}
-export def "service-integrations UpdateServiceIntegration" [
+export def "service-integrations update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -665,34 +692,35 @@ export def "service-integrations UpdateServiceIntegration" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  ServiceIntegration: record #  Information about updating the integration status of an Amazon Web Services service, such as Amazon Web Services Systems Manager, with DevOps Guru.  — shape: {OpsCenter?: record, LogsAnomalyDetection?: any}
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  service_integration: record # Information about updating the integration status of an Amazon Web Services service, such as Amazon Web Services Systems Manager, with DevOps Guru. — shape: {OpsCenter?: record, LogsAnomalyDetection?: any}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/service-integrations")
-  let body = {ServiceIntegration: $ServiceIntegration} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"ServiceIntegration": $service_integration} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
-# Returns an estimate of the monthly cost for DevOps Guru to analyze your Amazon Web Services resources. For more information, see <a href="https://docs.aws.amazon.com/devops-guru/latest/userguide/cost-estimate.html">Estimate your Amazon DevOps Guru costs</a> and <a href="http://aws.amazon.com/devops-guru/pricing/">Amazon DevOps Guru pricing</a>.
+# Returns an estimate of the monthly cost for DevOps Guru to analyze your Amazon Web Services resources. For more information, see Estimate your Amazon DevOps Guru costs (https://docs.aws.amazon.com/devops-guru/latest/userguide/cost-estimate.html) and Amazon DevOps Guru pricing (http://aws.amazon.com/devops-guru/pricing/).
 #
 # GET /cost-estimation
 # operationId: GetCostEstimation
-export def "cost-estimation GetCostEstimation" [
+export def "cost-estimation get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -700,25 +728,26 @@ export def "cost-estimation GetCostEstimation" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --NextToken: string # The pagination token to use to retrieve the next page of results for this operation. If this value is null, it retrieves the first page.
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --next-token: string # The pagination token to use to retrieve the next page of results for this operation. If this value is null, it retrieves the first page.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<ResourceCollection: record<CloudFormation: record<StackNames: record>, Tags: record>, Status: record, Costs: record, TimeRange: record<StartTime: record, EndTime: record>, TotalCost: record, NextToken: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/cost-estimation" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Starts the creation of an estimate of the monthly cost to analyze your Amazon Web Services resources.
@@ -726,7 +755,7 @@ export def "cost-estimation GetCostEstimation" [
 # PUT /cost-estimation
 # operationId: StartCostEstimation
 # --ResourceCollection shape: {CloudFormation?: any, Tags?: any}
-export def "cost-estimation StartCostEstimation" [
+export def "cost-estimation start" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -734,36 +763,37 @@ export def "cost-estimation StartCostEstimation" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  ResourceCollection: record # Information about a filter used to specify which Amazon Web Services resources are analyzed to create a monthly DevOps Guru cost estimate. For more information, see <a href="https://docs.aws.amazon.com/devops-guru/latest/userguide/cost-estimate.html">Estimate your Amazon DevOps Guru costs</a> and <a href="http://aws.amazon.com/devops-guru/pricing/">Amazon DevOps Guru pricing</a>.  — shape: {CloudFormation?: any, Tags?: any}
-  --ClientToken: string # The idempotency token used to identify each cost estimate request.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  resource_collection: record # Information about a filter used to specify which Amazon Web Services resources are analyzed to create a monthly DevOps Guru cost estimate. For more information, see Estimate your Amazon DevOps Guru costs (https://docs.aws.amazon.com/devops-guru/latest/userguide/cost-estimate.html) and Amazon DevOps Guru pricing (http://aws.amazon.com/devops-guru/pricing/). — shape: {CloudFormation?: any, Tags?: any}
+  --client-token: string # The idempotency token used to identify each cost estimate request.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/cost-estimation")
-  let body = {ResourceCollection: $ResourceCollection, ClientToken: $ClientToken} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"ResourceCollection": $resource_collection, "ClientToken": $client_token} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
-#  Returns lists Amazon Web Services resources that are of the specified resource collection type. The two types of Amazon Web Services resource collections supported are Amazon Web Services CloudFormation stacks and Amazon Web Services resources that contain the same Amazon Web Services tag. DevOps Guru can be configured to analyze the Amazon Web Services resources that are defined in the stacks or that are tagged using the same tag <i>key</i>. You can specify up to 500 Amazon Web Services CloudFormation stacks. 
+# Returns lists Amazon Web Services resources that are of the specified resource collection type. The two types of Amazon Web Services resource collections supported are Amazon Web Services CloudFormation stacks and Amazon Web Services resources that contain the same Amazon Web Services tag. DevOps Guru can be configured to analyze the Amazon Web Services resources that are defined in the stacks or that are tagged using the same tag key. You can specify up to 500 Amazon Web Services CloudFormation stacks.
 #
 # GET /resource-collections/{ResourceCollectionType}
 # operationId: GetResourceCollection
-export def "resource-collections GetResourceCollection" [
-  ResourceCollectionType: string
+export def "resource-collections get" [
+  resource_collection_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -771,35 +801,36 @@ export def "resource-collections GetResourceCollection" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --NextToken: string # The pagination token to use to retrieve the next page of results for this operation. If this value is null, it retrieves the first page.
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --next-token: string # The pagination token to use to retrieve the next page of results for this operation. If this value is null, it retrieves the first page.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<ResourceCollection: record<CloudFormation: record<StackNames: record>, Tags: record>, NextToken: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/resource-collections/($ResourceCollectionType)" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let qp = [(serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({resource_collection_type: (encode-path-segment $resource_collection_type)} | format pattern "/resource-collections/{resource_collection_type}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
-#  Returns a list of the anomalies that belong to an insight that you specify using its ID. 
+# Returns a list of the anomalies that belong to an insight that you specify using its ID.
 #
 # POST /anomalies/insight/{InsightId}
 # operationId: ListAnomaliesForInsight
 # --StartTimeRange shape: {FromTime?: any, ToTime?: any}
 # --Filters shape: {ServiceCollection?: record}
-export def "anomalies-insight ListAnomaliesForInsight" [
-  InsightId: string
+export def "anomalies-insight list" [
+  insight_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -807,41 +838,42 @@ export def "anomalies-insight ListAnomaliesForInsight" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --StartTimeRange: record #  A time range used to specify when the behavior of an insight or anomaly started.  — shape: {FromTime?: any, ToTime?: any}
-  --MaxResults: int # The maximum number of results to return with a single call. To retrieve the remaining results, make another call with the returned <code>nextToken</code> value.
-  --NextToken: string # The pagination token to use to retrieve the next page of results for this operation. If this value is null, it retrieves the first page.
-  --AccountId: string # The ID of the Amazon Web Services account. 
-  --Filters: record #  Specifies one or more service names that are used to list anomalies.  — shape: {ServiceCollection?: record}
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --start-time-range: record # A time range used to specify when the behavior of an insight or anomaly started. — shape: {FromTime?: any, ToTime?: any}
+  --max-results: int # The maximum number of results to return with a single call. To retrieve the remaining results, make another call with the returned nextToken value.
+  --next-token: string # The pagination token to use to retrieve the next page of results for this operation. If this value is null, it retrieves the first page.
+  --account-id: string # The ID of the Amazon Web Services account.
+  --filters: record # Specifies one or more service names that are used to list anomalies. — shape: {ServiceCollection?: record}
 ]: any -> record<ProactiveAnomalies: record, ReactiveAnomalies: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/anomalies/insight/($InsightId)" $qp)
-  let body = {StartTimeRange: $StartTimeRange, MaxResults: $MaxResults, NextToken: $NextToken, AccountId: $AccountId, Filters: $Filters} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({insight_id: (encode-path-segment $insight_id)} | format pattern "/anomalies/insight/{insight_id}") $qp)
+  let req_body = {"StartTimeRange": $start_time_range, "MaxResults": $max_results, "NextToken": $next_token, "AccountId": $account_id, "Filters": $filters} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
-#  Returns the list of log groups that contain log anomalies. 
+# Returns the list of log groups that contain log anomalies.
 #
 # POST /list-log-anomalies
 # operationId: ListAnomalousLogGroups
-export def "list-log-anomalies ListAnomalousLogGroups" [
+export def "list-log-anomalies list-anomalous-groups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -849,40 +881,41 @@ export def "list-log-anomalies ListAnomalousLogGroups" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  InsightId: string #  The ID of the insight containing the log groups. 
-  --MaxResults: int # The maximum number of results to return with a single call. To retrieve the remaining results, make another call with the returned <code>nextToken</code> value.
-  --NextToken: string # The pagination token to use to retrieve the next page of results for this operation. If this value is null, it retrieves the first page.
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  insight_id: string # The ID of the insight containing the log groups.
+  --max-results: int # The maximum number of results to return with a single call. To retrieve the remaining results, make another call with the returned nextToken value.
+  --next-token: string # The pagination token to use to retrieve the next page of results for this operation. If this value is null, it retrieves the first page.
 ]: any -> record<InsightId: record, AnomalousLogGroups: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/list-log-anomalies" $qp)
-  let body = {InsightId: $InsightId, MaxResults: $MaxResults, NextToken: $NextToken} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"InsightId": $insight_id, "MaxResults": $max_results, "NextToken": $next_token} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
-#  Returns a list of the events emitted by the resources that are evaluated by DevOps Guru. You can use filters to specify which events are returned. 
+# Returns a list of the events emitted by the resources that are evaluated by DevOps Guru. You can use filters to specify which events are returned.
 #
 # POST /events
 # operationId: ListEvents
 # --Filters shape: {InsightId?: any, EventTimeRange?: any, EventClass?: any, EventSource?: any, DataSource?: any, ResourceCollection?: record}
-export def "events ListEvents" [
+export def "events list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -890,41 +923,42 @@ export def "events ListEvents" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  Filters: record #  Filters you can use to specify which events are returned when <code>ListEvents</code> is called.  — shape: {InsightId?: any, EventTimeRange?: any, EventClass?: any, EventSource?: any, DataSource?: any, ResourceCollection?: record}
-  --MaxResults: int # The maximum number of results to return with a single call. To retrieve the remaining results, make another call with the returned <code>nextToken</code> value.
-  --NextToken: string # The pagination token to use to retrieve the next page of results for this operation. If this value is null, it retrieves the first page.
-  --AccountId: string # The ID of the Amazon Web Services account. 
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  filters: record # Filters you can use to specify which events are returned when ListEvents is called. — shape: {InsightId?: any, EventTimeRange?: any, EventClass?: any, EventSource?: any, DataSource?: any, ResourceCollection?: record}
+  --max-results: int # The maximum number of results to return with a single call. To retrieve the remaining results, make another call with the returned nextToken value.
+  --next-token: string # The pagination token to use to retrieve the next page of results for this operation. If this value is null, it retrieves the first page.
+  --account-id: string # The ID of the Amazon Web Services account.
 ]: any -> record<Events: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/events" $qp)
-  let body = {Filters: $Filters, MaxResults: $MaxResults, NextToken: $NextToken, AccountId: $AccountId} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"Filters": $filters, "MaxResults": $max_results, "NextToken": $next_token, "AccountId": $account_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
-#  Returns a list of insights in your Amazon Web Services account. You can specify which insights are returned by their start time and status (<code>ONGOING</code>, <code>CLOSED</code>, or <code>ANY</code>). 
+# Returns a list of insights in your Amazon Web Services account. You can specify which insights are returned by their start time and status (ONGOING, CLOSED, or ANY).
 #
 # POST /insights
 # operationId: ListInsights
 # --StatusFilter shape: {Ongoing?: any, Closed?: any, Any?: any}
-export def "insights ListInsights" [
+export def "insights list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -932,40 +966,41 @@ export def "insights ListInsights" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  StatusFilter: record #  A filter used by <code>ListInsights</code> to specify which insights to return.  — shape: {Ongoing?: any, Closed?: any, Any?: any}
-  --MaxResults: int # The maximum number of results to return with a single call. To retrieve the remaining results, make another call with the returned <code>nextToken</code> value.
-  --NextToken: string # The pagination token to use to retrieve the next page of results for this operation. If this value is null, it retrieves the first page.
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  status_filter: record # A filter used by ListInsights to specify which insights to return. — shape: {Ongoing?: any, Closed?: any, Any?: any}
+  --max-results: int # The maximum number of results to return with a single call. To retrieve the remaining results, make another call with the returned nextToken value.
+  --next-token: string # The pagination token to use to retrieve the next page of results for this operation. If this value is null, it retrieves the first page.
 ]: any -> record<ProactiveInsights: record, ReactiveInsights: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/insights" $qp)
-  let body = {StatusFilter: $StatusFilter, MaxResults: $MaxResults, NextToken: $NextToken} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"StatusFilter": $status_filter, "MaxResults": $max_results, "NextToken": $next_token} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
-#  Returns the list of all log groups that are being monitored and tagged by DevOps Guru. 
+# Returns the list of all log groups that are being monitored and tagged by DevOps Guru.
 #
 # POST /monitoredResources
 # operationId: ListMonitoredResources
 # --Filters shape: {ResourcePermission?: any, ResourceTypeFilters?: any}
-export def "monitored-resources ListMonitoredResources" [
+export def "monitored-resources list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -973,32 +1008,33 @@ export def "monitored-resources ListMonitoredResources" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --Filters: record #  Filters to determine which monitored resources you want to retrieve. You can filter by resource type or resource permission status.  — shape: {ResourcePermission?: any, ResourceTypeFilters?: any}
-  --MaxResults: int # The maximum number of results to return with a single call. To retrieve the remaining results, make another call with the returned <code>nextToken</code> value.
-  --NextToken: string # The pagination token to use to retrieve the next page of results for this operation. If this value is null, it retrieves the first page.
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --filters: record # Filters to determine which monitored resources you want to retrieve. You can filter by resource type or resource permission status. — shape: {ResourcePermission?: any, ResourceTypeFilters?: any}
+  --max-results: int # The maximum number of results to return with a single call. To retrieve the remaining results, make another call with the returned nextToken value.
+  --next-token: string # The pagination token to use to retrieve the next page of results for this operation. If this value is null, it retrieves the first page.
 ]: any -> record<MonitoredResourceIdentifiers: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/monitoredResources" $qp)
-  let body = {Filters: $Filters, MaxResults: $MaxResults, NextToken: $NextToken} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"Filters": $filters, "MaxResults": $max_results, "NextToken": $next_token} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Returns a list of insights associated with the account or OU Id.
@@ -1006,7 +1042,7 @@ export def "monitored-resources ListMonitoredResources" [
 # POST /organization/insights
 # operationId: ListOrganizationInsights
 # --StatusFilter shape: {Ongoing?: any, Closed?: any, Any?: any}
-export def "organization-insights ListOrganizationInsights" [
+export def "organization-insights list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1014,41 +1050,42 @@ export def "organization-insights ListOrganizationInsights" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  StatusFilter: record #  A filter used by <code>ListInsights</code> to specify which insights to return.  — shape: {Ongoing?: any, Closed?: any, Any?: any}
-  --MaxResults: int # The maximum number of results to return with a single call. To retrieve the remaining results, make another call with the returned <code>nextToken</code> value.
-  --AccountIds: list # The ID of the Amazon Web Services account. 
-  --OrganizationalUnitIds: list # The ID of the organizational unit.
-  --NextToken: string # The pagination token to use to retrieve the next page of results for this operation. If this value is null, it retrieves the first page.
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  status_filter: record # A filter used by ListInsights to specify which insights to return. — shape: {Ongoing?: any, Closed?: any, Any?: any}
+  --max-results: int # The maximum number of results to return with a single call. To retrieve the remaining results, make another call with the returned nextToken value.
+  --account-ids: list<string> # The ID of the Amazon Web Services account.
+  --organizational-unit-ids: list<string> # The ID of the organizational unit.
+  --next-token: string # The pagination token to use to retrieve the next page of results for this operation. If this value is null, it retrieves the first page.
 ]: any -> record<ProactiveInsights: record, ReactiveInsights: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/organization/insights" $qp)
-  let body = {StatusFilter: $StatusFilter, MaxResults: $MaxResults, AccountIds: $AccountIds, OrganizationalUnitIds: $OrganizationalUnitIds, NextToken: $NextToken} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"StatusFilter": $status_filter, "MaxResults": $max_results, "AccountIds": $account_ids, "OrganizationalUnitIds": $organizational_unit_ids, "NextToken": $next_token} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
-#  Returns a list of a specified insight's recommendations. Each recommendation includes a list of related metrics and a list of related events. 
+# Returns a list of a specified insight's recommendations. Each recommendation includes a list of related metrics and a list of related events.
 #
 # POST /recommendations
 # operationId: ListRecommendations
-export def "recommendations ListRecommendations" [
+export def "recommendations list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1056,40 +1093,41 @@ export def "recommendations ListRecommendations" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  InsightId: string #  The ID of the requested insight. 
-  --NextToken: string # The pagination token to use to retrieve the next page of results for this operation. If this value is null, it retrieves the first page.
-  --Locale: string@Locale-completer # A locale that specifies the language to use for recommendations.
-  --AccountId: string # The ID of the Amazon Web Services account. 
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  insight_id: string # The ID of the requested insight.
+  --next-token: string # The pagination token to use to retrieve the next page of results for this operation. If this value is null, it retrieves the first page.
+  --locale: string@locale-completer # A locale that specifies the language to use for recommendations.
+  --account-id: string # The ID of the Amazon Web Services account.
 ]: any -> record<Recommendations: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/recommendations" $qp)
-  let body = {InsightId: $InsightId, NextToken: $NextToken, Locale: $Locale, AccountId: $AccountId} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"InsightId": $insight_id, "NextToken": $next_token, "Locale": $locale, "AccountId": $account_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
-#  Removes a notification channel from DevOps Guru. A notification channel is used to notify you when DevOps Guru generates an insight that contains information about how to improve your operations. 
+# Removes a notification channel from DevOps Guru. A notification channel is used to notify you when DevOps Guru generates an insight that contains information about how to improve your operations.
 #
 # DELETE /channels/{Id}
 # operationId: RemoveNotificationChannel
-export def "channels RemoveNotificationChannel" [
-  Id: string
+export def "channels delete-notification" [
+  id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1097,32 +1135,33 @@ export def "channels RemoveNotificationChannel" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/channels/($Id)")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/channels/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
-# <p> Returns a list of insights in your Amazon Web Services account. You can specify which insights are returned by their start time, one or more statuses (<code>ONGOING</code> or <code>CLOSED</code>), one or more severities (<code>LOW</code>, <code>MEDIUM</code>, and <code>HIGH</code>), and type (<code>REACTIVE</code> or <code>PROACTIVE</code>). </p> <p> Use the <code>Filters</code> parameter to specify status and severity search parameters. Use the <code>Type</code> parameter to specify <code>REACTIVE</code> or <code>PROACTIVE</code> in your search. </p>
+# Returns a list of insights in your Amazon Web Services account. You can specify which insights are returned by their start time, one or more statuses (ONGOING or CLOSED), one or more severities (LOW, MEDIUM, and HIGH), and type (REACTIVE or PROACTIVE). Use the Filters parameter to specify status and severity search parameters. Use the Type parameter to specify REACTIVE or PROACTIVE in your search.
 #
 # POST /insights/search
 # operationId: SearchInsights
 # --StartTimeRange shape: {FromTime?: any, ToTime?: any}
 # --Filters shape: {Severities?: any, Statuses?: any, ResourceCollection?: record, ServiceCollection?: any}
-export def "insights-search SearchInsights" [
+export def "insights-search list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1130,43 +1169,44 @@ export def "insights-search SearchInsights" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  StartTimeRange: record #  A time range used to specify when the behavior of an insight or anomaly started.  — shape: {FromTime?: any, ToTime?: any}
-  --Filters: record # Specifies values used to filter responses when searching for insights. You can use a <code>ResourceCollection</code>, <code>ServiceCollection</code>, array of severities, and an array of status values. Each filter type contains one or more values to search for. If you specify multiple filter types, the filter types are joined with an <code>AND</code>, and the request returns only results that match all of the specified filters. — shape: {Severities?: any, Statuses?: any, ResourceCollection?: record, ServiceCollection?: any}
-  --MaxResults: int # The maximum number of results to return with a single call. To retrieve the remaining results, make another call with the returned <code>nextToken</code> value.
-  --NextToken: string # The pagination token to use to retrieve the next page of results for this operation. If this value is null, it retrieves the first page.
-  Type: string@Type-completer #  The type of insights you are searching for (<code>REACTIVE</code> or <code>PROACTIVE</code>). 
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  start_time_range: record # A time range used to specify when the behavior of an insight or anomaly started. — shape: {FromTime?: any, ToTime?: any}
+  --filters: record # Specifies values used to filter responses when searching for insights. You can use a ResourceCollection, ServiceCollection, array of severities, and an array of status values. Each filter type contains one or more values to search for. If you specify multiple filter types, the filter types are joined with an AND, and the request returns only results that match all of the specified filters. — shape: {Severities?: any, Statuses?: any, ResourceCollection?: record, ServiceCollection?: any}
+  --max-results: int # The maximum number of results to return with a single call. To retrieve the remaining results, make another call with the returned nextToken value.
+  --next-token: string # The pagination token to use to retrieve the next page of results for this operation. If this value is null, it retrieves the first page.
+  type: string@type-completer # The type of insights you are searching for (REACTIVE or PROACTIVE).
 ]: any -> record<ProactiveInsights: record, ReactiveInsights: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/insights/search" $qp)
-  let body = {StartTimeRange: $StartTimeRange, Filters: $Filters, MaxResults: $MaxResults, NextToken: $NextToken, Type: $Type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"StartTimeRange": $start_time_range, "Filters": $filters, "MaxResults": $max_results, "NextToken": $next_token, "Type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
-# <p> Returns a list of insights in your organization. You can specify which insights are returned by their start time, one or more statuses (<code>ONGOING</code>, <code>CLOSED</code>, and <code>CLOSED</code>), one or more severities (<code>LOW</code>, <code>MEDIUM</code>, and <code>HIGH</code>), and type (<code>REACTIVE</code> or <code>PROACTIVE</code>). </p> <p> Use the <code>Filters</code> parameter to specify status and severity search parameters. Use the <code>Type</code> parameter to specify <code>REACTIVE</code> or <code>PROACTIVE</code> in your search. </p>
+# Returns a list of insights in your organization. You can specify which insights are returned by their start time, one or more statuses (ONGOING, CLOSED, and CLOSED), one or more severities (LOW, MEDIUM, and HIGH), and type (REACTIVE or PROACTIVE). Use the Filters parameter to specify status and severity search parameters. Use the Type parameter to specify REACTIVE or PROACTIVE in your search.
 #
 # POST /organization/insights/search
 # operationId: SearchOrganizationInsights
 # --StartTimeRange shape: {FromTime?: any, ToTime?: any}
 # --Filters shape: {Severities?: any, Statuses?: any, ResourceCollection?: record, ServiceCollection?: record}
-export def "organization-insights-search SearchOrganizationInsights" [
+export def "organization-insights-search list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1174,43 +1214,44 @@ export def "organization-insights-search SearchOrganizationInsights" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  AccountIds: list # The ID of the Amazon Web Services account. 
-  StartTimeRange: record #  A time range used to specify when the behavior of an insight or anomaly started.  — shape: {FromTime?: any, ToTime?: any}
-  --Filters: record #  Filters you can use to specify which events are returned when <code>ListEvents</code> is called.  — shape: {Severities?: any, Statuses?: any, ResourceCollection?: record, ServiceCollection?: record}
-  --MaxResults: int # The maximum number of results to return with a single call. To retrieve the remaining results, make another call with the returned <code>nextToken</code> value.
-  --NextToken: string # The pagination token to use to retrieve the next page of results for this operation. If this value is null, it retrieves the first page.
-  Type: string@Type-completer #  The type of insights you are searching for (<code>REACTIVE</code> or <code>PROACTIVE</code>). 
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  account_ids: list<string> # The ID of the Amazon Web Services account.
+  start_time_range: record # A time range used to specify when the behavior of an insight or anomaly started. — shape: {FromTime?: any, ToTime?: any}
+  --filters: record # Filters you can use to specify which events are returned when ListEvents is called. — shape: {Severities?: any, Statuses?: any, ResourceCollection?: record, ServiceCollection?: record}
+  --max-results: int # The maximum number of results to return with a single call. To retrieve the remaining results, make another call with the returned nextToken value.
+  --next-token: string # The pagination token to use to retrieve the next page of results for this operation. If this value is null, it retrieves the first page.
+  type: string@type-completer # The type of insights you are searching for (REACTIVE or PROACTIVE).
 ]: any -> record<ProactiveInsights: record, ReactiveInsights: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/organization/insights/search" $qp)
-  let body = {AccountIds: $AccountIds, StartTimeRange: $StartTimeRange, Filters: $Filters, MaxResults: $MaxResults, NextToken: $NextToken, Type: $Type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"AccountIds": $account_ids, "StartTimeRange": $start_time_range, "Filters": $filters, "MaxResults": $max_results, "NextToken": $next_token, "Type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
-#  Updates the collection of resources that DevOps Guru analyzes. The two types of Amazon Web Services resource collections supported are Amazon Web Services CloudFormation stacks and Amazon Web Services resources that contain the same Amazon Web Services tag. DevOps Guru can be configured to analyze the Amazon Web Services resources that are defined in the stacks or that are tagged using the same tag <i>key</i>. You can specify up to 500 Amazon Web Services CloudFormation stacks. This method also creates the IAM role required for you to use DevOps Guru. 
+# Updates the collection of resources that DevOps Guru analyzes. The two types of Amazon Web Services resource collections supported are Amazon Web Services CloudFormation stacks and Amazon Web Services resources that contain the same Amazon Web Services tag. DevOps Guru can be configured to analyze the Amazon Web Services resources that are defined in the stacks or that are tagged using the same tag key. You can specify up to 500 Amazon Web Services CloudFormation stacks. This method also creates the IAM role required for you to use DevOps Guru.
 #
 # PUT /resource-collections
 # operationId: UpdateResourceCollection
 # --ResourceCollection shape: {CloudFormation?: any, Tags?: any}
-export def "resource-collections UpdateResourceCollection" [
+export def "resource-collections update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1218,26 +1259,27 @@ export def "resource-collections UpdateResourceCollection" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  Action: string@Action-completer #  Specifies if the resource collection in the request is added or deleted to the resource collection. 
-  ResourceCollection: record #  Contains information used to update a collection of Amazon Web Services resources.  — shape: {CloudFormation?: any, Tags?: any}
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  action: string@action-completer # Specifies if the resource collection in the request is added or deleted to the resource collection.
+  resource_collection: record # Contains information used to update a collection of Amazon Web Services resources. — shape: {CloudFormation?: any, Tags?: any}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/resource-collections")
-  let body = {Action: $Action, ResourceCollection: $ResourceCollection} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"Action": $action, "ResourceCollection": $resource_collection} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }

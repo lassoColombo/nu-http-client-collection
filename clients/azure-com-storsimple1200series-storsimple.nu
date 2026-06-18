@@ -18,21 +18,32 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 }
 
 # Serialize a single query parameter based on collection style
+# Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
+# ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = ($name | url encode)
+  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
-  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
-    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
-    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
+    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
+    _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
+}
+
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Build URL from base, path, and optional query string
@@ -44,7 +55,7 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
@@ -53,13 +64,13 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
     "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "put" => { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "patch" => { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
   if ($method in ["head" "options"]) { return $resp }
-  if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
+  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
 def base-url-completer [] { ["https://management.azure.com"] }
@@ -68,8 +79,8 @@ def auth-scheme-completer [] { ["bearer"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-stor-simple-operations List" } } | get name | first)
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-stor-simple-operations list-available" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -93,7 +104,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.StorSimple/operations
 # operationId: AvailableProviderOperations_List
-export def "providers-microsoft-stor-simple-operations List" [
+export def "providers-microsoft-stor-simple-operations list-available" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -101,6 +112,7 @@ export def "providers-microsoft-stor-simple-operations List" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version
 ]: nothing -> record<nextLink: string, value: table<display: record, name: string, origin: string, properties: record>> {
@@ -110,15 +122,15 @@ export def "providers-microsoft-stor-simple-operations List" [
   let full_url = (build-url $base "/providers/Microsoft.StorSimple/operations" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Retrieves all the managers in a subscription.
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.StorSimple/managers
 # operationId: Managers_List
-export def "subscriptions-providers-microsoft-stor-simple-managers List" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-stor-simple-managers list" [
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -126,25 +138,26 @@ export def "subscriptions-providers-microsoft-stor-simple-managers List" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version
 ]: nothing -> record<value: table<etag: string, properties: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.StorSimple/managers" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.StorSimple/managers") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Retrieves all the managers in a resource group.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers
 # operationId: Managers_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers ListByResourceGroup" [
-  subscriptionId: string
-  resourceGroupName: string
+export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers list" [
+  subscription_id: string
+  resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -152,26 +165,27 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version
 ]: nothing -> record<value: table<etag: string, properties: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.StorSimple/managers" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.StorSimple/managers") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Deletes the manager.
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}
 # operationId: Managers_Delete
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers Delete" [
-  subscriptionId: string
-  resourceGroupName: string
-  managerName: string
+export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers delete" [
+  subscription_id: string
+  resource_group_name: string
+  manager_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -179,26 +193,27 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version
 ]: nothing -> record<errorCode: string, message: record<language: string, value: string>, values: table<key: string, value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.StorSimple/managers/($managerName)" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), manager_name: (encode-path-segment $manager_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.StorSimple/managers/{manager_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Returns the properties of the specified manager name.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}
 # operationId: Managers_Get
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers Get" [
-  subscriptionId: string
-  resourceGroupName: string
-  managerName: string
+export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers get" [
+  subscription_id: string
+  resource_group_name: string
+  manager_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -206,26 +221,27 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version
 ]: nothing -> record<etag: string, properties: record<cisIntrinsicSettings: record<type: string>, provisioningState: string, sku: record<name: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.StorSimple/managers/($managerName)" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), manager_name: (encode-path-segment $manager_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.StorSimple/managers/{manager_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Updates the StorSimple Manager.
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}
 # operationId: Managers_Update
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers Update" [
-  subscriptionId: string
-  resourceGroupName: string
-  managerName: string
+export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers update" [
+  subscription_id: string
+  resource_group_name: string
+  manager_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -233,6 +249,7 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version
   --tags: record # The tags attached to the StorSimple Manager.
@@ -241,12 +258,12 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.StorSimple/managers/($managerName)" $qp)
-  let body = {tags: $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), manager_name: (encode-path-segment $manager_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.StorSimple/managers/{manager_name}") $qp)
+  let req_body = {"tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Creates or updates the manager.
@@ -254,10 +271,10 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}
 # operationId: Managers_CreateOrUpdate
 # --properties shape: {cisIntrinsicSettings?: record, sku?: record}
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers CreateOrUpdate" [
-  subscriptionId: string
-  resourceGroupName: string
-  managerName: string
+export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers create-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  manager_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -265,6 +282,7 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version
   --etag: string # ETag of the Manager
@@ -276,22 +294,22 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.StorSimple/managers/($managerName)" $qp)
-  let body = {etag: $etag, properties: $properties, location: $location, tags: $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), manager_name: (encode-path-segment $manager_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.StorSimple/managers/{manager_name}") $qp)
+  let req_body = {"etag": $etag, "properties": $properties, "location": $location, "tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Retrieves all the access control records in a manager.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/accessControlRecords
 # operationId: AccessControlRecords_ListByManager
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-access-control-records ListByManager" [
-  subscriptionId: string
-  resourceGroupName: string
-  managerName: string
+export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-access-control-records list" [
+  subscription_id: string
+  resource_group_name: string
+  manager_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -299,27 +317,28 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version
 ]: nothing -> record<value: table<properties: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.StorSimple/managers/($managerName)/accessControlRecords" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), manager_name: (encode-path-segment $manager_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.StorSimple/managers/{manager_name}/accessControlRecords") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Deletes the access control record.
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/accessControlRecords/{accessControlRecordName}
 # operationId: AccessControlRecords_Delete
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-access-control-records Delete" [
-  accessControlRecordName: string
-  subscriptionId: string
-  resourceGroupName: string
-  managerName: string
+export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-access-control-records delete" [
+  subscription_id: string
+  resource_group_name: string
+  manager_name: string
+  access_control_record_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -327,27 +346,28 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version
 ]: nothing -> record<errorCode: string, message: record<language: string, value: string>, values: table<key: string, value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.StorSimple/managers/($managerName)/accessControlRecords/($accessControlRecordName)" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), manager_name: (encode-path-segment $manager_name), access_control_record_name: (encode-path-segment $access_control_record_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.StorSimple/managers/{manager_name}/accessControlRecords/{access_control_record_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Returns the properties of the specified access control record name.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/accessControlRecords/{accessControlRecordName}
 # operationId: AccessControlRecords_Get
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-access-control-records Get" [
-  accessControlRecordName: string
-  subscriptionId: string
-  resourceGroupName: string
-  managerName: string
+export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-access-control-records get" [
+  subscription_id: string
+  resource_group_name: string
+  manager_name: string
+  access_control_record_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -355,16 +375,17 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version
 ]: nothing -> record<properties: record<initiatorName: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.StorSimple/managers/($managerName)/accessControlRecords/($accessControlRecordName)" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), manager_name: (encode-path-segment $manager_name), access_control_record_name: (encode-path-segment $access_control_record_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.StorSimple/managers/{manager_name}/accessControlRecords/{access_control_record_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Creates or Updates an access control record.
@@ -372,11 +393,11 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/accessControlRecords/{accessControlRecordName}
 # operationId: AccessControlRecords_CreateOrUpdate
 # --properties shape: {initiatorName: string}
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-access-control-records CreateOrUpdate" [
-  accessControlRecordName: string
-  subscriptionId: string
-  resourceGroupName: string
-  managerName: string
+export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-access-control-records create-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  manager_name: string
+  access_control_record_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -384,6 +405,7 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version
   properties: record # Properties of access control record — shape: {initiatorName: string}
@@ -392,22 +414,22 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.StorSimple/managers/($managerName)/accessControlRecords/($accessControlRecordName)" $qp)
-  let body = {properties: $properties} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), manager_name: (encode-path-segment $manager_name), access_control_record_name: (encode-path-segment $access_control_record_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.StorSimple/managers/{manager_name}/accessControlRecords/{access_control_record_name}") $qp)
+  let req_body = {"properties": $properties} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Retrieves all the alerts in a manager.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/alerts
 # operationId: Alerts_ListByManager
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-alerts ListByManager" [
-  subscriptionId: string
-  resourceGroupName: string
-  managerName: string
+export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-alerts list" [
+  subscription_id: string
+  resource_group_name: string
+  manager_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -415,6 +437,7 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version
   --filter: string # OData Filter options
@@ -422,20 +445,20 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.StorSimple/managers/($managerName)/alerts" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), manager_name: (encode-path-segment $manager_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.StorSimple/managers/{manager_name}/alerts") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Retrieves all the backups in a manager.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/backups
 # operationId: Backups_ListByManager
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-backups ListByManager" [
-  subscriptionId: string
-  resourceGroupName: string
-  managerName: string
+export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-backups list" [
+  subscription_id: string
+  resource_group_name: string
+  manager_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -443,6 +466,7 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version
   --filter: string # OData Filter options
@@ -450,10 +474,10 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.StorSimple/managers/($managerName)/backups" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), manager_name: (encode-path-segment $manager_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.StorSimple/managers/{manager_name}/backups") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Upload Vault Cred Certificate. Returns UploadCertificateResponse
@@ -461,11 +485,11 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/certificates/{certificateName}
 # operationId: Managers_UploadRegistrationCertificate
 # --properties shape: {authType?: "Invalid"|"AccessControlService"|"AzureActiveDirectory", certificate: string}
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-certificates UploadRegistrationCertificate" [
-  certificateName: string
-  subscriptionId: string
-  resourceGroupName: string
-  managerName: string
+export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-certificates upload-registration" [
+  subscription_id: string
+  resource_group_name: string
+  manager_name: string
+  certificate_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -473,6 +497,7 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version
   properties: record # Raw Certificate Data From IDM — shape: {authType?: "Invalid"|"AccessControlService"|"AzureActiveDirectory", certificate: string}
@@ -481,22 +506,22 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.StorSimple/managers/($managerName)/certificates/($certificateName)" $qp)
-  let body = {properties: $properties} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), manager_name: (encode-path-segment $manager_name), certificate_name: (encode-path-segment $certificate_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.StorSimple/managers/{manager_name}/certificates/{certificate_name}") $qp)
+  let req_body = {"properties": $properties} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Clear the alerts.
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/clearAlerts
 # operationId: Alerts_Clear
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-clear-alerts Clear" [
-  subscriptionId: string
-  resourceGroupName: string
-  managerName: string
+export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-clear-alerts create" [
+  subscription_id: string
+  resource_group_name: string
+  manager_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -504,31 +529,32 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version
-  alerts: list # List of alert Ids to be cleared
-  --resolutionMessage: string # Resolution message while clearing the request
+  alerts: list<string> # List of alert Ids to be cleared
+  --resolution-message: string # Resolution message while clearing the request
 ]: any -> record<errorCode: string, message: record<language: string, value: string>, values: table<key: string, value: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.StorSimple/managers/($managerName)/clearAlerts" $qp)
-  let body = {alerts: $alerts, resolutionMessage: $resolutionMessage} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), manager_name: (encode-path-segment $manager_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.StorSimple/managers/{manager_name}/clearAlerts") $qp)
+  let req_body = {"alerts": $alerts, "resolutionMessage": $resolution_message} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Retrieves all the devices in a manager.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/devices
 # operationId: Devices_ListByManager
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices ListByManager" [
-  subscriptionId: string
-  resourceGroupName: string
-  managerName: string
+export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices list" [
+  subscription_id: string
+  resource_group_name: string
+  manager_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -536,6 +562,7 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version
   --expand: string # Specify $expand=details to populate additional fields related to the device.
@@ -543,21 +570,21 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.StorSimple/managers/($managerName)/devices" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), manager_name: (encode-path-segment $manager_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.StorSimple/managers/{manager_name}/devices") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Deletes the device.
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/devices/{deviceName}
 # operationId: Devices_Delete
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices Delete" [
-  deviceName: string
-  subscriptionId: string
-  resourceGroupName: string
-  managerName: string
+export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices delete" [
+  subscription_id: string
+  resource_group_name: string
+  manager_name: string
+  device_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -565,27 +592,28 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version
 ]: nothing -> record<errorCode: string, message: record<language: string, value: string>, values: table<key: string, value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.StorSimple/managers/($managerName)/devices/($deviceName)" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), manager_name: (encode-path-segment $manager_name), device_name: (encode-path-segment $device_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.StorSimple/managers/{manager_name}/devices/{device_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Returns the properties of the specified device name.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/devices/{deviceName}
 # operationId: Devices_Get
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices Get" [
-  deviceName: string
-  subscriptionId: string
-  resourceGroupName: string
-  managerName: string
+export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices get" [
+  subscription_id: string
+  resource_group_name: string
+  manager_name: string
+  device_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -593,6 +621,7 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version
   --expand: string # Specify $expand=details to populate additional fields related to the device.
@@ -600,21 +629,21 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.StorSimple/managers/($managerName)/devices/($deviceName)" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), manager_name: (encode-path-segment $manager_name), device_name: (encode-path-segment $device_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.StorSimple/managers/{manager_name}/devices/{device_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Patches the device.
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/devices/{deviceName}
 # operationId: Devices_Patch
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices Patch" [
-  deviceName: string
-  subscriptionId: string
-  resourceGroupName: string
-  managerName: string
+export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices update" [
+  subscription_id: string
+  resource_group_name: string
+  manager_name: string
+  device_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -622,31 +651,32 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version
-  --deviceDescription: string # Short description given for the device
+  --device-description: string # Short description given for the device
 ]: any -> record<properties: record<activationTime: string, allowedDeviceOperations: list<string>, culture: string, details: record<availableLocalStorageInBytes: int, availableStorageInBytes: int, endpointCount: int, provisionedLocalStorageInBytes: int, provisionedStorageInBytes: int, totalBackupSizeInBytes: int, totalLocalStorageInBytes: int, totalStorageInBytes: int, usingLocalStorageInBytes: int, usingStorageInBytes: int>, deviceCapabilities: list<string>, deviceConfigurationStatus: string, deviceDescription: string, deviceSoftwareVersion: string, domainName: string, friendlySoftwareName: string, modelDescription: string, status: string, type: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.StorSimple/managers/($managerName)/devices/($deviceName)" $qp)
-  let body = {deviceDescription: $deviceDescription} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), manager_name: (encode-path-segment $manager_name), device_name: (encode-path-segment $device_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.StorSimple/managers/{manager_name}/devices/{device_name}") $qp)
+  let req_body = {"deviceDescription": $device_description} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Returns the alert settings of the specified device name.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/devices/{deviceName}/alertSettings/default
 # operationId: Devices_GetAlertSettings
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-alert-settings-default GetAlertSettings" [
-  deviceName: string
-  subscriptionId: string
-  resourceGroupName: string
-  managerName: string
+export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-alert-settings-default get" [
+  subscription_id: string
+  resource_group_name: string
+  manager_name: string
+  device_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -654,28 +684,29 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version
 ]: nothing -> record<properties: record<additionalRecipientEmailList: list<string>, alertNotificationCulture: string, emailNotification: string, notificationToServiceOwners: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.StorSimple/managers/($managerName)/devices/($deviceName)/alertSettings/default" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), manager_name: (encode-path-segment $manager_name), device_name: (encode-path-segment $device_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.StorSimple/managers/{manager_name}/devices/{device_name}/alertSettings/default") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Creates or updates the alert settings
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/devices/{deviceName}/alertSettings/default
 # operationId: Devices_CreateOrUpdateAlertSettings
-# --properties shape: {additionalRecipientEmailList?: list, alertNotificationCulture: string, emailNotification: "Enabled"|"Disabled", notificationToServiceOwners: "Enabled"|"Disabled"}
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-alert-settings-default CreateOrUpdateAlertSettings" [
-  deviceName: string
-  subscriptionId: string
-  resourceGroupName: string
-  managerName: string
+# --properties shape: {additionalRecipientEmailList?: list<string>, alertNotificationCulture: string, emailNotification: "Enabled"|"Disabled", notificationToServiceOwners: "Enabled"|"Disabled"}
+export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-alert-settings-default create-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  manager_name: string
+  device_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -683,31 +714,32 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version
-  properties: record # Class containing the properties of AlertSettings — shape: {additionalRecipientEmailList?: list, alertNotificationCulture: string, emailNotification: "Enabled"|"Disabled", notificationToServiceOwners: "Enabled"|"Disabled"}
+  properties: record # Class containing the properties of AlertSettings — shape: {additionalRecipientEmailList?: list<string>, alertNotificationCulture: string, emailNotification: "Enabled"|"Disabled", notificationToServiceOwners: "Enabled"|"Disabled"}
 ]: any -> record<properties: record<additionalRecipientEmailList: list<string>, alertNotificationCulture: string, emailNotification: string, notificationToServiceOwners: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.StorSimple/managers/($managerName)/devices/($deviceName)/alertSettings/default" $qp)
-  let body = {properties: $properties} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), manager_name: (encode-path-segment $manager_name), device_name: (encode-path-segment $device_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.StorSimple/managers/{manager_name}/devices/{device_name}/alertSettings/default") $qp)
+  let req_body = {"properties": $properties} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Retrieves all the backup schedule groups in a device.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/devices/{deviceName}/backupScheduleGroups
 # operationId: BackupScheduleGroups_ListByDevice
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-backup-schedule-groups ListByDevice" [
-  deviceName: string
-  subscriptionId: string
-  resourceGroupName: string
-  managerName: string
+export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-backup-schedule-groups list" [
+  subscription_id: string
+  resource_group_name: string
+  manager_name: string
+  device_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -715,28 +747,29 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version
 ]: nothing -> record<value: table<properties: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.StorSimple/managers/($managerName)/devices/($deviceName)/backupScheduleGroups" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), manager_name: (encode-path-segment $manager_name), device_name: (encode-path-segment $device_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.StorSimple/managers/{manager_name}/devices/{device_name}/backupScheduleGroups") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Deletes the backup schedule group.
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/devices/{deviceName}/backupScheduleGroups/{scheduleGroupName}
 # operationId: BackupScheduleGroups_Delete
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-backup-schedule-groups Delete" [
-  deviceName: string
-  scheduleGroupName: string
-  subscriptionId: string
-  resourceGroupName: string
-  managerName: string
+export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-backup-schedule-groups delete" [
+  subscription_id: string
+  resource_group_name: string
+  manager_name: string
+  device_name: string
+  schedule_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -744,28 +777,29 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version
 ]: nothing -> record<errorCode: string, message: record<language: string, value: string>, values: table<key: string, value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.StorSimple/managers/($managerName)/devices/($deviceName)/backupScheduleGroups/($scheduleGroupName)" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), manager_name: (encode-path-segment $manager_name), device_name: (encode-path-segment $device_name), schedule_group_name: (encode-path-segment $schedule_group_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.StorSimple/managers/{manager_name}/devices/{device_name}/backupScheduleGroups/{schedule_group_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Returns the properties of the specified backup schedule group name.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/devices/{deviceName}/backupScheduleGroups/{scheduleGroupName}
 # operationId: BackupScheduleGroups_Get
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-backup-schedule-groups Get" [
-  deviceName: string
-  scheduleGroupName: string
-  subscriptionId: string
-  resourceGroupName: string
-  managerName: string
+export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-backup-schedule-groups get" [
+  subscription_id: string
+  resource_group_name: string
+  manager_name: string
+  device_name: string
+  schedule_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -773,16 +807,17 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version
 ]: nothing -> record<properties: record<startTime: record<hour: int, minute: int>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.StorSimple/managers/($managerName)/devices/($deviceName)/backupScheduleGroups/($scheduleGroupName)" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), manager_name: (encode-path-segment $manager_name), device_name: (encode-path-segment $device_name), schedule_group_name: (encode-path-segment $schedule_group_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.StorSimple/managers/{manager_name}/devices/{device_name}/backupScheduleGroups/{schedule_group_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Creates or Updates the backup schedule Group.
@@ -790,12 +825,12 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/devices/{deviceName}/backupScheduleGroups/{scheduleGroupName}
 # operationId: BackupScheduleGroups_CreateOrUpdate
 # --properties shape: {startTime: record}
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-backup-schedule-groups CreateOrUpdate" [
-  deviceName: string
-  scheduleGroupName: string
-  subscriptionId: string
-  resourceGroupName: string
-  managerName: string
+export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-backup-schedule-groups create-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  manager_name: string
+  device_name: string
+  schedule_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -803,6 +838,7 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version
   properties: record # The Backup Schedule Group Properties — shape: {startTime: record}
@@ -811,23 +847,23 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.StorSimple/managers/($managerName)/devices/($deviceName)/backupScheduleGroups/($scheduleGroupName)" $qp)
-  let body = {properties: $properties} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), manager_name: (encode-path-segment $manager_name), device_name: (encode-path-segment $device_name), schedule_group_name: (encode-path-segment $schedule_group_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.StorSimple/managers/{manager_name}/devices/{device_name}/backupScheduleGroups/{schedule_group_name}") $qp)
+  let req_body = {"properties": $properties} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Retrieves all the backups in a device. Can be used to get the backups for failover also.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/devices/{deviceName}/backups
 # operationId: Backups_ListByDevice
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-backups ListByDevice" [
-  deviceName: string
-  subscriptionId: string
-  resourceGroupName: string
-  managerName: string
+export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-backups list" [
+  subscription_id: string
+  resource_group_name: string
+  manager_name: string
+  device_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -835,30 +871,31 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --forFailover: oneof<nothing, bool> # Set to true if you need backups which can be used for failover.
+  --for-failover: oneof<nothing, bool> # Set to true if you need backups which can be used for failover.
   --api-version: string # The api version
   --filter: string # OData Filter options
 ]: nothing -> record<nextLink: string, value: table<properties: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "forFailover" $forFailover "scalar") (serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.StorSimple/managers/($managerName)/devices/($deviceName)/backups" $qp)
+  let qp = [(serialize-qp "forFailover" $for_failover "scalar") (serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), manager_name: (encode-path-segment $manager_name), device_name: (encode-path-segment $device_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.StorSimple/managers/{manager_name}/devices/{device_name}/backups") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Deletes the backup.
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/devices/{deviceName}/backups/{backupName}
 # operationId: Backups_Delete
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-backups Delete" [
-  deviceName: string
-  backupName: string
-  subscriptionId: string
-  resourceGroupName: string
-  managerName: string
+export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-backups delete" [
+  subscription_id: string
+  resource_group_name: string
+  manager_name: string
+  device_name: string
+  backup_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -866,16 +903,17 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version
 ]: nothing -> record<errorCode: string, message: record<language: string, value: string>, values: table<key: string, value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.StorSimple/managers/($managerName)/devices/($deviceName)/backups/($backupName)" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), manager_name: (encode-path-segment $manager_name), device_name: (encode-path-segment $device_name), backup_name: (encode-path-segment $backup_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.StorSimple/managers/{manager_name}/devices/{device_name}/backups/{backup_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Clones the given backup element to a new disk or share with given details.
@@ -883,13 +921,13 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/devices/{deviceName}/backups/{backupName}/elements/{elementName}/clone
 # operationId: Backups_Clone
 # --properties shape: {disk?: record, newEndpointName: string, share?: record, targetAccessPointId: string, targetDeviceId: string}
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-backups-elements-clone Clone" [
-  deviceName: string
-  backupName: string
-  elementName: string
-  subscriptionId: string
-  resourceGroupName: string
-  managerName: string
+export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-backups-elements-clone clone" [
+  subscription_id: string
+  resource_group_name: string
+  manager_name: string
+  device_name: string
+  backup_name: string
+  element_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -897,6 +935,7 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version
   properties: record # Properties of CloneRequest — shape: {disk?: record, newEndpointName: string, share?: record, targetAccessPointId: string, targetDeviceId: string}
@@ -905,23 +944,23 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.StorSimple/managers/($managerName)/devices/($deviceName)/backups/($backupName)/elements/($elementName)/clone" $qp)
-  let body = {properties: $properties} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), manager_name: (encode-path-segment $manager_name), device_name: (encode-path-segment $device_name), backup_name: (encode-path-segment $backup_name), element_name: (encode-path-segment $element_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.StorSimple/managers/{manager_name}/devices/{device_name}/backups/{backup_name}/elements/{element_name}/clone") $qp)
+  let req_body = {"properties": $properties} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Retrieves all the chap settings in a device.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/devices/{deviceName}/chapSettings
 # operationId: ChapSettings_ListByDevice
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-chap-settings ListByDevice" [
-  deviceName: string
-  subscriptionId: string
-  resourceGroupName: string
-  managerName: string
+export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-chap-settings list" [
+  subscription_id: string
+  resource_group_name: string
+  manager_name: string
+  device_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -929,28 +968,29 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version
 ]: nothing -> record<value: table<properties: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.StorSimple/managers/($managerName)/devices/($deviceName)/chapSettings" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), manager_name: (encode-path-segment $manager_name), device_name: (encode-path-segment $device_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.StorSimple/managers/{manager_name}/devices/{device_name}/chapSettings") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Deletes the chap setting.
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/devices/{deviceName}/chapSettings/{chapUserName}
 # operationId: ChapSettings_Delete
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-chap-settings Delete" [
-  deviceName: string
-  chapUserName: string
-  subscriptionId: string
-  resourceGroupName: string
-  managerName: string
+export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-chap-settings delete" [
+  subscription_id: string
+  resource_group_name: string
+  manager_name: string
+  device_name: string
+  chap_user_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -958,28 +998,29 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version
 ]: nothing -> record<errorCode: string, message: record<language: string, value: string>, values: table<key: string, value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.StorSimple/managers/($managerName)/devices/($deviceName)/chapSettings/($chapUserName)" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), manager_name: (encode-path-segment $manager_name), device_name: (encode-path-segment $device_name), chap_user_name: (encode-path-segment $chap_user_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.StorSimple/managers/{manager_name}/devices/{device_name}/chapSettings/{chap_user_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Returns the properties of the specified chap setting name.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/devices/{deviceName}/chapSettings/{chapUserName}
 # operationId: ChapSettings_Get
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-chap-settings Get" [
-  deviceName: string
-  chapUserName: string
-  subscriptionId: string
-  resourceGroupName: string
-  managerName: string
+export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-chap-settings get" [
+  subscription_id: string
+  resource_group_name: string
+  manager_name: string
+  device_name: string
+  chap_user_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -987,16 +1028,17 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version
 ]: nothing -> record<properties: record<password: record<encryptionAlgorithm: string, encryptionCertificateThumbprint: string, value: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.StorSimple/managers/($managerName)/devices/($deviceName)/chapSettings/($chapUserName)" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), manager_name: (encode-path-segment $manager_name), device_name: (encode-path-segment $device_name), chap_user_name: (encode-path-segment $chap_user_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.StorSimple/managers/{manager_name}/devices/{device_name}/chapSettings/{chap_user_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Creates or updates the chap setting.
@@ -1004,12 +1046,12 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/devices/{deviceName}/chapSettings/{chapUserName}
 # operationId: ChapSettings_CreateOrUpdate
 # --properties shape: {password: record}
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-chap-settings CreateOrUpdate" [
-  deviceName: string
-  chapUserName: string
-  subscriptionId: string
-  resourceGroupName: string
-  managerName: string
+export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-chap-settings create-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  manager_name: string
+  device_name: string
+  chap_user_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1017,6 +1059,7 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version
   properties: record # Chap properties — shape: {password: record}
@@ -1025,23 +1068,23 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.StorSimple/managers/($managerName)/devices/($deviceName)/chapSettings/($chapUserName)" $qp)
-  let body = {properties: $properties} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), manager_name: (encode-path-segment $manager_name), device_name: (encode-path-segment $device_name), chap_user_name: (encode-path-segment $chap_user_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.StorSimple/managers/{manager_name}/devices/{device_name}/chapSettings/{chap_user_name}") $qp)
+  let req_body = {"properties": $properties} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Deactivates the device.
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/devices/{deviceName}/deactivate
 # operationId: Devices_Deactivate
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-deactivate Deactivate" [
-  deviceName: string
-  subscriptionId: string
-  resourceGroupName: string
-  managerName: string
+export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-deactivate create" [
+  subscription_id: string
+  resource_group_name: string
+  manager_name: string
+  device_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1049,27 +1092,28 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version
 ]: nothing -> record<errorCode: string, message: record<language: string, value: string>, values: table<key: string, value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.StorSimple/managers/($managerName)/devices/($deviceName)/deactivate" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), manager_name: (encode-path-segment $manager_name), device_name: (encode-path-segment $device_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.StorSimple/managers/{manager_name}/devices/{device_name}/deactivate") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Retrieves all the iSCSI disks in a device.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/devices/{deviceName}/disks
 # operationId: IscsiDisks_ListByDevice
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-disks ListByDevice" [
-  deviceName: string
-  subscriptionId: string
-  resourceGroupName: string
-  managerName: string
+export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-disks list-iscsi" [
+  subscription_id: string
+  resource_group_name: string
+  manager_name: string
+  device_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1077,27 +1121,28 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version
 ]: nothing -> record<value: table<properties: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.StorSimple/managers/($managerName)/devices/($deviceName)/disks" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), manager_name: (encode-path-segment $manager_name), device_name: (encode-path-segment $device_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.StorSimple/managers/{manager_name}/devices/{device_name}/disks") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Downloads updates on the device.
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/devices/{deviceName}/download
 # operationId: Devices_DownloadUpdates
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-download DownloadUpdates" [
-  deviceName: string
-  subscriptionId: string
-  resourceGroupName: string
-  managerName: string
+export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-download download-updates" [
+  subscription_id: string
+  resource_group_name: string
+  manager_name: string
+  device_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1105,27 +1150,28 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version
 ]: nothing -> record<errorCode: string, message: record<language: string, value: string>, values: table<key: string, value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.StorSimple/managers/($managerName)/devices/($deviceName)/download" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), manager_name: (encode-path-segment $manager_name), device_name: (encode-path-segment $device_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.StorSimple/managers/{manager_name}/devices/{device_name}/download") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Fails over the device to another device.
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/devices/{deviceName}/failover
 # operationId: Devices_Failover
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-failover Failover" [
-  deviceName: string
-  subscriptionId: string
-  resourceGroupName: string
-  managerName: string
+export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-failover create" [
+  subscription_id: string
+  resource_group_name: string
+  manager_name: string
+  device_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1133,34 +1179,35 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version
-  --accesspointIds: list
-  --keepSourceDevice: oneof<nothing, bool>
-  --skipValidation: oneof<nothing, bool>
-  --targetDeviceId: string
+  --accesspoint-ids: list<string>
+  --keep-source-device: oneof<nothing, bool>
+  --skip-validation: oneof<nothing, bool>
+  --target-device-id: string
 ]: any -> record<errorCode: string, message: record<language: string, value: string>, values: table<key: string, value: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.StorSimple/managers/($managerName)/devices/($deviceName)/failover" $qp)
-  let body = {accesspointIds: $accesspointIds, keepSourceDevice: $keepSourceDevice, skipValidation: $skipValidation, targetDeviceId: $targetDeviceId} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), manager_name: (encode-path-segment $manager_name), device_name: (encode-path-segment $device_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.StorSimple/managers/{manager_name}/devices/{device_name}/failover") $qp)
+  let req_body = {"accesspointIds": $accesspoint_ids, "keepSourceDevice": $keep_source_device, "skipValidation": $skip_validation, "targetDeviceId": $target_device_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Retrieves all the devices which can be used as failover targets for the given device.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/devices/{deviceName}/failoverTargets
 # operationId: Devices_ListFailoverTarget
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-failover-targets ListFailoverTarget" [
-  deviceName: string
-  subscriptionId: string
-  resourceGroupName: string
-  managerName: string
+export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-failover-targets list" [
+  subscription_id: string
+  resource_group_name: string
+  manager_name: string
+  device_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1168,6 +1215,7 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version
   --expand: string # Specify $expand=details to populate additional fields related to the device.
@@ -1175,21 +1223,21 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.StorSimple/managers/($managerName)/devices/($deviceName)/failoverTargets" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), manager_name: (encode-path-segment $manager_name), device_name: (encode-path-segment $device_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.StorSimple/managers/{manager_name}/devices/{device_name}/failoverTargets") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Retrieves all the file servers in a device.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/devices/{deviceName}/fileservers
 # operationId: FileServers_ListByDevice
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-fileservers ListByDevice" [
-  deviceName: string
-  subscriptionId: string
-  resourceGroupName: string
-  managerName: string
+export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-fileservers list-file-servers" [
+  subscription_id: string
+  resource_group_name: string
+  manager_name: string
+  device_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1197,28 +1245,29 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version
 ]: nothing -> record<value: table<properties: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.StorSimple/managers/($managerName)/devices/($deviceName)/fileservers" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), manager_name: (encode-path-segment $manager_name), device_name: (encode-path-segment $device_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.StorSimple/managers/{manager_name}/devices/{device_name}/fileservers") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Deletes the file server.
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/devices/{deviceName}/fileservers/{fileServerName}
 # operationId: FileServers_Delete
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-fileservers Delete" [
-  deviceName: string
-  fileServerName: string
-  subscriptionId: string
-  resourceGroupName: string
-  managerName: string
+export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-fileservers delete-file-servers" [
+  subscription_id: string
+  resource_group_name: string
+  manager_name: string
+  device_name: string
+  file_server_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1226,28 +1275,29 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version
 ]: nothing -> record<errorCode: string, message: record<language: string, value: string>, values: table<key: string, value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.StorSimple/managers/($managerName)/devices/($deviceName)/fileservers/($fileServerName)" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), manager_name: (encode-path-segment $manager_name), device_name: (encode-path-segment $device_name), file_server_name: (encode-path-segment $file_server_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.StorSimple/managers/{manager_name}/devices/{device_name}/fileservers/{file_server_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Returns the properties of the specified file server name.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/devices/{deviceName}/fileservers/{fileServerName}
 # operationId: FileServers_Get
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-fileservers Get" [
-  deviceName: string
-  fileServerName: string
-  subscriptionId: string
-  resourceGroupName: string
-  managerName: string
+export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-fileservers get-file-servers" [
+  subscription_id: string
+  resource_group_name: string
+  manager_name: string
+  device_name: string
+  file_server_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1255,16 +1305,17 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version
 ]: nothing -> record<properties: record<backupScheduleGroupId: string, description: string, domainName: string, storageDomainId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.StorSimple/managers/($managerName)/devices/($deviceName)/fileservers/($fileServerName)" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), manager_name: (encode-path-segment $manager_name), device_name: (encode-path-segment $device_name), file_server_name: (encode-path-segment $file_server_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.StorSimple/managers/{manager_name}/devices/{device_name}/fileservers/{file_server_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Creates or updates the file server.
@@ -1272,12 +1323,12 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/devices/{deviceName}/fileservers/{fileServerName}
 # operationId: FileServers_CreateOrUpdate
 # --properties shape: {backupScheduleGroupId: string, description?: string, domainName: string, storageDomainId: string}
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-fileservers CreateOrUpdate" [
-  deviceName: string
-  fileServerName: string
-  subscriptionId: string
-  resourceGroupName: string
-  managerName: string
+export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-fileservers create-file-servers-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  manager_name: string
+  device_name: string
+  file_server_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1285,6 +1336,7 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version
   properties: record # The file server properties. — shape: {backupScheduleGroupId: string, description?: string, domainName: string, storageDomainId: string}
@@ -1293,24 +1345,24 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.StorSimple/managers/($managerName)/devices/($deviceName)/fileservers/($fileServerName)" $qp)
-  let body = {properties: $properties} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), manager_name: (encode-path-segment $manager_name), device_name: (encode-path-segment $device_name), file_server_name: (encode-path-segment $file_server_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.StorSimple/managers/{manager_name}/devices/{device_name}/fileservers/{file_server_name}") $qp)
+  let req_body = {"properties": $properties} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Backup the file server now.
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/devices/{deviceName}/fileservers/{fileServerName}/backup
 # operationId: FileServers_BackupNow
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-fileservers-backup BackupNow" [
-  deviceName: string
-  fileServerName: string
-  subscriptionId: string
-  resourceGroupName: string
-  managerName: string
+export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-fileservers-backup create-file-servers-now" [
+  subscription_id: string
+  resource_group_name: string
+  manager_name: string
+  device_name: string
+  file_server_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1318,28 +1370,29 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version
 ]: nothing -> record<errorCode: string, message: record<language: string, value: string>, values: table<key: string, value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.StorSimple/managers/($managerName)/devices/($deviceName)/fileservers/($fileServerName)/backup" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), manager_name: (encode-path-segment $manager_name), device_name: (encode-path-segment $device_name), file_server_name: (encode-path-segment $file_server_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.StorSimple/managers/{manager_name}/devices/{device_name}/fileservers/{file_server_name}/backup") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Gets the file server metrics.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/devices/{deviceName}/fileservers/{fileServerName}/metrics
 # operationId: FileServers_ListMetrics
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-fileservers-metrics ListMetrics" [
-  deviceName: string
-  fileServerName: string
-  subscriptionId: string
-  resourceGroupName: string
-  managerName: string
+export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-fileservers-metrics list-file-servers" [
+  subscription_id: string
+  resource_group_name: string
+  manager_name: string
+  device_name: string
+  file_server_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1347,6 +1400,7 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version
   --filter: string # OData Filter options
@@ -1354,22 +1408,22 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.StorSimple/managers/($managerName)/devices/($deviceName)/fileservers/($fileServerName)/metrics" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), manager_name: (encode-path-segment $manager_name), device_name: (encode-path-segment $device_name), file_server_name: (encode-path-segment $file_server_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.StorSimple/managers/{manager_name}/devices/{device_name}/fileservers/{file_server_name}/metrics") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Retrieves metric definitions of all metrics aggregated at the file server.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/devices/{deviceName}/fileservers/{fileServerName}/metricsDefinitions
 # operationId: FileServers_ListMetricDefinition
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-fileservers-metrics-definitions ListMetricDefinition" [
-  deviceName: string
-  fileServerName: string
-  subscriptionId: string
-  resourceGroupName: string
-  managerName: string
+export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-fileservers-metrics-definitions list-file-servers" [
+  subscription_id: string
+  resource_group_name: string
+  manager_name: string
+  device_name: string
+  file_server_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1377,28 +1431,29 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version
 ]: nothing -> record<value: table<dimensions: list, metricAvailabilities: list, name: record, primaryAggregationType: string, resourceId: string, type: string, unit: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.StorSimple/managers/($managerName)/devices/($deviceName)/fileservers/($fileServerName)/metricsDefinitions" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), manager_name: (encode-path-segment $manager_name), device_name: (encode-path-segment $device_name), file_server_name: (encode-path-segment $file_server_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.StorSimple/managers/{manager_name}/devices/{device_name}/fileservers/{file_server_name}/metricsDefinitions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Retrieves all the file shares in a file server.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/devices/{deviceName}/fileservers/{fileServerName}/shares
 # operationId: FileShares_ListByFileServer
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-fileservers-shares ListByFileServer" [
-  deviceName: string
-  fileServerName: string
-  subscriptionId: string
-  resourceGroupName: string
-  managerName: string
+export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-fileservers-shares list-file-by-file-server" [
+  subscription_id: string
+  resource_group_name: string
+  manager_name: string
+  device_name: string
+  file_server_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1406,29 +1461,30 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version
 ]: nothing -> record<value: table<properties: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.StorSimple/managers/($managerName)/devices/($deviceName)/fileservers/($fileServerName)/shares" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), manager_name: (encode-path-segment $manager_name), device_name: (encode-path-segment $device_name), file_server_name: (encode-path-segment $file_server_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.StorSimple/managers/{manager_name}/devices/{device_name}/fileservers/{file_server_name}/shares") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Deletes the file share.
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/devices/{deviceName}/fileservers/{fileServerName}/shares/{shareName}
 # operationId: FileShares_Delete
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-fileservers-shares Delete" [
-  deviceName: string
-  fileServerName: string
-  shareName: string
-  subscriptionId: string
-  resourceGroupName: string
-  managerName: string
+export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-fileservers-shares delete-file" [
+  subscription_id: string
+  resource_group_name: string
+  manager_name: string
+  device_name: string
+  file_server_name: string
+  share_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1436,29 +1492,30 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version
 ]: nothing -> record<errorCode: string, message: record<language: string, value: string>, values: table<key: string, value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.StorSimple/managers/($managerName)/devices/($deviceName)/fileservers/($fileServerName)/shares/($shareName)" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), manager_name: (encode-path-segment $manager_name), device_name: (encode-path-segment $device_name), file_server_name: (encode-path-segment $file_server_name), share_name: (encode-path-segment $share_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.StorSimple/managers/{manager_name}/devices/{device_name}/fileservers/{file_server_name}/shares/{share_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Returns the properties of the specified file share name.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/devices/{deviceName}/fileservers/{fileServerName}/shares/{shareName}
 # operationId: FileShares_Get
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-fileservers-shares Get" [
-  deviceName: string
-  fileServerName: string
-  shareName: string
-  subscriptionId: string
-  resourceGroupName: string
-  managerName: string
+export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-fileservers-shares get-file" [
+  subscription_id: string
+  resource_group_name: string
+  manager_name: string
+  device_name: string
+  file_server_name: string
+  share_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1466,16 +1523,17 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version
 ]: nothing -> record<properties: record<adminUser: string, dataPolicy: string, description: string, localUsedCapacityInBytes: int, monitoringStatus: string, provisionedCapacityInBytes: int, shareStatus: string, usedCapacityInBytes: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.StorSimple/managers/($managerName)/devices/($deviceName)/fileservers/($fileServerName)/shares/($shareName)" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), manager_name: (encode-path-segment $manager_name), device_name: (encode-path-segment $device_name), file_server_name: (encode-path-segment $file_server_name), share_name: (encode-path-segment $share_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.StorSimple/managers/{manager_name}/devices/{device_name}/fileservers/{file_server_name}/shares/{share_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Creates or updates the file share.
@@ -1483,13 +1541,13 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/devices/{deviceName}/fileservers/{fileServerName}/shares/{shareName}
 # operationId: FileShares_CreateOrUpdate
 # --properties shape: {adminUser: string, dataPolicy: "Invalid"|"Local"|"Tiered"|"Cloud", description?: string, monitoringStatus: "Enabled"|"Disabled", provisionedCapacityInBytes: int, shareStatus: "Online"|"Offline"}
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-fileservers-shares CreateOrUpdate" [
-  deviceName: string
-  fileServerName: string
-  shareName: string
-  subscriptionId: string
-  resourceGroupName: string
-  managerName: string
+export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-fileservers-shares create-file-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  manager_name: string
+  device_name: string
+  file_server_name: string
+  share_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1497,6 +1555,7 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version
   properties: record # The File Share. — shape: {adminUser: string, dataPolicy: "Invalid"|"Local"|"Tiered"|"Cloud", description?: string, monitoringStatus: "Enabled"|"Disabled", provisionedCapacityInBytes: int, shareStatus: "Online"|"Offline"}
@@ -1505,25 +1564,25 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.StorSimple/managers/($managerName)/devices/($deviceName)/fileservers/($fileServerName)/shares/($shareName)" $qp)
-  let body = {properties: $properties} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), manager_name: (encode-path-segment $manager_name), device_name: (encode-path-segment $device_name), file_server_name: (encode-path-segment $file_server_name), share_name: (encode-path-segment $share_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.StorSimple/managers/{manager_name}/devices/{device_name}/fileservers/{file_server_name}/shares/{share_name}") $qp)
+  let req_body = {"properties": $properties} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Gets the file share metrics
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/devices/{deviceName}/fileservers/{fileServerName}/shares/{shareName}/metrics
 # operationId: FileShares_ListMetrics
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-fileservers-shares-metrics ListMetrics" [
-  deviceName: string
-  fileServerName: string
-  shareName: string
-  subscriptionId: string
-  resourceGroupName: string
-  managerName: string
+export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-fileservers-shares-metrics list-file" [
+  subscription_id: string
+  resource_group_name: string
+  manager_name: string
+  device_name: string
+  file_server_name: string
+  share_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1531,6 +1590,7 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version
   --filter: string # OData Filter options
@@ -1538,23 +1598,23 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.StorSimple/managers/($managerName)/devices/($deviceName)/fileservers/($fileServerName)/shares/($shareName)/metrics" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), manager_name: (encode-path-segment $manager_name), device_name: (encode-path-segment $device_name), file_server_name: (encode-path-segment $file_server_name), share_name: (encode-path-segment $share_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.StorSimple/managers/{manager_name}/devices/{device_name}/fileservers/{file_server_name}/shares/{share_name}/metrics") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Retrieves metric definitions of all metrics aggregated at the file share.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/devices/{deviceName}/fileservers/{fileServerName}/shares/{shareName}/metricsDefinitions
 # operationId: FileShares_ListMetricDefinition
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-fileservers-shares-metrics-definitions ListMetricDefinition" [
-  deviceName: string
-  fileServerName: string
-  shareName: string
-  subscriptionId: string
-  resourceGroupName: string
-  managerName: string
+export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-fileservers-shares-metrics-definitions list-file" [
+  subscription_id: string
+  resource_group_name: string
+  manager_name: string
+  device_name: string
+  file_server_name: string
+  share_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1562,27 +1622,28 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version
 ]: nothing -> record<value: table<dimensions: list, metricAvailabilities: list, name: record, primaryAggregationType: string, resourceId: string, type: string, unit: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.StorSimple/managers/($managerName)/devices/($deviceName)/fileservers/($fileServerName)/shares/($shareName)/metricsDefinitions" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), manager_name: (encode-path-segment $manager_name), device_name: (encode-path-segment $device_name), file_server_name: (encode-path-segment $file_server_name), share_name: (encode-path-segment $share_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.StorSimple/managers/{manager_name}/devices/{device_name}/fileservers/{file_server_name}/shares/{share_name}/metricsDefinitions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Installs the updates on the device.
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/devices/{deviceName}/install
 # operationId: Devices_InstallUpdates
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-install InstallUpdates" [
-  deviceName: string
-  subscriptionId: string
-  resourceGroupName: string
-  managerName: string
+export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-install create-updates" [
+  subscription_id: string
+  resource_group_name: string
+  manager_name: string
+  device_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1590,27 +1651,28 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version
 ]: nothing -> record<errorCode: string, message: record<language: string, value: string>, values: table<key: string, value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.StorSimple/managers/($managerName)/devices/($deviceName)/install" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), manager_name: (encode-path-segment $manager_name), device_name: (encode-path-segment $device_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.StorSimple/managers/{manager_name}/devices/{device_name}/install") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Retrieves all the iSCSI in a device.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/devices/{deviceName}/iscsiservers
 # operationId: IscsiServers_ListByDevice
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-iscsiservers ListByDevice" [
-  deviceName: string
-  subscriptionId: string
-  resourceGroupName: string
-  managerName: string
+export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-iscsiservers list-iscsi-servers" [
+  subscription_id: string
+  resource_group_name: string
+  manager_name: string
+  device_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1618,28 +1680,29 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version
 ]: nothing -> record<value: table<properties: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.StorSimple/managers/($managerName)/devices/($deviceName)/iscsiservers" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), manager_name: (encode-path-segment $manager_name), device_name: (encode-path-segment $device_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.StorSimple/managers/{manager_name}/devices/{device_name}/iscsiservers") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Deletes the iSCSI server.
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/devices/{deviceName}/iscsiservers/{iscsiServerName}
 # operationId: IscsiServers_Delete
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-iscsiservers Delete" [
-  deviceName: string
-  iscsiServerName: string
-  subscriptionId: string
-  resourceGroupName: string
-  managerName: string
+export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-iscsiservers delete-iscsi-servers" [
+  subscription_id: string
+  resource_group_name: string
+  manager_name: string
+  device_name: string
+  iscsi_server_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1647,28 +1710,29 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version
 ]: nothing -> record<errorCode: string, message: record<language: string, value: string>, values: table<key: string, value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.StorSimple/managers/($managerName)/devices/($deviceName)/iscsiservers/($iscsiServerName)" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), manager_name: (encode-path-segment $manager_name), device_name: (encode-path-segment $device_name), iscsi_server_name: (encode-path-segment $iscsi_server_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.StorSimple/managers/{manager_name}/devices/{device_name}/iscsiservers/{iscsi_server_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Returns the properties of the specified iSCSI server name.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/devices/{deviceName}/iscsiservers/{iscsiServerName}
 # operationId: IscsiServers_Get
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-iscsiservers Get" [
-  deviceName: string
-  iscsiServerName: string
-  subscriptionId: string
-  resourceGroupName: string
-  managerName: string
+export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-iscsiservers get-iscsi-servers" [
+  subscription_id: string
+  resource_group_name: string
+  manager_name: string
+  device_name: string
+  iscsi_server_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1676,16 +1740,17 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version
 ]: nothing -> record<properties: record<backupScheduleGroupId: string, chapId: string, description: string, reverseChapId: string, storageDomainId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.StorSimple/managers/($managerName)/devices/($deviceName)/iscsiservers/($iscsiServerName)" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), manager_name: (encode-path-segment $manager_name), device_name: (encode-path-segment $device_name), iscsi_server_name: (encode-path-segment $iscsi_server_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.StorSimple/managers/{manager_name}/devices/{device_name}/iscsiservers/{iscsi_server_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Creates or updates the iSCSI server.
@@ -1693,12 +1758,12 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/devices/{deviceName}/iscsiservers/{iscsiServerName}
 # operationId: IscsiServers_CreateOrUpdate
 # --properties shape: {backupScheduleGroupId: string, chapId?: string, description?: string, reverseChapId?: string, storageDomainId: string}
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-iscsiservers CreateOrUpdate" [
-  deviceName: string
-  iscsiServerName: string
-  subscriptionId: string
-  resourceGroupName: string
-  managerName: string
+export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-iscsiservers create-iscsi-servers-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  manager_name: string
+  device_name: string
+  iscsi_server_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1706,6 +1771,7 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version
   properties: record # The iSCSI server properties. — shape: {backupScheduleGroupId: string, chapId?: string, description?: string, reverseChapId?: string, storageDomainId: string}
@@ -1714,24 +1780,24 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.StorSimple/managers/($managerName)/devices/($deviceName)/iscsiservers/($iscsiServerName)" $qp)
-  let body = {properties: $properties} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), manager_name: (encode-path-segment $manager_name), device_name: (encode-path-segment $device_name), iscsi_server_name: (encode-path-segment $iscsi_server_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.StorSimple/managers/{manager_name}/devices/{device_name}/iscsiservers/{iscsi_server_name}") $qp)
+  let req_body = {"properties": $properties} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Backup the iSCSI server now.
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/devices/{deviceName}/iscsiservers/{iscsiServerName}/backup
 # operationId: IscsiServers_BackupNow
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-iscsiservers-backup BackupNow" [
-  deviceName: string
-  iscsiServerName: string
-  subscriptionId: string
-  resourceGroupName: string
-  managerName: string
+export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-iscsiservers-backup create-iscsi-servers-now" [
+  subscription_id: string
+  resource_group_name: string
+  manager_name: string
+  device_name: string
+  iscsi_server_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1739,28 +1805,29 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version
 ]: nothing -> record<errorCode: string, message: record<language: string, value: string>, values: table<key: string, value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.StorSimple/managers/($managerName)/devices/($deviceName)/iscsiservers/($iscsiServerName)/backup" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), manager_name: (encode-path-segment $manager_name), device_name: (encode-path-segment $device_name), iscsi_server_name: (encode-path-segment $iscsi_server_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.StorSimple/managers/{manager_name}/devices/{device_name}/iscsiservers/{iscsi_server_name}/backup") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Retrieves all the disks in a iSCSI server.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/devices/{deviceName}/iscsiservers/{iscsiServerName}/disks
 # operationId: IscsiDisks_ListByIscsiServer
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-iscsiservers-disks ListByIscsiServer" [
-  deviceName: string
-  iscsiServerName: string
-  subscriptionId: string
-  resourceGroupName: string
-  managerName: string
+export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-iscsiservers-disks list-iscsi-by-iscsi-server" [
+  subscription_id: string
+  resource_group_name: string
+  manager_name: string
+  device_name: string
+  iscsi_server_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1768,29 +1835,30 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version
 ]: nothing -> record<value: table<properties: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.StorSimple/managers/($managerName)/devices/($deviceName)/iscsiservers/($iscsiServerName)/disks" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), manager_name: (encode-path-segment $manager_name), device_name: (encode-path-segment $device_name), iscsi_server_name: (encode-path-segment $iscsi_server_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.StorSimple/managers/{manager_name}/devices/{device_name}/iscsiservers/{iscsi_server_name}/disks") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Deletes the iSCSI disk.
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/devices/{deviceName}/iscsiservers/{iscsiServerName}/disks/{diskName}
 # operationId: IscsiDisks_Delete
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-iscsiservers-disks Delete" [
-  deviceName: string
-  iscsiServerName: string
-  diskName: string
-  subscriptionId: string
-  resourceGroupName: string
-  managerName: string
+export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-iscsiservers-disks delete-iscsi" [
+  subscription_id: string
+  resource_group_name: string
+  manager_name: string
+  device_name: string
+  iscsi_server_name: string
+  disk_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1798,29 +1866,30 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version
 ]: nothing -> record<errorCode: string, message: record<language: string, value: string>, values: table<key: string, value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.StorSimple/managers/($managerName)/devices/($deviceName)/iscsiservers/($iscsiServerName)/disks/($diskName)" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), manager_name: (encode-path-segment $manager_name), device_name: (encode-path-segment $device_name), iscsi_server_name: (encode-path-segment $iscsi_server_name), disk_name: (encode-path-segment $disk_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.StorSimple/managers/{manager_name}/devices/{device_name}/iscsiservers/{iscsi_server_name}/disks/{disk_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Returns the properties of the specified iSCSI disk name.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/devices/{deviceName}/iscsiservers/{iscsiServerName}/disks/{diskName}
 # operationId: IscsiDisks_Get
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-iscsiservers-disks Get" [
-  deviceName: string
-  iscsiServerName: string
-  diskName: string
-  subscriptionId: string
-  resourceGroupName: string
-  managerName: string
+export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-iscsiservers-disks get-iscsi" [
+  subscription_id: string
+  resource_group_name: string
+  manager_name: string
+  device_name: string
+  iscsi_server_name: string
+  disk_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1828,30 +1897,31 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version
 ]: nothing -> record<properties: record<accessControlRecords: list<string>, dataPolicy: string, description: string, diskStatus: string, localUsedCapacityInBytes: int, monitoringStatus: string, provisionedCapacityInBytes: int, usedCapacityInBytes: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.StorSimple/managers/($managerName)/devices/($deviceName)/iscsiservers/($iscsiServerName)/disks/($diskName)" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), manager_name: (encode-path-segment $manager_name), device_name: (encode-path-segment $device_name), iscsi_server_name: (encode-path-segment $iscsi_server_name), disk_name: (encode-path-segment $disk_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.StorSimple/managers/{manager_name}/devices/{device_name}/iscsiservers/{iscsi_server_name}/disks/{disk_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Creates or updates the iSCSI disk.
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/devices/{deviceName}/iscsiservers/{iscsiServerName}/disks/{diskName}
 # operationId: IscsiDisks_CreateOrUpdate
-# --properties shape: {accessControlRecords: list, dataPolicy: "Invalid"|"Local"|"Tiered"|"Cloud", description?: string, diskStatus: "Online"|"Offline", monitoringStatus: "Enabled"|"Disabled", provisionedCapacityInBytes: int}
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-iscsiservers-disks CreateOrUpdate" [
-  deviceName: string
-  iscsiServerName: string
-  diskName: string
-  subscriptionId: string
-  resourceGroupName: string
-  managerName: string
+# --properties shape: {accessControlRecords: list<string>, dataPolicy: "Invalid"|"Local"|"Tiered"|"Cloud", description?: string, diskStatus: "Online"|"Offline", monitoringStatus: "Enabled"|"Disabled", provisionedCapacityInBytes: int}
+export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-iscsiservers-disks create-iscsi-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  manager_name: string
+  device_name: string
+  iscsi_server_name: string
+  disk_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1859,33 +1929,34 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version
-  properties: record # The iSCSI disk properties. — shape: {accessControlRecords: list, dataPolicy: "Invalid"|"Local"|"Tiered"|"Cloud", description?: string, diskStatus: "Online"|"Offline", monitoringStatus: "Enabled"|"Disabled", provisionedCapacityInBytes: int}
+  properties: record # The iSCSI disk properties. — shape: {accessControlRecords: list<string>, dataPolicy: "Invalid"|"Local"|"Tiered"|"Cloud", description?: string, diskStatus: "Online"|"Offline", monitoringStatus: "Enabled"|"Disabled", provisionedCapacityInBytes: int}
 ]: any -> record<properties: record<accessControlRecords: list<string>, dataPolicy: string, description: string, diskStatus: string, localUsedCapacityInBytes: int, monitoringStatus: string, provisionedCapacityInBytes: int, usedCapacityInBytes: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.StorSimple/managers/($managerName)/devices/($deviceName)/iscsiservers/($iscsiServerName)/disks/($diskName)" $qp)
-  let body = {properties: $properties} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), manager_name: (encode-path-segment $manager_name), device_name: (encode-path-segment $device_name), iscsi_server_name: (encode-path-segment $iscsi_server_name), disk_name: (encode-path-segment $disk_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.StorSimple/managers/{manager_name}/devices/{device_name}/iscsiservers/{iscsi_server_name}/disks/{disk_name}") $qp)
+  let req_body = {"properties": $properties} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Gets the iSCSI disk metrics
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/devices/{deviceName}/iscsiservers/{iscsiServerName}/disks/{diskName}/metrics
 # operationId: IscsiDisks_ListMetrics
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-iscsiservers-disks-metrics ListMetrics" [
-  deviceName: string
-  iscsiServerName: string
-  diskName: string
-  subscriptionId: string
-  resourceGroupName: string
-  managerName: string
+export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-iscsiservers-disks-metrics list-iscsi" [
+  subscription_id: string
+  resource_group_name: string
+  manager_name: string
+  device_name: string
+  iscsi_server_name: string
+  disk_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1893,6 +1964,7 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version
   --filter: string # OData Filter options
@@ -1900,23 +1972,23 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.StorSimple/managers/($managerName)/devices/($deviceName)/iscsiservers/($iscsiServerName)/disks/($diskName)/metrics" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), manager_name: (encode-path-segment $manager_name), device_name: (encode-path-segment $device_name), iscsi_server_name: (encode-path-segment $iscsi_server_name), disk_name: (encode-path-segment $disk_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.StorSimple/managers/{manager_name}/devices/{device_name}/iscsiservers/{iscsi_server_name}/disks/{disk_name}/metrics") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Retrieves metric definitions for all metric aggregated at the iSCSI disk.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/devices/{deviceName}/iscsiservers/{iscsiServerName}/disks/{diskName}/metricsDefinitions
 # operationId: IscsiDisks_ListMetricDefinition
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-iscsiservers-disks-metrics-definitions ListMetricDefinition" [
-  deviceName: string
-  iscsiServerName: string
-  diskName: string
-  subscriptionId: string
-  resourceGroupName: string
-  managerName: string
+export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-iscsiservers-disks-metrics-definitions list-iscsi" [
+  subscription_id: string
+  resource_group_name: string
+  manager_name: string
+  device_name: string
+  iscsi_server_name: string
+  disk_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1924,28 +1996,29 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version
 ]: nothing -> record<value: table<dimensions: list, metricAvailabilities: list, name: record, primaryAggregationType: string, resourceId: string, type: string, unit: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.StorSimple/managers/($managerName)/devices/($deviceName)/iscsiservers/($iscsiServerName)/disks/($diskName)/metricsDefinitions" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), manager_name: (encode-path-segment $manager_name), device_name: (encode-path-segment $device_name), iscsi_server_name: (encode-path-segment $iscsi_server_name), disk_name: (encode-path-segment $disk_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.StorSimple/managers/{manager_name}/devices/{device_name}/iscsiservers/{iscsi_server_name}/disks/{disk_name}/metricsDefinitions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Gets the iSCSI server metrics
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/devices/{deviceName}/iscsiservers/{iscsiServerName}/metrics
 # operationId: IscsiServers_ListMetrics
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-iscsiservers-metrics ListMetrics" [
-  deviceName: string
-  iscsiServerName: string
-  subscriptionId: string
-  resourceGroupName: string
-  managerName: string
+export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-iscsiservers-metrics list-iscsi-servers" [
+  subscription_id: string
+  resource_group_name: string
+  manager_name: string
+  device_name: string
+  iscsi_server_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1953,6 +2026,7 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version
   --filter: string # OData Filter options
@@ -1960,22 +2034,22 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.StorSimple/managers/($managerName)/devices/($deviceName)/iscsiservers/($iscsiServerName)/metrics" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), manager_name: (encode-path-segment $manager_name), device_name: (encode-path-segment $device_name), iscsi_server_name: (encode-path-segment $iscsi_server_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.StorSimple/managers/{manager_name}/devices/{device_name}/iscsiservers/{iscsi_server_name}/metrics") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Retrieves metric definitions for all metrics aggregated at iSCSI server.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/devices/{deviceName}/iscsiservers/{iscsiServerName}/metricsDefinitions
 # operationId: IscsiServers_ListMetricDefinition
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-iscsiservers-metrics-definitions ListMetricDefinition" [
-  deviceName: string
-  iscsiServerName: string
-  subscriptionId: string
-  resourceGroupName: string
-  managerName: string
+export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-iscsiservers-metrics-definitions list-iscsi-servers" [
+  subscription_id: string
+  resource_group_name: string
+  manager_name: string
+  device_name: string
+  iscsi_server_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1983,27 +2057,28 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version
 ]: nothing -> record<value: table<dimensions: list, metricAvailabilities: list, name: record, primaryAggregationType: string, resourceId: string, type: string, unit: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.StorSimple/managers/($managerName)/devices/($deviceName)/iscsiservers/($iscsiServerName)/metricsDefinitions" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), manager_name: (encode-path-segment $manager_name), device_name: (encode-path-segment $device_name), iscsi_server_name: (encode-path-segment $iscsi_server_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.StorSimple/managers/{manager_name}/devices/{device_name}/iscsiservers/{iscsi_server_name}/metricsDefinitions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Retrieves all the jobs in a device.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/devices/{deviceName}/jobs
 # operationId: Jobs_ListByDevice
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-jobs ListByDevice" [
-  deviceName: string
-  subscriptionId: string
-  resourceGroupName: string
-  managerName: string
+export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-jobs list" [
+  subscription_id: string
+  resource_group_name: string
+  manager_name: string
+  device_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2011,6 +2086,7 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version
   --filter: string # OData Filter options
@@ -2018,22 +2094,22 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.StorSimple/managers/($managerName)/devices/($deviceName)/jobs" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), manager_name: (encode-path-segment $manager_name), device_name: (encode-path-segment $device_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.StorSimple/managers/{manager_name}/devices/{device_name}/jobs") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Returns the properties of the specified job name.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/devices/{deviceName}/jobs/{jobName}
 # operationId: Jobs_Get
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-jobs Get" [
-  deviceName: string
-  jobName: string
-  subscriptionId: string
-  resourceGroupName: string
-  managerName: string
+export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-jobs get" [
+  subscription_id: string
+  resource_group_name: string
+  manager_name: string
+  device_name: string
+  job_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2041,27 +2117,28 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version
 ]: nothing -> record<endTime: string, error: record<code: string, errorDetails: list<record>, message: string>, percentComplete: int, properties: record<backupPointInTime: string, deviceId: string, downloadProgress: record<downloadPhase: string, numberOfUpdatesDownloaded: int, numberOfUpdatesToDownload: int, percentComplete: int, totalBytesDownloaded: float, totalBytesToDownload: float>, entityId: string, entityType: string, installProgress: record<numberOfUpdatesInstalled: int, numberOfUpdatesToInstall: int, percentComplete: int>, isCancellable: bool, jobStages: list<record>, jobType: string, sourceDeviceId: string, stats: record<completedWorkItemCount: int, estimatedTimeRemaining: int, totalWorkItemCount: int>, targetId: string, targetType: string>, startTime: string, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.StorSimple/managers/($managerName)/devices/($deviceName)/jobs/($jobName)" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), manager_name: (encode-path-segment $manager_name), device_name: (encode-path-segment $device_name), job_name: (encode-path-segment $job_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.StorSimple/managers/{manager_name}/devices/{device_name}/jobs/{job_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Retrieves the device metrics.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/devices/{deviceName}/metrics
 # operationId: Devices_ListMetrics
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-metrics ListMetrics" [
-  deviceName: string
-  subscriptionId: string
-  resourceGroupName: string
-  managerName: string
+export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-metrics list" [
+  subscription_id: string
+  resource_group_name: string
+  manager_name: string
+  device_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2069,6 +2146,7 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version
   --filter: string # OData Filter options
@@ -2076,21 +2154,21 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.StorSimple/managers/($managerName)/devices/($deviceName)/metrics" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), manager_name: (encode-path-segment $manager_name), device_name: (encode-path-segment $device_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.StorSimple/managers/{manager_name}/devices/{device_name}/metrics") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Retrieves metric definition of all metrics aggregated at device.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/devices/{deviceName}/metricsDefinitions
 # operationId: Devices_ListMetricDefinition
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-metrics-definitions ListMetricDefinition" [
-  deviceName: string
-  subscriptionId: string
-  resourceGroupName: string
-  managerName: string
+export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-metrics-definitions list" [
+  subscription_id: string
+  resource_group_name: string
+  manager_name: string
+  device_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2098,27 +2176,28 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version
 ]: nothing -> record<value: table<dimensions: list, metricAvailabilities: list, name: record, primaryAggregationType: string, resourceId: string, type: string, unit: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.StorSimple/managers/($managerName)/devices/($deviceName)/metricsDefinitions" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), manager_name: (encode-path-segment $manager_name), device_name: (encode-path-segment $device_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.StorSimple/managers/{manager_name}/devices/{device_name}/metricsDefinitions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Returns the network settings of the specified device name.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/devices/{deviceName}/networkSettings/default
 # operationId: Devices_GetNetworkSettings
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-network-settings-default GetNetworkSettings" [
-  deviceName: string
-  subscriptionId: string
-  resourceGroupName: string
-  managerName: string
+export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-network-settings-default get" [
+  subscription_id: string
+  resource_group_name: string
+  manager_name: string
+  device_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2126,27 +2205,28 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version
 ]: nothing -> record<properties: record<nodeNetworks: list<record>, primaryDnsServer: string, secondaryDnsServer: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.StorSimple/managers/($managerName)/devices/($deviceName)/networkSettings/default" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), manager_name: (encode-path-segment $manager_name), device_name: (encode-path-segment $device_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.StorSimple/managers/{manager_name}/devices/{device_name}/networkSettings/default") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Scans for updates on the device.
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/devices/{deviceName}/scanForUpdates
 # operationId: Devices_ScanForUpdates
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-scan-for-updates ScanForUpdates" [
-  deviceName: string
-  subscriptionId: string
-  resourceGroupName: string
-  managerName: string
+export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-scan-for-updates create" [
+  subscription_id: string
+  resource_group_name: string
+  manager_name: string
+  device_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2154,16 +2234,17 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version
 ]: nothing -> record<errorCode: string, message: record<language: string, value: string>, values: table<key: string, value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.StorSimple/managers/($managerName)/devices/($deviceName)/scanForUpdates" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), manager_name: (encode-path-segment $manager_name), device_name: (encode-path-segment $device_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.StorSimple/managers/{manager_name}/devices/{device_name}/scanForUpdates") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Creates or updates the security settings.
@@ -2171,11 +2252,11 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/devices/{deviceName}/securitySettings/default/update
 # operationId: Devices_CreateOrUpdateSecuritySettings
 # --properties shape: {deviceAdminPassword: record}
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-security-settings-default-update CreateOrUpdateSecuritySettings" [
-  deviceName: string
-  subscriptionId: string
-  resourceGroupName: string
-  managerName: string
+export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-security-settings-default-update create-or" [
+  subscription_id: string
+  resource_group_name: string
+  manager_name: string
+  device_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2183,6 +2264,7 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version
   properties: record # The properties of SecuritySettings — shape: {deviceAdminPassword: record}
@@ -2191,23 +2273,23 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.StorSimple/managers/($managerName)/devices/($deviceName)/securitySettings/default/update" $qp)
-  let body = {properties: $properties} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), manager_name: (encode-path-segment $manager_name), device_name: (encode-path-segment $device_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.StorSimple/managers/{manager_name}/devices/{device_name}/securitySettings/default/update") $qp)
+  let req_body = {"properties": $properties} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Sends a test alert email.
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/devices/{deviceName}/sendTestAlertEmail
 # operationId: Alerts_SendTestEmail
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-send-test-alert-email SendTestEmail" [
-  deviceName: string
-  subscriptionId: string
-  resourceGroupName: string
-  managerName: string
+export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-send-test-alert-email send" [
+  subscription_id: string
+  resource_group_name: string
+  manager_name: string
+  device_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2215,31 +2297,32 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version
-  emailList: list # List of emails to send the test alerts
+  email_list: list<string> # List of emails to send the test alerts
 ]: any -> record<errorCode: string, message: record<language: string, value: string>, values: table<key: string, value: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.StorSimple/managers/($managerName)/devices/($deviceName)/sendTestAlertEmail" $qp)
-  let body = {emailList: $emailList} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), manager_name: (encode-path-segment $manager_name), device_name: (encode-path-segment $device_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.StorSimple/managers/{manager_name}/devices/{device_name}/sendTestAlertEmail") $qp)
+  let req_body = {"emailList": $email_list} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Retrieves all the file shares in a device.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/devices/{deviceName}/shares
 # operationId: FileShares_ListByDevice
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-shares ListByDevice" [
-  deviceName: string
-  subscriptionId: string
-  resourceGroupName: string
-  managerName: string
+export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-shares list-file" [
+  subscription_id: string
+  resource_group_name: string
+  manager_name: string
+  device_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2247,27 +2330,28 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version
 ]: nothing -> record<value: table<properties: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.StorSimple/managers/($managerName)/devices/($deviceName)/shares" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), manager_name: (encode-path-segment $manager_name), device_name: (encode-path-segment $device_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.StorSimple/managers/{manager_name}/devices/{device_name}/shares") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Returns the time settings of the specified device name.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/devices/{deviceName}/timeSettings/default
 # operationId: Devices_GetTimeSettings
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-time-settings-default GetTimeSettings" [
-  deviceName: string
-  subscriptionId: string
-  resourceGroupName: string
-  managerName: string
+export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-time-settings-default get" [
+  subscription_id: string
+  resource_group_name: string
+  manager_name: string
+  device_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2275,27 +2359,28 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version
 ]: nothing -> record<properties: record<primaryTimeServer: string, secondaryTimeServer: string, timeZone: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.StorSimple/managers/($managerName)/devices/($deviceName)/timeSettings/default" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), manager_name: (encode-path-segment $manager_name), device_name: (encode-path-segment $device_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.StorSimple/managers/{manager_name}/devices/{device_name}/timeSettings/default") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Returns the update summary of the specified device name.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/devices/{deviceName}/updateSummary/default
 # operationId: Devices_GetUpdateSummary
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-update-summary-default GetUpdateSummary" [
-  deviceName: string
-  subscriptionId: string
-  resourceGroupName: string
-  managerName: string
+export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-update-summary-default get" [
+  subscription_id: string
+  resource_group_name: string
+  manager_name: string
+  device_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2303,26 +2388,27 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version
 ]: nothing -> record<properties: record<deviceLastScannedTime: string, deviceVersion: string, inProgressDownloadJobId: string, inProgressDownloadJobStartedTime: string, inProgressInstallJobId: string, inProgressInstallJobStartedTime: string, inProgressScanStartedTime: string, lastCompletedDownloadJobTime: string, lastCompletedInstallJobTime: string, lastCompletedScanTime: string, rebootRequiredForInstall: bool, regularUpdatesAvailable: bool, status: string, totalItemsPendingForDownload: int, totalItemsPendingForInstall: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.StorSimple/managers/($managerName)/devices/($deviceName)/updateSummary/default" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), manager_name: (encode-path-segment $manager_name), device_name: (encode-path-segment $device_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.StorSimple/managers/{manager_name}/devices/{device_name}/updateSummary/default") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Returns the encryption settings of the manager.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/encryptionSettings/default
 # operationId: Managers_GetEncryptionSettings
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-encryption-settings-default GetEncryptionSettings" [
-  subscriptionId: string
-  resourceGroupName: string
-  managerName: string
+export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-encryption-settings-default get" [
+  subscription_id: string
+  resource_group_name: string
+  manager_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2330,26 +2416,27 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version
 ]: nothing -> record<properties: record<encryptionStatus: string, keyRolloverStatus: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.StorSimple/managers/($managerName)/encryptionSettings/default" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), manager_name: (encode-path-segment $manager_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.StorSimple/managers/{manager_name}/encryptionSettings/default") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Deletes the extended info of the manager.
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/extendedInformation/vaultExtendedInfo
 # operationId: Managers_DeleteExtendedInfo
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-extended-information-vault-extended-info DeleteExtendedInfo" [
-  subscriptionId: string
-  resourceGroupName: string
-  managerName: string
+export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-extended-information-vault-extended-info delete" [
+  subscription_id: string
+  resource_group_name: string
+  manager_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2357,26 +2444,27 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version
 ]: nothing -> record<errorCode: string, message: record<language: string, value: string>, values: table<key: string, value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.StorSimple/managers/($managerName)/extendedInformation/vaultExtendedInfo" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), manager_name: (encode-path-segment $manager_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.StorSimple/managers/{manager_name}/extendedInformation/vaultExtendedInfo") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Returns the extended information of the specified manager name.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/extendedInformation/vaultExtendedInfo
 # operationId: Managers_GetExtendedInfo
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-extended-information-vault-extended-info GetExtendedInfo" [
-  subscriptionId: string
-  resourceGroupName: string
-  managerName: string
+export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-extended-information-vault-extended-info get" [
+  subscription_id: string
+  resource_group_name: string
+  manager_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2384,16 +2472,17 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version
 ]: nothing -> record<etag: string, properties: record<algorithm: string, encryptionKey: string, encryptionKeyThumbprint: string, integrityKey: string, portalCertificateThumbprint: string, version: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.StorSimple/managers/($managerName)/extendedInformation/vaultExtendedInfo" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), manager_name: (encode-path-segment $manager_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.StorSimple/managers/{manager_name}/extendedInformation/vaultExtendedInfo") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Updates the extended info of the manager.
@@ -2401,10 +2490,10 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/extendedInformation/vaultExtendedInfo
 # operationId: Managers_UpdateExtendedInfo
 # --properties shape: {algorithm: string, encryptionKey?: string, encryptionKeyThumbprint?: string, integrityKey: string, portalCertificateThumbprint?: string, version?: string}
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-extended-information-vault-extended-info UpdateExtendedInfo" [
-  subscriptionId: string
-  resourceGroupName: string
-  managerName: string
+export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-extended-information-vault-extended-info update" [
+  subscription_id: string
+  resource_group_name: string
+  manager_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2412,9 +2501,10 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version
-  --If-Match: string # Pass the ETag of ExtendedInfo fetched from GET call
+  --if-match: string # Pass the ETag of ExtendedInfo fetched from GET call
   --etag: string # ETag of the Resource
   properties: record # Properties of the ManagerExtendedInfo — shape: {algorithm: string, encryptionKey?: string, encryptionKeyThumbprint?: string, integrityKey: string, portalCertificateThumbprint?: string, version?: string}
 ]: any -> record<etag: string, properties: record<algorithm: string, encryptionKey: string, encryptionKeyThumbprint: string, integrityKey: string, portalCertificateThumbprint: string, version: string>> {
@@ -2422,14 +2512,14 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.StorSimple/managers/($managerName)/extendedInformation/vaultExtendedInfo" $qp)
-  let body = {etag: $etag, properties: $properties} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"If-Match": $If_Match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), manager_name: (encode-path-segment $manager_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.StorSimple/managers/{manager_name}/extendedInformation/vaultExtendedInfo") $qp)
+  let req_body = {"etag": $etag, "properties": $properties} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"If-Match": $if_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Creates the extended info of the manager.
@@ -2437,10 +2527,10 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/extendedInformation/vaultExtendedInfo
 # operationId: Managers_CreateExtendedInfo
 # --properties shape: {algorithm: string, encryptionKey?: string, encryptionKeyThumbprint?: string, integrityKey: string, portalCertificateThumbprint?: string, version?: string}
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-extended-information-vault-extended-info CreateExtendedInfo" [
-  subscriptionId: string
-  resourceGroupName: string
-  managerName: string
+export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-extended-information-vault-extended-info create" [
+  subscription_id: string
+  resource_group_name: string
+  manager_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2448,6 +2538,7 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version
   --etag: string # ETag of the Resource
@@ -2457,22 +2548,22 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.StorSimple/managers/($managerName)/extendedInformation/vaultExtendedInfo" $qp)
-  let body = {etag: $etag, properties: $properties} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), manager_name: (encode-path-segment $manager_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.StorSimple/managers/{manager_name}/extendedInformation/vaultExtendedInfo") $qp)
+  let req_body = {"etag": $etag, "properties": $properties} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Retrieves all the file servers in a manager.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/fileservers
 # operationId: FileServers_ListByManager
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-fileservers ListByManager" [
-  subscriptionId: string
-  resourceGroupName: string
-  managerName: string
+export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-fileservers list-file-servers" [
+  subscription_id: string
+  resource_group_name: string
+  manager_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2480,26 +2571,27 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version
 ]: nothing -> record<value: table<properties: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.StorSimple/managers/($managerName)/fileservers" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), manager_name: (encode-path-segment $manager_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.StorSimple/managers/{manager_name}/fileservers") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Returns the symmetric encryption key of the manager.
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/getEncryptionKey
 # operationId: Managers_GetEncryptionKey
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-get-encryption-key GetEncryptionKey" [
-  subscriptionId: string
-  resourceGroupName: string
-  managerName: string
+export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-get-encryption-key get" [
+  subscription_id: string
+  resource_group_name: string
+  manager_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2507,26 +2599,27 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version
 ]: nothing -> record<encryptionAlgorithm: string, value: string, valueCertificateThumbprint: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.StorSimple/managers/($managerName)/getEncryptionKey" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), manager_name: (encode-path-segment $manager_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.StorSimple/managers/{manager_name}/getEncryptionKey") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Retrieves all the iSCSI servers in a manager.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/iscsiservers
 # operationId: IscsiServers_ListByManager
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-iscsiservers ListByManager" [
-  subscriptionId: string
-  resourceGroupName: string
-  managerName: string
+export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-iscsiservers list-iscsi-servers" [
+  subscription_id: string
+  resource_group_name: string
+  manager_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2534,26 +2627,27 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version
 ]: nothing -> record<value: table<properties: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.StorSimple/managers/($managerName)/iscsiservers" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), manager_name: (encode-path-segment $manager_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.StorSimple/managers/{manager_name}/iscsiservers") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Retrieves all the jobs in a manager.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/jobs
 # operationId: Jobs_ListByManager
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-jobs ListByManager" [
-  subscriptionId: string
-  resourceGroupName: string
-  managerName: string
+export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-jobs list" [
+  subscription_id: string
+  resource_group_name: string
+  manager_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2561,6 +2655,7 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version
   --filter: string # OData Filter options
@@ -2568,20 +2663,20 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.StorSimple/managers/($managerName)/jobs" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), manager_name: (encode-path-segment $manager_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.StorSimple/managers/{manager_name}/jobs") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
-# Gets the  manager metrics
+# Gets the manager metrics
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/metrics
 # operationId: Managers_ListMetrics
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-metrics ListMetrics" [
-  subscriptionId: string
-  resourceGroupName: string
-  managerName: string
+export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-metrics list" [
+  subscription_id: string
+  resource_group_name: string
+  manager_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2589,6 +2684,7 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version
   --filter: string # OData Filter options
@@ -2596,20 +2692,20 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.StorSimple/managers/($managerName)/metrics" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), manager_name: (encode-path-segment $manager_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.StorSimple/managers/{manager_name}/metrics") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Retrieves metric definition of all metrics aggregated at manager.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/metricsDefinitions
 # operationId: Managers_ListMetricDefinition
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-metrics-definitions ListMetricDefinition" [
-  subscriptionId: string
-  resourceGroupName: string
-  managerName: string
+export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-metrics-definitions list" [
+  subscription_id: string
+  resource_group_name: string
+  manager_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2617,26 +2713,27 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version
 ]: nothing -> record<value: table<dimensions: list, metricAvailabilities: list, name: record, primaryAggregationType: string, resourceId: string, type: string, unit: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.StorSimple/managers/($managerName)/metricsDefinitions" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), manager_name: (encode-path-segment $manager_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.StorSimple/managers/{manager_name}/metricsDefinitions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Retrieves all the storage account credentials in a manager.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/storageAccountCredentials
 # operationId: StorageAccountCredentials_ListByManager
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-storage-account-credentials ListByManager" [
-  subscriptionId: string
-  resourceGroupName: string
-  managerName: string
+export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-storage-account-credentials list" [
+  subscription_id: string
+  resource_group_name: string
+  manager_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2644,27 +2741,28 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version
 ]: nothing -> record<value: table<properties: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.StorSimple/managers/($managerName)/storageAccountCredentials" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), manager_name: (encode-path-segment $manager_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.StorSimple/managers/{manager_name}/storageAccountCredentials") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Deletes the storage account credential
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/storageAccountCredentials/{credentialName}
 # operationId: StorageAccountCredentials_Delete
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-storage-account-credentials Delete" [
-  credentialName: string
-  subscriptionId: string
-  resourceGroupName: string
-  managerName: string
+export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-storage-account-credentials delete" [
+  subscription_id: string
+  resource_group_name: string
+  manager_name: string
+  credential_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2672,27 +2770,28 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version
 ]: nothing -> record<errorCode: string, message: record<language: string, value: string>, values: table<key: string, value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.StorSimple/managers/($managerName)/storageAccountCredentials/($credentialName)" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), manager_name: (encode-path-segment $manager_name), credential_name: (encode-path-segment $credential_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.StorSimple/managers/{manager_name}/storageAccountCredentials/{credential_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Returns the properties of the specified storage account credential name.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/storageAccountCredentials/{credentialName}
 # operationId: StorageAccountCredentials_Get
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-storage-account-credentials Get" [
-  credentialName: string
-  subscriptionId: string
-  resourceGroupName: string
-  managerName: string
+export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-storage-account-credentials get" [
+  subscription_id: string
+  resource_group_name: string
+  manager_name: string
+  credential_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2700,16 +2799,17 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version
 ]: nothing -> record<properties: record<accessKey: record<encryptionAlgorithm: string, encryptionCertificateThumbprint: string, value: string>, cloudType: string, enableSSL: string, endPoint: string, location: string, login: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.StorSimple/managers/($managerName)/storageAccountCredentials/($credentialName)" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), manager_name: (encode-path-segment $manager_name), credential_name: (encode-path-segment $credential_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.StorSimple/managers/{manager_name}/storageAccountCredentials/{credential_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Creates or updates the storage account credential
@@ -2717,11 +2817,11 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/storageAccountCredentials/{credentialName}
 # operationId: StorageAccountCredentials_CreateOrUpdate
 # --properties shape: {accessKey?: record, cloudType: "Azure"|"S3"|"S3_RRS"|"OpenStack"|"HP", enableSSL: "Enabled"|"Disabled", endPoint: string, location?: string, login: string}
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-storage-account-credentials CreateOrUpdate" [
-  credentialName: string
-  subscriptionId: string
-  resourceGroupName: string
-  managerName: string
+export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-storage-account-credentials create-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  manager_name: string
+  credential_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2729,6 +2829,7 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version
   properties: record # Storage account properties — shape: {accessKey?: record, cloudType: "Azure"|"S3"|"S3_RRS"|"OpenStack"|"HP", enableSSL: "Enabled"|"Disabled", endPoint: string, location?: string, login: string}
@@ -2737,22 +2838,22 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.StorSimple/managers/($managerName)/storageAccountCredentials/($credentialName)" $qp)
-  let body = {properties: $properties} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), manager_name: (encode-path-segment $manager_name), credential_name: (encode-path-segment $credential_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.StorSimple/managers/{manager_name}/storageAccountCredentials/{credential_name}") $qp)
+  let req_body = {"properties": $properties} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Retrieves all the storage domains in a manager.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/storageDomains
 # operationId: StorageDomains_ListByManager
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-storage-domains ListByManager" [
-  subscriptionId: string
-  resourceGroupName: string
-  managerName: string
+export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-storage-domains list" [
+  subscription_id: string
+  resource_group_name: string
+  manager_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2760,27 +2861,28 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version
 ]: nothing -> record<value: table<properties: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.StorSimple/managers/($managerName)/storageDomains" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), manager_name: (encode-path-segment $manager_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.StorSimple/managers/{manager_name}/storageDomains") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Deletes the storage domain.
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/storageDomains/{storageDomainName}
 # operationId: StorageDomains_Delete
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-storage-domains Delete" [
-  storageDomainName: string
-  subscriptionId: string
-  resourceGroupName: string
-  managerName: string
+export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-storage-domains delete" [
+  subscription_id: string
+  resource_group_name: string
+  manager_name: string
+  storage_domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2788,27 +2890,28 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version
 ]: nothing -> record<errorCode: string, message: record<language: string, value: string>, values: table<key: string, value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.StorSimple/managers/($managerName)/storageDomains/($storageDomainName)" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), manager_name: (encode-path-segment $manager_name), storage_domain_name: (encode-path-segment $storage_domain_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.StorSimple/managers/{manager_name}/storageDomains/{storage_domain_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Returns the properties of the specified storage domain name.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/storageDomains/{storageDomainName}
 # operationId: StorageDomains_Get
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-storage-domains Get" [
-  storageDomainName: string
-  subscriptionId: string
-  resourceGroupName: string
-  managerName: string
+export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-storage-domains get" [
+  subscription_id: string
+  resource_group_name: string
+  manager_name: string
+  storage_domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2816,28 +2919,29 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version
 ]: nothing -> record<properties: record<encryptionKey: record<encryptionAlgorithm: string, encryptionCertificateThumbprint: string, value: string>, encryptionStatus: string, storageAccountCredentialIds: list<string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.StorSimple/managers/($managerName)/storageDomains/($storageDomainName)" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), manager_name: (encode-path-segment $manager_name), storage_domain_name: (encode-path-segment $storage_domain_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.StorSimple/managers/{manager_name}/storageDomains/{storage_domain_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Creates or updates the storage domain.
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/storageDomains/{storageDomainName}
 # operationId: StorageDomains_CreateOrUpdate
-# --properties shape: {encryptionKey?: record, encryptionStatus: "Enabled"|"Disabled", storageAccountCredentialIds: list}
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-storage-domains CreateOrUpdate" [
-  storageDomainName: string
-  subscriptionId: string
-  resourceGroupName: string
-  managerName: string
+# --properties shape: {encryptionKey?: record, encryptionStatus: "Enabled"|"Disabled", storageAccountCredentialIds: list<string>}
+export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-storage-domains create-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  manager_name: string
+  storage_domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2845,18 +2949,19 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version
-  properties: record # The storage domain properties. — shape: {encryptionKey?: record, encryptionStatus: "Enabled"|"Disabled", storageAccountCredentialIds: list}
+  properties: record # The storage domain properties. — shape: {encryptionKey?: record, encryptionStatus: "Enabled"|"Disabled", storageAccountCredentialIds: list<string>}
 ]: any -> record<properties: record<encryptionKey: record<encryptionAlgorithm: string, encryptionCertificateThumbprint: string, value: string>, encryptionStatus: string, storageAccountCredentialIds: list<string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.StorSimple/managers/($managerName)/storageDomains/($storageDomainName)" $qp)
-  let body = {properties: $properties} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), manager_name: (encode-path-segment $manager_name), storage_domain_name: (encode-path-segment $storage_domain_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.StorSimple/managers/{manager_name}/storageDomains/{storage_domain_name}") $qp)
+  let req_body = {"properties": $properties} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }

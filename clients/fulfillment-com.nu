@@ -19,21 +19,32 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 }
 
 # Serialize a single query parameter based on collection style
+# Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
+# ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = ($name | url encode)
+  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
-  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
-    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
-    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
+    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
+    _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
+}
+
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Build URL from base, path, and optional query string
@@ -45,7 +56,7 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
@@ -54,13 +65,13 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
     "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "put" => { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "patch" => { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
   if ($method in ["head" "options"]) { return $resp }
-  if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
+  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
 def base-url-completer [] { ["https://api.fulfillment.com/v2"] }
@@ -71,8 +82,8 @@ def integrator-completer [] { ["1ShoppingCart" "3dCart" "AdobeBC" "AmazonAU" "Am
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "accounting get-accounting" } } | get name | first)
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "accounting get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -96,7 +107,7 @@ export def commands []: nothing -> table {
 #
 # GET /accounting
 # operationId: get-accounting
-export def "accounting get-accounting" [
+export def "accounting get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -104,29 +115,30 @@ export def "accounting get-accounting" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fromDate: string # Orders invoice date. Date-time in ISO 8601 format for selecting orders after, or at, the specified time
-  --toDate: string # Orders invoice date. Date-time in ISO 8601 format for selecting orders before, or at, the specified time
+  --from-date: string # Orders invoice date. Date-time in ISO 8601 format for selecting orders after, or at, the specified time
+  --to-date: string # Orders invoice date. Date-time in ISO 8601 format for selecting orders before, or at, the specified time
   --page: int # A multiplier of the number of items (limit parameter) to skip before returning results (default: 1)
   --limit: int # The numbers of items to return (default: 80)
-  --warehouseIds: list # A CSV of warehouse id, '123' or '1,2,3'
-  --orderIds: list # A CSV of FDC order id, '123' or '1,2,3'
-  --hydrate: list # Adds additional information to the response, uses a CSV format for multiple values. (e.g. items)
+  --warehouse-ids: list<int> # A CSV of warehouse id, '123' or '1,2,3'
+  --order-ids: list<int> # A CSV of FDC order id, '123' or '1,2,3'
+  --hydrate: list<string> # Adds additional information to the response, uses a CSV format for multiple values. (e.g. items)
 ]: nothing -> record<data: table<fees: record, itemCount: int, items: list, merchant: record, order: record, warehouse: record>, meta: record<pagination: record<count: int, currentPage: int, total: int, totalPages: int>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fromDate" $fromDate "scalar") (serialize-qp "toDate" $toDate "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "warehouseIds" $warehouseIds "csv") (serialize-qp "orderIds" $orderIds "multi") (serialize-qp "hydrate" $hydrate "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "fromDate" $from_date "scalar") (serialize-qp "toDate" $to_date "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "warehouseIds" $warehouse_ids "csv") (serialize-qp "orderIds" $order_ids "multi") (serialize-qp "hydrate" $hydrate "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/accounting" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # List of Item Inventories
 #
 # GET /inventory
 # operationId: get-inventory
-export def "inventory get-inventory" [
+export def "inventory get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -134,20 +146,21 @@ export def "inventory get-inventory" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # A multiplier of the number of items (limit parameter) to skip before returning results (default: 1)
   --limit: int # The numbers of items to return (default: 80)
-  --merchantIds: list # A CSV of merchant id, '123' or '1,2,3'
-  --warehouseIds: list # A CSV of warehouse id, '123' or '1,2,3'
-  --externalSkuNames: list # A CSV of sku reference names, 'skuName1' or 'skuName1,skuName2,skuName3'
+  --merchant-ids: list<int> # A CSV of merchant id, '123' or '1,2,3'
+  --warehouse-ids: list<int> # A CSV of warehouse id, '123' or '1,2,3'
+  --external-sku-names: list<string> # A CSV of sku reference names, 'skuName1' or 'skuName1,skuName2,skuName3'
 ]: nothing -> record<data: table<item: record, merchant: record, quantity: record>, meta: record<pagination: record<count: int, currentPage: int, total: int, totalPages: int>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "merchantIds" $merchantIds "csv") (serialize-qp "warehouseIds" $warehouseIds "csv") (serialize-qp "externalSkuNames" $externalSkuNames "csv")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "merchantIds" $merchant_ids "csv") (serialize-qp "warehouseIds" $warehouse_ids "csv") (serialize-qp "externalSkuNames" $external_sku_names "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/inventory" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Generate an Access Token
@@ -155,7 +168,7 @@ export def "inventory get-inventory" [
 # POST /oauth/access_token
 # Docs: #section/Getting-Started/Perpetuating-Access — More Information on Refresh Tokens
 # operationId: post-oauth-access_token
-export def "oauth-access-token token" [
+export def "oauth-access-token create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -163,6 +176,7 @@ export def "oauth-access-token token" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> record<access_token: string, expires_in: int, refresh_token: string, token_type: string> {
@@ -170,17 +184,18 @@ export def "oauth-access-token token" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/oauth/access_token")
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # List of Orders
 #
 # GET /orders
 # operationId: get-orders
-export def "orders get-orders" [
+export def "orders list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -188,22 +203,23 @@ export def "orders get-orders" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fromDate: string # Date-time in ISO 8601 format for selecting orders after, or at, the specified time
-  --toDate: string # Date-time in ISO 8601 format for selecting orders before, or at, the specified time
-  --merchantIds: list # A CSV of merchant id, '123' or '1,2,3'
-  --warehouseIds: list # A CSV of warehouse id, '123' or '1,2,3'
+  --from-date: string # Date-time in ISO 8601 format for selecting orders after, or at, the specified time
+  --to-date: string # Date-time in ISO 8601 format for selecting orders before, or at, the specified time
+  --merchant-ids: list<int> # A CSV of merchant id, '123' or '1,2,3'
+  --warehouse-ids: list<int> # A CSV of warehouse id, '123' or '1,2,3'
   --page: int # A multiplier of the number of items (limit parameter) to skip before returning results (default: 1)
   --limit: int # The numbers of items to return (default: 80)
-  --hydrate: list # Adds additional information to the response, uses a CSV format for multiple values.'
+  --hydrate: list<string> # Adds additional information to the response, uses a CSV format for multiple values.'
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fromDate" $fromDate "scalar") (serialize-qp "toDate" $toDate "scalar") (serialize-qp "merchantIds" $merchantIds "csv") (serialize-qp "warehouseIds" $warehouseIds "csv") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "hydrate" $hydrate "csv")] | flatten | str join "&"
+  let qp = [(serialize-qp "fromDate" $from_date "scalar") (serialize-qp "toDate" $to_date "scalar") (serialize-qp "merchantIds" $merchant_ids "csv") (serialize-qp "warehouseIds" $warehouse_ids "csv") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "hydrate" $hydrate "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/orders" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # New Order
@@ -213,7 +229,7 @@ export def "orders get-orders" [
 # --items item shape: {declaredValue: string, quantity: int, sku: string}
 # --recipient shape: {address1: string, address2?: string, addressLocality: string, addressRegion: string, companyName?: string, country: string, email: string, firstName: string, lastName: string, phone: string, postalCode?: string}
 # --warehouse shape: {id?: int}
-export def "orders post-orders" [
+export def "orders create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -221,32 +237,33 @@ export def "orders post-orders" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --integrator: string@integrator-completer # Use of this property requires special permission and must be discussed with your account executive; values are restricted while custom values need to be accepted by your AE.
   items: list # item shape: {declaredValue: string, quantity: int, sku: string}
-  --merchantId: int # Necessary if you have a multitenancy account, otherwise we will associate the order with your account
-  merchantOrderId: string # Unique ID provided by the merchant
+  --merchant-id: int # Necessary if you have a multitenancy account, otherwise we will associate the order with your account
+  merchant_order_id: string # Unique ID provided by the merchant
   --notes: string
   recipient: record # shape: {address1: string, address2?: string, addressLocality: string, addressRegion: string, companyName?: string, country: string, email: string, firstName: string, lastName: string, phone: string, postalCode?: string}
-  shippingMethod: string # Custom for you, it will be mapped to an actual method within the OMS UI (e.g. Ground)
+  shipping_method: string # Custom for you, it will be mapped to an actual method within the OMS UI (e.g. Ground)
   --warehouse: record # We automatically select a warehouse based on inventory availability, requested carrier and delivery schedule, and carrier cost. You may however override this process. Because this is not recommended please inform your AE prior to using so they may enable this feature. — shape: {id?: int}
-]: any -> record<currentStatus: record<createdBy: any, date: string, id: int, reason: string, status: record<actionRequiredBy: record, code: string, detail: string, detailCode: string, id: int, isClosed: bool, name: string, reason: string, stage: record, state: record>>, departDate: string, dispatchDate: string, id: int, merchant: record<id: int, name: string>, merchantOrderId: string, merchantShippingMethod: string, originalConsignee: record<address1: string, address2: string, addressLocality: string, addressRegion: string, companyName: string, country: string, email: string, firstName: string, id: int, iso: record<id: int, iso2: string, name: string>, lastName: string, phone: string, postalCode: string, updatedAt: string, updatedBy: any>, parentOrder: record<id: int>, purchaseOrderNum: string, recordedOn: string, trackingNumbers: table<barcodeScanValue: string, carrier: record, value: string>, validatedConsignee: any, warehouse: record<id: int>> {
+]: any -> record<currentStatus: record<createdBy: record<id: int>, date: string, id: int, reason: string, status: record<actionRequiredBy: record, code: string, detail: string, detailCode: string, id: int, isClosed: bool, name: string, reason: string, stage: record, state: record>>, departDate: string, dispatchDate: string, id: int, merchant: record<id: int, name: string>, merchantOrderId: string, merchantShippingMethod: string, originalConsignee: record<address1: string, address2: string, addressLocality: string, addressRegion: string, companyName: string, country: string, email: string, firstName: string, id: int, iso: record<id: int, iso2: string, name: string>, lastName: string, phone: string, postalCode: string, updatedAt: string, updatedBy: record<id: int>>, parentOrder: record<id: int>, purchaseOrderNum: string, recordedOn: string, trackingNumbers: table<barcodeScanValue: string, carrier: record, value: string>, validatedConsignee: record<address1: string, address2: string, addressLocality: string, addressRegion: string, companyName: string, country: string, email: string, firstName: string, id: int, iso: record<id: int, iso2: string, name: string>, lastName: string, phone: string, postalCode: string, updatedAt: string, updatedBy: record<id: int>>, warehouse: record<id: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/orders")
-  let body = {integrator: $integrator, items: $items, merchantId: $merchantId, merchantOrderId: $merchantOrderId, notes: $notes, recipient: $recipient, shippingMethod: $shippingMethod, warehouse: $warehouse} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"integrator": $integrator, "items": $items, "merchantId": $merchant_id, "merchantOrderId": $merchant_order_id, "notes": $notes, "recipient": $recipient, "shippingMethod": $shipping_method, "warehouse": $warehouse} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Cancel an Order
 #
 # DELETE /orders/{id}
 # operationId: delete-orders-id
-export def "orders delete-orders-id" [
+export def "orders delete" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -255,14 +272,15 @@ export def "orders delete-orders-id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<currentStatus: record<createdBy: record<id: int>, date: string, id: int, reason: string, status: record<actionRequiredBy: record, code: string, detail: string, detailCode: string, id: int, isClosed: bool, name: string, reason: string, stage: record, state: record>>, departDate: string, dispatchDate: string, id: int, merchant: record<id: int, name: string>, merchantOrderId: string, merchantShippingMethod: string, originalConsignee: record<address1: string, address2: string, addressLocality: string, addressRegion: string, companyName: string, country: string, email: string, firstName: string, id: int, iso: record<id: int, iso2: string, name: string>, lastName: string, phone: string, postalCode: string, updatedAt: string, updatedBy: record<id: int>>, parentOrder: record<id: int>, purchaseOrderNum: string, recordedOn: string, trackingNumbers: table<barcodeScanValue: string, carrier: record, value: string>, validatedConsignee: record<address1: string, address2: string, addressLocality: string, addressRegion: string, companyName: string, country: string, email: string, firstName: string, id: int, iso: record<id: int, iso2: string, name: string>, lastName: string, phone: string, postalCode: string, updatedAt: string, updatedBy: record<id: int>>, warehouse: record<id: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/orders/($id)")
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/orders/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Order Details
@@ -278,24 +296,25 @@ export def "orders get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --merchantId: int # Providing your `merchantId` indicates the `id` is your `merchantOrderId`. Although it is not necessary to provide this it will speed up your results when using your `merchantOrderId` however it will slow your results when using the FDC provided `id`
-  --hydrate: list # Adds additional information to the response, uses a CSV format for multiple values.'
+  --merchant-id: int # Providing your `merchantId` indicates the `id` is your `merchantOrderId`. Although it is not necessary to provide this it will speed up your results when using your `merchantOrderId` however it will slow your results when using the FDC provided `id`
+  --hydrate: list<string> # Adds additional information to the response, uses a CSV format for multiple values.'
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "merchantId" $merchantId "scalar") (serialize-qp "hydrate" $hydrate "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/orders/($id)" $qp)
+  let qp = [(serialize-qp "merchantId" $merchant_id "scalar") (serialize-qp "hydrate" $hydrate "csv")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/orders/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Ship an Order
 #
 # PUT /orders/{id}/ship
 # operationId: put-orders-id-ship
-export def "orders-ship put-orders-id-ship" [
+export def "orders-ship update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -304,19 +323,20 @@ export def "orders-ship put-orders-id-ship" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  trackingNumber: string # Tracking number of package
-  --weightOverride: float # Override predicted weight of package (format: float)
-]: any -> any {
+  tracking_number: string # Tracking number of package
+  --weight-override: float # Override predicted weight of package (format: float)
+]: any -> record<currentStatus: record<createdBy: record<id: int>, date: string, id: int, reason: string, status: record<actionRequiredBy: record, code: string, detail: string, detailCode: string, id: int, isClosed: bool, name: string, reason: string, stage: record, state: record>>, departDate: string, dispatchDate: string, id: int, merchant: record<id: int, name: string>, merchantOrderId: string, merchantShippingMethod: string, originalConsignee: record<address1: string, address2: string, addressLocality: string, addressRegion: string, companyName: string, country: string, email: string, firstName: string, id: int, iso: record<id: int, iso2: string, name: string>, lastName: string, phone: string, postalCode: string, updatedAt: string, updatedBy: record<id: int>>, parentOrder: record<id: int>, purchaseOrderNum: string, recordedOn: string, trackingNumbers: table<barcodeScanValue: string, carrier: record, value: string>, validatedConsignee: record<address1: string, address2: string, addressLocality: string, addressRegion: string, companyName: string, country: string, email: string, firstName: string, id: int, iso: record<id: int, iso2: string, name: string>, lastName: string, phone: string, postalCode: string, updatedAt: string, updatedBy: record<id: int>>, warehouse: record<id: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/orders/($id)/ship")
-  let body = {trackingNumber: $trackingNumber, weightOverride: $weightOverride} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/orders/{id}/ship"))
+  let req_body = {"trackingNumber": $tracking_number, "weightOverride": $weight_override} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Update Order Status
@@ -324,7 +344,7 @@ export def "orders-ship put-orders-id-ship" [
 # PUT /orders/{id}/status
 # operationId: put-orders-id-status
 # --status shape: {code: string}
-export def "orders-status put-orders-id-status" [
+export def "orders-status update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -333,26 +353,27 @@ export def "orders-status put-orders-id-status" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   reason: string # Human-readable description
   status: record # shape: {code: string}
-]: any -> any {
+]: any -> record<currentStatus: record<createdBy: record<id: int>, date: string, id: int, reason: string, status: record<actionRequiredBy: record, code: string, detail: string, detailCode: string, id: int, isClosed: bool, name: string, reason: string, stage: record, state: record>>, departDate: string, dispatchDate: string, id: int, merchant: record<id: int, name: string>, merchantOrderId: string, merchantShippingMethod: string, originalConsignee: record<address1: string, address2: string, addressLocality: string, addressRegion: string, companyName: string, country: string, email: string, firstName: string, id: int, iso: record<id: int, iso2: string, name: string>, lastName: string, phone: string, postalCode: string, updatedAt: string, updatedBy: record<id: int>>, parentOrder: record<id: int>, purchaseOrderNum: string, recordedOn: string, trackingNumbers: table<barcodeScanValue: string, carrier: record, value: string>, validatedConsignee: record<address1: string, address2: string, addressLocality: string, addressRegion: string, companyName: string, country: string, email: string, firstName: string, id: int, iso: record<id: int, iso2: string, name: string>, lastName: string, phone: string, postalCode: string, updatedAt: string, updatedBy: record<id: int>>, warehouse: record<id: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/orders/($id)/status")
-  let body = {reason: $reason, status: $status} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/orders/{id}/status"))
+  let req_body = {"reason": $reason, "status": $status} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # List Returns
 #
 # GET /returns
 # operationId: get-returns
-export def "returns get-returns" [
+export def "returns get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -360,19 +381,20 @@ export def "returns get-returns" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fromDate: string # Date-time in ISO 8601 format for selecting orders after, or at, the specified time
-  --toDate: string # Date-time in ISO 8601 format for selecting orders before, or at, the specified time
+  --from-date: string # Date-time in ISO 8601 format for selecting orders after, or at, the specified time
+  --to-date: string # Date-time in ISO 8601 format for selecting orders before, or at, the specified time
   --page: int # A multiplier of the number of items (limit parameter) to skip before returning results (default: 1)
   --limit: int # The numbers of items to return (default: 80)
-]: nothing -> record<data: table<comments: string, createdAt: string, createdBy: any, id: int, order: record, reason: record, returnedBy: string, rmaItems: list, rmaNumber: string, status: record, updatedAt: string, updatedBy: record>, meta: record<pagination: record<count: int, currentPage: int, total: int, totalPages: int>>> {
+]: nothing -> record<data: table<comments: string, createdAt: string, createdBy: record, id: int, order: record, reason: record, returnedBy: string, rmaItems: list, rmaNumber: string, status: record, updatedAt: string, updatedBy: record>, meta: record<pagination: record<count: int, currentPage: int, total: int, totalPages: int>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fromDate" $fromDate "scalar") (serialize-qp "toDate" $toDate "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fromDate" $from_date "scalar") (serialize-qp "toDate" $to_date "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/returns" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Inform us of an RMA
@@ -380,7 +402,8 @@ export def "returns get-returns" [
 # PUT /returns
 # operationId: put-returns
 # --items item shape: {quantityExpected: int, sku: string}
-export def "returns put-returns" [
+# --recipient shape: {address1: string, address2?: string, addressLocality: string, addressRegion: string, companyName?: string, country: string, email: string, firstName: string, lastName: string, phone: string, postalCode?: string}
+export def "returns update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -388,28 +411,29 @@ export def "returns put-returns" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   items: list # item shape: {quantityExpected: int, sku: string}
-  --merchantOrderId: string
-  recipient: any
-  rmaNumber: string
-]: any -> record<items: table<quantityExpected: int, sku: string>, merchantOrderId: string, recipient: record<address1: string, address2: string, addressLocality: string, addressRegion: string, companyName: string, country: string, email: string, firstName: string, id: int, iso: record<id: int, iso2: string, name: string>, lastName: string, phone: string, postalCode: string, updatedAt: string, updatedBy: any>, rmaNumber: string> {
+  --merchant-order-id: string
+  recipient: record # shape: {address1: string, address2?: string, addressLocality: string, addressRegion: string, companyName?: string, country: string, email: string, firstName: string, lastName: string, phone: string, postalCode?: string}
+  rma_number: string
+]: any -> record<items: table<quantityExpected: int, sku: string>, merchantOrderId: string, recipient: record<address1: string, address2: string, addressLocality: string, addressRegion: string, companyName: string, country: string, email: string, firstName: string, id: int, iso: record<id: int, iso2: string, name: string>, lastName: string, phone: string, postalCode: string, updatedAt: string, updatedBy: record<id: int>>, rmaNumber: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/returns")
-  let body = {items: $items, merchantOrderId: $merchantOrderId, recipient: $recipient, rmaNumber: $rmaNumber} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"items": $items, "merchantOrderId": $merchant_order_id, "recipient": $recipient, "rmaNumber": $rma_number} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Tracking
 #
 # GET /track
 # operationId: get-track
-export def "track get-track" [
+export def "track get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -417,23 +441,24 @@ export def "track get-track" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --trackingNumber: string
-]: nothing -> record<destination: any, fdcOrderId: int, firstCheckedDateTime: string, firstTransitEvent: string, lastCheckedDateTime: string, lastUpdatedDateTime: string, origin: record<bbox: list<any>, centerline: any, geometry: record<coordinates: any, type: string>, id: int, properties: record<name: string>, title: string, type: string>, status: string, statusCategoryCode: int, statusDateTime: string, statusMessage: string, trackedEvents: table<eventCategory: string, eventCategoryCode: int, eventDateTime: string, eventLocation: any, eventSource: string, eventStatus: string>, trackingNumber: record<barcodeScanValue: string, carrier: record<id: int>, value: string>> {
+  --tracking-number: string
+]: nothing -> record<destination: record<bbox: list<any>, centerline: record<coordinates: any, type: string>, geometry: record<coordinates: any, type: string>, id: int, properties: record<name: string>, title: string, type: string>, fdcOrderId: int, firstCheckedDateTime: string, firstTransitEvent: string, lastCheckedDateTime: string, lastUpdatedDateTime: string, origin: record<bbox: list<any>, centerline: record<coordinates: any, type: string>, geometry: record<coordinates: any, type: string>, id: int, properties: record<name: string>, title: string, type: string>, status: string, statusCategoryCode: int, statusDateTime: string, statusMessage: string, trackedEvents: table<eventCategory: string, eventCategoryCode: int, eventDateTime: string, eventLocation: record, eventSource: string, eventStatus: string>, trackingNumber: record<barcodeScanValue: string, carrier: record<id: int>, value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "trackingNumber" $trackingNumber "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "trackingNumber" $tracking_number "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/track" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # About Me
 #
 # GET /users/me
 # operationId: get-users-me
-export def "users-me get-users-me" [
+export def "users-me get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -441,12 +466,13 @@ export def "users-me get-users-me" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<apiKey: string, contactInfo: record<apiKey: string, contactInfo: any, createDate: string, deptLeader: bool, id: int, merchant: record<id: int>, name: string, status: bool, updatedAt: string, updatedBy: string, username: string>, createDate: string, deptLeader: bool, id: int, merchant: record<id: int>, name: string, status: bool, updatedAt: string, updatedBy: string, username: string> {
+]: nothing -> record<apiKey: string, contactInfo: record<apiKey: string, contactInfo: record<address1: string, address2: string, addressLocality: string, addressRegion: string, companyName: string, country: string, email: string, firstName: string, id: int, iso: record, lastName: string, phone: string, postalCode: string, updatedAt: string, updatedBy: record>, createDate: string, deptLeader: bool, id: int, merchant: record<id: int>, name: string, status: bool, updatedAt: string, updatedBy: string, username: string>, createDate: string, deptLeader: bool, id: int, merchant: record<id: int>, name: string, status: bool, updatedAt: string, updatedBy: string, username: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/users/me")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }

@@ -11,7 +11,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {headers: {}, query: ""} }
   match $scheme {
-    "query-api_key" => { {headers: {}, query: $"api_key=($token_val)"} }
+    "query-api_key" => { {headers: {}, query: $"(encode-path-segment "api_key")=(encode-path-segment $token_val)"} }
     "bearer" => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
     "none" => { {headers: {}, query: ""} }
     _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
@@ -19,21 +19,32 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 }
 
 # Serialize a single query parameter based on collection style
+# Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
+# ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = ($name | url encode)
+  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
-  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
-    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
-    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
+    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
+    _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
+}
+
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Build URL from base, path, and optional query string
@@ -45,7 +56,7 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
@@ -54,13 +65,13 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
     "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "put" => { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "patch" => { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
   if ($method in ["head" "options"]) { return $resp }
-  if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
+  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
 def base-url-completer [] { ["https://app.orbit.love/api/v1"] }
@@ -79,7 +90,7 @@ def activity-type-completer-1 [] { ["content" "custom" "discord" "discourse" "gi
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "user get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -111,6 +122,7 @@ export def "user get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -118,7 +130,7 @@ export def "user get" [
   let full_url = (build-url $base "/user")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get all workspaces for the current user
@@ -132,6 +144,7 @@ export def "workspaces list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -139,7 +152,7 @@ export def "workspaces list" [
   let full_url = (build-url $base "/workspaces")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get a workspace
@@ -154,16 +167,17 @@ export def "workspaces get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --include-orbit-level-counts: oneof<nothing, bool> # Include the number of members by Orbit Level in the attributes
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "include_orbit_level_counts" $include_orbit_level_counts "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/workspaces/($workspace_slug)" $qp)
+  let full_url = (build-url $base ({workspace_slug: (encode-path-segment $workspace_slug)} | format pattern "/workspaces/{workspace_slug}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # List activities for a workspace
@@ -179,6 +193,7 @@ export def "activities list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --affiliation: string@affiliation-completer
   --member-tags: string # The list of tags to filter against. Separate tags with `,` to do an intersection (AND), or with `|` to do a union (OR)
@@ -192,7 +207,7 @@ export def "activities list" [
   --cities: string # Comma separated list of cities. The union (OR) of cities is applied.
   --start-date: string # Filter activities after this date. Format: YYYY-MM-DD.
   --end-date: string # Filter activities before this date. Format: YYYY-MM-DD.
-  --relative: string # Relative timeframes. Format: this_<integer>_<period>, with period in [days, weeks, months, years]. For example, this_30_days.
+  --relative: string # Relative timeframes. Format: this__, with period in [days, weeks, months, years]. For example, this_30_days.
   --page: string
   --direction: string@direction-completer
   --items: string@items-completer
@@ -202,17 +217,17 @@ export def "activities list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "affiliation" $affiliation "scalar") (serialize-qp "member_tags" $member_tags "scalar") (serialize-qp "orbit" $orbit "scalar") (serialize-qp "activity_type" $activity_type "scalar") (serialize-qp "identity" $identity "scalar") (serialize-qp "company[]" $company "scalar") (serialize-qp "title[]" $title "scalar") (serialize-qp "regions[]" $regions "scalar") (serialize-qp "countries[]" $countries "scalar") (serialize-qp "cities[]" $cities "scalar") (serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar") (serialize-qp "relative" $relative "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "direction" $direction "scalar") (serialize-qp "items" $items "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "type" $type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($workspace_slug)/activities" $qp)
+  let full_url = (build-url $base ({workspace_slug: (encode-path-segment $workspace_slug)} | format pattern "/{workspace_slug}/activities") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Create a Custom or a Content activity for a new or existing member
 #
 # POST /{workspace_slug}/activities
 # --identity shape: {email?: string, name?: string, source: string, source_host?: string, uid?: string, url?: string, username?: string}
-export def "activities post" [
+export def "activities create" [
   workspace_slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -221,6 +236,7 @@ export def "activities post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --activity: any
   --identity: record # Represents an email address, a profile on networks like github and twitter, or a record in another system. — shape: {email?: string, name?: string, source: string, source_host?: string, uid?: string, url?: string, username?: string}
@@ -228,12 +244,12 @@ export def "activities post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($workspace_slug)/activities")
-  let body = {activity: $activity, identity: $identity} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({workspace_slug: (encode-path-segment $workspace_slug)} | format pattern "/{workspace_slug}/activities"))
+  let req_body = {"activity": $activity, "identity": $identity} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Get an activity in the workspace
@@ -249,14 +265,15 @@ export def "activities get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($workspace_slug)/activities/($id)")
+  let full_url = (build-url $base ({workspace_slug: (encode-path-segment $workspace_slug), id: (encode-path-segment $id)} | format pattern "/{workspace_slug}/activities/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # List all activity types for a workspace
@@ -271,14 +288,15 @@ export def "activity-types get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($workspace_slug)/activity_types")
+  let full_url = (build-url $base ({workspace_slug: (encode-path-segment $workspace_slug)} | format pattern "/{workspace_slug}/activity_types"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # List members in a workspace
@@ -294,6 +312,7 @@ export def "members list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --affiliation: string@affiliation-completer
   --member-tags: string # The list of tags to filter against. Separate tags with `,` to do an intersection (AND), or with `|` to do a union (OR)
@@ -307,7 +326,7 @@ export def "members list" [
   --cities: string # Comma separated list of cities. The union (OR) of cities is applied.
   --start-date: string # Filter activities after this date. Format: YYYY-MM-DD.
   --end-date: string # Filter activities before this date. Format: YYYY-MM-DD.
-  --relative: string # Relative timeframes. Format: this_<integer>_<period>, with period in [days, weeks, months, years]. For example, this_30_days.
+  --relative: string # Relative timeframes. Format: this__, with period in [days, weeks, months, years]. For example, this_30_days.
   --query: string
   --page: string
   --direction: string@direction-completer
@@ -320,10 +339,10 @@ export def "members list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "affiliation" $affiliation "scalar") (serialize-qp "member_tags" $member_tags "scalar") (serialize-qp "orbit" $orbit "scalar") (serialize-qp "activity_type" $activity_type "scalar") (serialize-qp "identity" $identity "scalar") (serialize-qp "company[]" $company "scalar") (serialize-qp "title[]" $title "scalar") (serialize-qp "regions[]" $regions "scalar") (serialize-qp "countries[]" $countries "scalar") (serialize-qp "cities[]" $cities "scalar") (serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar") (serialize-qp "relative" $relative "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "direction" $direction "scalar") (serialize-qp "items" $items "scalar") (serialize-qp "activities_count_min" $activities_count_min "scalar") (serialize-qp "activities_count_max" $activities_count_max "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "type" $type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($workspace_slug)/members" $qp)
+  let full_url = (build-url $base ({workspace_slug: (encode-path-segment $workspace_slug)} | format pattern "/{workspace_slug}/members") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Create or update a member
@@ -331,7 +350,7 @@ export def "members list" [
 # POST /{workspace_slug}/members
 # --identity shape: {email?: string, name?: string, source: string, source_host?: string, uid?: string, url?: string, username?: string}
 # --member shape: {bio?: string, birthday?: string, company?: string, devto?: string, email?: string, github?: string, linkedin?: string, location?: string, name?: string, pronouns?: string, shipping_address?: string, slug?: string, tag_list?: string, tags?: string, tags_to_add?: string, teammate?: bool, title?: string, tshirt?: string, twitter?: string, url?: string}
-export def "members post" [
+export def "members create" [
   workspace_slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -340,6 +359,7 @@ export def "members post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --identity: record # Represents an email address, a profile on networks like github and twitter, or a record in another system. — shape: {email?: string, name?: string, source: string, source_host?: string, uid?: string, url?: string, username?: string}
   --member: record # shape: {bio?: string, birthday?: string, company?: string, devto?: string, email?: string, github?: string, linkedin?: string, location?: string, name?: string, pronouns?: string, shipping_address?: string, slug?: string, tag_list?: string, tags?: string, tags_to_add?: string, teammate?: bool, title?: string, tshirt?: string, twitter?: string, url?: string}
@@ -347,12 +367,12 @@ export def "members post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($workspace_slug)/members")
-  let body = {identity: $identity, member: $member} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({workspace_slug: (encode-path-segment $workspace_slug)} | format pattern "/{workspace_slug}/members"))
+  let req_body = {"identity": $identity, "member": $member} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Find a member by an identity
@@ -367,21 +387,22 @@ export def "members-find get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --qp-source: string
   --source-host: string
   --uid: string
   --username: string
   --email: string
-  --github: string # Deprecated, please use source=github and username=<username> instead
+  --github: string # Deprecated, please use source=github and username= instead
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "source" $qp_source "scalar") (serialize-qp "source_host" $source_host "scalar") (serialize-qp "uid" $uid "scalar") (serialize-qp "username" $username "scalar") (serialize-qp "email" $email "scalar") (serialize-qp "github" $github "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($workspace_slug)/members/find" $qp)
+  let full_url = (build-url $base ({workspace_slug: (encode-path-segment $workspace_slug)} | format pattern "/{workspace_slug}/members/find") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Delete a member
@@ -397,14 +418,15 @@ export def "members delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($workspace_slug)/members/($member_slug)")
+  let full_url = (build-url $base ({workspace_slug: (encode-path-segment $workspace_slug), member_slug: (encode-path-segment $member_slug)} | format pattern "/{workspace_slug}/members/{member_slug}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get a member
@@ -420,20 +442,21 @@ export def "members get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($workspace_slug)/members/($member_slug)")
+  let full_url = (build-url $base ({workspace_slug: (encode-path-segment $workspace_slug), member_slug: (encode-path-segment $member_slug)} | format pattern "/{workspace_slug}/members/{member_slug}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Update a member
 #
 # PUT /{workspace_slug}/members/{member_slug}
-export def "members put" [
+export def "members update" [
   workspace_slug: string
   member_slug: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -443,6 +466,7 @@ export def "members put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --bio: string
   --birthday: string
@@ -463,17 +487,17 @@ export def "members put" [
   --title: string
   --tshirt: string
   --twitter: string # The member's Twitter username
-  --body-url: string
+  --url: string
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($workspace_slug)/members/($member_slug)")
-  let body = {bio: $bio, birthday: $birthday, company: $company, devto: $devto, email: $email, github: $github, linkedin: $linkedin, location: $location, name: $name, pronouns: $pronouns, shipping_address: $shipping_address, slug: $slug, tag_list: $tag_list, tags: $tags, tags_to_add: $tags_to_add, teammate: $teammate, title: $title, tshirt: $tshirt, twitter: $twitter, url: $body_url} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({workspace_slug: (encode-path-segment $workspace_slug), member_slug: (encode-path-segment $member_slug)} | format pattern "/{workspace_slug}/members/{member_slug}"))
+  let req_body = {"bio": $bio, "birthday": $birthday, "company": $company, "devto": $devto, "email": $email, "github": $github, "linkedin": $linkedin, "location": $location, "name": $name, "pronouns": $pronouns, "shipping_address": $shipping_address, "slug": $slug, "tag_list": $tag_list, "tags": $tags, "tags_to_add": $tags_to_add, "teammate": $teammate, "title": $title, "tshirt": $tshirt, "twitter": $twitter, "url": $url} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # List activities for a member
@@ -490,6 +514,7 @@ export def "members-activities get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: string
   --direction: string@direction-completer
@@ -501,16 +526,16 @@ export def "members-activities get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "direction" $direction "scalar") (serialize-qp "items" $items "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "activity_type" $activity_type "scalar") (serialize-qp "type" $type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($workspace_slug)/members/($member_slug)/activities" $qp)
+  let full_url = (build-url $base ({workspace_slug: (encode-path-segment $workspace_slug), member_slug: (encode-path-segment $member_slug)} | format pattern "/{workspace_slug}/members/{member_slug}/activities") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Create a Custom or a Content activity for a member
 #
 # POST /{workspace_slug}/members/{member_slug}/activities
-export def "members-activities post" [
+export def "members-activities create" [
   workspace_slug: string
   member_slug: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -520,6 +545,7 @@ export def "members-activities post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --activity-type: string # The type of activity - what action was done by the member. This is a legacy field, use activity_type_key instead.
   --activity-type-key: string # The key for a custom activity type for the workspace. Will create a new activity type if it does not exist.
@@ -531,17 +557,17 @@ export def "members-activities post" [
   --properties: record # Key-value pairs to provide contextual metadata about an activity.
   --title: string # A title for the activity; displayed in the timeline
   --weight: string # A custom weight to be used in filters and reports; defaults to 1.
-  --body-url: string # The url representing the post
+  --url: string # The url representing the post
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($workspace_slug)/members/($member_slug)/activities")
-  let body = {activity_type: $activity_type, activity_type_key: $activity_type_key, description: $description, key: $key, link: $link, link_text: $link_text, occurred_at: $occurred_at, properties: $properties, title: $title, weight: $weight, url: $body_url} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({workspace_slug: (encode-path-segment $workspace_slug), member_slug: (encode-path-segment $member_slug)} | format pattern "/{workspace_slug}/members/{member_slug}/activities"))
+  let req_body = {"activity_type": $activity_type, "activity_type_key": $activity_type_key, "description": $description, "key": $key, "link": $link, "link_text": $link_text, "occurred_at": $occurred_at, "properties": $properties, "title": $title, "weight": $weight, "url": $url} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Delete a post activity
@@ -558,20 +584,21 @@ export def "members-activities delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($workspace_slug)/members/($member_slug)/activities/($id)")
+  let full_url = (build-url $base ({workspace_slug: (encode-path-segment $workspace_slug), member_slug: (encode-path-segment $member_slug), id: (encode-path-segment $id)} | format pattern "/{workspace_slug}/members/{member_slug}/activities/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Update a custom activity for a member
 #
 # PUT /{workspace_slug}/members/{member_slug}/activities/{id}
-export def "members-activities put" [
+export def "members-activities update" [
   workspace_slug: string
   member_slug: string
   id: string
@@ -582,6 +609,7 @@ export def "members-activities put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --activity-type: string # The type of activity - what action was done by the member. This is a legacy field, use activity_type_key instead.
   --activity-type-key: string # The key for a custom activity type for the workspace. Will create a new activity type if it does not exist.
@@ -597,12 +625,12 @@ export def "members-activities put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($workspace_slug)/members/($member_slug)/activities/($id)")
-  let body = {activity_type: $activity_type, activity_type_key: $activity_type_key, description: $description, key: $key, link: $link, link_text: $link_text, occurred_at: $occurred_at, properties: $properties, title: $title, weight: $weight} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({workspace_slug: (encode-path-segment $workspace_slug), member_slug: (encode-path-segment $member_slug), id: (encode-path-segment $id)} | format pattern "/{workspace_slug}/members/{member_slug}/activities/{id}"))
+  let req_body = {"activity_type": $activity_type, "activity_type_key": $activity_type_key, "description": $description, "key": $key, "link": $link, "link_text": $link_text, "occurred_at": $occurred_at, "properties": $properties, "title": $title, "weight": $weight} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Remove identity from a member
@@ -618,30 +646,31 @@ export def "members-identities delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --email: string # The email of the person in the source system
   --name: string # The name of the person in the source system
   --body-source: string # The type of source: known values include github, twitter, discourse, email, linkedin, devto. Custom values can also be used
   --source-host: string # Specifies the location of the source, such as the host of a Discourse instance
   --uid: string # The uid of the person in the source system
-  --body-url: string # For custom identities, an optional link to the profile on the source system
+  --url: string # For custom identities, an optional link to the profile on the source system
   --username: string # The username of the person in the source system
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($workspace_slug)/members/($member_slug)/identities")
-  let body = {email: $email, name: $name, source: $body_source, source_host: $source_host, uid: $uid, url: $body_url, username: $username} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({workspace_slug: (encode-path-segment $workspace_slug), member_slug: (encode-path-segment $member_slug)} | format pattern "/{workspace_slug}/members/{member_slug}/identities"))
+  let req_body = {"email": $email, "name": $name, "source": $body_source, "source_host": $source_host, "uid": $uid, "url": $url, "username": $username} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Add identity to a member
 #
 # POST /{workspace_slug}/members/{member_slug}/identities
-export def "members-identities post" [
+export def "members-identities create" [
   workspace_slug: string
   member_slug: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -651,24 +680,25 @@ export def "members-identities post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --email: string # The email of the person in the source system
   --name: string # The name of the person in the source system
   --body-source: string # The type of source: known values include github, twitter, discourse, email, linkedin, devto. Custom values can also be used
   --source-host: string # Specifies the location of the source, such as the host of a Discourse instance
   --uid: string # The uid of the person in the source system
-  --body-url: string # For custom identities, an optional link to the profile on the source system
+  --url: string # For custom identities, an optional link to the profile on the source system
   --username: string # The username of the person in the source system
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($workspace_slug)/members/($member_slug)/identities")
-  let body = {email: $email, name: $name, source: $body_source, source_host: $source_host, uid: $uid, url: $body_url, username: $username} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({workspace_slug: (encode-path-segment $workspace_slug), member_slug: (encode-path-segment $member_slug)} | format pattern "/{workspace_slug}/members/{member_slug}/identities"))
+  let req_body = {"email": $email, "name": $name, "source": $body_source, "source_host": $source_host, "uid": $uid, "url": $url, "username": $username} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Get the member's notes
@@ -684,22 +714,23 @@ export def "members-notes get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: string
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($workspace_slug)/members/($member_slug)/notes" $qp)
+  let full_url = (build-url $base ({workspace_slug: (encode-path-segment $workspace_slug), member_slug: (encode-path-segment $member_slug)} | format pattern "/{workspace_slug}/members/{member_slug}/notes") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Create a note
 #
 # POST /{workspace_slug}/members/{member_slug}/notes
-export def "members-notes post" [
+export def "members-notes create" [
   workspace_slug: string
   member_slug: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -709,24 +740,25 @@ export def "members-notes post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body-body: string
+  body: string
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($workspace_slug)/members/($member_slug)/notes")
-  let body = {body: $body_body} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({workspace_slug: (encode-path-segment $workspace_slug), member_slug: (encode-path-segment $member_slug)} | format pattern "/{workspace_slug}/members/{member_slug}/notes"))
+  let req_body = {"body": $body} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Update a note
 #
 # PUT /{workspace_slug}/members/{member_slug}/notes/{id}
-export def "members-notes put" [
+export def "members-notes update" [
   workspace_slug: string
   member_slug: string
   id: string
@@ -737,18 +769,19 @@ export def "members-notes put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body-body: string
+  body: string
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($workspace_slug)/members/($member_slug)/notes/($id)")
-  let body = {body: $body_body} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({workspace_slug: (encode-path-segment $workspace_slug), member_slug: (encode-path-segment $member_slug), id: (encode-path-segment $id)} | format pattern "/{workspace_slug}/members/{member_slug}/notes/{id}"))
+  let req_body = {"body": $body} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # List organizations in a workspace
@@ -763,6 +796,7 @@ export def "organizations list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --query: string
   --page: string
@@ -773,10 +807,10 @@ export def "organizations list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "direction" $direction "scalar") (serialize-qp "items" $items "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($workspace_slug)/organizations" $qp)
+  let full_url = (build-url $base ({workspace_slug: (encode-path-segment $workspace_slug)} | format pattern "/{workspace_slug}/organizations") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get an organization
@@ -792,20 +826,21 @@ export def "organizations get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($workspace_slug)/organizations/($organization_id)")
+  let full_url = (build-url $base ({workspace_slug: (encode-path-segment $workspace_slug), organization_id: (encode-path-segment $organization_id)} | format pattern "/{workspace_slug}/organizations/{organization_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Update an organization
 #
 # PUT /{workspace_slug}/organizations/{organization_id}
-export def "organizations put" [
+export def "organizations update" [
   workspace_slug: string
   organization_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -815,6 +850,7 @@ export def "organizations put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --crm-uid: string # The unique identifier of the organization in your CRM.
   crm_url: string # A link to the organization profile in your CRM.
@@ -828,12 +864,12 @@ export def "organizations put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($workspace_slug)/organizations/($organization_id)")
-  let body = {crm_uid: $crm_uid, crm_url: $crm_url, deal_closed_date: $deal_closed_date, lifecycle_stage: $lifecycle_stage, owner_email: $owner_email, owner_name: $owner_name, price_plan: $price_plan, source: $body_source} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({workspace_slug: (encode-path-segment $workspace_slug), organization_id: (encode-path-segment $organization_id)} | format pattern "/{workspace_slug}/organizations/{organization_id}"))
+  let req_body = {"crm_uid": $crm_uid, "crm_url": $crm_url, "deal_closed_date": $deal_closed_date, "lifecycle_stage": $lifecycle_stage, "owner_email": $owner_email, "owner_name": $owner_name, "price_plan": $price_plan, "source": $body_source} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # List member activities in an organization
@@ -849,6 +885,7 @@ export def "organizations-activities get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: string
   --direction: string@direction-completer
@@ -859,10 +896,10 @@ export def "organizations-activities get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "direction" $direction "scalar") (serialize-qp "items" $items "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "activity_type" $activity_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($workspace_slug)/organizations/($organization_id)/activities" $qp)
+  let full_url = (build-url $base ({workspace_slug: (encode-path-segment $workspace_slug), organization_id: (encode-path-segment $organization_id)} | format pattern "/{workspace_slug}/organizations/{organization_id}/activities") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # List members in an organization
@@ -878,6 +915,7 @@ export def "organizations-members get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: string
   --items: string@items-completer
@@ -885,10 +923,10 @@ export def "organizations-members get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "items" $items "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($workspace_slug)/organizations/($organization_id)/members" $qp)
+  let full_url = (build-url $base ({workspace_slug: (encode-path-segment $workspace_slug), organization_id: (encode-path-segment $organization_id)} | format pattern "/{workspace_slug}/organizations/{organization_id}/members") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get a workspace stats
@@ -904,10 +942,11 @@ export def "reports get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --start-date: string # Filter activities after this date. Format: YYYY-MM-DD.
   --end-date: string # Filter activities before this date. Format: YYYY-MM-DD.
-  --relative: string # Relative timeframes. Format: this_<integer>_<period>, with period in [days, weeks, months, years]. For example, this_30_days.
+  --relative: string # Relative timeframes. Format: this__, with period in [days, weeks, months, years]. For example, this_30_days.
   --properties: string
   --activity-type: string
   --type: string # Deprecated in favor of the activity_type parameter. (DEPRECATED)
@@ -915,10 +954,10 @@ export def "reports get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar") (serialize-qp "relative" $relative "scalar") (serialize-qp "properties" $properties "scalar") (serialize-qp "activity_type" $activity_type "scalar") (serialize-qp "type" $type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($workspace_slug)/reports" $qp)
+  let full_url = (build-url $base ({workspace_slug: (encode-path-segment $workspace_slug)} | format pattern "/{workspace_slug}/reports") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # List webhooks in a workspace
@@ -933,20 +972,21 @@ export def "webhooks list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($workspace_slug)/webhooks")
+  let full_url = (build-url $base ({workspace_slug: (encode-path-segment $workspace_slug)} | format pattern "/{workspace_slug}/webhooks"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Create a webhook
 #
 # POST /{workspace_slug}/webhooks
-export def "webhooks post" [
+export def "webhooks create" [
   workspace_slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -955,24 +995,25 @@ export def "webhooks post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --activity-tags: list
-  --activity-types: list
+  --activity-tags: list<string>
+  --activity-types: list<string>
   event_type: string
-  --member-tags: list
+  --member-tags: list<string>
   name: string
   --secret: string
-  --body-url: string
+  url: string
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($workspace_slug)/webhooks")
-  let body = {activity_tags: $activity_tags, activity_types: $activity_types, event_type: $event_type, member_tags: $member_tags, name: $name, secret: $secret, url: $body_url} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({workspace_slug: (encode-path-segment $workspace_slug)} | format pattern "/{workspace_slug}/webhooks"))
+  let req_body = {"activity_tags": $activity_tags, "activity_types": $activity_types, "event_type": $event_type, "member_tags": $member_tags, "name": $name, "secret": $secret, "url": $url} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Delete a webhook
@@ -988,14 +1029,15 @@ export def "webhooks delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($workspace_slug)/webhooks/($id)")
+  let full_url = (build-url $base ({workspace_slug: (encode-path-segment $workspace_slug), id: (encode-path-segment $id)} | format pattern "/{workspace_slug}/webhooks/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get a webhook
@@ -1011,20 +1053,21 @@ export def "webhooks get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($workspace_slug)/webhooks/($id)")
+  let full_url = (build-url $base ({workspace_slug: (encode-path-segment $workspace_slug), id: (encode-path-segment $id)} | format pattern "/{workspace_slug}/webhooks/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Update a webhook
 #
 # PUT /{workspace_slug}/webhooks/{id}
-export def "webhooks put" [
+export def "webhooks update" [
   workspace_slug: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1034,22 +1077,23 @@ export def "webhooks put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --activity-tags: list
-  --activity-types: list
+  --activity-tags: list<string>
+  --activity-types: list<string>
   event_type: string
-  --member-tags: list
+  --member-tags: list<string>
   name: string
   --secret: string
-  --body-url: string
+  url: string
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($workspace_slug)/webhooks/($id)")
-  let body = {activity_tags: $activity_tags, activity_types: $activity_types, event_type: $event_type, member_tags: $member_tags, name: $name, secret: $secret, url: $body_url} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({workspace_slug: (encode-path-segment $workspace_slug), id: (encode-path-segment $id)} | format pattern "/{workspace_slug}/webhooks/{id}"))
+  let req_body = {"activity_tags": $activity_tags, "activity_types": $activity_types, "event_type": $event_type, "member_tags": $member_tags, "name": $name, "secret": $secret, "url": $url} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }

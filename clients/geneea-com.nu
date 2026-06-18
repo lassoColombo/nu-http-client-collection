@@ -11,28 +11,39 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {headers: {}, query: ""} }
   match $scheme {
-    "query-user_key" => { {headers: {}, query: $"user_key=($token_val)"} }
+    "query-user_key" => { {headers: {}, query: $"(encode-path-segment "user_key")=(encode-path-segment $token_val)"} }
     "none" => { {headers: {}, query: ""} }
     _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
   }
 }
 
 # Serialize a single query parameter based on collection style
+# Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
+# ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = ($name | url encode)
+  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
-  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
-    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
-    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
+    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
+    _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
+}
+
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Build URL from base, path, and optional query string
@@ -44,7 +55,7 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
@@ -53,13 +64,13 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
     "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "put" => { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "patch" => { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
   if ($method in ["head" "options"]) { return $resp }
-  if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
+  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
 def base-url-completer [] { ["https://api.geneea.com"] }
@@ -71,8 +82,8 @@ def accept-completer [] { ["application/json" "text/plain"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "account get" } } | get name | first)
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "account get-get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -96,7 +107,7 @@ export def commands []: nothing -> table {
 #
 # GET /account
 # operationId: getInfo
-export def "account get" [
+export def "account get-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -104,6 +115,7 @@ export def "account get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-user_key"))
@@ -111,14 +123,14 @@ export def "account get" [
   let full_url = (build-url $base "/account")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Performs text correction (diacritization) on the given document
 #
 # GET /s1/correction
 # operationId: correctionGet
-export def "s1-correction correctionGet" [
+export def "s1-correction get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -126,28 +138,29 @@ export def "s1-correction correctionGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # document ID
   --text: string # raw document text
-  --qp-url: string # document URL
+  --url: string # document URL
   --extractor: string@extractor-completer # document extractor
   --language: string # document language
-  --returnTextInfo: oneof<nothing, bool>
+  --return-text-info: oneof<nothing, bool>
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-user_key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "text" $text "scalar") (serialize-qp "url" $qp_url "scalar") (serialize-qp "extractor" $extractor "scalar") (serialize-qp "language" $language "scalar") (serialize-qp "returnTextInfo" $returnTextInfo "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "text" $text "scalar") (serialize-qp "url" $url "scalar") (serialize-qp "extractor" $extractor "scalar") (serialize-qp "language" $language "scalar") (serialize-qp "returnTextInfo" $return_text_info "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/s1/correction" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Performs text correction (diacritization) on the given document
 #
 # POST /s1/correction
 # operationId: correctionPost
-export def "s1-correction correctionPost" [
+export def "s1-correction create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -155,31 +168,32 @@ export def "s1-correction correctionPost" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --extractor: string@extractor-completer # [optional] Text extractor to be used when analyzing HTML document
   --id: string # Unique identifier of the document, it's optional
   --language: string # [optional] The language of the document, auto-detection will be used if omitted
   --options: record # [optional] Additional options for the internal modules (key-value pairs)
-  --returnTextInfo: oneof<nothing, bool> # [optional] Indicates whether to return the source text within the response object
+  --return-text-info: oneof<nothing, bool> # [optional] Indicates whether to return the source text within the response object
   --text: string # The raw text to be analyzed, mutually exclusive with the 'url' parameter
-  --body-url: string # URL of a document to be analysed, mutually exclusive with the 'text' parameter
+  --url: string # URL of a document to be analysed, mutually exclusive with the 'text' parameter
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "query-user_key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/s1/correction")
-  let body = {extractor: $extractor, id: $id, language: $language, options: $options, returnTextInfo: $returnTextInfo, text: $text, url: $body_url} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"extractor": $extractor, "id": $id, "language": $language, "options": $options, "returnTextInfo": $return_text_info, "text": $text, "url": $url} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Performs named-entity recognition on the given document
 #
 # GET /s1/entities
 # operationId: entitiesGet
-export def "s1-entities entitiesGet" [
+export def "s1-entities get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -187,28 +201,29 @@ export def "s1-entities entitiesGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # document ID
   --text: string # raw document text
-  --qp-url: string # document URL
+  --url: string # document URL
   --extractor: string@extractor-completer # document extractor
   --language: string # document language
-  --returnTextInfo: oneof<nothing, bool>
+  --return-text-info: oneof<nothing, bool>
 ]: nothing -> record<entities: table<entity: string, links: record, sentiment: float, textOffset: int, type: string>, id: string, language: string, text: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-user_key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "text" $text "scalar") (serialize-qp "url" $qp_url "scalar") (serialize-qp "extractor" $extractor "scalar") (serialize-qp "language" $language "scalar") (serialize-qp "returnTextInfo" $returnTextInfo "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "text" $text "scalar") (serialize-qp "url" $url "scalar") (serialize-qp "extractor" $extractor "scalar") (serialize-qp "language" $language "scalar") (serialize-qp "returnTextInfo" $return_text_info "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/s1/entities" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Performs named-entity recognition on the given document
 #
 # POST /s1/entities
 # operationId: entitiesPost
-export def "s1-entities entitiesPost" [
+export def "s1-entities create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -216,31 +231,32 @@ export def "s1-entities entitiesPost" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --extractor: string@extractor-completer # [optional] Text extractor to be used when analyzing HTML document
   --id: string # Unique identifier of the document, it's optional
   --language: string # [optional] The language of the document, auto-detection will be used if omitted
   --options: record # [optional] Additional options for the internal modules (key-value pairs)
-  --returnTextInfo: oneof<nothing, bool> # [optional] Indicates whether to return the source text within the response object
+  --return-text-info: oneof<nothing, bool> # [optional] Indicates whether to return the source text within the response object
   --text: string # The raw text to be analyzed, mutually exclusive with the 'url' parameter
-  --body-url: string # URL of a document to be analysed, mutually exclusive with the 'text' parameter
+  --url: string # URL of a document to be analysed, mutually exclusive with the 'text' parameter
 ]: any -> record<entities: table<entity: string, links: record, sentiment: float, textOffset: int, type: string>, id: string, language: string, text: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "query-user_key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/s1/entities")
-  let body = {extractor: $extractor, id: $id, language: $language, options: $options, returnTextInfo: $returnTextInfo, text: $text, url: $body_url} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"extractor": $extractor, "id": $id, "language": $language, "options": $options, "returnTextInfo": $return_text_info, "text": $text, "url": $url} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Performs lemmatization on the given document
 #
 # GET /s1/lemmatize
 # operationId: lemmatizeGet
-export def "s1-lemmatize lemmatizeGet" [
+export def "s1-lemmatize get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -248,28 +264,29 @@ export def "s1-lemmatize lemmatizeGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # document ID
   --text: string # raw document text
-  --qp-url: string # document URL
+  --url: string # document URL
   --extractor: string@extractor-completer # document extractor
   --language: string # document language
-  --returnTextInfo: oneof<nothing, bool>
+  --return-text-info: oneof<nothing, bool>
 ]: nothing -> record<id: string, language: string, lemmatizedText: string, text: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-user_key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "text" $text "scalar") (serialize-qp "url" $qp_url "scalar") (serialize-qp "extractor" $extractor "scalar") (serialize-qp "language" $language "scalar") (serialize-qp "returnTextInfo" $returnTextInfo "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "text" $text "scalar") (serialize-qp "url" $url "scalar") (serialize-qp "extractor" $extractor "scalar") (serialize-qp "language" $language "scalar") (serialize-qp "returnTextInfo" $return_text_info "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/s1/lemmatize" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Performs lemmatization on the given document
 #
 # POST /s1/lemmatize
 # operationId: lemmatizePost
-export def "s1-lemmatize lemmatizePost" [
+export def "s1-lemmatize create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -277,31 +294,32 @@ export def "s1-lemmatize lemmatizePost" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --extractor: string@extractor-completer # [optional] Text extractor to be used when analyzing HTML document
   --id: string # Unique identifier of the document, it's optional
   --language: string # [optional] The language of the document, auto-detection will be used if omitted
   --options: record # [optional] Additional options for the internal modules (key-value pairs)
-  --returnTextInfo: oneof<nothing, bool> # [optional] Indicates whether to return the source text within the response object
+  --return-text-info: oneof<nothing, bool> # [optional] Indicates whether to return the source text within the response object
   --text: string # The raw text to be analyzed, mutually exclusive with the 'url' parameter
-  --body-url: string # URL of a document to be analysed, mutually exclusive with the 'text' parameter
+  --url: string # URL of a document to be analysed, mutually exclusive with the 'text' parameter
 ]: any -> record<id: string, language: string, lemmatizedText: string, text: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "query-user_key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/s1/lemmatize")
-  let body = {extractor: $extractor, id: $id, language: $language, options: $options, returnTextInfo: $returnTextInfo, text: $text, url: $body_url} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"extractor": $extractor, "id": $id, "language": $language, "options": $options, "returnTextInfo": $return_text_info, "text": $text, "url": $url} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Performs sentiment analysis on the given document
 #
 # GET /s1/sentiment
 # operationId: sentimentGet
-export def "s1-sentiment sentimentGet" [
+export def "s1-sentiment get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -309,28 +327,29 @@ export def "s1-sentiment sentimentGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # document ID
   --text: string # raw document text
-  --qp-url: string # document URL
+  --url: string # document URL
   --extractor: string@extractor-completer # document extractor
   --language: string # document language
-  --returnTextInfo: oneof<nothing, bool>
+  --return-text-info: oneof<nothing, bool>
 ]: nothing -> record<id: string, language: string, sentiment: float, text: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-user_key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "text" $text "scalar") (serialize-qp "url" $qp_url "scalar") (serialize-qp "extractor" $extractor "scalar") (serialize-qp "language" $language "scalar") (serialize-qp "returnTextInfo" $returnTextInfo "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "text" $text "scalar") (serialize-qp "url" $url "scalar") (serialize-qp "extractor" $extractor "scalar") (serialize-qp "language" $language "scalar") (serialize-qp "returnTextInfo" $return_text_info "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/s1/sentiment" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Performs sentiment analysis on the given document
 #
 # POST /s1/sentiment
 # operationId: sentimentPost
-export def "s1-sentiment sentimentPost" [
+export def "s1-sentiment create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -338,31 +357,32 @@ export def "s1-sentiment sentimentPost" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --extractor: string@extractor-completer # [optional] Text extractor to be used when analyzing HTML document
   --id: string # Unique identifier of the document, it's optional
   --language: string # [optional] The language of the document, auto-detection will be used if omitted
   --options: record # [optional] Additional options for the internal modules (key-value pairs)
-  --returnTextInfo: oneof<nothing, bool> # [optional] Indicates whether to return the source text within the response object
+  --return-text-info: oneof<nothing, bool> # [optional] Indicates whether to return the source text within the response object
   --text: string # The raw text to be analyzed, mutually exclusive with the 'url' parameter
-  --body-url: string # URL of a document to be analysed, mutually exclusive with the 'text' parameter
+  --url: string # URL of a document to be analysed, mutually exclusive with the 'text' parameter
 ]: any -> record<id: string, language: string, sentiment: float, text: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "query-user_key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/s1/sentiment")
-  let body = {extractor: $extractor, id: $id, language: $language, options: $options, returnTextInfo: $returnTextInfo, text: $text, url: $body_url} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"extractor": $extractor, "id": $id, "language": $language, "options": $options, "returnTextInfo": $return_text_info, "text": $text, "url": $url} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Performs topic detection on the given document
 #
 # GET /s1/topic
 # operationId: topicGet
-export def "s1-topic topicGet" [
+export def "s1-topic get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -370,28 +390,29 @@ export def "s1-topic topicGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # document ID
   --text: string # raw document text
-  --qp-url: string # document URL
+  --url: string # document URL
   --extractor: string@extractor-completer # document extractor
   --language: string # document language
-  --returnTextInfo: oneof<nothing, bool>
+  --return-text-info: oneof<nothing, bool>
 ]: nothing -> record<confidence: float, id: string, labels: table<confidence: float, label: string>, language: string, text: string, topic: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-user_key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "text" $text "scalar") (serialize-qp "url" $qp_url "scalar") (serialize-qp "extractor" $extractor "scalar") (serialize-qp "language" $language "scalar") (serialize-qp "returnTextInfo" $returnTextInfo "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "text" $text "scalar") (serialize-qp "url" $url "scalar") (serialize-qp "extractor" $extractor "scalar") (serialize-qp "language" $language "scalar") (serialize-qp "returnTextInfo" $return_text_info "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/s1/topic" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Performs topic detection on the given document
 #
 # POST /s1/topic
 # operationId: topicPost
-export def "s1-topic topicPost" [
+export def "s1-topic create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -399,31 +420,32 @@ export def "s1-topic topicPost" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --extractor: string@extractor-completer # [optional] Text extractor to be used when analyzing HTML document
   --id: string # Unique identifier of the document, it's optional
   --language: string # [optional] The language of the document, auto-detection will be used if omitted
   --options: record # [optional] Additional options for the internal modules (key-value pairs)
-  --returnTextInfo: oneof<nothing, bool> # [optional] Indicates whether to return the source text within the response object
+  --return-text-info: oneof<nothing, bool> # [optional] Indicates whether to return the source text within the response object
   --text: string # The raw text to be analyzed, mutually exclusive with the 'url' parameter
-  --body-url: string # URL of a document to be analysed, mutually exclusive with the 'text' parameter
+  --url: string # URL of a document to be analysed, mutually exclusive with the 'text' parameter
 ]: any -> record<confidence: float, id: string, labels: table<confidence: float, label: string>, language: string, text: string, topic: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "query-user_key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/s1/topic")
-  let body = {extractor: $extractor, id: $id, language: $language, options: $options, returnTextInfo: $returnTextInfo, text: $text, url: $body_url} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"extractor": $extractor, "id": $id, "language": $language, "options": $options, "returnTextInfo": $return_text_info, "text": $text, "url": $url} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Gets status of the Interpretor service
 #
 # GET /status
 # operationId: status
-export def "status status" [
+export def "status get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -431,6 +453,7 @@ export def "status status" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> string {
@@ -439,5 +462,5 @@ export def "status status" [
   let full_url = (build-url $base "/status")
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }

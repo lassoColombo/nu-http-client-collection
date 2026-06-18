@@ -17,21 +17,32 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 }
 
 # Serialize a single query parameter based on collection style
+# Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
+# ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = ($name | url encode)
+  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
-  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
-    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
-    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
+    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
+    _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
+}
+
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Build URL from base, path, and optional query string
@@ -43,7 +54,7 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
@@ -52,13 +63,13 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
     "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "put" => { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "patch" => { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
   if ($method in ["head" "options"]) { return $resp }
-  if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
+  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
 def base-url-completer [] { ["https://api.ideal-postcodes.co.uk/v1"] }
@@ -69,8 +80,8 @@ def bias-ip-completer [] { ["true"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "addresses Addresses" } } | get name | first)
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "addresses get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -94,7 +105,7 @@ export def commands []: nothing -> table {
 #
 # GET /addresses
 # operationId: Addresses
-export def "addresses Addresses" [
+export def "addresses get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -102,6 +113,7 @@ export def "addresses Addresses" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # e.g. ak_test
   --query: string # Specifies the address you wish to query. Query can be shortened to `q=`
@@ -135,14 +147,14 @@ export def "addresses Addresses" [
   let full_url = (build-url $base "/addresses" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Find Address
 #
 # GET /autocomplete/addresses
 # operationId: AddressAutocomplete
-export def "autocomplete-addresses AddressAutocomplete" [
+export def "autocomplete-addresses get-address" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -150,11 +162,12 @@ export def "autocomplete-addresses AddressAutocomplete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # e.g. ak_test
   --query: string # Specifies the address you wish to query. Query can be shortened to `q=`
   --context: string
-  --limit: int # Limits number of address suggestions unless a postcode is detected. In this instance entire list of addreses for that postcode is returned.  (format: int32, default: 10, e.g. 5)
+  --limit: int # Limits number of address suggestions unless a postcode is detected. In this instance entire list of addreses for that postcode is returned. (format: int32, default: 10, e.g. 5)
   --postcode-outward: string # e.g. 1AA
   --postcode: string # e.g. SW1A 2AA
   --postcode-area: string # e.g. SW
@@ -181,14 +194,14 @@ export def "autocomplete-addresses AddressAutocomplete" [
   let full_url = (build-url $base "/autocomplete/addresses" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Resolve Address (GBR)
 #
 # GET /autocomplete/addresses/{address}/gbr
 # operationId: Resolve
-export def "autocomplete-addresses-gbr Resolve" [
+export def "autocomplete-addresses-gbr get-resolve" [
   address: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -197,23 +210,24 @@ export def "autocomplete-addresses-gbr Resolve" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # e.g. ak_test
 ]: nothing -> record<code: int, message: string, result: any> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api_key" $api_key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/autocomplete/addresses/($address)/gbr" $qp)
+  let full_url = (build-url $base ({address: (encode-path-segment $address)} | format pattern "/autocomplete/addresses/{address}/gbr") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Resolve Address (USA)
 #
 # GET /autocomplete/addresses/{address}/usa
 # operationId: ResolveUsa
-export def "autocomplete-addresses-usa ResolveUsa" [
+export def "autocomplete-addresses-usa get-resolve" [
   address: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -222,23 +236,24 @@ export def "autocomplete-addresses-usa ResolveUsa" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # e.g. ak_test
 ]: nothing -> record<code: int, message: string, result: any> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api_key" $api_key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/autocomplete/addresses/($address)/usa" $qp)
+  let full_url = (build-url $base ({address: (encode-path-segment $address)} | format pattern "/autocomplete/addresses/{address}/usa") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Cleanse
 #
 # POST /cleanse/addresses
 # operationId: AddressCleanse
-export def "cleanse-addresses AddressCleanse" [
+export def "cleanse-addresses create-address" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -246,27 +261,28 @@ export def "cleanse-addresses AddressCleanse" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # e.g. ak_test
-  query: string # Freeform address input to cleanse  (e.g. 10 Downing Street, London, SW2A 2BN)
+  query: string # Freeform address input to cleanse (e.g. 10 Downing Street, London, SW2A 2BN)
 ]: any -> record<code: int, message: string, result: any> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api_key" $api_key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/cleanse/addresses" $qp)
-  let body = {query: $query} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"query": $query} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Email Validation
 #
 # GET /emails
 # operationId: EmailValidation
-export def "emails EmailValidation" [
+export def "emails get-validation" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -274,6 +290,7 @@ export def "emails EmailValidation" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # e.g. ak_test
   --query: string # Specifies the email address to validate
@@ -284,14 +301,14 @@ export def "emails EmailValidation" [
   let full_url = (build-url $base "/emails" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Availability
 #
 # GET /keys/{key}
 # operationId: KeyAvailability
-export def "keys KeyAvailability" [
+export def "keys get-availability" [
   key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -300,21 +317,22 @@ export def "keys KeyAvailability" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<code: int, message: string, result: record<available: bool, context: any, contexts: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/keys/($key)")
+  let full_url = (build-url $base ({key: (encode-path-segment $key)} | format pattern "/keys/{key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # List
 #
 # GET /keys/{key}/configs
 # operationId: ListConfigs
-export def "keys-configs ListConfigs" [
+export def "keys-configs list" [
   key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -323,23 +341,24 @@ export def "keys-configs ListConfigs" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --user-token: string # e.g. uk_B59ScW1p1HHouf1VqclEPZUx
 ]: nothing -> record<code: int, message: string, result: record<configs: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "user_token" $user_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/keys/($key)/configs" $qp)
+  let full_url = (build-url $base ({key: (encode-path-segment $key)} | format pattern "/keys/{key}/configs") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Create
 #
 # POST /keys/{key}/configs
 # operationId: CreateConfig
-export def "keys-configs CreateConfig" [
+export def "keys-configs create" [
   key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -348,6 +367,7 @@ export def "keys-configs CreateConfig" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --user-token: string # e.g. uk_B59ScW1p1HHouf1VqclEPZUx
   name: string # A unique name to identify the configuration payload (e.g. woocommerce)
@@ -357,19 +377,19 @@ export def "keys-configs CreateConfig" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "user_token" $user_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/keys/($key)/configs" $qp)
-  let body = {name: $name, payload: $payload} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({key: (encode-path-segment $key)} | format pattern "/keys/{key}/configs") $qp)
+  let req_body = {"name": $name, "payload": $payload} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Delete
 #
 # DELETE /keys/{key}/configs/{config}
 # operationId: DeleteConfig
-export def "keys-configs DeleteConfig" [
+export def "keys-configs delete" [
   key: string
   config: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -379,23 +399,24 @@ export def "keys-configs DeleteConfig" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --user-token: string # e.g. uk_B59ScW1p1HHouf1VqclEPZUx
 ]: nothing -> record<code: int, message: string, result: record<deleted: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "user_token" $user_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/keys/($key)/configs/($config)" $qp)
+  let full_url = (build-url $base ({key: (encode-path-segment $key), config: (encode-path-segment $config)} | format pattern "/keys/{key}/configs/{config}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Retrieve
 #
 # GET /keys/{key}/configs/{config}
 # operationId: RetrieveConfig
-export def "keys-configs RetrieveConfig" [
+export def "keys-configs get" [
   key: string
   config: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -405,21 +426,22 @@ export def "keys-configs RetrieveConfig" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<code: int, message: string, result: record<createdAt: string, name: string, payload: string, updatedAt: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/keys/($key)/configs/($config)")
+  let full_url = (build-url $base ({key: (encode-path-segment $key), config: (encode-path-segment $config)} | format pattern "/keys/{key}/configs/{config}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Update
 #
 # POST /keys/{key}/configs/{config}
 # operationId: UpdateConfig
-export def "keys-configs UpdateConfig" [
+export def "keys-configs update" [
   key: string
   config: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -429,6 +451,7 @@ export def "keys-configs UpdateConfig" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --user-token: string # e.g. uk_B59ScW1p1HHouf1VqclEPZUx
   --payload: string # A serialised payload of up to `4096` characters (e.g. {   "removeOrganisation": false } )
@@ -437,19 +460,19 @@ export def "keys-configs UpdateConfig" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "user_token" $user_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/keys/($key)/configs/($config)" $qp)
-  let body = {payload: $payload} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({key: (encode-path-segment $key), config: (encode-path-segment $config)} | format pattern "/keys/{key}/configs/{config}") $qp)
+  let req_body = {"payload": $payload} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Details
 #
 # GET /keys/{key}/details
 # operationId: KeyDetails
-export def "keys-details KeyDetails" [
+export def "keys-details get" [
   key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -458,23 +481,24 @@ export def "keys-details KeyDetails" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --user-token: string # e.g. uk_B59ScW1p1HHouf1VqclEPZUx
 ]: nothing -> record<code: int, message: string, result: record<allowed_urls: list<string>, automated_topups: record<enabled: bool>, current_purchases: list<record>, daily_limit: record<consumed: int, limit: int>, datasets: record<ecad: bool, ecaf: bool, herewe: bool, mr: bool, nyb: bool, paf: bool, pafa: bool, pafw: bool, usps: bool>, individual_limit: record<limit: int>, lookups_remaining: int, notifications: record<emails: list, enabled: bool>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "user_token" $user_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/keys/($key)/details" $qp)
+  let full_url = (build-url $base ({key: (encode-path-segment $key)} | format pattern "/keys/{key}/details") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # List
 #
 # GET /keys/{key}/licensees
 # operationId: ListLicensees
-export def "keys-licensees ListLicensees" [
+export def "keys-licensees list" [
   key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -483,6 +507,7 @@ export def "keys-licensees ListLicensees" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --starting-after: int # Specify ID of the licensee after which you would like to list results (format: int32)
   --user-token: string # e.g. uk_B59ScW1p1HHouf1VqclEPZUx
@@ -492,10 +517,10 @@ export def "keys-licensees ListLicensees" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "starting_after" $starting_after "scalar") (serialize-qp "user_token" $user_token "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "query" $query "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/keys/($key)/licensees" $qp)
+  let full_url = (build-url $base ({key: (encode-path-segment $key)} | format pattern "/keys/{key}/licensees") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Create
@@ -503,7 +528,7 @@ export def "keys-licensees ListLicensees" [
 # POST /keys/{key}/licensees
 # operationId: CreateLicensee
 # --daily shape: {limit?: float}
-export def "keys-licensees CreateLicensee" [
+export def "keys-licensees create" [
   key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -512,31 +537,32 @@ export def "keys-licensees CreateLicensee" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --user-token: string # e.g. uk_B59ScW1p1HHouf1VqclEPZUx
   --address: string # Licensee's first, second and third line address as well as post town concatenated by commas (e.g. 12 High Street, Manchester)
   --daily: record # shape: {limit?: float}
   --name: string # Licensee individual or organisation name (e.g. Qwerty Widgets Limited)
   --postcode: string # Licensee's postcode (e.g. ID1 1QD)
-  --whitelist: list # A list of allowed URLs. An empty list means that whitelisting is disabled
+  --whitelist: list<string> # A list of allowed URLs. An empty list means that whitelisting is disabled
 ]: any -> record<code: int, message: string, result: record<address: string, daily: record<count: float, updatedAt: string>, name: string, postcode: string, whitelist: list<string>, createdAt: string, id: string, key: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "user_token" $user_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/keys/($key)/licensees" $qp)
-  let body = {address: $address, daily: $daily, name: $name, postcode: $postcode, whitelist: $whitelist} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({key: (encode-path-segment $key)} | format pattern "/keys/{key}/licensees") $qp)
+  let req_body = {"address": $address, "daily": $daily, "name": $name, "postcode": $postcode, "whitelist": $whitelist} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Cancel
 #
 # DELETE /keys/{key}/licensees/{licensee}
 # operationId: DeleteLicensee
-export def "keys-licensees DeleteLicensee" [
+export def "keys-licensees delete" [
   key: string
   licensee: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -546,23 +572,24 @@ export def "keys-licensees DeleteLicensee" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --user-token: string # e.g. uk_B59ScW1p1HHouf1VqclEPZUx
 ]: nothing -> record<code: int, message: string, result: record<deleted: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "user_token" $user_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/keys/($key)/licensees/($licensee)" $qp)
+  let full_url = (build-url $base ({key: (encode-path-segment $key), licensee: (encode-path-segment $licensee)} | format pattern "/keys/{key}/licensees/{licensee}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Retrieve
 #
 # GET /keys/{key}/licensees/{licensee}
 # operationId: RetrieveLicensee
-export def "keys-licensees RetrieveLicensee" [
+export def "keys-licensees get" [
   key: string
   licensee: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -572,16 +599,17 @@ export def "keys-licensees RetrieveLicensee" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --user-token: string # e.g. uk_B59ScW1p1HHouf1VqclEPZUx
 ]: nothing -> record<code: int, message: string, result: record<address: string, daily: record<count: float, updatedAt: string>, name: string, postcode: string, whitelist: list<string>, createdAt: string, id: string, key: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "user_token" $user_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/keys/($key)/licensees/($licensee)" $qp)
+  let full_url = (build-url $base ({key: (encode-path-segment $key), licensee: (encode-path-segment $licensee)} | format pattern "/keys/{key}/licensees/{licensee}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Update
@@ -589,7 +617,7 @@ export def "keys-licensees RetrieveLicensee" [
 # PUT /keys/{key}/licensees/{licensee}
 # operationId: UpdateLicensee
 # --daily shape: {limit?: float}
-export def "keys-licensees UpdateLicensee" [
+export def "keys-licensees update" [
   key: string
   licensee: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -599,31 +627,32 @@ export def "keys-licensees UpdateLicensee" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --user-token: string # e.g. uk_B59ScW1p1HHouf1VqclEPZUx
   --address: string # Licensee's first, second and third line address as well as post town concatenated by commas (e.g. 12 High Street, Manchester)
   --daily: record # shape: {limit?: float}
   --name: string # Licensee individual or organisation name (e.g. Qwerty Widgets Limited)
   --postcode: string # Licensee's postcode (e.g. ID1 1QD)
-  --whitelist: list # A list of allowed URLs. An empty list means that whitelisting is disabled
+  --whitelist: list<string> # A list of allowed URLs. An empty list means that whitelisting is disabled
 ]: any -> record<code: int, message: string, result: record<address: string, daily: record<count: float, updatedAt: string>, name: string, postcode: string, whitelist: list<string>, createdAt: string, id: string, key: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "user_token" $user_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/keys/($key)/licensees/($licensee)" $qp)
-  let body = {address: $address, daily: $daily, name: $name, postcode: $postcode, whitelist: $whitelist} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({key: (encode-path-segment $key), licensee: (encode-path-segment $licensee)} | format pattern "/keys/{key}/licensees/{licensee}") $qp)
+  let req_body = {"address": $address, "daily": $daily, "name": $name, "postcode": $postcode, "whitelist": $whitelist} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Logs (CSV)
 #
 # GET /keys/{key}/lookups
 # operationId: KeyLogs
-export def "keys-lookups KeyLogs" [
+export def "keys-lookups logs" [
   key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -632,6 +661,7 @@ export def "keys-lookups KeyLogs" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --start: int # An start date/time in the form of a UNIX Timestamp in milliseconds, e.g. `1418556452651`. If no start time is provided, the start time will be assigned to a time 21 days prior to the end time. (format: int32, e.g. 1418556452651)
   --end: int # An end date/time in the form of a UNIX Timestamp in milliseconds, e.g. `1418556452651`. If no end time is provided, the current time will be used. (format: int32, e.g. 1418556477882)
@@ -640,17 +670,17 @@ export def "keys-lookups KeyLogs" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "licensee" $licensee "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/keys/($key)/lookups" $qp)
+  let full_url = (build-url $base ({key: (encode-path-segment $key)} | format pattern "/keys/{key}/lookups") $qp)
   let accept_val = "text/csv"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Usage Stats
 #
 # GET /keys/{key}/usage
 # operationId: KeyUsage
-export def "keys-usage KeyUsage" [
+export def "keys-usage get" [
   key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -659,6 +689,7 @@ export def "keys-usage KeyUsage" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --start: int # A start date/time in the form of a UNIX Timestamp in milliseconds, e.g. `1418556452651`. If no start time is provided, the start time will be assigned to a time 21 days prior to the end time. (format: int32, e.g. 1418556452651)
   --end: int # An end date/time in the form of a UNIX Timestamp in milliseconds, e.g. `1418556452651`. If no end time is provided, the current time will be used. (format: int32, e.g. 1418556477882)
@@ -668,17 +699,17 @@ export def "keys-usage KeyUsage" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "tags" $tags "scalar") (serialize-qp "licensee" $licensee "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/keys/($key)/usage" $qp)
+  let full_url = (build-url $base ({key: (encode-path-segment $key)} | format pattern "/keys/{key}/usage") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Phone Number Validation
 #
 # GET /phone_numbers
 # operationId: PhoneNumberValidation
-export def "phone-numbers PhoneNumberValidation" [
+export def "phone-numbers get-validation" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -686,6 +717,7 @@ export def "phone-numbers PhoneNumberValidation" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # e.g. ak_test
   --query: string # Specifies the phone number to validate. Phone number must include a country code in acceptable format. For instance, UK phone numbers should be suffixed `+44`, `44` or `0044`.
@@ -696,14 +728,14 @@ export def "phone-numbers PhoneNumberValidation" [
   let full_url = (build-url $base "/phone_numbers" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Find Place
 #
 # GET /places
 # operationId: FindPlace
-export def "places FindPlace" [
+export def "places find" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -711,6 +743,7 @@ export def "places FindPlace" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # e.g. ak_test
   --query: string # Specifies the place you wish to query. Query can be shortened to `q=`
@@ -725,14 +758,14 @@ export def "places FindPlace" [
   let full_url = (build-url $base "/places" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Resolve Place
 #
 # GET /places/${place}
 # operationId: ResolvePlace
-export def "places-place ResolvePlace" [
+export def "places-place get-resolve" [
   place: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -741,23 +774,24 @@ export def "places-place ResolvePlace" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # e.g. ak_test
 ]: nothing -> record<code: int, message: string, result: any> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api_key" $api_key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/places/$($place)" $qp)
+  let full_url = (build-url $base ({place: (encode-path-segment $place)} | format pattern "/places/${place}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Lookup Postcode
 #
 # GET /postcodes/{postcode}
 # operationId: Postcodes
-export def "postcodes Postcodes" [
+export def "postcodes get" [
   postcode: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -766,6 +800,7 @@ export def "postcodes Postcodes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # e.g. ak_test
   --filter: string # e.g. line_1,line_2,line_3
@@ -774,17 +809,17 @@ export def "postcodes Postcodes" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/postcodes/($postcode)" $qp)
+  let full_url = (build-url $base ({postcode: (encode-path-segment $postcode)} | format pattern "/postcodes/{postcode}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Retrieve by UDPRN
 #
 # GET /udprn/{udprn}
 # operationId: UDPRN
-export def "udprn UDPRN" [
+export def "udprn get" [
   udprn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -793,6 +828,7 @@ export def "udprn UDPRN" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # e.g. ak_test
   --filter: string # e.g. line_1,line_2,line_3
@@ -800,17 +836,17 @@ export def "udprn UDPRN" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/udprn/($udprn)" $qp)
+  let full_url = (build-url $base ({udprn: (encode-path-segment $udprn)} | format pattern "/udprn/{udprn}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Retrieve by UMPRN
 #
 # GET /umprn/{umprn}
 # operationId: UMPRN
-export def "umprn UMPRN" [
+export def "umprn get" [
   umprn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -819,6 +855,7 @@ export def "umprn UMPRN" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # e.g. ak_test
   --filter: string # e.g. line_1,line_2,line_3
@@ -826,8 +863,8 @@ export def "umprn UMPRN" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/umprn/($umprn)" $qp)
+  let full_url = (build-url $base ({umprn: (encode-path-segment $umprn)} | format pattern "/umprn/{umprn}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }

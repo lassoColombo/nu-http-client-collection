@@ -12,27 +12,39 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {headers: {}, query: ""} }
   match $scheme {
     "basic" => { {headers: {Authorization: $"Basic ($token_val)"}, query: ""} }
+    "basic-credentials" => { {headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: ""} }
     "none" => { {headers: {}, query: ""} }
     _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
   }
 }
 
 # Serialize a single query parameter based on collection style
+# Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
+# ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = ($name | url encode)
+  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
-  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
-    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
-    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
+    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
+    _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
+}
+
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Build URL from base, path, and optional query string
@@ -44,7 +56,7 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
@@ -53,23 +65,23 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
     "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "put" => { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "patch" => { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
   if ($method in ["head" "options"]) { return $resp }
-  if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
+  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
 def base-url-completer [] { ["https://autopilot.twilio.com"] }
-def auth-scheme-completer [] { ["basic"] }
+def auth-scheme-completer [] { ["basic" "basic-credentials"] }
 
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "assistants ListAssistant" } } | get name | first)
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "assistants list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -92,7 +104,7 @@ export def commands []: nothing -> table {
 # GET /v1/Assistants
 #
 # operationId: ListAssistant
-export def "assistants ListAssistant" [
+export def "assistants list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -100,24 +112,25 @@ export def "assistants ListAssistant" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
-  --Page: int # The page index. This value is simply for client state.
-  --PageToken: string # The page token. This is provided by the API.
+  --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
+  --page: int # The page index. This value is simply for client state.
+  --page-token: string # The page token. This is provided by the API.
 ]: nothing -> record<assistants: table<account_sid: string, callback_events: string, callback_url: string, date_created: string, date_updated: string, development_stage: string, friendly_name: string, latest_model_build_sid: string, links: record, log_queries: bool, needs_model_build: bool, sid: string, unique_name: string, url: string>, meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://autopilot.twilio.com")
-  let qp = [(serialize-qp "PageSize" $PageSize "scalar") (serialize-qp "Page" $Page "scalar") (serialize-qp "PageToken" $PageToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/Assistants" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # POST /v1/Assistants
 #
 # operationId: CreateAssistant
-export def "assistants CreateAssistant" [
+export def "assistants create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -125,30 +138,32 @@ export def "assistants CreateAssistant" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --CallbackEvents: string # Reserved.
-  --CallbackUrl: string # Reserved. (format: uri)
-  --Defaults: any # A JSON object that defines the Assistant's [default tasks](https://www.twilio.com/docs/autopilot/api/assistant/defaults) for various scenarios, including initiation actions and fallback tasks.
-  --FriendlyName: string # A descriptive string that you create to describe the new resource. It is not unique and can be up to 255 characters long.
-  --LogQueries: oneof<nothing, bool> # Whether queries should be logged and kept after training. Can be: `true` or `false` and defaults to `true`. If `true`, queries are stored for 30 days, and then deleted. If `false`, no queries are stored.
-  --StyleSheet: any # The JSON string that defines the Assistant's [style sheet](https://www.twilio.com/docs/autopilot/api/assistant/stylesheet)
-  --UniqueName: string # An application-defined string that uniquely identifies the new resource. It can be used as an alternative to the `sid` in the URL path to address the resource. The first 64 characters must be unique.
+  --callback-events: string # Reserved.
+  --callback-url: string # Reserved. (format: uri)
+  --defaults: any # A JSON object that defines the Assistant's [default tasks](https://www.twilio.com/docs/autopilot/api/assistant/defaults) for various scenarios, including initiation actions and fallback tasks.
+  --friendly-name: string # A descriptive string that you create to describe the new resource. It is not unique and can be up to 255 characters long.
+  --log-queries: oneof<nothing, bool> # Whether queries should be logged and kept after training. Can be: `true` or `false` and defaults to `true`. If `true`, queries are stored for 30 days, and then deleted. If `false`, no queries are stored.
+  --style-sheet: any # The JSON string that defines the Assistant's [style sheet](https://www.twilio.com/docs/autopilot/api/assistant/stylesheet)
+  --unique-name: string # An application-defined string that uniquely identifies the new resource. It can be used as an alternative to the `sid` in the URL path to address the resource. The first 64 characters must be unique.
 ]: any -> record<account_sid: string, callback_events: string, callback_url: string, date_created: string, date_updated: string, development_stage: string, friendly_name: string, latest_model_build_sid: string, links: record, log_queries: bool, needs_model_build: bool, sid: string, unique_name: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://autopilot.twilio.com")
   let full_url = (build-url $base "/v1/Assistants")
-  let body = {CallbackEvents: $CallbackEvents, CallbackUrl: $CallbackUrl, Defaults: $Defaults, FriendlyName: $FriendlyName, LogQueries: $LogQueries, StyleSheet: $StyleSheet, UniqueName: $UniqueName} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"CallbackEvents": $callback_events, "CallbackUrl": $callback_url, "Defaults": $defaults, "FriendlyName": $friendly_name, "LogQueries": $log_queries, "StyleSheet": $style_sheet, "UniqueName": $unique_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # POST /v1/Assistants/Restore
 #
 # operationId: UpdateRestoreAssistant
-export def "assistants-restore UpdateRestoreAssistant" [
+export def "assistants-restore update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -156,25 +171,27 @@ export def "assistants-restore UpdateRestoreAssistant" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  Assistant: string # The Twilio-provided string that uniquely identifies the Assistant resource to restore.
+  assistant: string # The Twilio-provided string that uniquely identifies the Assistant resource to restore.
 ]: any -> record<account_sid: string, callback_events: string, callback_url: string, date_created: string, date_updated: string, development_stage: string, friendly_name: string, latest_model_build_sid: string, log_queries: bool, needs_model_build: bool, sid: string, unique_name: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://autopilot.twilio.com")
   let full_url = (build-url $base "/v1/Assistants/Restore")
-  let body = {Assistant: $Assistant} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"Assistant": $assistant} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # GET /v1/Assistants/{AssistantSid}/Defaults
 #
 # operationId: FetchDefaults
-export def "assistants-defaults FetchDefaults" [
-  AssistantSid: string
+export def "assistants-defaults get" [
+  assistant_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -182,21 +199,22 @@ export def "assistants-defaults FetchDefaults" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<account_sid: string, assistant_sid: string, data: any, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://autopilot.twilio.com")
-  let full_url = (build-url $base $"/v1/Assistants/($AssistantSid)/Defaults")
+  let full_url = (build-url $base ({assistant_sid: (encode-path-segment $assistant_sid)} | format pattern "/v1/Assistants/{assistant_sid}/Defaults"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # POST /v1/Assistants/{AssistantSid}/Defaults
 #
 # operationId: UpdateDefaults
-export def "assistants-defaults UpdateDefaults" [
-  AssistantSid: string
+export def "assistants-defaults update" [
+  assistant_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -204,26 +222,28 @@ export def "assistants-defaults UpdateDefaults" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Defaults: any # A JSON string that describes the default task links for the `assistant_initiation`, `collect`, and `fallback` situations.
+  --defaults: any # A JSON string that describes the default task links for the `assistant_initiation`, `collect`, and `fallback` situations.
 ]: any -> record<account_sid: string, assistant_sid: string, data: any, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://autopilot.twilio.com")
-  let full_url = (build-url $base $"/v1/Assistants/($AssistantSid)/Defaults")
-  let body = {Defaults: $Defaults} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({assistant_sid: (encode-path-segment $assistant_sid)} | format pattern "/v1/Assistants/{assistant_sid}/Defaults"))
+  let req_body = {"Defaults": $defaults} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # GET /v1/Assistants/{AssistantSid}/Dialogues/{Sid}
 #
 # operationId: FetchDialogue
-export def "assistants-dialogues FetchDialogue" [
-  AssistantSid: string
-  Sid: string
+export def "assistants-dialogues get" [
+  assistant_sid: string
+  sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -231,21 +251,22 @@ export def "assistants-dialogues FetchDialogue" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<account_sid: string, assistant_sid: string, data: any, sid: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://autopilot.twilio.com")
-  let full_url = (build-url $base $"/v1/Assistants/($AssistantSid)/Dialogues/($Sid)")
+  let full_url = (build-url $base ({assistant_sid: (encode-path-segment $assistant_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Assistants/{assistant_sid}/Dialogues/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # GET /v1/Assistants/{AssistantSid}/FieldTypes
 #
 # operationId: ListFieldType
-export def "assistants-field-types ListFieldType" [
-  AssistantSid: string
+export def "assistants-field-types list" [
+  assistant_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -253,25 +274,26 @@ export def "assistants-field-types ListFieldType" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
-  --Page: int # The page index. This value is simply for client state.
-  --PageToken: string # The page token. This is provided by the API.
+  --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
+  --page: int # The page index. This value is simply for client state.
+  --page-token: string # The page token. This is provided by the API.
 ]: nothing -> record<field_types: table<account_sid: string, assistant_sid: string, date_created: string, date_updated: string, friendly_name: string, links: record, sid: string, unique_name: string, url: string>, meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://autopilot.twilio.com")
-  let qp = [(serialize-qp "PageSize" $PageSize "scalar") (serialize-qp "Page" $Page "scalar") (serialize-qp "PageToken" $PageToken "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/Assistants/($AssistantSid)/FieldTypes" $qp)
+  let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({assistant_sid: (encode-path-segment $assistant_sid)} | format pattern "/v1/Assistants/{assistant_sid}/FieldTypes") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # POST /v1/Assistants/{AssistantSid}/FieldTypes
 #
 # operationId: CreateFieldType
-export def "assistants-field-types CreateFieldType" [
-  AssistantSid: string
+export def "assistants-field-types create" [
+  assistant_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -279,27 +301,29 @@ export def "assistants-field-types CreateFieldType" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --FriendlyName: string # A descriptive string that you create to describe the new resource. It is not unique and can be up to 255 characters long.
-  UniqueName: string # An application-defined string that uniquely identifies the new resource. It can be used as an alternative to the `sid` in the URL path to address the resource. The first 64 characters must be unique.
+  --friendly-name: string # A descriptive string that you create to describe the new resource. It is not unique and can be up to 255 characters long.
+  unique_name: string # An application-defined string that uniquely identifies the new resource. It can be used as an alternative to the `sid` in the URL path to address the resource. The first 64 characters must be unique.
 ]: any -> record<account_sid: string, assistant_sid: string, date_created: string, date_updated: string, friendly_name: string, links: record, sid: string, unique_name: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://autopilot.twilio.com")
-  let full_url = (build-url $base $"/v1/Assistants/($AssistantSid)/FieldTypes")
-  let body = {FriendlyName: $FriendlyName, UniqueName: $UniqueName} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({assistant_sid: (encode-path-segment $assistant_sid)} | format pattern "/v1/Assistants/{assistant_sid}/FieldTypes"))
+  let req_body = {"FriendlyName": $friendly_name, "UniqueName": $unique_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # GET /v1/Assistants/{AssistantSid}/FieldTypes/{FieldTypeSid}/FieldValues
 #
 # operationId: ListFieldValue
-export def "assistants-field-types-field-values ListFieldValue" [
-  AssistantSid: string
-  FieldTypeSid: string
+export def "assistants-field-types-field-values list" [
+  assistant_sid: string
+  field_type_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -307,27 +331,28 @@ export def "assistants-field-types-field-values ListFieldValue" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Language: string # The [ISO language-country](https://docs.oracle.com/cd/E13214_01/wli/docs92/xref/xqisocodes.html) tag that specifies the language of the value. Currently supported tags: `en-US`
-  --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
-  --Page: int # The page index. This value is simply for client state.
-  --PageToken: string # The page token. This is provided by the API.
+  --language: string # The [ISO language-country](https://docs.oracle.com/cd/E13214_01/wli/docs92/xref/xqisocodes.html) tag that specifies the language of the value. Currently supported tags: `en-US`
+  --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
+  --page: int # The page index. This value is simply for client state.
+  --page-token: string # The page token. This is provided by the API.
 ]: nothing -> record<field_values: table<account_sid: string, assistant_sid: string, date_created: string, date_updated: string, field_type_sid: string, language: string, sid: string, synonym_of: string, url: string, value: string>, meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://autopilot.twilio.com")
-  let qp = [(serialize-qp "Language" $Language "scalar") (serialize-qp "PageSize" $PageSize "scalar") (serialize-qp "Page" $Page "scalar") (serialize-qp "PageToken" $PageToken "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/Assistants/($AssistantSid)/FieldTypes/($FieldTypeSid)/FieldValues" $qp)
+  let qp = [(serialize-qp "Language" $language "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({assistant_sid: (encode-path-segment $assistant_sid), field_type_sid: (encode-path-segment $field_type_sid)} | format pattern "/v1/Assistants/{assistant_sid}/FieldTypes/{field_type_sid}/FieldValues") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # POST /v1/Assistants/{AssistantSid}/FieldTypes/{FieldTypeSid}/FieldValues
 #
 # operationId: CreateFieldValue
-export def "assistants-field-types-field-values CreateFieldValue" [
-  AssistantSid: string
-  FieldTypeSid: string
+export def "assistants-field-types-field-values create" [
+  assistant_sid: string
+  field_type_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -335,29 +360,31 @@ export def "assistants-field-types-field-values CreateFieldValue" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  Language: string # The [ISO language-country](https://docs.oracle.com/cd/E13214_01/wli/docs92/xref/xqisocodes.html) tag that specifies the language of the value. Currently supported tags: `en-US`
-  --SynonymOf: string # The string value that indicates which word the field value is a synonym of.
-  Value: string # The Field Value data.
+  language: string # The [ISO language-country](https://docs.oracle.com/cd/E13214_01/wli/docs92/xref/xqisocodes.html) tag that specifies the language of the value. Currently supported tags: `en-US`
+  --synonym-of: string # The string value that indicates which word the field value is a synonym of.
+  value: string # The Field Value data.
 ]: any -> record<account_sid: string, assistant_sid: string, date_created: string, date_updated: string, field_type_sid: string, language: string, sid: string, synonym_of: string, url: string, value: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://autopilot.twilio.com")
-  let full_url = (build-url $base $"/v1/Assistants/($AssistantSid)/FieldTypes/($FieldTypeSid)/FieldValues")
-  let body = {Language: $Language, SynonymOf: $SynonymOf, Value: $Value} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({assistant_sid: (encode-path-segment $assistant_sid), field_type_sid: (encode-path-segment $field_type_sid)} | format pattern "/v1/Assistants/{assistant_sid}/FieldTypes/{field_type_sid}/FieldValues"))
+  let req_body = {"Language": $language, "SynonymOf": $synonym_of, "Value": $value} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # DELETE /v1/Assistants/{AssistantSid}/FieldTypes/{FieldTypeSid}/FieldValues/{Sid}
 #
 # operationId: DeleteFieldValue
-export def "assistants-field-types-field-values DeleteFieldValue" [
-  AssistantSid: string
-  FieldTypeSid: string
-  Sid: string
+export def "assistants-field-types-field-values delete" [
+  assistant_sid: string
+  field_type_sid: string
+  sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -365,23 +392,24 @@ export def "assistants-field-types-field-values DeleteFieldValue" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://autopilot.twilio.com")
-  let full_url = (build-url $base $"/v1/Assistants/($AssistantSid)/FieldTypes/($FieldTypeSid)/FieldValues/($Sid)")
+  let full_url = (build-url $base ({assistant_sid: (encode-path-segment $assistant_sid), field_type_sid: (encode-path-segment $field_type_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Assistants/{assistant_sid}/FieldTypes/{field_type_sid}/FieldValues/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # GET /v1/Assistants/{AssistantSid}/FieldTypes/{FieldTypeSid}/FieldValues/{Sid}
 #
 # operationId: FetchFieldValue
-export def "assistants-field-types-field-values FetchFieldValue" [
-  AssistantSid: string
-  FieldTypeSid: string
-  Sid: string
+export def "assistants-field-types-field-values get" [
+  assistant_sid: string
+  field_type_sid: string
+  sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -389,22 +417,23 @@ export def "assistants-field-types-field-values FetchFieldValue" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<account_sid: string, assistant_sid: string, date_created: string, date_updated: string, field_type_sid: string, language: string, sid: string, synonym_of: string, url: string, value: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://autopilot.twilio.com")
-  let full_url = (build-url $base $"/v1/Assistants/($AssistantSid)/FieldTypes/($FieldTypeSid)/FieldValues/($Sid)")
+  let full_url = (build-url $base ({assistant_sid: (encode-path-segment $assistant_sid), field_type_sid: (encode-path-segment $field_type_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Assistants/{assistant_sid}/FieldTypes/{field_type_sid}/FieldValues/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # DELETE /v1/Assistants/{AssistantSid}/FieldTypes/{Sid}
 #
 # operationId: DeleteFieldType
-export def "assistants-field-types DeleteFieldType" [
-  AssistantSid: string
-  Sid: string
+export def "assistants-field-types delete" [
+  assistant_sid: string
+  sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -412,22 +441,23 @@ export def "assistants-field-types DeleteFieldType" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://autopilot.twilio.com")
-  let full_url = (build-url $base $"/v1/Assistants/($AssistantSid)/FieldTypes/($Sid)")
+  let full_url = (build-url $base ({assistant_sid: (encode-path-segment $assistant_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Assistants/{assistant_sid}/FieldTypes/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # GET /v1/Assistants/{AssistantSid}/FieldTypes/{Sid}
 #
 # operationId: FetchFieldType
-export def "assistants-field-types FetchFieldType" [
-  AssistantSid: string
-  Sid: string
+export def "assistants-field-types get" [
+  assistant_sid: string
+  sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -435,22 +465,23 @@ export def "assistants-field-types FetchFieldType" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<account_sid: string, assistant_sid: string, date_created: string, date_updated: string, friendly_name: string, links: record, sid: string, unique_name: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://autopilot.twilio.com")
-  let full_url = (build-url $base $"/v1/Assistants/($AssistantSid)/FieldTypes/($Sid)")
+  let full_url = (build-url $base ({assistant_sid: (encode-path-segment $assistant_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Assistants/{assistant_sid}/FieldTypes/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # POST /v1/Assistants/{AssistantSid}/FieldTypes/{Sid}
 #
 # operationId: UpdateFieldType
-export def "assistants-field-types UpdateFieldType" [
-  AssistantSid: string
-  Sid: string
+export def "assistants-field-types update" [
+  assistant_sid: string
+  sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -458,26 +489,28 @@ export def "assistants-field-types UpdateFieldType" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --FriendlyName: string # A descriptive string that you create to describe the resource. It is not unique and can be up to 255 characters long.
-  --UniqueName: string # An application-defined string that uniquely identifies the resource. It can be used as an alternative to the `sid` in the URL path to address the resource. The first 64 characters must be unique.
+  --friendly-name: string # A descriptive string that you create to describe the resource. It is not unique and can be up to 255 characters long.
+  --unique-name: string # An application-defined string that uniquely identifies the resource. It can be used as an alternative to the `sid` in the URL path to address the resource. The first 64 characters must be unique.
 ]: any -> record<account_sid: string, assistant_sid: string, date_created: string, date_updated: string, friendly_name: string, links: record, sid: string, unique_name: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://autopilot.twilio.com")
-  let full_url = (build-url $base $"/v1/Assistants/($AssistantSid)/FieldTypes/($Sid)")
-  let body = {FriendlyName: $FriendlyName, UniqueName: $UniqueName} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({assistant_sid: (encode-path-segment $assistant_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Assistants/{assistant_sid}/FieldTypes/{sid}"))
+  let req_body = {"FriendlyName": $friendly_name, "UniqueName": $unique_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # GET /v1/Assistants/{AssistantSid}/ModelBuilds
 #
 # operationId: ListModelBuild
-export def "assistants-model-builds ListModelBuild" [
-  AssistantSid: string
+export def "assistants-model-builds list" [
+  assistant_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -485,25 +518,26 @@ export def "assistants-model-builds ListModelBuild" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
-  --Page: int # The page index. This value is simply for client state.
-  --PageToken: string # The page token. This is provided by the API.
+  --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
+  --page: int # The page index. This value is simply for client state.
+  --page-token: string # The page token. This is provided by the API.
 ]: nothing -> record<meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>, model_builds: table<account_sid: string, assistant_sid: string, build_duration: int, date_created: string, date_updated: string, error_code: int, sid: string, status: string, unique_name: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://autopilot.twilio.com")
-  let qp = [(serialize-qp "PageSize" $PageSize "scalar") (serialize-qp "Page" $Page "scalar") (serialize-qp "PageToken" $PageToken "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/Assistants/($AssistantSid)/ModelBuilds" $qp)
+  let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({assistant_sid: (encode-path-segment $assistant_sid)} | format pattern "/v1/Assistants/{assistant_sid}/ModelBuilds") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # POST /v1/Assistants/{AssistantSid}/ModelBuilds
 #
 # operationId: CreateModelBuild
-export def "assistants-model-builds CreateModelBuild" [
-  AssistantSid: string
+export def "assistants-model-builds create" [
+  assistant_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -511,27 +545,29 @@ export def "assistants-model-builds CreateModelBuild" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --StatusCallback: string # The URL we should call using a POST method to send status information to your application. (format: uri)
-  --UniqueName: string # An application-defined string that uniquely identifies the new resource. This value must be a unique string of no more than 64 characters. It can be used as an alternative to the `sid` in the URL path to address the resource.
+  --status-callback: string # The URL we should call using a POST method to send status information to your application. (format: uri)
+  --unique-name: string # An application-defined string that uniquely identifies the new resource. This value must be a unique string of no more than 64 characters. It can be used as an alternative to the `sid` in the URL path to address the resource.
 ]: any -> record<account_sid: string, assistant_sid: string, build_duration: int, date_created: string, date_updated: string, error_code: int, sid: string, status: string, unique_name: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://autopilot.twilio.com")
-  let full_url = (build-url $base $"/v1/Assistants/($AssistantSid)/ModelBuilds")
-  let body = {StatusCallback: $StatusCallback, UniqueName: $UniqueName} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({assistant_sid: (encode-path-segment $assistant_sid)} | format pattern "/v1/Assistants/{assistant_sid}/ModelBuilds"))
+  let req_body = {"StatusCallback": $status_callback, "UniqueName": $unique_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # DELETE /v1/Assistants/{AssistantSid}/ModelBuilds/{Sid}
 #
 # operationId: DeleteModelBuild
-export def "assistants-model-builds DeleteModelBuild" [
-  AssistantSid: string
-  Sid: string
+export def "assistants-model-builds delete" [
+  assistant_sid: string
+  sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -539,22 +575,23 @@ export def "assistants-model-builds DeleteModelBuild" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://autopilot.twilio.com")
-  let full_url = (build-url $base $"/v1/Assistants/($AssistantSid)/ModelBuilds/($Sid)")
+  let full_url = (build-url $base ({assistant_sid: (encode-path-segment $assistant_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Assistants/{assistant_sid}/ModelBuilds/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # GET /v1/Assistants/{AssistantSid}/ModelBuilds/{Sid}
 #
 # operationId: FetchModelBuild
-export def "assistants-model-builds FetchModelBuild" [
-  AssistantSid: string
-  Sid: string
+export def "assistants-model-builds get" [
+  assistant_sid: string
+  sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -562,22 +599,23 @@ export def "assistants-model-builds FetchModelBuild" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<account_sid: string, assistant_sid: string, build_duration: int, date_created: string, date_updated: string, error_code: int, sid: string, status: string, unique_name: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://autopilot.twilio.com")
-  let full_url = (build-url $base $"/v1/Assistants/($AssistantSid)/ModelBuilds/($Sid)")
+  let full_url = (build-url $base ({assistant_sid: (encode-path-segment $assistant_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Assistants/{assistant_sid}/ModelBuilds/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # POST /v1/Assistants/{AssistantSid}/ModelBuilds/{Sid}
 #
 # operationId: UpdateModelBuild
-export def "assistants-model-builds UpdateModelBuild" [
-  AssistantSid: string
-  Sid: string
+export def "assistants-model-builds update" [
+  assistant_sid: string
+  sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -585,25 +623,27 @@ export def "assistants-model-builds UpdateModelBuild" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --UniqueName: string # An application-defined string that uniquely identifies the resource. This value must be a unique string of no more than 64 characters. It can be used as an alternative to the `sid` in the URL path to address the resource.
+  --unique-name: string # An application-defined string that uniquely identifies the resource. This value must be a unique string of no more than 64 characters. It can be used as an alternative to the `sid` in the URL path to address the resource.
 ]: any -> record<account_sid: string, assistant_sid: string, build_duration: int, date_created: string, date_updated: string, error_code: int, sid: string, status: string, unique_name: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://autopilot.twilio.com")
-  let full_url = (build-url $base $"/v1/Assistants/($AssistantSid)/ModelBuilds/($Sid)")
-  let body = {UniqueName: $UniqueName} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({assistant_sid: (encode-path-segment $assistant_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Assistants/{assistant_sid}/ModelBuilds/{sid}"))
+  let req_body = {"UniqueName": $unique_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # GET /v1/Assistants/{AssistantSid}/Queries
 #
 # operationId: ListQuery
-export def "assistants-queries ListQuery" [
-  AssistantSid: string
+export def "assistants-queries list-list" [
+  assistant_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -611,29 +651,30 @@ export def "assistants-queries ListQuery" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Language: string # The [ISO language-country](https://docs.oracle.com/cd/E13214_01/wli/docs92/xref/xqisocodes.html) string that specifies the language used by the Query resources to read. For example: `en-US`.
-  --ModelBuild: string # The SID or unique name of the [Model Build](https://www.twilio.com/docs/autopilot/api/model-build) to be queried.
-  --Status: string # The status of the resources to read. Can be: `pending-review`, `reviewed`, or `discarded`
-  --DialogueSid: string # The SID of the [Dialogue](https://www.twilio.com/docs/autopilot/api/dialogue).
-  --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
-  --Page: int # The page index. This value is simply for client state.
-  --PageToken: string # The page token. This is provided by the API.
+  --language: string # The [ISO language-country](https://docs.oracle.com/cd/E13214_01/wli/docs92/xref/xqisocodes.html) string that specifies the language used by the Query resources to read. For example: `en-US`.
+  --model-build: string # The SID or unique name of the [Model Build](https://www.twilio.com/docs/autopilot/api/model-build) to be queried.
+  --status: string # The status of the resources to read. Can be: `pending-review`, `reviewed`, or `discarded`
+  --dialogue-sid: string # The SID of the [Dialogue](https://www.twilio.com/docs/autopilot/api/dialogue).
+  --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
+  --page: int # The page index. This value is simply for client state.
+  --page-token: string # The page token. This is provided by the API.
 ]: nothing -> record<meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>, queries: table<account_sid: string, assistant_sid: string, date_created: string, date_updated: string, dialogue_sid: string, language: string, model_build_sid: string, query: string, results: any, sample_sid: string, sid: string, source_channel: string, status: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://autopilot.twilio.com")
-  let qp = [(serialize-qp "Language" $Language "scalar") (serialize-qp "ModelBuild" $ModelBuild "scalar") (serialize-qp "Status" $Status "scalar") (serialize-qp "DialogueSid" $DialogueSid "scalar") (serialize-qp "PageSize" $PageSize "scalar") (serialize-qp "Page" $Page "scalar") (serialize-qp "PageToken" $PageToken "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/Assistants/($AssistantSid)/Queries" $qp)
+  let qp = [(serialize-qp "Language" $language "scalar") (serialize-qp "ModelBuild" $model_build "scalar") (serialize-qp "Status" $status "scalar") (serialize-qp "DialogueSid" $dialogue_sid "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({assistant_sid: (encode-path-segment $assistant_sid)} | format pattern "/v1/Assistants/{assistant_sid}/Queries") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # POST /v1/Assistants/{AssistantSid}/Queries
 #
 # operationId: CreateQuery
-export def "assistants-queries CreateQuery" [
-  AssistantSid: string
+export def "assistants-queries create-list" [
+  assistant_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -641,29 +682,31 @@ export def "assistants-queries CreateQuery" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  Language: string # The [ISO language-country](https://docs.oracle.com/cd/E13214_01/wli/docs92/xref/xqisocodes.html) string that specifies the language used for the new query. For example: `en-US`.
-  --ModelBuild: string # The SID or unique name of the [Model Build](https://www.twilio.com/docs/autopilot/api/model-build) to be queried.
-  Query: string # The end-user's natural language input. It can be up to 2048 characters long.
-  --Tasks: string # The list of tasks to limit the new query to. Tasks are expressed as a comma-separated list of task `unique_name` values. For example, `task-unique_name-1, task-unique_name-2`. Listing specific tasks is useful to constrain the paths that a user can take.
+  language: string # The [ISO language-country](https://docs.oracle.com/cd/E13214_01/wli/docs92/xref/xqisocodes.html) string that specifies the language used for the new query. For example: `en-US`.
+  --model-build: string # The SID or unique name of the [Model Build](https://www.twilio.com/docs/autopilot/api/model-build) to be queried.
+  query: string # The end-user's natural language input. It can be up to 2048 characters long.
+  --tasks: string # The list of tasks to limit the new query to. Tasks are expressed as a comma-separated list of task `unique_name` values. For example, `task-unique_name-1, task-unique_name-2`. Listing specific tasks is useful to constrain the paths that a user can take.
 ]: any -> record<account_sid: string, assistant_sid: string, date_created: string, date_updated: string, dialogue_sid: string, language: string, model_build_sid: string, query: string, results: any, sample_sid: string, sid: string, source_channel: string, status: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://autopilot.twilio.com")
-  let full_url = (build-url $base $"/v1/Assistants/($AssistantSid)/Queries")
-  let body = {Language: $Language, ModelBuild: $ModelBuild, Query: $Query, Tasks: $Tasks} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({assistant_sid: (encode-path-segment $assistant_sid)} | format pattern "/v1/Assistants/{assistant_sid}/Queries"))
+  let req_body = {"Language": $language, "ModelBuild": $model_build, "Query": $query, "Tasks": $tasks} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # DELETE /v1/Assistants/{AssistantSid}/Queries/{Sid}
 #
 # operationId: DeleteQuery
-export def "assistants-queries DeleteQuery" [
-  AssistantSid: string
-  Sid: string
+export def "assistants-queries delete-list" [
+  assistant_sid: string
+  sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -671,22 +714,23 @@ export def "assistants-queries DeleteQuery" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://autopilot.twilio.com")
-  let full_url = (build-url $base $"/v1/Assistants/($AssistantSid)/Queries/($Sid)")
+  let full_url = (build-url $base ({assistant_sid: (encode-path-segment $assistant_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Assistants/{assistant_sid}/Queries/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # GET /v1/Assistants/{AssistantSid}/Queries/{Sid}
 #
 # operationId: FetchQuery
-export def "assistants-queries FetchQuery" [
-  AssistantSid: string
-  Sid: string
+export def "assistants-queries get-list" [
+  assistant_sid: string
+  sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -694,22 +738,23 @@ export def "assistants-queries FetchQuery" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<account_sid: string, assistant_sid: string, date_created: string, date_updated: string, dialogue_sid: string, language: string, model_build_sid: string, query: string, results: any, sample_sid: string, sid: string, source_channel: string, status: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://autopilot.twilio.com")
-  let full_url = (build-url $base $"/v1/Assistants/($AssistantSid)/Queries/($Sid)")
+  let full_url = (build-url $base ({assistant_sid: (encode-path-segment $assistant_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Assistants/{assistant_sid}/Queries/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # POST /v1/Assistants/{AssistantSid}/Queries/{Sid}
 #
 # operationId: UpdateQuery
-export def "assistants-queries UpdateQuery" [
-  AssistantSid: string
-  Sid: string
+export def "assistants-queries update-list" [
+  assistant_sid: string
+  sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -717,27 +762,29 @@ export def "assistants-queries UpdateQuery" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --SampleSid: string # The SID of an optional reference to the [Sample](https://www.twilio.com/docs/autopilot/api/task-sample) created from the query.
-  --Status: string # The new status of the resource. Can be: `pending-review`, `reviewed`, or `discarded`
+  --sample-sid: string # The SID of an optional reference to the [Sample](https://www.twilio.com/docs/autopilot/api/task-sample) created from the query.
+  --status: string # The new status of the resource. Can be: `pending-review`, `reviewed`, or `discarded`
 ]: any -> record<account_sid: string, assistant_sid: string, date_created: string, date_updated: string, dialogue_sid: string, language: string, model_build_sid: string, query: string, results: any, sample_sid: string, sid: string, source_channel: string, status: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://autopilot.twilio.com")
-  let full_url = (build-url $base $"/v1/Assistants/($AssistantSid)/Queries/($Sid)")
-  let body = {SampleSid: $SampleSid, Status: $Status} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({assistant_sid: (encode-path-segment $assistant_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Assistants/{assistant_sid}/Queries/{sid}"))
+  let req_body = {"SampleSid": $sample_sid, "Status": $status} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # Returns Style sheet JSON object for the Assistant
 #
 # GET /v1/Assistants/{AssistantSid}/StyleSheet
 # operationId: FetchStyleSheet
-export def "assistants-style-sheet FetchStyleSheet" [
-  AssistantSid: string
+export def "assistants-style-sheet get" [
+  assistant_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -745,22 +792,23 @@ export def "assistants-style-sheet FetchStyleSheet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<account_sid: string, assistant_sid: string, data: any, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://autopilot.twilio.com")
-  let full_url = (build-url $base $"/v1/Assistants/($AssistantSid)/StyleSheet")
+  let full_url = (build-url $base ({assistant_sid: (encode-path-segment $assistant_sid)} | format pattern "/v1/Assistants/{assistant_sid}/StyleSheet"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Updates the style sheet for an Assistant identified by `assistant_sid`.
 #
 # POST /v1/Assistants/{AssistantSid}/StyleSheet
 # operationId: UpdateStyleSheet
-export def "assistants-style-sheet UpdateStyleSheet" [
-  AssistantSid: string
+export def "assistants-style-sheet update" [
+  assistant_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -768,25 +816,27 @@ export def "assistants-style-sheet UpdateStyleSheet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --StyleSheet: any # The JSON string that describes the style sheet object.
+  --style-sheet: any # The JSON string that describes the style sheet object.
 ]: any -> record<account_sid: string, assistant_sid: string, data: any, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://autopilot.twilio.com")
-  let full_url = (build-url $base $"/v1/Assistants/($AssistantSid)/StyleSheet")
-  let body = {StyleSheet: $StyleSheet} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({assistant_sid: (encode-path-segment $assistant_sid)} | format pattern "/v1/Assistants/{assistant_sid}/StyleSheet"))
+  let req_body = {"StyleSheet": $style_sheet} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # GET /v1/Assistants/{AssistantSid}/Tasks
 #
 # operationId: ListTask
-export def "assistants-tasks ListTask" [
-  AssistantSid: string
+export def "assistants-tasks list" [
+  assistant_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -794,25 +844,26 @@ export def "assistants-tasks ListTask" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
-  --Page: int # The page index. This value is simply for client state.
-  --PageToken: string # The page token. This is provided by the API.
+  --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
+  --page: int # The page index. This value is simply for client state.
+  --page-token: string # The page token. This is provided by the API.
 ]: nothing -> record<meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>, tasks: table<account_sid: string, actions_url: string, assistant_sid: string, date_created: string, date_updated: string, friendly_name: string, links: record, sid: string, unique_name: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://autopilot.twilio.com")
-  let qp = [(serialize-qp "PageSize" $PageSize "scalar") (serialize-qp "Page" $Page "scalar") (serialize-qp "PageToken" $PageToken "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/Assistants/($AssistantSid)/Tasks" $qp)
+  let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({assistant_sid: (encode-path-segment $assistant_sid)} | format pattern "/v1/Assistants/{assistant_sid}/Tasks") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # POST /v1/Assistants/{AssistantSid}/Tasks
 #
 # operationId: CreateTask
-export def "assistants-tasks CreateTask" [
-  AssistantSid: string
+export def "assistants-tasks create" [
+  assistant_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -820,29 +871,31 @@ export def "assistants-tasks CreateTask" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Actions: any # The JSON string that specifies the [actions](https://www.twilio.com/docs/autopilot/actions) that instruct the Assistant on how to perform the task. It is optional and not unique.
-  --ActionsUrl: string # The URL from which the Assistant can fetch actions. (format: uri)
-  --FriendlyName: string # A descriptive string that you create to describe the new resource. It is not unique and can be up to 255 characters long.
-  UniqueName: string # An application-defined string that uniquely identifies the new resource. It can be used as an alternative to the `sid` in the URL path to address the resource. This value must be unique and 64 characters or less in length.
+  --actions: any # The JSON string that specifies the [actions](https://www.twilio.com/docs/autopilot/actions) that instruct the Assistant on how to perform the task. It is optional and not unique.
+  --actions-url: string # The URL from which the Assistant can fetch actions. (format: uri)
+  --friendly-name: string # A descriptive string that you create to describe the new resource. It is not unique and can be up to 255 characters long.
+  unique_name: string # An application-defined string that uniquely identifies the new resource. It can be used as an alternative to the `sid` in the URL path to address the resource. This value must be unique and 64 characters or less in length.
 ]: any -> record<account_sid: string, actions_url: string, assistant_sid: string, date_created: string, date_updated: string, friendly_name: string, links: record, sid: string, unique_name: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://autopilot.twilio.com")
-  let full_url = (build-url $base $"/v1/Assistants/($AssistantSid)/Tasks")
-  let body = {Actions: $Actions, ActionsUrl: $ActionsUrl, FriendlyName: $FriendlyName, UniqueName: $UniqueName} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({assistant_sid: (encode-path-segment $assistant_sid)} | format pattern "/v1/Assistants/{assistant_sid}/Tasks"))
+  let req_body = {"Actions": $actions, "ActionsUrl": $actions_url, "FriendlyName": $friendly_name, "UniqueName": $unique_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # DELETE /v1/Assistants/{AssistantSid}/Tasks/{Sid}
 #
 # operationId: DeleteTask
-export def "assistants-tasks DeleteTask" [
-  AssistantSid: string
-  Sid: string
+export def "assistants-tasks delete" [
+  assistant_sid: string
+  sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -850,22 +903,23 @@ export def "assistants-tasks DeleteTask" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://autopilot.twilio.com")
-  let full_url = (build-url $base $"/v1/Assistants/($AssistantSid)/Tasks/($Sid)")
+  let full_url = (build-url $base ({assistant_sid: (encode-path-segment $assistant_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Assistants/{assistant_sid}/Tasks/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # GET /v1/Assistants/{AssistantSid}/Tasks/{Sid}
 #
 # operationId: FetchTask
-export def "assistants-tasks FetchTask" [
-  AssistantSid: string
-  Sid: string
+export def "assistants-tasks get" [
+  assistant_sid: string
+  sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -873,22 +927,23 @@ export def "assistants-tasks FetchTask" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<account_sid: string, actions_url: string, assistant_sid: string, date_created: string, date_updated: string, friendly_name: string, links: record, sid: string, unique_name: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://autopilot.twilio.com")
-  let full_url = (build-url $base $"/v1/Assistants/($AssistantSid)/Tasks/($Sid)")
+  let full_url = (build-url $base ({assistant_sid: (encode-path-segment $assistant_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Assistants/{assistant_sid}/Tasks/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # POST /v1/Assistants/{AssistantSid}/Tasks/{Sid}
 #
 # operationId: UpdateTask
-export def "assistants-tasks UpdateTask" [
-  AssistantSid: string
-  Sid: string
+export def "assistants-tasks update" [
+  assistant_sid: string
+  sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -896,30 +951,32 @@ export def "assistants-tasks UpdateTask" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Actions: any # The JSON string that specifies the [actions](https://www.twilio.com/docs/autopilot/actions) that instruct the Assistant on how to perform the task.
-  --ActionsUrl: string # The URL from which the Assistant can fetch actions. (format: uri)
-  --FriendlyName: string # A descriptive string that you create to describe the resource. It is not unique and can be up to 255 characters long.
-  --UniqueName: string # An application-defined string that uniquely identifies the resource. This value must be 64 characters or less in length and be unique. It can be used as an alternative to the `sid` in the URL path to address the resource.
+  --actions: any # The JSON string that specifies the [actions](https://www.twilio.com/docs/autopilot/actions) that instruct the Assistant on how to perform the task.
+  --actions-url: string # The URL from which the Assistant can fetch actions. (format: uri)
+  --friendly-name: string # A descriptive string that you create to describe the resource. It is not unique and can be up to 255 characters long.
+  --unique-name: string # An application-defined string that uniquely identifies the resource. This value must be 64 characters or less in length and be unique. It can be used as an alternative to the `sid` in the URL path to address the resource.
 ]: any -> record<account_sid: string, actions_url: string, assistant_sid: string, date_created: string, date_updated: string, friendly_name: string, links: record, sid: string, unique_name: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://autopilot.twilio.com")
-  let full_url = (build-url $base $"/v1/Assistants/($AssistantSid)/Tasks/($Sid)")
-  let body = {Actions: $Actions, ActionsUrl: $ActionsUrl, FriendlyName: $FriendlyName, UniqueName: $UniqueName} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({assistant_sid: (encode-path-segment $assistant_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Assistants/{assistant_sid}/Tasks/{sid}"))
+  let req_body = {"Actions": $actions, "ActionsUrl": $actions_url, "FriendlyName": $friendly_name, "UniqueName": $unique_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # Returns JSON actions for the Task.
 #
 # GET /v1/Assistants/{AssistantSid}/Tasks/{TaskSid}/Actions
 # operationId: FetchTaskActions
-export def "assistants-tasks-actions FetchTaskActions" [
-  AssistantSid: string
-  TaskSid: string
+export def "assistants-tasks-actions get" [
+  assistant_sid: string
+  task_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -927,23 +984,24 @@ export def "assistants-tasks-actions FetchTaskActions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<account_sid: string, assistant_sid: string, data: any, task_sid: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://autopilot.twilio.com")
-  let full_url = (build-url $base $"/v1/Assistants/($AssistantSid)/Tasks/($TaskSid)/Actions")
+  let full_url = (build-url $base ({assistant_sid: (encode-path-segment $assistant_sid), task_sid: (encode-path-segment $task_sid)} | format pattern "/v1/Assistants/{assistant_sid}/Tasks/{task_sid}/Actions"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Updates the actions of an Task identified by {TaskSid} or {TaskUniqueName}.
 #
 # POST /v1/Assistants/{AssistantSid}/Tasks/{TaskSid}/Actions
 # operationId: UpdateTaskActions
-export def "assistants-tasks-actions UpdateTaskActions" [
-  AssistantSid: string
-  TaskSid: string
+export def "assistants-tasks-actions update" [
+  assistant_sid: string
+  task_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -951,26 +1009,28 @@ export def "assistants-tasks-actions UpdateTaskActions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Actions: any # The JSON string that specifies the [actions](https://www.twilio.com/docs/autopilot/actions) that instruct the Assistant on how to perform the task.
+  --actions: any # The JSON string that specifies the [actions](https://www.twilio.com/docs/autopilot/actions) that instruct the Assistant on how to perform the task.
 ]: any -> record<account_sid: string, assistant_sid: string, data: any, task_sid: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://autopilot.twilio.com")
-  let full_url = (build-url $base $"/v1/Assistants/($AssistantSid)/Tasks/($TaskSid)/Actions")
-  let body = {Actions: $Actions} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({assistant_sid: (encode-path-segment $assistant_sid), task_sid: (encode-path-segment $task_sid)} | format pattern "/v1/Assistants/{assistant_sid}/Tasks/{task_sid}/Actions"))
+  let req_body = {"Actions": $actions} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # GET /v1/Assistants/{AssistantSid}/Tasks/{TaskSid}/Fields
 #
 # operationId: ListField
-export def "assistants-tasks-fields ListField" [
-  AssistantSid: string
-  TaskSid: string
+export def "assistants-tasks-fields list" [
+  assistant_sid: string
+  task_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -978,26 +1038,27 @@ export def "assistants-tasks-fields ListField" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
-  --Page: int # The page index. This value is simply for client state.
-  --PageToken: string # The page token. This is provided by the API.
+  --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
+  --page: int # The page index. This value is simply for client state.
+  --page-token: string # The page token. This is provided by the API.
 ]: nothing -> record<fields: table<account_sid: string, assistant_sid: string, date_created: string, date_updated: string, field_type: string, sid: string, task_sid: string, unique_name: string, url: string>, meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://autopilot.twilio.com")
-  let qp = [(serialize-qp "PageSize" $PageSize "scalar") (serialize-qp "Page" $Page "scalar") (serialize-qp "PageToken" $PageToken "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/Assistants/($AssistantSid)/Tasks/($TaskSid)/Fields" $qp)
+  let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({assistant_sid: (encode-path-segment $assistant_sid), task_sid: (encode-path-segment $task_sid)} | format pattern "/v1/Assistants/{assistant_sid}/Tasks/{task_sid}/Fields") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # POST /v1/Assistants/{AssistantSid}/Tasks/{TaskSid}/Fields
 #
 # operationId: CreateField
-export def "assistants-tasks-fields CreateField" [
-  AssistantSid: string
-  TaskSid: string
+export def "assistants-tasks-fields create" [
+  assistant_sid: string
+  task_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1005,28 +1066,30 @@ export def "assistants-tasks-fields CreateField" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  FieldType: string # The Field Type of the new field. Can be: a [Built-in Field Type](https://www.twilio.com/docs/autopilot/built-in-field-types), the `unique_name`, or the `sid` of a custom Field Type.
-  UniqueName: string # An application-defined string that uniquely identifies the new resource. This value must be a unique string of no more than 64 characters. It can be used as an alternative to the `sid` in the URL path to address the resource.
+  field_type: string # The Field Type of the new field. Can be: a [Built-in Field Type](https://www.twilio.com/docs/autopilot/built-in-field-types), the `unique_name`, or the `sid` of a custom Field Type.
+  unique_name: string # An application-defined string that uniquely identifies the new resource. This value must be a unique string of no more than 64 characters. It can be used as an alternative to the `sid` in the URL path to address the resource.
 ]: any -> record<account_sid: string, assistant_sid: string, date_created: string, date_updated: string, field_type: string, sid: string, task_sid: string, unique_name: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://autopilot.twilio.com")
-  let full_url = (build-url $base $"/v1/Assistants/($AssistantSid)/Tasks/($TaskSid)/Fields")
-  let body = {FieldType: $FieldType, UniqueName: $UniqueName} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({assistant_sid: (encode-path-segment $assistant_sid), task_sid: (encode-path-segment $task_sid)} | format pattern "/v1/Assistants/{assistant_sid}/Tasks/{task_sid}/Fields"))
+  let req_body = {"FieldType": $field_type, "UniqueName": $unique_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # DELETE /v1/Assistants/{AssistantSid}/Tasks/{TaskSid}/Fields/{Sid}
 #
 # operationId: DeleteField
-export def "assistants-tasks-fields DeleteField" [
-  AssistantSid: string
-  TaskSid: string
-  Sid: string
+export def "assistants-tasks-fields delete" [
+  assistant_sid: string
+  task_sid: string
+  sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1034,23 +1097,24 @@ export def "assistants-tasks-fields DeleteField" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://autopilot.twilio.com")
-  let full_url = (build-url $base $"/v1/Assistants/($AssistantSid)/Tasks/($TaskSid)/Fields/($Sid)")
+  let full_url = (build-url $base ({assistant_sid: (encode-path-segment $assistant_sid), task_sid: (encode-path-segment $task_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Assistants/{assistant_sid}/Tasks/{task_sid}/Fields/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # GET /v1/Assistants/{AssistantSid}/Tasks/{TaskSid}/Fields/{Sid}
 #
 # operationId: FetchField
-export def "assistants-tasks-fields FetchField" [
-  AssistantSid: string
-  TaskSid: string
-  Sid: string
+export def "assistants-tasks-fields get" [
+  assistant_sid: string
+  task_sid: string
+  sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1058,22 +1122,23 @@ export def "assistants-tasks-fields FetchField" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<account_sid: string, assistant_sid: string, date_created: string, date_updated: string, field_type: string, sid: string, task_sid: string, unique_name: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://autopilot.twilio.com")
-  let full_url = (build-url $base $"/v1/Assistants/($AssistantSid)/Tasks/($TaskSid)/Fields/($Sid)")
+  let full_url = (build-url $base ({assistant_sid: (encode-path-segment $assistant_sid), task_sid: (encode-path-segment $task_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Assistants/{assistant_sid}/Tasks/{task_sid}/Fields/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # GET /v1/Assistants/{AssistantSid}/Tasks/{TaskSid}/Samples
 #
 # operationId: ListSample
-export def "assistants-tasks-samples ListSample" [
-  AssistantSid: string
-  TaskSid: string
+export def "assistants-tasks-samples list" [
+  assistant_sid: string
+  task_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1081,27 +1146,28 @@ export def "assistants-tasks-samples ListSample" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Language: string # The [ISO language-country](https://docs.oracle.com/cd/E13214_01/wli/docs92/xref/xqisocodes.html) string that specifies the language used for the sample. For example: `en-US`.
-  --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
-  --Page: int # The page index. This value is simply for client state.
-  --PageToken: string # The page token. This is provided by the API.
+  --language: string # The [ISO language-country](https://docs.oracle.com/cd/E13214_01/wli/docs92/xref/xqisocodes.html) string that specifies the language used for the sample. For example: `en-US`.
+  --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
+  --page: int # The page index. This value is simply for client state.
+  --page-token: string # The page token. This is provided by the API.
 ]: nothing -> record<meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>, samples: table<account_sid: string, assistant_sid: string, date_created: string, date_updated: string, language: string, sid: string, source_channel: string, tagged_text: string, task_sid: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://autopilot.twilio.com")
-  let qp = [(serialize-qp "Language" $Language "scalar") (serialize-qp "PageSize" $PageSize "scalar") (serialize-qp "Page" $Page "scalar") (serialize-qp "PageToken" $PageToken "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/Assistants/($AssistantSid)/Tasks/($TaskSid)/Samples" $qp)
+  let qp = [(serialize-qp "Language" $language "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({assistant_sid: (encode-path-segment $assistant_sid), task_sid: (encode-path-segment $task_sid)} | format pattern "/v1/Assistants/{assistant_sid}/Tasks/{task_sid}/Samples") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # POST /v1/Assistants/{AssistantSid}/Tasks/{TaskSid}/Samples
 #
 # operationId: CreateSample
-export def "assistants-tasks-samples CreateSample" [
-  AssistantSid: string
-  TaskSid: string
+export def "assistants-tasks-samples create" [
+  assistant_sid: string
+  task_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1109,29 +1175,31 @@ export def "assistants-tasks-samples CreateSample" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  Language: string # The [ISO language-country](https://docs.oracle.com/cd/E13214_01/wli/docs92/xref/xqisocodes.html) string that specifies the language used for the new sample. For example: `en-US`.
-  --SourceChannel: string # The communication channel from which the new sample was captured. Can be: `voice`, `sms`, `chat`, `alexa`, `google-assistant`, `slack`, or null if not included.
-  TaggedText: string # The text example of how end users might express the task. The sample can contain [Field tag blocks](https://www.twilio.com/docs/autopilot/api/task-sample#field-tagging).
+  language: string # The [ISO language-country](https://docs.oracle.com/cd/E13214_01/wli/docs92/xref/xqisocodes.html) string that specifies the language used for the new sample. For example: `en-US`.
+  --source-channel: string # The communication channel from which the new sample was captured. Can be: `voice`, `sms`, `chat`, `alexa`, `google-assistant`, `slack`, or null if not included.
+  tagged_text: string # The text example of how end users might express the task. The sample can contain [Field tag blocks](https://www.twilio.com/docs/autopilot/api/task-sample#field-tagging).
 ]: any -> record<account_sid: string, assistant_sid: string, date_created: string, date_updated: string, language: string, sid: string, source_channel: string, tagged_text: string, task_sid: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://autopilot.twilio.com")
-  let full_url = (build-url $base $"/v1/Assistants/($AssistantSid)/Tasks/($TaskSid)/Samples")
-  let body = {Language: $Language, SourceChannel: $SourceChannel, TaggedText: $TaggedText} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({assistant_sid: (encode-path-segment $assistant_sid), task_sid: (encode-path-segment $task_sid)} | format pattern "/v1/Assistants/{assistant_sid}/Tasks/{task_sid}/Samples"))
+  let req_body = {"Language": $language, "SourceChannel": $source_channel, "TaggedText": $tagged_text} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # DELETE /v1/Assistants/{AssistantSid}/Tasks/{TaskSid}/Samples/{Sid}
 #
 # operationId: DeleteSample
-export def "assistants-tasks-samples DeleteSample" [
-  AssistantSid: string
-  TaskSid: string
-  Sid: string
+export def "assistants-tasks-samples delete" [
+  assistant_sid: string
+  task_sid: string
+  sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1139,23 +1207,24 @@ export def "assistants-tasks-samples DeleteSample" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://autopilot.twilio.com")
-  let full_url = (build-url $base $"/v1/Assistants/($AssistantSid)/Tasks/($TaskSid)/Samples/($Sid)")
+  let full_url = (build-url $base ({assistant_sid: (encode-path-segment $assistant_sid), task_sid: (encode-path-segment $task_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Assistants/{assistant_sid}/Tasks/{task_sid}/Samples/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # GET /v1/Assistants/{AssistantSid}/Tasks/{TaskSid}/Samples/{Sid}
 #
 # operationId: FetchSample
-export def "assistants-tasks-samples FetchSample" [
-  AssistantSid: string
-  TaskSid: string
-  Sid: string
+export def "assistants-tasks-samples get" [
+  assistant_sid: string
+  task_sid: string
+  sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1163,23 +1232,24 @@ export def "assistants-tasks-samples FetchSample" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<account_sid: string, assistant_sid: string, date_created: string, date_updated: string, language: string, sid: string, source_channel: string, tagged_text: string, task_sid: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://autopilot.twilio.com")
-  let full_url = (build-url $base $"/v1/Assistants/($AssistantSid)/Tasks/($TaskSid)/Samples/($Sid)")
+  let full_url = (build-url $base ({assistant_sid: (encode-path-segment $assistant_sid), task_sid: (encode-path-segment $task_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Assistants/{assistant_sid}/Tasks/{task_sid}/Samples/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # POST /v1/Assistants/{AssistantSid}/Tasks/{TaskSid}/Samples/{Sid}
 #
 # operationId: UpdateSample
-export def "assistants-tasks-samples UpdateSample" [
-  AssistantSid: string
-  TaskSid: string
-  Sid: string
+export def "assistants-tasks-samples update" [
+  assistant_sid: string
+  task_sid: string
+  sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1187,28 +1257,30 @@ export def "assistants-tasks-samples UpdateSample" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Language: string # The [ISO language-country](https://docs.oracle.com/cd/E13214_01/wli/docs92/xref/xqisocodes.html) string that specifies the language used for the sample. For example: `en-US`.
-  --SourceChannel: string # The communication channel from which the sample was captured. Can be: `voice`, `sms`, `chat`, `alexa`, `google-assistant`, `slack`, or null if not included.
-  --TaggedText: string # The text example of how end users might express the task. The sample can contain [Field tag blocks](https://www.twilio.com/docs/autopilot/api/task-sample#field-tagging).
+  --language: string # The [ISO language-country](https://docs.oracle.com/cd/E13214_01/wli/docs92/xref/xqisocodes.html) string that specifies the language used for the sample. For example: `en-US`.
+  --source-channel: string # The communication channel from which the sample was captured. Can be: `voice`, `sms`, `chat`, `alexa`, `google-assistant`, `slack`, or null if not included.
+  --tagged-text: string # The text example of how end users might express the task. The sample can contain [Field tag blocks](https://www.twilio.com/docs/autopilot/api/task-sample#field-tagging).
 ]: any -> record<account_sid: string, assistant_sid: string, date_created: string, date_updated: string, language: string, sid: string, source_channel: string, tagged_text: string, task_sid: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://autopilot.twilio.com")
-  let full_url = (build-url $base $"/v1/Assistants/($AssistantSid)/Tasks/($TaskSid)/Samples/($Sid)")
-  let body = {Language: $Language, SourceChannel: $SourceChannel, TaggedText: $TaggedText} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({assistant_sid: (encode-path-segment $assistant_sid), task_sid: (encode-path-segment $task_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Assistants/{assistant_sid}/Tasks/{task_sid}/Samples/{sid}"))
+  let req_body = {"Language": $language, "SourceChannel": $source_channel, "TaggedText": $tagged_text} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # GET /v1/Assistants/{AssistantSid}/Tasks/{TaskSid}/Statistics
 #
 # operationId: FetchTaskStatistics
-export def "assistants-tasks-statistics FetchTaskStatistics" [
-  AssistantSid: string
-  TaskSid: string
+export def "assistants-tasks-statistics get" [
+  assistant_sid: string
+  task_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1216,21 +1288,22 @@ export def "assistants-tasks-statistics FetchTaskStatistics" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<account_sid: string, assistant_sid: string, fields_count: int, samples_count: int, task_sid: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://autopilot.twilio.com")
-  let full_url = (build-url $base $"/v1/Assistants/($AssistantSid)/Tasks/($TaskSid)/Statistics")
+  let full_url = (build-url $base ({assistant_sid: (encode-path-segment $assistant_sid), task_sid: (encode-path-segment $task_sid)} | format pattern "/v1/Assistants/{assistant_sid}/Tasks/{task_sid}/Statistics"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # GET /v1/Assistants/{AssistantSid}/Webhooks
 #
 # operationId: ListWebhook
-export def "assistants-webhooks ListWebhook" [
-  AssistantSid: string
+export def "assistants-webhooks list" [
+  assistant_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1238,25 +1311,26 @@ export def "assistants-webhooks ListWebhook" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
-  --Page: int # The page index. This value is simply for client state.
-  --PageToken: string # The page token. This is provided by the API.
+  --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
+  --page: int # The page index. This value is simply for client state.
+  --page-token: string # The page token. This is provided by the API.
 ]: nothing -> record<meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>, webhooks: table<account_sid: string, assistant_sid: string, date_created: string, date_updated: string, events: string, sid: string, unique_name: string, url: string, webhook_method: string, webhook_url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://autopilot.twilio.com")
-  let qp = [(serialize-qp "PageSize" $PageSize "scalar") (serialize-qp "Page" $Page "scalar") (serialize-qp "PageToken" $PageToken "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/Assistants/($AssistantSid)/Webhooks" $qp)
+  let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({assistant_sid: (encode-path-segment $assistant_sid)} | format pattern "/v1/Assistants/{assistant_sid}/Webhooks") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # POST /v1/Assistants/{AssistantSid}/Webhooks
 #
 # operationId: CreateWebhook
-export def "assistants-webhooks CreateWebhook" [
-  AssistantSid: string
+export def "assistants-webhooks create" [
+  assistant_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1264,29 +1338,31 @@ export def "assistants-webhooks CreateWebhook" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  Events: string # The list of space-separated events that this Webhook will subscribe to.
-  UniqueName: string # An application-defined string that uniquely identifies the new resource. It can be used as an alternative to the `sid` in the URL path to address the resource. This value must be unique and 64 characters or less in length.
-  --WebhookMethod: string # The method to be used when calling the webhook's URL.
-  WebhookUrl: string # The URL associated with this Webhook. (format: uri)
+  events: string # The list of space-separated events that this Webhook will subscribe to.
+  unique_name: string # An application-defined string that uniquely identifies the new resource. It can be used as an alternative to the `sid` in the URL path to address the resource. This value must be unique and 64 characters or less in length.
+  --webhook-method: string # The method to be used when calling the webhook's URL.
+  webhook_url: string # The URL associated with this Webhook. (format: uri)
 ]: any -> record<account_sid: string, assistant_sid: string, date_created: string, date_updated: string, events: string, sid: string, unique_name: string, url: string, webhook_method: string, webhook_url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://autopilot.twilio.com")
-  let full_url = (build-url $base $"/v1/Assistants/($AssistantSid)/Webhooks")
-  let body = {Events: $Events, UniqueName: $UniqueName, WebhookMethod: $WebhookMethod, WebhookUrl: $WebhookUrl} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({assistant_sid: (encode-path-segment $assistant_sid)} | format pattern "/v1/Assistants/{assistant_sid}/Webhooks"))
+  let req_body = {"Events": $events, "UniqueName": $unique_name, "WebhookMethod": $webhook_method, "WebhookUrl": $webhook_url} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # DELETE /v1/Assistants/{AssistantSid}/Webhooks/{Sid}
 #
 # operationId: DeleteWebhook
-export def "assistants-webhooks DeleteWebhook" [
-  AssistantSid: string
-  Sid: string
+export def "assistants-webhooks delete" [
+  assistant_sid: string
+  sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1294,22 +1370,23 @@ export def "assistants-webhooks DeleteWebhook" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://autopilot.twilio.com")
-  let full_url = (build-url $base $"/v1/Assistants/($AssistantSid)/Webhooks/($Sid)")
+  let full_url = (build-url $base ({assistant_sid: (encode-path-segment $assistant_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Assistants/{assistant_sid}/Webhooks/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # GET /v1/Assistants/{AssistantSid}/Webhooks/{Sid}
 #
 # operationId: FetchWebhook
-export def "assistants-webhooks FetchWebhook" [
-  AssistantSid: string
-  Sid: string
+export def "assistants-webhooks get" [
+  assistant_sid: string
+  sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1317,22 +1394,23 @@ export def "assistants-webhooks FetchWebhook" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<account_sid: string, assistant_sid: string, date_created: string, date_updated: string, events: string, sid: string, unique_name: string, url: string, webhook_method: string, webhook_url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://autopilot.twilio.com")
-  let full_url = (build-url $base $"/v1/Assistants/($AssistantSid)/Webhooks/($Sid)")
+  let full_url = (build-url $base ({assistant_sid: (encode-path-segment $assistant_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Assistants/{assistant_sid}/Webhooks/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # POST /v1/Assistants/{AssistantSid}/Webhooks/{Sid}
 #
 # operationId: UpdateWebhook
-export def "assistants-webhooks UpdateWebhook" [
-  AssistantSid: string
-  Sid: string
+export def "assistants-webhooks update" [
+  assistant_sid: string
+  sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1340,28 +1418,30 @@ export def "assistants-webhooks UpdateWebhook" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Events: string # The list of space-separated events that this Webhook will subscribe to.
-  --UniqueName: string # An application-defined string that uniquely identifies the new resource. It can be used as an alternative to the `sid` in the URL path to address the resource. This value must be unique and 64 characters or less in length.
-  --WebhookMethod: string # The method to be used when calling the webhook's URL.
-  --WebhookUrl: string # The URL associated with this Webhook. (format: uri)
+  --events: string # The list of space-separated events that this Webhook will subscribe to.
+  --unique-name: string # An application-defined string that uniquely identifies the new resource. It can be used as an alternative to the `sid` in the URL path to address the resource. This value must be unique and 64 characters or less in length.
+  --webhook-method: string # The method to be used when calling the webhook's URL.
+  --webhook-url: string # The URL associated with this Webhook. (format: uri)
 ]: any -> record<account_sid: string, assistant_sid: string, date_created: string, date_updated: string, events: string, sid: string, unique_name: string, url: string, webhook_method: string, webhook_url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://autopilot.twilio.com")
-  let full_url = (build-url $base $"/v1/Assistants/($AssistantSid)/Webhooks/($Sid)")
-  let body = {Events: $Events, UniqueName: $UniqueName, WebhookMethod: $WebhookMethod, WebhookUrl: $WebhookUrl} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({assistant_sid: (encode-path-segment $assistant_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Assistants/{assistant_sid}/Webhooks/{sid}"))
+  let req_body = {"Events": $events, "UniqueName": $unique_name, "WebhookMethod": $webhook_method, "WebhookUrl": $webhook_url} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # DELETE /v1/Assistants/{Sid}
 #
 # operationId: DeleteAssistant
-export def "assistants DeleteAssistant" [
-  Sid: string
+export def "assistants delete" [
+  sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1369,21 +1449,22 @@ export def "assistants DeleteAssistant" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://autopilot.twilio.com")
-  let full_url = (build-url $base $"/v1/Assistants/($Sid)")
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/Assistants/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # GET /v1/Assistants/{Sid}
 #
 # operationId: FetchAssistant
-export def "assistants FetchAssistant" [
-  Sid: string
+export def "assistants get" [
+  sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1391,21 +1472,22 @@ export def "assistants FetchAssistant" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<account_sid: string, callback_events: string, callback_url: string, date_created: string, date_updated: string, development_stage: string, friendly_name: string, latest_model_build_sid: string, links: record, log_queries: bool, needs_model_build: bool, sid: string, unique_name: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://autopilot.twilio.com")
-  let full_url = (build-url $base $"/v1/Assistants/($Sid)")
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/Assistants/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # POST /v1/Assistants/{Sid}
 #
 # operationId: UpdateAssistant
-export def "assistants UpdateAssistant" [
-  Sid: string
+export def "assistants update" [
+  sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1413,23 +1495,25 @@ export def "assistants UpdateAssistant" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --CallbackEvents: string # Reserved.
-  --CallbackUrl: string # Reserved. (format: uri)
-  --Defaults: any # A JSON object that defines the Assistant's [default tasks](https://www.twilio.com/docs/autopilot/api/assistant/defaults) for various scenarios, including initiation actions and fallback tasks.
-  --DevelopmentStage: string # A string describing the state of the assistant.
-  --FriendlyName: string # A descriptive string that you create to describe the resource. It is not unique and can be up to 255 characters long.
-  --LogQueries: oneof<nothing, bool> # Whether queries should be logged and kept after training. Can be: `true` or `false` and defaults to `true`. If `true`, queries are stored for 30 days, and then deleted. If `false`, no queries are stored.
-  --StyleSheet: any # The JSON string that defines the Assistant's [style sheet](https://www.twilio.com/docs/autopilot/api/assistant/stylesheet)
-  --UniqueName: string # An application-defined string that uniquely identifies the resource. It can be used as an alternative to the `sid` in the URL path to address the resource. The first 64 characters must be unique.
+  --callback-events: string # Reserved.
+  --callback-url: string # Reserved. (format: uri)
+  --defaults: any # A JSON object that defines the Assistant's [default tasks](https://www.twilio.com/docs/autopilot/api/assistant/defaults) for various scenarios, including initiation actions and fallback tasks.
+  --development-stage: string # A string describing the state of the assistant.
+  --friendly-name: string # A descriptive string that you create to describe the resource. It is not unique and can be up to 255 characters long.
+  --log-queries: oneof<nothing, bool> # Whether queries should be logged and kept after training. Can be: `true` or `false` and defaults to `true`. If `true`, queries are stored for 30 days, and then deleted. If `false`, no queries are stored.
+  --style-sheet: any # The JSON string that defines the Assistant's [style sheet](https://www.twilio.com/docs/autopilot/api/assistant/stylesheet)
+  --unique-name: string # An application-defined string that uniquely identifies the resource. It can be used as an alternative to the `sid` in the URL path to address the resource. The first 64 characters must be unique.
 ]: any -> record<account_sid: string, callback_events: string, callback_url: string, date_created: string, date_updated: string, development_stage: string, friendly_name: string, latest_model_build_sid: string, links: record, log_queries: bool, needs_model_build: bool, sid: string, unique_name: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://autopilot.twilio.com")
-  let full_url = (build-url $base $"/v1/Assistants/($Sid)")
-  let body = {CallbackEvents: $CallbackEvents, CallbackUrl: $CallbackUrl, Defaults: $Defaults, DevelopmentStage: $DevelopmentStage, FriendlyName: $FriendlyName, LogQueries: $LogQueries, StyleSheet: $StyleSheet, UniqueName: $UniqueName} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/Assistants/{sid}"))
+  let req_body = {"CallbackEvents": $callback_events, "CallbackUrl": $callback_url, "Defaults": $defaults, "DevelopmentStage": $development_stage, "FriendlyName": $friendly_name, "LogQueries": $log_queries, "StyleSheet": $style_sheet, "UniqueName": $unique_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }

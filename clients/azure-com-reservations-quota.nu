@@ -18,21 +18,32 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 }
 
 # Serialize a single query parameter based on collection style
+# Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
+# ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = ($name | url encode)
+  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
-  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
-    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
-    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
+    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
+    _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
+}
+
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Build URL from base, path, and optional query string
@@ -44,7 +55,7 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
@@ -53,25 +64,25 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
     "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "put" => { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "patch" => { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
   if ($method in ["head" "options"]) { return $resp }
-  if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
+  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
 def base-url-completer [] { ["https://management.azure.com"] }
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
-def resourceType-completer [] { ["dedicated" "serviceSpecific" "shared" "standard"] }
+def resource-type-completer [] { ["dedicated" "serviceSpecific" "shared" "standard"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-providers-microsoft-capacity-auto-quota-increase GetProperties" } } | get name | first)
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-providers-microsoft-capacity-auto-quota-increase get-properties" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -95,8 +106,8 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Capacity/autoQuotaIncrease
 # operationId: AutoQuotaIncrease_GetProperties
-export def "subscriptions-providers-microsoft-capacity-auto-quota-increase GetProperties" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-capacity-auto-quota-increase get-properties" [
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -104,16 +115,17 @@ export def "subscriptions-providers-microsoft-capacity-auto-quota-increase GetPr
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Api version.
 ]: nothing -> record<id: string, name: string, properties: record<onFailure: record<emailActions: record, phoneActions: record>, onSuccess: record<emailActions: record, phoneActions: record>, settings: record<autoQuotaIncreaseState: any>, supportTicketAction: record<alternateEmailAddresses: list, autoQuotaIncreaseState: any, country: string, firstName: string, lastName: string, phoneNumber: string, preferredContactMethod: any, primaryEmailAddress: string, severity: any, supportLanguage: string>>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Capacity/autoQuotaIncrease" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Capacity/autoQuotaIncrease") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # For the specified subscription, sets the Auto Quota Increase enrollment properties.
@@ -121,8 +133,8 @@ export def "subscriptions-providers-microsoft-capacity-auto-quota-increase GetPr
 # PUT /subscriptions/{subscriptionId}/providers/Microsoft.Capacity/autoQuotaIncrease
 # operationId: AutoQuotaIncrease_Create
 # --properties shape: {onFailure?: record, onSuccess?: record, settings?: record, supportTicketAction?: record}
-export def "subscriptions-providers-microsoft-capacity-auto-quota-increase Create" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-capacity-auto-quota-increase create" [
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -130,6 +142,7 @@ export def "subscriptions-providers-microsoft-capacity-auto-quota-increase Creat
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Api version.
   --properties: record # Actions for auto quota increase. — shape: {onFailure?: record, onSuccess?: record, settings?: record, supportTicketAction?: record}
@@ -138,21 +151,21 @@ export def "subscriptions-providers-microsoft-capacity-auto-quota-increase Creat
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Capacity/autoQuotaIncrease" $qp)
-  let body = {properties: $properties} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Capacity/autoQuotaIncrease") $qp)
+  let req_body = {"properties": $properties} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Gets the current quota limit and usages for all the resources by the resource provider at the specified location.
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Capacity/resourceProviders/{providerId}/locations/{location}/serviceLimits
 # operationId: Quotas_listStatus
-export def "subscriptions-providers-microsoft-capacity-resource-providers-locations-service-limits list" [
-  subscriptionId: string
-  providerId: string
+export def "subscriptions-providers-microsoft-capacity-resource-providers-locations-service-limits list-quotas-status" [
+  subscription_id: string
+  provider_id: string
   location: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -161,27 +174,28 @@ export def "subscriptions-providers-microsoft-capacity-resource-providers-locati
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Api version.
 ]: nothing -> record<nextLink: string, value: table<currentValue: int, limit: int, name: record, properties: record, quotaPeriod: string, resourceType: any, unit: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Capacity/resourceProviders/($providerId)/locations/($location)/serviceLimits" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), provider_id: (encode-path-segment $provider_id), location: (encode-path-segment $location)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Capacity/resourceProviders/{provider_id}/locations/{location}/serviceLimits") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Gets the current quota limit and usages for the resource provider for the specified location for the specific resource in the parameter.
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Capacity/resourceProviders/{providerId}/locations/{location}/serviceLimits/{resourceName}
 # operationId: Quota_listStatus
-export def "subscriptions-providers-microsoft-capacity-resource-providers-locations-service-limits listStatus" [
-  subscriptionId: string
-  providerId: string
+export def "subscriptions-providers-microsoft-capacity-resource-providers-locations-service-limits list-quota-status" [
+  subscription_id: string
+  provider_id: string
   location: string
-  resourceName: string
+  resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -189,16 +203,17 @@ export def "subscriptions-providers-microsoft-capacity-resource-providers-locati
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Api version.
 ]: nothing -> record<currentValue: int, limit: int, name: record<localizedValue: string, value: string>, properties: record, quotaPeriod: string, resourceType: any, unit: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Capacity/resourceProviders/($providerId)/locations/($location)/serviceLimits/($resourceName)" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), provider_id: (encode-path-segment $provider_id), location: (encode-path-segment $location), resource_name: (encode-path-segment $resource_name)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Capacity/resourceProviders/{provider_id}/locations/{location}/serviceLimits/{resource_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Submits a Quota Request for a resource provider at the specified location for the specific resource in the parameter.
@@ -206,11 +221,11 @@ export def "subscriptions-providers-microsoft-capacity-resource-providers-locati
 # PATCH /subscriptions/{subscriptionId}/providers/Microsoft.Capacity/resourceProviders/{providerId}/locations/{location}/serviceLimits/{resourceName}
 # operationId: QuotaRequest_Update
 # --name shape: {value?: string}
-export def "subscriptions-providers-microsoft-capacity-resource-providers-locations-service-limits Update" [
-  subscriptionId: string
-  providerId: string
+export def "subscriptions-providers-microsoft-capacity-resource-providers-locations-service-limits request-quota-update" [
+  subscription_id: string
+  provider_id: string
   location: string
-  resourceName: string
+  resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -218,27 +233,28 @@ export def "subscriptions-providers-microsoft-capacity-resource-providers-locati
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Api version.
-  --If-Match: string # ETag of the Entity. ETag should match the current entity state from the header response of the GET request or it should be * for unconditional update.
+  --if-match: string # ETag of the Entity. ETag should match the current entity state from the header response of the GET request or it should be * for unconditional update.
   --limit: int # The quota limit.
   --name: any # Name of the resource provide by the resource Provider. Please use this name property for quotaRequests. — shape: {value?: string}
   --properties: record # Additional properties for the specific resource provider.
-  --resourceType: any@resourceType-completer # The resource types.
-  --unit: string #  The units of the limit, such as - Count, Bytes, etc. Use the unit field provided in the Get quota response.
+  --resource-type: any@resource-type-completer # The resource types.
+  --unit: string # The units of the limit, such as - Count, Bytes, etc. Use the unit field provided in the Get quota response.
 ]: any -> record<id: string, name: string, properties: record<message: string, properties: record<currentValue: int, limit: int, name: record, properties: record, quotaPeriod: string, resourceType: any, unit: string>, provisioningState: any, requestSubmitTime: string>, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Capacity/resourceProviders/($providerId)/locations/($location)/serviceLimits/($resourceName)" $qp)
-  let body = {limit: $limit, name: $name, properties: $properties, resourceType: $resourceType, unit: $unit} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"If-Match": $If_Match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), provider_id: (encode-path-segment $provider_id), location: (encode-path-segment $location), resource_name: (encode-path-segment $resource_name)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Capacity/resourceProviders/{provider_id}/locations/{location}/serviceLimits/{resource_name}") $qp)
+  let req_body = {"limit": $limit, "name": $name, "properties": $properties, "resourceType": $resource_type, "unit": $unit} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"If-Match": $if_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Submits a Quota Request for a resource provider at the specified location for the specific resource in the parameter.
@@ -246,11 +262,11 @@ export def "subscriptions-providers-microsoft-capacity-resource-providers-locati
 # PUT /subscriptions/{subscriptionId}/providers/Microsoft.Capacity/resourceProviders/{providerId}/locations/{location}/serviceLimits/{resourceName}
 # operationId: QuotaRequest_Create
 # --name shape: {value?: string}
-export def "subscriptions-providers-microsoft-capacity-resource-providers-locations-service-limits Create" [
-  subscriptionId: string
-  providerId: string
+export def "subscriptions-providers-microsoft-capacity-resource-providers-locations-service-limits request-quota-create" [
+  subscription_id: string
+  provider_id: string
   location: string
-  resourceName: string
+  resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -258,36 +274,37 @@ export def "subscriptions-providers-microsoft-capacity-resource-providers-locati
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Api version.
-  --If-Match: string # ETag of the Entity. ETag should match the current entity state from the header response of the GET request or it should be * for unconditional update.
+  --if-match: string # ETag of the Entity. ETag should match the current entity state from the header response of the GET request or it should be * for unconditional update.
   --limit: int # The quota limit.
   --name: any # Name of the resource provide by the resource Provider. Please use this name property for quotaRequests. — shape: {value?: string}
   --properties: record # Additional properties for the specific resource provider.
-  --resourceType: any@resourceType-completer # The resource types.
-  --unit: string #  The units of the limit, such as - Count, Bytes, etc. Use the unit field provided in the Get quota response.
+  --resource-type: any@resource-type-completer # The resource types.
+  --unit: string # The units of the limit, such as - Count, Bytes, etc. Use the unit field provided in the Get quota response.
 ]: any -> record<id: string, name: string, properties: record<message: string, properties: record<currentValue: int, limit: int, name: record, properties: record, quotaPeriod: string, resourceType: any, unit: string>, provisioningState: any, requestSubmitTime: string>, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Capacity/resourceProviders/($providerId)/locations/($location)/serviceLimits/($resourceName)" $qp)
-  let body = {limit: $limit, name: $name, properties: $properties, resourceType: $resourceType, unit: $unit} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"If-Match": $If_Match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), provider_id: (encode-path-segment $provider_id), location: (encode-path-segment $location), resource_name: (encode-path-segment $resource_name)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Capacity/resourceProviders/{provider_id}/locations/{location}/serviceLimits/{resource_name}") $qp)
+  let req_body = {"limit": $limit, "name": $name, "properties": $properties, "resourceType": $resource_type, "unit": $unit} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"If-Match": $if_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
-# For the specified location and resource Provider, gets the quota requests under the subscription over the time  period of one year ago from now to one year back, based on the filter specified.
+# For the specified location and resource Provider, gets the quota requests under the subscription over the time period of one year ago from now to one year back, based on the filter specified.
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Capacity/resourceProviders/{providerId}/locations/{location}/serviceLimitsRequests
 # operationId: QuotaRequests_ListStatus
-export def "subscriptions-providers-microsoft-capacity-resource-providers-locations-service-limits-requests ListStatus" [
-  subscriptionId: string
-  providerId: string
+export def "subscriptions-providers-microsoft-capacity-resource-providers-locations-service-limits-requests list-quota-status" [
+  subscription_id: string
+  provider_id: string
   location: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -296,28 +313,29 @@ export def "subscriptions-providers-microsoft-capacity-resource-providers-locati
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Api version.
-  --filter: string # | Field                    | Supported operators   |---------------------|------------------------  |requestSubmitTime | ge, le, eq, gt, lt
+  --filter: string # | Field | Supported operators |---------------------|------------------------ |requestSubmitTime | ge, le, eq, gt, lt
   --top: int # Number of records to return. (format: int32)
   --skiptoken: string # Skiptoken is only used if a previous operation returned a partial result. If a previous response contains a nextLink element, the value of the nextLink element will include a skiptoken parameter that specifies a starting point to use for subsequent calls
 ]: nothing -> record<nextLink: string, value: table<id: string, name: string, properties: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$skiptoken" $skiptoken "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Capacity/resourceProviders/($providerId)/locations/($location)/serviceLimitsRequests" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), provider_id: (encode-path-segment $provider_id), location: (encode-path-segment $location)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Capacity/resourceProviders/{provider_id}/locations/{location}/serviceLimitsRequests") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Gets the Quota request status by requestId, for the specified resource provider at specified location.
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Capacity/resourceProviders/{providerId}/locations/{location}/serviceLimitsRequests/{id}
 # operationId: QuotaRequests_GetStatus
-export def "subscriptions-providers-microsoft-capacity-resource-providers-locations-service-limits-requests GetStatus" [
-  subscriptionId: string
-  providerId: string
+export def "subscriptions-providers-microsoft-capacity-resource-providers-locations-service-limits-requests get-quota-status" [
+  subscription_id: string
+  provider_id: string
   location: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -327,14 +345,15 @@ export def "subscriptions-providers-microsoft-capacity-resource-providers-locati
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Api version.
 ]: nothing -> record<id: string, name: string, properties: record<message: string, provisioningState: any, requestSubmitTime: string, value: list<record>>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Capacity/resourceProviders/($providerId)/locations/($location)/serviceLimitsRequests/($id)" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), provider_id: (encode-path-segment $provider_id), location: (encode-path-segment $location), id: (encode-path-segment $id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Capacity/resourceProviders/{provider_id}/locations/{location}/serviceLimitsRequests/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }

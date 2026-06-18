@@ -17,21 +17,32 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 }
 
 # Serialize a single query parameter based on collection style
+# Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
+# ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = ($name | url encode)
+  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
-  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
-    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
-    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
+    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
+    _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
+}
+
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Build URL from base, path, and optional query string
@@ -43,7 +54,7 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
@@ -52,13 +63,13 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
     "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "put" => { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "patch" => { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
   if ($method in ["head" "options"]) { return $resp }
-  if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
+  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
 def base-url-completer [] { ["https://rest.iad-01.braze.com"] }
@@ -67,8 +78,8 @@ def auth-scheme-completer [] { ["bearer"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "campaigns-data-series campaignAnalytics" } } | get name | first)
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "campaigns-data-series get-analytics" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -92,7 +103,7 @@ export def commands []: nothing -> table {
 #
 # GET /campaigns/data_series
 # operationId: campaignAnalytics
-export def "campaigns-data-series campaignAnalytics" [
+export def "campaigns-data-series get-analytics" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -100,10 +111,11 @@ export def "campaigns-data-series campaignAnalytics" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --campaign-id: string # (Required) String  Campaign API identifier (e.g. {{campaign_identifier}})
-  --length: string # (Required) Integer  Max number of days before ending_at to include in the returned series - must be between 1 and 100 inclusive (e.g. 7)
-  --ending-at: string # (Optional) DateTime (ISO 8601 string)  Date on which the data series should end - defaults to time of the request (e.g. 2020-06-28T23:59:59-5:00)
+  --campaign-id: string # (Required) String Campaign API identifier (e.g. {{campaign_identifier}})
+  --length: string # (Required) Integer Max number of days before ending_at to include in the returned series - must be between 1 and 100 inclusive (e.g. 7)
+  --ending-at: string # (Optional) DateTime (ISO 8601 string) Date on which the data series should end - defaults to time of the request (e.g. 2020-06-28T23:59:59-5:00)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -111,14 +123,14 @@ export def "campaigns-data-series campaignAnalytics" [
   let full_url = (build-url $base "/campaigns/data_series" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Campaign Details
 #
 # GET /campaigns/details
 # operationId: campaignDetails
-export def "campaigns-details campaignDetails" [
+export def "campaigns-details get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -126,8 +138,9 @@ export def "campaigns-details campaignDetails" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --campaign-id: string # (Required) String  Campaign API identifier (e.g. {{campaign_identifier}})
+  --campaign-id: string # (Required) String Campaign API identifier (e.g. {{campaign_identifier}})
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -135,14 +148,14 @@ export def "campaigns-details campaignDetails" [
   let full_url = (build-url $base "/campaigns/details" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Campaign List
 #
 # GET /campaigns/list
 # operationId: campaignList
-export def "campaigns-list campaignList" [
+export def "campaigns-list list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -150,26 +163,27 @@ export def "campaigns-list campaignList" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --page: string # (Optional) Integer  The page of campaigns to return, defaults to 0 (returns the first set of up to 100) (e.g. 0)
-  --include-archived: string # (Optional) Boolean  Whether or not to include archived campaigns, defaults to false (e.g. false)
-  --sort-direction: string # (Optional) String  Pass in the value `desc` to sort by creation time from newest to oldest. Pass in `asc` to sort from oldest to newest. If sort_direction is not included, the default order is oldest to newest. (e.g. desc)
-  --last-edittimegt: string # (Optional) DateTime (ISO 8601 string)  Filters the results and only returns campaigns that were edited greater than the time provided till now.  (e.g. 2020-06-28T23:59:59-5:00)
+  --page: string # (Optional) Integer The page of campaigns to return, defaults to 0 (returns the first set of up to 100) (e.g. 0)
+  --include-archived: string # (Optional) Boolean Whether or not to include archived campaigns, defaults to false (e.g. false)
+  --sort-direction: string # (Optional) String Pass in the value `desc` to sort by creation time from newest to oldest. Pass in `asc` to sort from oldest to newest. If sort_direction is not included, the default order is oldest to newest. (e.g. desc)
+  --last-edit-time-gt: string # (Optional) DateTime (ISO 8601 string) Filters the results and only returns campaigns that were edited greater than the time provided till now. (e.g. 2020-06-28T23:59:59-5:00)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "include_archived" $include_archived "scalar") (serialize-qp "sort_direction" $sort_direction "scalar") (serialize-qp "last_edit.time[gt]" $last_edittimegt "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "include_archived" $include_archived "scalar") (serialize-qp "sort_direction" $sort_direction "scalar") (serialize-qp "last_edit.time[gt]" $last_edit_time_gt "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/campaigns/list" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Canvas Data Series Analytics
 #
 # GET /canvas/data_series
 # operationId: canvasDataSeriesAnalytics
-export def "canvas-data-series canvasDataSeriesAnalytics" [
+export def "canvas-data-series get-analytics" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -177,14 +191,15 @@ export def "canvas-data-series canvasDataSeriesAnalytics" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --canvas-id: string # (Required) String  Canvas API Identifier (e.g. {{canvas_id}})
-  --ending-at: string # (Required) DateTime (ISO 8601 string)  Date on which the data export should end - defaults to time of the request (e.g. 2018-05-30T23:59:59-5:00)
-  --starting-at: string # (Optional) DateTime (ISO 8601 string)   Date on which the data export should begin (either length or starting_at are required) (e.g. 2018-05-28T23:59:59-5:00)
-  --length: string # (Optional) DateTime (ISO 8601 string)  Max number of days before ending_at to include in the returned series - must be between 1 and 14 inclusive (either length or starting_at required) (e.g. 10)
-  --include-variant-breakdown: string # (Optional) Boolean  Whether or not to include variant stats (defaults to false) (e.g. true)
-  --include-step-breakdown: string # (Optional) Boolean  Whether or not to include step stats (defaults to false) (e.g. true)
-  --include-deleted-step-data: string # (Optional) Boolean  Whether or not to include step stats for deleted steps (defaults to false) (e.g. true)
+  --canvas-id: string # (Required) String Canvas API Identifier (e.g. {{canvas_id}})
+  --ending-at: string # (Required) DateTime (ISO 8601 string) Date on which the data export should end - defaults to time of the request (e.g. 2018-05-30T23:59:59-5:00)
+  --starting-at: string # (Optional) DateTime (ISO 8601 string) Date on which the data export should begin (either length or starting_at are required) (e.g. 2018-05-28T23:59:59-5:00)
+  --length: string # (Optional) DateTime (ISO 8601 string) Max number of days before ending_at to include in the returned series - must be between 1 and 14 inclusive (either length or starting_at required) (e.g. 10)
+  --include-variant-breakdown: string # (Optional) Boolean Whether or not to include variant stats (defaults to false) (e.g. true)
+  --include-step-breakdown: string # (Optional) Boolean Whether or not to include step stats (defaults to false) (e.g. true)
+  --include-deleted-step-data: string # (Optional) Boolean Whether or not to include step stats for deleted steps (defaults to false) (e.g. true)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -192,14 +207,14 @@ export def "canvas-data-series canvasDataSeriesAnalytics" [
   let full_url = (build-url $base "/canvas/data_series" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Canvas Data Analytics Summary
 #
 # GET /canvas/data_summary
 # operationId: canvasDataAnalyticsSummary
-export def "canvas-data-summary canvasDataAnalyticsSummary" [
+export def "canvas-data-summary get-analytics" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -207,14 +222,15 @@ export def "canvas-data-summary canvasDataAnalyticsSummary" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --canvas-id: string # (Required) String   Canvas API identifier (e.g. {{canvas_id}})
-  --ending-at: string # (Required) DateTime (ISO 8601 string)  Date on which the data export should end - defaults to time of the request (e.g. 2018-05-30T23:59:59-5:00)
-  --starting-at: string # (Optional) DateTime (ISO 8601 string)  Date on which the data export should begin (either length or starting_at required) (e.g. 2018-05-28T23:59:59-5:00)
-  --length: string # (Optional) Integer  Max number of days before ending_at to include in the returned series - must be between 1 and 14 inclusive (either length or starting_at required) (e.g. 5)
-  --include-variant-breakdown: string # (Optional) Boolean  Whether or not to include variant stats (defaults to false) (e.g. true)
-  --include-step-breakdown: string # (Optional) Boolean  Whether or not to include step stats (defaults to false) (e.g. true)
-  --include-deleted-step-data: string # (Optional) Boolean  Whether or not to include step stats for deleted steps (defaults to false) (e.g. true)
+  --canvas-id: string # (Required) String Canvas API identifier (e.g. {{canvas_id}})
+  --ending-at: string # (Required) DateTime (ISO 8601 string) Date on which the data export should end - defaults to time of the request (e.g. 2018-05-30T23:59:59-5:00)
+  --starting-at: string # (Optional) DateTime (ISO 8601 string) Date on which the data export should begin (either length or starting_at required) (e.g. 2018-05-28T23:59:59-5:00)
+  --length: string # (Optional) Integer Max number of days before ending_at to include in the returned series - must be between 1 and 14 inclusive (either length or starting_at required) (e.g. 5)
+  --include-variant-breakdown: string # (Optional) Boolean Whether or not to include variant stats (defaults to false) (e.g. true)
+  --include-step-breakdown: string # (Optional) Boolean Whether or not to include step stats (defaults to false) (e.g. true)
+  --include-deleted-step-data: string # (Optional) Boolean Whether or not to include step stats for deleted steps (defaults to false) (e.g. true)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -222,14 +238,14 @@ export def "canvas-data-summary canvasDataAnalyticsSummary" [
   let full_url = (build-url $base "/canvas/data_summary" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Canvas Details
 #
 # GET /canvas/details
 # operationId: canvasDetails
-export def "canvas-details canvasDetails" [
+export def "canvas-details get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -237,8 +253,9 @@ export def "canvas-details canvasDetails" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --canvas-id: string # (Required) String  Canvas API Identifier  (e.g. {{canvas_identifier}})
+  --canvas-id: string # (Required) String Canvas API Identifier (e.g. {{canvas_identifier}})
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -246,14 +263,14 @@ export def "canvas-details canvasDetails" [
   let full_url = (build-url $base "/canvas/details" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Canvas List
 #
 # GET /canvas/list
 # operationId: canvasList
-export def "canvas-list canvasList" [
+export def "canvas-list list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -261,19 +278,20 @@ export def "canvas-list canvasList" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --page: string # (Optional) Integer  The page of Canvases to return, defaults to `0` (returns the first set of up to 100) (e.g. 1)
-  --include-archived: string # (Optional) Boolean  Whether or not to include archived Canvases, defaults to `false`. (e.g. false)
-  --sort-direction: string # (Optional) String  Pass in the value `desc` to sort by creation time from newest to oldest. Pass in `asc` to sort from oldest to newest. If sort_direction is not included, the default order is oldest to newest. (e.g. desc)
-  --last-edittimegt: string # (Optional) DateTime (ISO 8601 string)  Filters the results and only returns Canvases that were edited greater than the time provided till now. (e.g. 2020-06-28T23:59:59-5:00)
+  --page: string # (Optional) Integer The page of Canvases to return, defaults to `0` (returns the first set of up to 100) (e.g. 1)
+  --include-archived: string # (Optional) Boolean Whether or not to include archived Canvases, defaults to `false`. (e.g. false)
+  --sort-direction: string # (Optional) String Pass in the value `desc` to sort by creation time from newest to oldest. Pass in `asc` to sort from oldest to newest. If sort_direction is not included, the default order is oldest to newest. (e.g. desc)
+  --last-edit-time-gt: string # (Optional) DateTime (ISO 8601 string) Filters the results and only returns Canvases that were edited greater than the time provided till now. (e.g. 2020-06-28T23:59:59-5:00)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "include_archived" $include_archived "scalar") (serialize-qp "sort_direction" $sort_direction "scalar") (serialize-qp "last_edit.time[gt]" $last_edittimegt "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "include_archived" $include_archived "scalar") (serialize-qp "sort_direction" $sort_direction "scalar") (serialize-qp "last_edit.time[gt]" $last_edit_time_gt "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/canvas/list" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Schedule API Triggered Canvases
@@ -283,7 +301,7 @@ export def "canvas-list canvasList" [
 # --audience shape: {AND?: list}
 # --recipients item shape: {canvas_entry_properties?: record, external_user_id?: string, trigger_properties?: string, user_alias?: string}
 # --schedule shape: {at_optimal_time?: bool, in_local_time?: bool, time?: string}
-export def "canvas-trigger-schedule-create scheduleApiTriggeredCanvases" [
+export def "canvas-trigger-schedule-create create-triggered-canvases" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -291,6 +309,7 @@ export def "canvas-trigger-schedule-create scheduleApiTriggeredCanvases" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --audience: record # shape: {AND?: list}
   --broadcast: oneof<nothing, bool> # e.g. false
@@ -303,18 +322,18 @@ export def "canvas-trigger-schedule-create scheduleApiTriggeredCanvases" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/canvas/trigger/schedule/create")
-  let body = {audience: $audience, broadcast: $broadcast, canvas_entry_properties: $canvas_entry_properties, canvas_id: $canvas_id, recipients: $recipients, schedule: $schedule} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"audience": $audience, "broadcast": $broadcast, "canvas_entry_properties": $canvas_entry_properties, "canvas_id": $canvas_id, "recipients": $recipients, "schedule": $schedule} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # See Content Block Information
 #
 # GET /content_blocks/info
 # operationId: seeContentBlockInformation
-export def "content-blocks-info seeContentBlockInformation" [
+export def "content-blocks-info get-see-information" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -322,9 +341,10 @@ export def "content-blocks-info seeContentBlockInformation" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-block-id: string # (Required) String  The Content Block ID. This can be found by either listing Content Block information or going to the Developer Console, then API Settings, then scrolling to the bottom and searching for your Content Block API Identifier. (e.g. {{content_block_id}})
-  --include-inclusion-data: string # (Optional) Boolean  When set to ‘true’, the API returns back the Message Variation API ID of Campaigns and Canvases where this content block is included, to be used in subsequent calls. The results exclude archived or deleted Campaigns or Canvases. (e.g. No)
+  --content-block-id: string # (Required) String The Content Block ID. This can be found by either listing Content Block information or going to the Developer Console, then API Settings, then scrolling to the bottom and searching for your Content Block API Identifier. (e.g. {{content_block_id}})
+  --include-inclusion-data: string # (Optional) Boolean When set to ‘true’, the API returns back the Message Variation API ID of Campaigns and Canvases where this content block is included, to be used in subsequent calls. The results exclude archived or deleted Campaigns or Canvases. (e.g. No)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -332,14 +352,14 @@ export def "content-blocks-info seeContentBlockInformation" [
   let full_url = (build-url $base "/content_blocks/info" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # List Available Content Blocks
 #
 # GET /content_blocks/list
 # operationId: listAvailableContentBlocks
-export def "content-blocks-list listAvailableContentBlocks" [
+export def "content-blocks-list list-available" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -347,11 +367,12 @@ export def "content-blocks-list listAvailableContentBlocks" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --modified-after: string # (Optional) String in ISO 8601  Retrieve only content blocks updated at or after the given time. (e.g. 2020-01-01T01:01:01.000000)
-  --modified-before: string # (Optional) String in ISO 8601  Retrieve only content blocks updated at or before the given time. (e.g. 2020-02-01T01:01:01.000000)
-  --limit: string # (Optional) Positive Number  Maximum number of content blocks to retrieve, default to 100 if not provided, maximum acceptable value is 1000. (e.g. 100)
-  --offset: string # (Optional) Positive Number  Number of content blocks to skip before returning rest of the templates that fit the search criteria. (e.g. 1)
+  --modified-after: string # (Optional) String in ISO 8601 Retrieve only content blocks updated at or after the given time. (e.g. 2020-01-01T01:01:01.000000)
+  --modified-before: string # (Optional) String in ISO 8601 Retrieve only content blocks updated at or before the given time. (e.g. 2020-02-01T01:01:01.000000)
+  --limit: string # (Optional) Positive Number Maximum number of content blocks to retrieve, default to 100 if not provided, maximum acceptable value is 1000. (e.g. 100)
+  --offset: string # (Optional) Positive Number Number of content blocks to skip before returning rest of the templates that fit the search criteria. (e.g. 1)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -359,14 +380,14 @@ export def "content-blocks-list listAvailableContentBlocks" [
   let full_url = (build-url $base "/content_blocks/list" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Query Hard Bounced Emails
 #
 # GET /email/hard_bounces
 # operationId: queryHardBouncedEmails
-export def "email-hard-bounces queryHardBouncedEmails" [
+export def "email-hard-bounces list-bounced" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -374,12 +395,13 @@ export def "email-hard-bounces queryHardBouncedEmails" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --start-date: string # (Optional*) String in YYYY-MM-DD format   Start date of the range to retrieve hard bounces, must be earlier than `end_date`. This is treated as midnight in UTC time by the API.  *You must provide either an `email` or a `start_date`, and an `end_date`.  (e.g. 2019-01-01)
-  --end-date: string # (Optional*) String in YYYY-MM-DD format  String in YYYY-MM-DD format. End date of the range to retrieve hard bounces. This is treated as midnight in UTC time by the API.  *You must provide either an `email` or a `start_date`, and an `end_date`. (e.g. 2019-02-01)
-  --limit: string # (Optional) Integer  Optional field to limit the number of results returned. Defaults to 100, maximum is 500. (e.g. 100)
-  --offset: string # (Optional) Integer  Optional beginning point in the list to retrieve from. (e.g. 1)
-  --email: string # (Optional*) String  If provided, we will return whether or not the user has hard bounced.  *You must provide either an `email` or a `start_date`, and an `end_date`. (e.g. example@braze.com)
+  --start-date: string # (Optional*) String in YYYY-MM-DD format Start date of the range to retrieve hard bounces, must be earlier than `end_date`. This is treated as midnight in UTC time by the API. *You must provide either an `email` or a `start_date`, and an `end_date`. (e.g. 2019-01-01)
+  --end-date: string # (Optional*) String in YYYY-MM-DD format String in YYYY-MM-DD format. End date of the range to retrieve hard bounces. This is treated as midnight in UTC time by the API. *You must provide either an `email` or a `start_date`, and an `end_date`. (e.g. 2019-02-01)
+  --limit: string # (Optional) Integer Optional field to limit the number of results returned. Defaults to 100, maximum is 500. (e.g. 100)
+  --offset: string # (Optional) Integer Optional beginning point in the list to retrieve from. (e.g. 1)
+  --email: string # (Optional*) String If provided, we will return whether or not the user has hard bounced. *You must provide either an `email` or a `start_date`, and an `end_date`. (e.g. example@braze.com)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -387,14 +409,14 @@ export def "email-hard-bounces queryHardBouncedEmails" [
   let full_url = (build-url $base "/email/hard_bounces" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Query List of Unsubscribed Email Addresses
 #
 # GET /email/unsubscribes
 # operationId: queryListOfUnsubscribedEmailAddresses
-export def "email-unsubscribes queryListOfUnsubscribedEmailAddresses" [
+export def "email-unsubscribes list-list-of-unsubscribed-addresses" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -402,13 +424,14 @@ export def "email-unsubscribes queryListOfUnsubscribedEmailAddresses" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --start-date: string # (Optional*) String in YYYY-MM-DD format  Start date of the range to retrieve unsubscribes, must be earlier than end_date. This is treated as midnight in UTC time by the API. (e.g. 2020-01-01)
-  --end-date: string # (Optional*)  String in YYYY-MM-DD format  End date of the range to retrieve unsubscribes. This is treated as midnight in UTC time by the API. (e.g. 2020-02-01)
-  --limit: string # (Optional) Integer  Optional field to limit the number of results returned. Limit must be greater than 1. Defaults to 100, maximum is 500. (e.g. 1)
-  --offset: string # (Optional) Integer   Optional beginning point in the list to retrieve from (e.g. 1)
-  --sort-direction: string # (Optional) String  Pass in the value `asc` to sort unsubscribes from oldest to newest. Pass in `desc` to sort from newest to oldest. If sort_direction is not included, the default order is newest to oldest. (e.g. desc)
-  --email: string # (Optional*) String  If provided, we will return whether or not the user has unsubscribed (e.g. example@braze.com)
+  --start-date: string # (Optional*) String in YYYY-MM-DD format Start date of the range to retrieve unsubscribes, must be earlier than end_date. This is treated as midnight in UTC time by the API. (e.g. 2020-01-01)
+  --end-date: string # (Optional*) String in YYYY-MM-DD format End date of the range to retrieve unsubscribes. This is treated as midnight in UTC time by the API. (e.g. 2020-02-01)
+  --limit: string # (Optional) Integer Optional field to limit the number of results returned. Limit must be greater than 1. Defaults to 100, maximum is 500. (e.g. 1)
+  --offset: string # (Optional) Integer Optional beginning point in the list to retrieve from (e.g. 1)
+  --sort-direction: string # (Optional) String Pass in the value `asc` to sort unsubscribes from oldest to newest. Pass in `desc` to sort from newest to oldest. If sort_direction is not included, the default order is newest to oldest. (e.g. desc)
+  --email: string # (Optional*) String If provided, we will return whether or not the user has unsubscribed (e.g. example@braze.com)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -416,14 +439,14 @@ export def "email-unsubscribes queryListOfUnsubscribedEmailAddresses" [
   let full_url = (build-url $base "/email/unsubscribes" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Custom Events Analytics
 #
 # GET /events/data_series
 # operationId: customEventsAnalytics
-export def "events-data-series customEventsAnalytics" [
+export def "events-data-series get-custom-analytics" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -431,13 +454,14 @@ export def "events-data-series customEventsAnalytics" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --event: string # (Required) String  The name of the custom event for which to return analytics  (e.g. event_name)
-  --length: string # (Required) Integer  Max number of units (days or hours) before ending_at to include in the returned series - must be between 1 and 100 inclusive (e.g. 24)
-  --unit: string # (Optional) String  Unit of time between data points - can be "day" or "hour" (defaults to "day") (e.g. hour)
-  --ending-at: string # (Optional) DateTime (ISO 8601 string)  Point in time when the data series should end - defaults to time of the request (e.g. 2014-12-10T23:59:59-05:00)
-  --app-id: string # (Optional) String  App API identifier retrieved from the Developer Console to limit analytics to a specific app (e.g. {{app_identifier}})
-  --segment-id: string # (Optional) String  Segment API identifier indicating the analytics enabled segment for which event analytics should be returned (e.g. {{segment_identifier}})
+  --event: string # (Required) String The name of the custom event for which to return analytics (e.g. event_name)
+  --length: string # (Required) Integer Max number of units (days or hours) before ending_at to include in the returned series - must be between 1 and 100 inclusive (e.g. 24)
+  --unit: string # (Optional) String Unit of time between data points - can be "day" or "hour" (defaults to "day") (e.g. hour)
+  --ending-at: string # (Optional) DateTime (ISO 8601 string) Point in time when the data series should end - defaults to time of the request (e.g. 2014-12-10T23:59:59-05:00)
+  --app-id: string # (Optional) String App API identifier retrieved from the Developer Console to limit analytics to a specific app (e.g. {{app_identifier}})
+  --segment-id: string # (Optional) String Segment API identifier indicating the analytics enabled segment for which event analytics should be returned (e.g. {{segment_identifier}})
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -445,14 +469,14 @@ export def "events-data-series customEventsAnalytics" [
   let full_url = (build-url $base "/events/data_series" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Custom Events List
 #
 # GET /events/list
 # operationId: customEventsList
-export def "events-list customEventsList" [
+export def "events-list list-custom" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -460,8 +484,9 @@ export def "events-list customEventsList" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --page: string # (Optional) Integer  The page of event names to return, defaults to 0 (returns the first set of up to 250) (e.g. 3)
+  --page: string # (Optional) Integer The page of event names to return, defaults to 0 (returns the first set of up to 250) (e.g. 3)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -469,14 +494,14 @@ export def "events-list customEventsList" [
   let full_url = (build-url $base "/events/list" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # News Feed Card Analytics
 #
 # GET /feed/data_series
 # operationId: newsFeedCardAnalytics
-export def "feed-data-series newsFeedCardAnalytics" [
+export def "feed-data-series get-news-card-analytics" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -484,11 +509,12 @@ export def "feed-data-series newsFeedCardAnalytics" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --card-id: string # (Required) String  Card API identifier (e.g. {{card_identifier}})
-  --length: string # (Required) Integer  Max number of units (days or hours) before ending_at to include in the returned series - must be between 1 and 100 inclusive (e.g. 14)
-  --unit: string # (Optional) String  Unit of time between data points - can be "day" or "hour" (defaults to "day") (e.g. day)
-  --ending-at: string # (Optional) DateTime (ISO 8601 string)  Date on which the data series should end - defaults to time of the request (e.g. 2018-06-28T23:59:59-5:00)
+  --card-id: string # (Required) String Card API identifier (e.g. {{card_identifier}})
+  --length: string # (Required) Integer Max number of units (days or hours) before ending_at to include in the returned series - must be between 1 and 100 inclusive (e.g. 14)
+  --unit: string # (Optional) String Unit of time between data points - can be "day" or "hour" (defaults to "day") (e.g. day)
+  --ending-at: string # (Optional) DateTime (ISO 8601 string) Date on which the data series should end - defaults to time of the request (e.g. 2018-06-28T23:59:59-5:00)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -496,14 +522,14 @@ export def "feed-data-series newsFeedCardAnalytics" [
   let full_url = (build-url $base "/feed/data_series" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # News Feed Cards Details
 #
 # GET /feed/details
 # operationId: newsFeedCardsDetails
-export def "feed-details newsFeedCardsDetails" [
+export def "feed-details get-news-cards" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -511,8 +537,9 @@ export def "feed-details newsFeedCardsDetails" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --card-id: string # (Required) String  Card API identifier  (e.g. {{card_identifier}})
+  --card-id: string # (Required) String Card API identifier (e.g. {{card_identifier}})
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -520,14 +547,14 @@ export def "feed-details newsFeedCardsDetails" [
   let full_url = (build-url $base "/feed/details" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # News Feed Cards List
 #
 # GET /feed/list
 # operationId: newsFeedCardsList
-export def "feed-list newsFeedCardsList" [
+export def "feed-list list-news-cards" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -535,10 +562,11 @@ export def "feed-list newsFeedCardsList" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --page: string # (Optional) Integer  The page of cards to return, defaults to 0 (returns the first set of up to 100) (e.g. 1)
-  --include-archived: string # (Optional) Boolean  Whether or not to include archived cards, defaults to false (e.g. true)
-  --sort-direction: string # (Optional) String  Pass in the value `desc` to sort by creation time from newest to oldest. Pass in `asc` to sort from oldest to newest. If sort_direction is not included, the default order is oldest to newest. (e.g. desc)
+  --page: string # (Optional) Integer The page of cards to return, defaults to 0 (returns the first set of up to 100) (e.g. 1)
+  --include-archived: string # (Optional) Boolean Whether or not to include archived cards, defaults to false (e.g. true)
+  --sort-direction: string # (Optional) String Pass in the value `desc` to sort by creation time from newest to oldest. Pass in `asc` to sort from oldest to newest. If sort_direction is not included, the default order is oldest to newest. (e.g. desc)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -546,14 +574,14 @@ export def "feed-list newsFeedCardsList" [
   let full_url = (build-url $base "/feed/list" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Daily Active Users by Date
 #
 # GET /kpi/dau/data_series
 # operationId: dailyActiveUsersByDate
-export def "kpi-dau-data-series dailyActiveUsersByDate" [
+export def "kpi-dau-data-series get-daily-active-users-by-date" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -561,10 +589,11 @@ export def "kpi-dau-data-series dailyActiveUsersByDate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --length: string # (Required) Integer  Max number of days before ending_at to include in the returned series - must be between 1 and 100 inclusive (e.g. 10)
-  --ending-at: string # (Optional) DateTime (ISO 8601 string)  Point in time when the data series should end - defaults to time of the request (e.g. 2018-06-28T23:59:59-5:00)
-  --app-id: string # (Optional) String  App API identifier; if excluded, results for all apps in app group will be returned (e.g. {{app_identifier}})
+  --length: string # (Required) Integer Max number of days before ending_at to include in the returned series - must be between 1 and 100 inclusive (e.g. 10)
+  --ending-at: string # (Optional) DateTime (ISO 8601 string) Point in time when the data series should end - defaults to time of the request (e.g. 2018-06-28T23:59:59-5:00)
+  --app-id: string # (Optional) String App API identifier; if excluded, results for all apps in app group will be returned (e.g. {{app_identifier}})
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -572,14 +601,14 @@ export def "kpi-dau-data-series dailyActiveUsersByDate" [
   let full_url = (build-url $base "/kpi/dau/data_series" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Monthly Active Users for Last 30 Days
 #
 # GET /kpi/mau/data_series
 # operationId: monthlyActiveUsersForLast30Days
-export def "kpi-mau-data-series monthlyActiveUsersForLast30Days" [
+export def "kpi-mau-data-series get-monthly-active-users-for-last30-days" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -587,10 +616,11 @@ export def "kpi-mau-data-series monthlyActiveUsersForLast30Days" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --length: string # (Required) Integer  Max number of days before ending_at to include in the returned series - must be between 1 and 100 inclusive (e.g. 7)
-  --ending-at: string # (Optional) DateTime (ISO 8601 string)  Point in time when the data series should end - defaults to time of the request (e.g. 2018-06-28T23:59:59-05:00)
-  --app-id: string # (Optional) String  App API identifier; if excluded, results for all apps in app group will be returned (e.g. {{app_identifier}})
+  --length: string # (Required) Integer Max number of days before ending_at to include in the returned series - must be between 1 and 100 inclusive (e.g. 7)
+  --ending-at: string # (Optional) DateTime (ISO 8601 string) Point in time when the data series should end - defaults to time of the request (e.g. 2018-06-28T23:59:59-05:00)
+  --app-id: string # (Optional) String App API identifier; if excluded, results for all apps in app group will be returned (e.g. {{app_identifier}})
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -598,14 +628,14 @@ export def "kpi-mau-data-series monthlyActiveUsersForLast30Days" [
   let full_url = (build-url $base "/kpi/mau/data_series" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Daily New Users by Date
 #
 # GET /kpi/new_users/data_series
 # operationId: dailyNewUsersByDate
-export def "kpi-new-users-data-series dailyNewUsersByDate" [
+export def "kpi-new-users-data-series get-daily-by-date" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -613,10 +643,11 @@ export def "kpi-new-users-data-series dailyNewUsersByDate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --length: string # (Required) Integer  Max number of days before ending_at to include in the returned series - must be between 1 and 100 inclusive (e.g. 14)
-  --ending-at: string # (Optional) DateTime (ISO 8601 string)  Point in time when the data series should end - defaults to time of the request (e.g. 2018-06-28T23:59:59-5:00)
-  --app-id: string # (Optional) String  App API identifier; if excluded, results for all apps in app group will be returned (e.g. {{app_identifier}})
+  --length: string # (Required) Integer Max number of days before ending_at to include in the returned series - must be between 1 and 100 inclusive (e.g. 14)
+  --ending-at: string # (Optional) DateTime (ISO 8601 string) Point in time when the data series should end - defaults to time of the request (e.g. 2018-06-28T23:59:59-5:00)
+  --app-id: string # (Optional) String App API identifier; if excluded, results for all apps in app group will be returned (e.g. {{app_identifier}})
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -624,14 +655,14 @@ export def "kpi-new-users-data-series dailyNewUsersByDate" [
   let full_url = (build-url $base "/kpi/new_users/data_series" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # KPIs for Daily App Uninstalls by Date
 #
 # GET /kpi/uninstalls/data_series
 # operationId: kpIsForDailyAppUninstallsByDate
-export def "kpi-uninstalls-data-series kpIsForDailyAppUninstallsByDate" [
+export def "kpi-uninstalls-data-series get-kp-is-for-daily-app-by-date" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -639,10 +670,11 @@ export def "kpi-uninstalls-data-series kpIsForDailyAppUninstallsByDate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --length: string # (Required) Integer  Max number of days before ending_at to include in the returned series - must be between 1 and 100 inclusive (e.g. 14)
-  --ending-at: string # (Optional) DateTime (ISO 8601 string)  Point in time when the data series should end - defaults to time of the request (e.g. 2018-06-28T23:59:59-5:00)
-  --app-id: string # (Optional) String  App API identifier; if excluded, results for all apps in app group will be returned (e.g. {{app_identifier}})
+  --length: string # (Required) Integer Max number of days before ending_at to include in the returned series - must be between 1 and 100 inclusive (e.g. 14)
+  --ending-at: string # (Optional) DateTime (ISO 8601 string) Point in time when the data series should end - defaults to time of the request (e.g. 2018-06-28T23:59:59-5:00)
+  --app-id: string # (Optional) String App API identifier; if excluded, results for all apps in app group will be returned (e.g. {{app_identifier}})
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -650,14 +682,14 @@ export def "kpi-uninstalls-data-series kpIsForDailyAppUninstallsByDate" [
   let full_url = (build-url $base "/kpi/uninstalls/data_series" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get Upcoming Scheduled Campaigns and Canvases
 #
 # GET /messages/scheduled_broadcasts
 # operationId: getUpcomingScheduledCampaignsAndCanvases
-export def "messages-scheduled-broadcasts get" [
+export def "messages-scheduled-broadcasts get-upcoming-campaigns-and-canvases" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -665,8 +697,9 @@ export def "messages-scheduled-broadcasts get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --end-time: string # (Required) String in ISO 8601 format  End date of the range to retrieve upcoming scheduled Campaigns and Canvases. This is treated as midnight in UTC time by the API. (e.g. 2018-09-01T00:00:00-04:00)
+  --end-time: string # (Required) String in ISO 8601 format End date of the range to retrieve upcoming scheduled Campaigns and Canvases. This is treated as midnight in UTC time by the API. (e.g. 2018-09-01T00:00:00-04:00)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -674,14 +707,14 @@ export def "messages-scheduled-broadcasts get" [
   let full_url = (build-url $base "/messages/scheduled_broadcasts" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Segment Analytics
 #
 # GET /segments/data_series
 # operationId: segmentAnalytics
-export def "segments-data-series segmentAnalytics" [
+export def "segments-data-series get-analytics" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -689,10 +722,11 @@ export def "segments-data-series segmentAnalytics" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --segment-id: string # (Required) String  Segment API identifier. (e.g. {{segment_identifier}})
-  --length: string # (Required) Integer  Max number of days before `ending_at` to include in the returned series - must be between 1 and 100 inclusive. (e.g. 14)
-  --ending-at: string # (Optional) DateTime (ISO 8601 string)  Point in time when the data series should end - defaults to time of the request. (e.g. 2018-06-27T23:59:59-5:00)
+  --segment-id: string # (Required) String Segment API identifier. (e.g. {{segment_identifier}})
+  --length: string # (Required) Integer Max number of days before `ending_at` to include in the returned series - must be between 1 and 100 inclusive. (e.g. 14)
+  --ending-at: string # (Optional) DateTime (ISO 8601 string) Point in time when the data series should end - defaults to time of the request. (e.g. 2018-06-27T23:59:59-5:00)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -700,14 +734,14 @@ export def "segments-data-series segmentAnalytics" [
   let full_url = (build-url $base "/segments/data_series" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Segment Details
 #
 # GET /segments/details
 # operationId: segmentDetails
-export def "segments-details segmentDetails" [
+export def "segments-details get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -715,8 +749,9 @@ export def "segments-details segmentDetails" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --segment-id: string # (Required) String  Segment API identifier (e.g. {{segment_identifier}})
+  --segment-id: string # (Required) String Segment API identifier (e.g. {{segment_identifier}})
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -724,14 +759,14 @@ export def "segments-details segmentDetails" [
   let full_url = (build-url $base "/segments/details" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Segment List
 #
 # GET /segments/list
 # operationId: segmentList
-export def "segments-list segmentList" [
+export def "segments-list list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -739,9 +774,10 @@ export def "segments-list segmentList" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --page: string # (Optional) Integer  The page of segments to return, defaults to 0 (returns the first set of up to 100) (e.g. 1)
-  --sort-direction: string # (Optional) String  Pass in the value `desc` to sort by creation time from newest to oldest. Pass in `asc` to sort from oldest to newest. If `sort_direction` is not included, the default order is oldest to newest. (e.g. desc)
+  --page: string # (Optional) Integer The page of segments to return, defaults to 0 (returns the first set of up to 100) (e.g. 1)
+  --sort-direction: string # (Optional) String Pass in the value `desc` to sort by creation time from newest to oldest. Pass in `asc` to sort from oldest to newest. If `sort_direction` is not included, the default order is oldest to newest. (e.g. desc)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -749,14 +785,14 @@ export def "segments-list segmentList" [
   let full_url = (build-url $base "/segments/list" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Send Analytics
 #
 # GET /sends/data_series
 # operationId: sendAnalytics
-export def "sends-data-series sendAnalytics" [
+export def "sends-data-series send-analytics" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -764,11 +800,12 @@ export def "sends-data-series sendAnalytics" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --campaign-id: string # (Required) String  Campaign API identifier. (e.g. {{campaign_identifier}})
-  --send-id: string # (Required) String  Send API identifier. (e.g. {{send_identifier}})
-  --length: string # (Required) Integer  Maximum number of days before `ending_at` to include in the returned series. Must be between 1 and 100 inclusive. (e.g. 30)
-  --ending-at: string # (Optional) Datetime ISO 8601 string  Date on which the data series should end. Defaults to time of the request. (e.g. 2014-12-10T23:59:59-05:00)
+  --campaign-id: string # (Required) String Campaign API identifier. (e.g. {{campaign_identifier}})
+  --send-id: string # (Required) String Send API identifier. (e.g. {{send_identifier}})
+  --length: string # (Required) Integer Maximum number of days before `ending_at` to include in the returned series. Must be between 1 and 100 inclusive. (e.g. 30)
+  --ending-at: string # (Optional) Datetime ISO 8601 string Date on which the data series should end. Defaults to time of the request. (e.g. 2014-12-10T23:59:59-05:00)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -776,14 +813,14 @@ export def "sends-data-series sendAnalytics" [
   let full_url = (build-url $base "/sends/data_series" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # App Sessions by Time
 #
 # GET /sessions/data_series
 # operationId: appSessionsByTime
-export def "sessions-data-series appSessionsByTime" [
+export def "sessions-data-series get-app-by-time" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -791,12 +828,13 @@ export def "sessions-data-series appSessionsByTime" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --length: string # (Required) Integer  Max number of units (days or hours) before ending_at to include in the returned series - must be between 1 and 100 inclusive. (e.g. 14)
-  --unit: string # (Optional) String  Unit of time between data points - can be "day" or "hour" (defaults to "day").  (e.g. day)
-  --ending-at: string # (Optional) DateTime (ISO 8601 string)  Point in time when the data series should end - defaults to time of the request. (e.g. 2018-06-28T23:59:59-5:00)
-  --app-id: string # (Optional) String  App API identifier retrieved from the Developer Console to limit analytics to a specific app. (e.g. {{app_identifier}})
-  --segment-id: string # (Optional) String  Segment API identifier indicating the analytics enabled segment for which sessions should be returned. (e.g. {{segment_identifier}})
+  --length: string # (Required) Integer Max number of units (days or hours) before ending_at to include in the returned series - must be between 1 and 100 inclusive. (e.g. 14)
+  --unit: string # (Optional) String Unit of time between data points - can be "day" or "hour" (defaults to "day"). (e.g. day)
+  --ending-at: string # (Optional) DateTime (ISO 8601 string) Point in time when the data series should end - defaults to time of the request. (e.g. 2018-06-28T23:59:59-5:00)
+  --app-id: string # (Optional) String App API identifier retrieved from the Developer Console to limit analytics to a specific app. (e.g. {{app_identifier}})
+  --segment-id: string # (Optional) String Segment API identifier indicating the analytics enabled segment for which sessions should be returned. (e.g. {{segment_identifier}})
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -804,14 +842,14 @@ export def "sessions-data-series appSessionsByTime" [
   let full_url = (build-url $base "/sessions/data_series" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
-# List User's  Subscription Group Status - SMS
+# List User's Subscription Group Status - SMS
 #
 # GET /subscription/status/get
 # operationId: listUser'sSubscriptionGroupStatusSms
-export def "subscription-status-get listUsersSubscriptionGroupStatusSms" [
+export def "subscription-status-get list-users-group-sms" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -819,10 +857,11 @@ export def "subscription-status-get listUsersSubscriptionGroupStatusSms" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --subscription-group-id: string # (Required) String  The `id` of your subscription group. (e.g. {{subscription_group_id}})
-  --external-id: string # (Required*) String  The `external_id` of the user (must include at least one and at most 50 `external_ids`).  Only external_id or phone is accepted for SMS subscription groups  (e.g. {{external_identifier}})
-  --phone: string # (Required*) String  The phone number of the user (must include at least one phone number and at most 50 phone numbers). The recommendation is to provide this in the E.164 format.  Only external_id or phone is accepted for SMS subscription groups  (e.g. +11112223333)
+  --subscription-group-id: string # (Required) String The `id` of your subscription group. (e.g. {{subscription_group_id}})
+  --external-id: string # (Required*) String The `external_id` of the user (must include at least one and at most 50 `external_ids`). Only external_id or phone is accepted for SMS subscription groups (e.g. {{external_identifier}})
+  --phone: string # (Required*) String The phone number of the user (must include at least one phone number and at most 50 phone numbers). The recommendation is to provide this in the E.164 format. Only external_id or phone is accepted for SMS subscription groups (e.g. +11112223333)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -830,14 +869,14 @@ export def "subscription-status-get listUsersSubscriptionGroupStatusSms" [
   let full_url = (build-url $base "/subscription/status/get" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # List User's Subscription Group - SMS
 #
 # GET /subscription/user/status
 # operationId: listUser'sSubscriptionGroupSms
-export def "subscription-user-status listUsersSubscriptionGroupSms" [
+export def "subscription-user-status list-users-group-sms" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -845,11 +884,12 @@ export def "subscription-user-status listUsersSubscriptionGroupSms" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --external-id: string # (Required*) String  The external_id of the user. Must include at least one and at most 50 `external_ids`. (e.g. {{external_id}})
-  --limit: string # (Optional) Integer  The limit on the maximum number of results returned. Default (and max) limit is 100. (e.g. 100)
-  --offset: string # (Optional) Integer  Number of templates to skip before returning rest of the templates that fit the search criteria. (e.g. 1)
-  --phone: string # (Required*) String  The phone number of the user (must include at least one phone number and at most 50 phone numbers). The recommendation is to provide this in the E.164 format.  (e.g. +11112223333)
+  --external-id: string # (Required*) String The external_id of the user. Must include at least one and at most 50 `external_ids`. (e.g. {{external_id}})
+  --limit: string # (Optional) Integer The limit on the maximum number of results returned. Default (and max) limit is 100. (e.g. 100)
+  --offset: string # (Optional) Integer Number of templates to skip before returning rest of the templates that fit the search criteria. (e.g. 1)
+  --phone: string # (Required*) String The phone number of the user (must include at least one phone number and at most 50 phone numbers). The recommendation is to provide this in the E.164 format. (e.g. +11112223333)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -857,14 +897,14 @@ export def "subscription-user-status listUsersSubscriptionGroupSms" [
   let full_url = (build-url $base "/subscription/user/status" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # See Email Template Information
 #
 # GET /templates/email/info
 # operationId: seeEmailTemplateInformation
-export def "templates-email-info seeEmailTemplateInformation" [
+export def "templates-email-info get-see-information" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -872,8 +912,9 @@ export def "templates-email-info seeEmailTemplateInformation" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --email-template-id: string # (Required) String  Your email template's API Identifier. (e.g. {{email_template_id}})
+  --email-template-id: string # (Required) String Your email template's API Identifier. (e.g. {{email_template_id}})
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -881,14 +922,14 @@ export def "templates-email-info seeEmailTemplateInformation" [
   let full_url = (build-url $base "/templates/email/info" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # List Available Email Templates
 #
 # GET /templates/email/list
 # operationId: listAvailableEmailTemplates
-export def "templates-email-list listAvailableEmailTemplates" [
+export def "templates-email-list list-available" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -896,11 +937,12 @@ export def "templates-email-list listAvailableEmailTemplates" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --modified-after: string # (Optional) String in ISO 8601  Retrieve only templates updated at or after the given time. (e.g. 2020-01-01T01:01:01.000000)
-  --modified-before: string # (Optional) String in ISO 8601  Retrieve only templates updated at or before the given time (e.g. 2020-02-01T01:01:01.000000)
-  --limit: string # (Optional) Positive Number  Maximum number of templates to retrieve, default to 100 if not provided, maximum acceptable value is 1000. (e.g. 1)
-  --offset: string # (Optional) Positive Number  Number of templates to skip before returning rest of the templates that fit the search criteria. (e.g. 0)
+  --modified-after: string # (Optional) String in ISO 8601 Retrieve only templates updated at or after the given time. (e.g. 2020-01-01T01:01:01.000000)
+  --modified-before: string # (Optional) String in ISO 8601 Retrieve only templates updated at or before the given time (e.g. 2020-02-01T01:01:01.000000)
+  --limit: string # (Optional) Positive Number Maximum number of templates to retrieve, default to 100 if not provided, maximum acceptable value is 1000. (e.g. 1)
+  --offset: string # (Optional) Positive Number Number of templates to skip before returning rest of the templates that fit the search criteria. (e.g. 0)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -908,5 +950,5 @@ export def "templates-email-list listAvailableEmailTemplates" [
   let full_url = (build-url $base "/templates/email/list" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }

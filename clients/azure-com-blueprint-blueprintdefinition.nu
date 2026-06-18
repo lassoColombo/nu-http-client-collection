@@ -18,21 +18,32 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 }
 
 # Serialize a single query parameter based on collection style
+# Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
+# ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = ($name | url encode)
+  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
-  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
-    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
-    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
+    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
+    _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
+}
+
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Build URL from base, path, and optional query string
@@ -44,7 +55,7 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
@@ -53,13 +64,13 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
     "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "put" => { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "patch" => { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
   if ($method in ["head" "options"]) { return $resp }
-  if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
+  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
 def base-url-completer [] { ["https://management.azure.com"] }
@@ -70,8 +81,8 @@ def kind-completer [] { ["policyAssignment" "roleAssignment" "template"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-blueprint-blueprints List" } } | get name | first)
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-blueprint-blueprints list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -95,7 +106,7 @@ export def commands []: nothing -> table {
 #
 # GET /{scope}/providers/Microsoft.Blueprint/blueprints
 # operationId: Blueprints_List
-export def "providers-microsoft-blueprint-blueprints List" [
+export def "providers-microsoft-blueprint-blueprints list" [
   scope: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -104,25 +115,26 @@ export def "providers-microsoft-blueprint-blueprints List" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API Version.
 ]: nothing -> record<nextLink: string, value: table<properties: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($scope)/providers/Microsoft.Blueprint/blueprints" $qp)
+  let full_url = (build-url $base ({scope: (encode-path-segment $scope)} | format pattern "/{scope}/providers/Microsoft.Blueprint/blueprints") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Delete a blueprint definition.
 #
 # DELETE /{scope}/providers/Microsoft.Blueprint/blueprints/{blueprintName}
 # operationId: Blueprints_Delete
-export def "providers-microsoft-blueprint-blueprints Delete" [
+export def "providers-microsoft-blueprint-blueprints delete" [
   scope: string
-  blueprintName: string
+  blueprint_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -130,25 +142,26 @@ export def "providers-microsoft-blueprint-blueprints Delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API Version.
 ]: nothing -> record<properties: record<layout: record, versions: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($scope)/providers/Microsoft.Blueprint/blueprints/($blueprintName)" $qp)
+  let full_url = (build-url $base ({scope: (encode-path-segment $scope), blueprint_name: (encode-path-segment $blueprint_name)} | format pattern "/{scope}/providers/Microsoft.Blueprint/blueprints/{blueprint_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get a blueprint definition.
 #
 # GET /{scope}/providers/Microsoft.Blueprint/blueprints/{blueprintName}
 # operationId: Blueprints_Get
-export def "providers-microsoft-blueprint-blueprints Get" [
+export def "providers-microsoft-blueprint-blueprints get" [
   scope: string
-  blueprintName: string
+  blueprint_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -156,16 +169,17 @@ export def "providers-microsoft-blueprint-blueprints Get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API Version.
 ]: nothing -> record<properties: record<layout: record, versions: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($scope)/providers/Microsoft.Blueprint/blueprints/($blueprintName)" $qp)
+  let full_url = (build-url $base ({scope: (encode-path-segment $scope), blueprint_name: (encode-path-segment $blueprint_name)} | format pattern "/{scope}/providers/Microsoft.Blueprint/blueprints/{blueprint_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Create or update a blueprint definition.
@@ -173,9 +187,9 @@ export def "providers-microsoft-blueprint-blueprints Get" [
 # PUT /{scope}/providers/Microsoft.Blueprint/blueprints/{blueprintName}
 # operationId: Blueprints_CreateOrUpdate
 # --properties shape: {layout?: record, versions?: record, parameters?: record, resourceGroups?: record, status?: record, targetScope: "subscription"|"managementGroup"}
-export def "providers-microsoft-blueprint-blueprints CreateOrUpdate" [
+export def "providers-microsoft-blueprint-blueprints create-or-update" [
   scope: string
-  blueprintName: string
+  blueprint_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -183,6 +197,7 @@ export def "providers-microsoft-blueprint-blueprints CreateOrUpdate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API Version.
   properties: record # Schema for blueprint definition properties. — shape: {layout?: record, versions?: record, parameters?: record, resourceGroups?: record, status?: record, targetScope: "subscription"|"managementGroup"}
@@ -191,21 +206,21 @@ export def "providers-microsoft-blueprint-blueprints CreateOrUpdate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($scope)/providers/Microsoft.Blueprint/blueprints/($blueprintName)" $qp)
-  let body = {properties: $properties} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({scope: (encode-path-segment $scope), blueprint_name: (encode-path-segment $blueprint_name)} | format pattern "/{scope}/providers/Microsoft.Blueprint/blueprints/{blueprint_name}") $qp)
+  let req_body = {"properties": $properties} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # List artifacts for a given blueprint definition.
 #
 # GET /{scope}/providers/Microsoft.Blueprint/blueprints/{blueprintName}/artifacts
 # operationId: Artifacts_List
-export def "providers-microsoft-blueprint-blueprints-artifacts List" [
+export def "providers-microsoft-blueprint-blueprints-artifacts list" [
   scope: string
-  blueprintName: string
+  blueprint_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -213,26 +228,27 @@ export def "providers-microsoft-blueprint-blueprints-artifacts List" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API Version.
 ]: nothing -> record<nextLink: string, value: table<kind: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($scope)/providers/Microsoft.Blueprint/blueprints/($blueprintName)/artifacts" $qp)
+  let full_url = (build-url $base ({scope: (encode-path-segment $scope), blueprint_name: (encode-path-segment $blueprint_name)} | format pattern "/{scope}/providers/Microsoft.Blueprint/blueprints/{blueprint_name}/artifacts") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Delete a blueprint artifact.
 #
 # DELETE /{scope}/providers/Microsoft.Blueprint/blueprints/{blueprintName}/artifacts/{artifactName}
 # operationId: Artifacts_Delete
-export def "providers-microsoft-blueprint-blueprints-artifacts Delete" [
+export def "providers-microsoft-blueprint-blueprints-artifacts delete" [
   scope: string
-  blueprintName: string
-  artifactName: string
+  blueprint_name: string
+  artifact_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -240,26 +256,27 @@ export def "providers-microsoft-blueprint-blueprints-artifacts Delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API Version.
 ]: nothing -> record<kind: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($scope)/providers/Microsoft.Blueprint/blueprints/($blueprintName)/artifacts/($artifactName)" $qp)
+  let full_url = (build-url $base ({scope: (encode-path-segment $scope), blueprint_name: (encode-path-segment $blueprint_name), artifact_name: (encode-path-segment $artifact_name)} | format pattern "/{scope}/providers/Microsoft.Blueprint/blueprints/{blueprint_name}/artifacts/{artifact_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get a blueprint artifact.
 #
 # GET /{scope}/providers/Microsoft.Blueprint/blueprints/{blueprintName}/artifacts/{artifactName}
 # operationId: Artifacts_Get
-export def "providers-microsoft-blueprint-blueprints-artifacts Get" [
+export def "providers-microsoft-blueprint-blueprints-artifacts get" [
   scope: string
-  blueprintName: string
-  artifactName: string
+  blueprint_name: string
+  artifact_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -267,16 +284,17 @@ export def "providers-microsoft-blueprint-blueprints-artifacts Get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API Version.
 ]: nothing -> record<kind: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($scope)/providers/Microsoft.Blueprint/blueprints/($blueprintName)/artifacts/($artifactName)" $qp)
+  let full_url = (build-url $base ({scope: (encode-path-segment $scope), blueprint_name: (encode-path-segment $blueprint_name), artifact_name: (encode-path-segment $artifact_name)} | format pattern "/{scope}/providers/Microsoft.Blueprint/blueprints/{blueprint_name}/artifacts/{artifact_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Create or update blueprint artifact.
@@ -284,10 +302,10 @@ export def "providers-microsoft-blueprint-blueprints-artifacts Get" [
 # PUT /{scope}/providers/Microsoft.Blueprint/blueprints/{blueprintName}/artifacts/{artifactName}
 # Discriminator (request): kind
 # operationId: Artifacts_CreateOrUpdate
-export def "providers-microsoft-blueprint-blueprints-artifacts CreateOrUpdate" [
+export def "providers-microsoft-blueprint-blueprints-artifacts create-or-update" [
   scope: string
-  blueprintName: string
-  artifactName: string
+  blueprint_name: string
+  artifact_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -295,6 +313,7 @@ export def "providers-microsoft-blueprint-blueprints-artifacts CreateOrUpdate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API Version.
   kind: string@kind-completer # Specifies the kind of blueprint artifact.
@@ -303,21 +322,21 @@ export def "providers-microsoft-blueprint-blueprints-artifacts CreateOrUpdate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($scope)/providers/Microsoft.Blueprint/blueprints/($blueprintName)/artifacts/($artifactName)" $qp)
-  let body = {kind: $kind} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({scope: (encode-path-segment $scope), blueprint_name: (encode-path-segment $blueprint_name), artifact_name: (encode-path-segment $artifact_name)} | format pattern "/{scope}/providers/Microsoft.Blueprint/blueprints/{blueprint_name}/artifacts/{artifact_name}") $qp)
+  let req_body = {"kind": $kind} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # List published versions of given blueprint definition.
 #
 # GET /{scope}/providers/Microsoft.Blueprint/blueprints/{blueprintName}/versions
 # operationId: PublishedBlueprints_List
-export def "providers-microsoft-blueprint-blueprints-versions List" [
+export def "providers-microsoft-blueprint-blueprints-versions list-published" [
   scope: string
-  blueprintName: string
+  blueprint_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -325,26 +344,27 @@ export def "providers-microsoft-blueprint-blueprints-versions List" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API Version.
 ]: nothing -> record<nextLink: string, value: table<properties: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($scope)/providers/Microsoft.Blueprint/blueprints/($blueprintName)/versions" $qp)
+  let full_url = (build-url $base ({scope: (encode-path-segment $scope), blueprint_name: (encode-path-segment $blueprint_name)} | format pattern "/{scope}/providers/Microsoft.Blueprint/blueprints/{blueprint_name}/versions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Delete a published version of a blueprint definition.
 #
 # DELETE /{scope}/providers/Microsoft.Blueprint/blueprints/{blueprintName}/versions/{versionId}
 # operationId: PublishedBlueprints_Delete
-export def "providers-microsoft-blueprint-blueprints-versions Delete" [
+export def "providers-microsoft-blueprint-blueprints-versions delete-published" [
   scope: string
-  blueprintName: string
-  versionId: string
+  blueprint_name: string
+  version_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -352,26 +372,27 @@ export def "providers-microsoft-blueprint-blueprints-versions Delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API Version.
 ]: nothing -> record<properties: record<blueprintName: string, changeNotes: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($scope)/providers/Microsoft.Blueprint/blueprints/($blueprintName)/versions/($versionId)" $qp)
+  let full_url = (build-url $base ({scope: (encode-path-segment $scope), blueprint_name: (encode-path-segment $blueprint_name), version_id: (encode-path-segment $version_id)} | format pattern "/{scope}/providers/Microsoft.Blueprint/blueprints/{blueprint_name}/versions/{version_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get a published version of a blueprint definition.
 #
 # GET /{scope}/providers/Microsoft.Blueprint/blueprints/{blueprintName}/versions/{versionId}
 # operationId: PublishedBlueprints_Get
-export def "providers-microsoft-blueprint-blueprints-versions Get" [
+export def "providers-microsoft-blueprint-blueprints-versions get-published" [
   scope: string
-  blueprintName: string
-  versionId: string
+  blueprint_name: string
+  version_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -379,16 +400,17 @@ export def "providers-microsoft-blueprint-blueprints-versions Get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API Version.
 ]: nothing -> record<properties: record<blueprintName: string, changeNotes: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($scope)/providers/Microsoft.Blueprint/blueprints/($blueprintName)/versions/($versionId)" $qp)
+  let full_url = (build-url $base ({scope: (encode-path-segment $scope), blueprint_name: (encode-path-segment $blueprint_name), version_id: (encode-path-segment $version_id)} | format pattern "/{scope}/providers/Microsoft.Blueprint/blueprints/{blueprint_name}/versions/{version_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Publish a new version of the blueprint definition with the latest artifacts. Published blueprint definitions are immutable.
@@ -396,10 +418,10 @@ export def "providers-microsoft-blueprint-blueprints-versions Get" [
 # PUT /{scope}/providers/Microsoft.Blueprint/blueprints/{blueprintName}/versions/{versionId}
 # operationId: PublishedBlueprints_Create
 # --properties shape: {blueprintName?: string, changeNotes?: string, parameters?: record, resourceGroups?: record, status?: record, targetScope?: "subscription"|"managementGroup"}
-export def "providers-microsoft-blueprint-blueprints-versions Create" [
+export def "providers-microsoft-blueprint-blueprints-versions create-published" [
   scope: string
-  blueprintName: string
-  versionId: string
+  blueprint_name: string
+  version_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -407,6 +429,7 @@ export def "providers-microsoft-blueprint-blueprints-versions Create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API Version.
   properties: record # Schema for published blueprint definition properties. — shape: {blueprintName?: string, changeNotes?: string, parameters?: record, resourceGroups?: record, status?: record, targetScope?: "subscription"|"managementGroup"}
@@ -415,22 +438,22 @@ export def "providers-microsoft-blueprint-blueprints-versions Create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($scope)/providers/Microsoft.Blueprint/blueprints/($blueprintName)/versions/($versionId)" $qp)
-  let body = {properties: $properties} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({scope: (encode-path-segment $scope), blueprint_name: (encode-path-segment $blueprint_name), version_id: (encode-path-segment $version_id)} | format pattern "/{scope}/providers/Microsoft.Blueprint/blueprints/{blueprint_name}/versions/{version_id}") $qp)
+  let req_body = {"properties": $properties} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # List artifacts for a version of a published blueprint definition.
 #
 # GET /{scope}/providers/Microsoft.Blueprint/blueprints/{blueprintName}/versions/{versionId}/artifacts
 # operationId: PublishedArtifacts_List
-export def "providers-microsoft-blueprint-blueprints-versions-artifacts List" [
+export def "providers-microsoft-blueprint-blueprints-versions-artifacts list-published" [
   scope: string
-  blueprintName: string
-  versionId: string
+  blueprint_name: string
+  version_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -438,27 +461,28 @@ export def "providers-microsoft-blueprint-blueprints-versions-artifacts List" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API Version.
 ]: nothing -> record<nextLink: string, value: table<kind: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($scope)/providers/Microsoft.Blueprint/blueprints/($blueprintName)/versions/($versionId)/artifacts" $qp)
+  let full_url = (build-url $base ({scope: (encode-path-segment $scope), blueprint_name: (encode-path-segment $blueprint_name), version_id: (encode-path-segment $version_id)} | format pattern "/{scope}/providers/Microsoft.Blueprint/blueprints/{blueprint_name}/versions/{version_id}/artifacts") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get an artifact for a published blueprint definition.
 #
 # GET /{scope}/providers/Microsoft.Blueprint/blueprints/{blueprintName}/versions/{versionId}/artifacts/{artifactName}
 # operationId: PublishedArtifacts_Get
-export def "providers-microsoft-blueprint-blueprints-versions-artifacts Get" [
+export def "providers-microsoft-blueprint-blueprints-versions-artifacts get-published" [
   scope: string
-  blueprintName: string
-  versionId: string
-  artifactName: string
+  blueprint_name: string
+  version_id: string
+  artifact_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -466,14 +490,15 @@ export def "providers-microsoft-blueprint-blueprints-versions-artifacts Get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API Version.
 ]: nothing -> record<kind: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($scope)/providers/Microsoft.Blueprint/blueprints/($blueprintName)/versions/($versionId)/artifacts/($artifactName)" $qp)
+  let full_url = (build-url $base ({scope: (encode-path-segment $scope), blueprint_name: (encode-path-segment $blueprint_name), version_id: (encode-path-segment $version_id), artifact_name: (encode-path-segment $artifact_name)} | format pattern "/{scope}/providers/Microsoft.Blueprint/blueprints/{blueprint_name}/versions/{version_id}/artifacts/{artifact_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }

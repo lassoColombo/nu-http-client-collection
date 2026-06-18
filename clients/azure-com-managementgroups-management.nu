@@ -18,21 +18,32 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 }
 
 # Serialize a single query parameter based on collection style
+# Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
+# ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = ($name | url encode)
+  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
-  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
-    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
-    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
+    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
+    _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
+}
+
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Build URL from base, path, and optional query string
@@ -44,7 +55,7 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
@@ -53,13 +64,13 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
     "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "put" => { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "patch" => { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
   if ($method in ["head" "options"]) { return $resp }
-  if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
+  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
 def base-url-completer [] { ["https://management.azure.com"] }
@@ -72,8 +83,8 @@ def expand-completer [] { ["children"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-management-check-name-availability CheckNameAvailability" } } | get name | first)
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-management-check-name-availability check" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -97,7 +108,7 @@ export def commands []: nothing -> table {
 #
 # POST /providers/Microsoft.Management/checkNameAvailability
 # operationId: CheckNameAvailability
-export def "providers-microsoft-management-check-name-availability CheckNameAvailability" [
+export def "providers-microsoft-management-check-name-availability check" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -105,6 +116,7 @@ export def "providers-microsoft-management-check-name-availability CheckNameAvai
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. The current version is 2018-01-01-preview.
 ]: nothing -> record<message: string, nameAvailable: bool, reason: string> {
@@ -114,14 +126,14 @@ export def "providers-microsoft-management-check-name-availability CheckNameAvai
   let full_url = (build-url $base "/providers/Microsoft.Management/checkNameAvailability" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # List all entities (Management Groups, Subscriptions, etc.) for the authenticated user.
 #
 # POST /providers/Microsoft.Management/getEntities
 # operationId: Entities_List
-export def "providers-microsoft-management-get-entities List" [
+export def "providers-microsoft-management-get-entities list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -129,34 +141,35 @@ export def "providers-microsoft-management-get-entities List" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. The current version is 2018-01-01-preview.
   --skiptoken: string # Page continuation token is only used if a previous operation returned a partial result. If a previous response contains a nextLink element, the value of the nextLink element will include a token parameter that specifies a starting point to use for subsequent calls.
   --skip: int # Number of entities to skip over when retrieving results. Passing this in will override $skipToken.
   --top: int # Number of elements to return when retrieving results. Passing this in will override $skipToken.
   --select: string # This parameter specifies the fields to include in the response. Can include any combination of Name,DisplayName,Type,ParentDisplayNameChain,ParentChain, e.g. '$select=Name,DisplayName,Type,ParentDisplayNameChain,ParentNameChain'. When specified the $select parameter can override select in $skipToken.
-  --search: string@search-completer # The $search parameter is used in conjunction with the $filter parameter to return three different outputs depending on the parameter passed in. With $search=AllowedParents the API will return the entity info of all groups that the requested entity will be able to reparent to as determined by the user's permissions. With $search=AllowedChildren the API will return the entity info of all entities that can be added as children of the requested entity. With $search=ParentAndFirstLevelChildren the API will return the parent and  first level of children that the user has either direct access to or indirect access via one of their descendants.
-  --filter: string # The filter parameter allows you to filter on the name or display name fields. You can check for equality on the name field (e.g. name eq '{entityName}')  and you can check for substrings on either the name or display name fields(e.g. contains(name, '{substringToSearch}'), contains(displayName, '{substringToSearch')). Note that the '{entityName}' and '{substringToSearch}' fields are checked case insensitively.
+  --search: string@search-completer # The $search parameter is used in conjunction with the $filter parameter to return three different outputs depending on the parameter passed in. With $search=AllowedParents the API will return the entity info of all groups that the requested entity will be able to reparent to as determined by the user's permissions. With $search=AllowedChildren the API will return the entity info of all entities that can be added as children of the requested entity. With $search=ParentAndFirstLevelChildren the API will return the parent and first level of children that the user has either direct access to or indirect access via one of their descendants.
+  --filter: string # The filter parameter allows you to filter on the name or display name fields. You can check for equality on the name field (e.g. name eq '{entityName}') and you can check for substrings on either the name or display name fields(e.g. contains(name, '{substringToSearch}'), contains(displayName, '{substringToSearch')). Note that the '{entityName}' and '{substringToSearch}' fields are checked case insensitively.
   --view: string@view-completer # The view parameter allows clients to filter the type of data that is returned by the getEntities call.
-  --groupName: string # A filter which allows the get entities call to focus on a particular group (i.e. "$filter=name eq 'groupName'")
-  --Cache-Control: string # Indicates that the request shouldn't utilize any caches.
+  --group-name: string # A filter which allows the get entities call to focus on a particular group (i.e. "$filter=name eq 'groupName'")
+  --cache-control: string # Indicates that the request shouldn't utilize any caches.
 ]: nothing -> record<count: int, nextLink: string, value: table<id: string, name: string, properties: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$skiptoken" $skiptoken "scalar") (serialize-qp "$skip" $skip "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$select" $select "scalar") (serialize-qp "$search" $search "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$view" $view "scalar") (serialize-qp "groupName" $groupName "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$skiptoken" $skiptoken "scalar") (serialize-qp "$skip" $skip "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$select" $select "scalar") (serialize-qp "$search" $search "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$view" $view "scalar") (serialize-qp "groupName" $group_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/providers/Microsoft.Management/getEntities" $qp)
-  let extra_headers = {"Cache-Control": $Cache_Control} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"Cache-Control": $cache_control} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # List management groups for the authenticated user.
 #
 # GET /providers/Microsoft.Management/managementGroups
 # operationId: ManagementGroups_List
-export def "providers-microsoft-management-management-groups List" [
+export def "providers-microsoft-management-management-groups list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -164,28 +177,29 @@ export def "providers-microsoft-management-management-groups List" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. The current version is 2018-01-01-preview.
   --skiptoken: string # Page continuation token is only used if a previous operation returned a partial result. If a previous response contains a nextLink element, the value of the nextLink element will include a token parameter that specifies a starting point to use for subsequent calls.
-  --Cache-Control: string # Indicates that the request shouldn't utilize any caches.
+  --cache-control: string # Indicates that the request shouldn't utilize any caches.
 ]: nothing -> record<nextLink: string, value: table<id: string, name: string, properties: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$skiptoken" $skiptoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/providers/Microsoft.Management/managementGroups" $qp)
-  let extra_headers = {"Cache-Control": $Cache_Control} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"Cache-Control": $cache_control} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Delete management group. If a management group contains child resources, the request will fail.
 #
 # DELETE /providers/Microsoft.Management/managementGroups/{groupId}
 # operationId: ManagementGroups_Delete
-export def "providers-microsoft-management-management-groups Delete" [
-  groupId: string
+export def "providers-microsoft-management-management-groups delete" [
+  group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -193,27 +207,28 @@ export def "providers-microsoft-management-management-groups Delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. The current version is 2018-01-01-preview.
-  --Cache-Control: string # Indicates that the request shouldn't utilize any caches.
+  --cache-control: string # Indicates that the request shouldn't utilize any caches.
 ]: nothing -> record<id: string, name: string, properties: record<provisioningState: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/providers/Microsoft.Management/managementGroups/($groupId)" $qp)
-  let extra_headers = {"Cache-Control": $Cache_Control} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/providers/Microsoft.Management/managementGroups/{group_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"Cache-Control": $cache_control} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get the details of the management group.
 #
 # GET /providers/Microsoft.Management/managementGroups/{groupId}
 # operationId: ManagementGroups_Get
-export def "providers-microsoft-management-management-groups Get" [
-  groupId: string
+export def "providers-microsoft-management-management-groups get" [
+  group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -221,30 +236,31 @@ export def "providers-microsoft-management-management-groups Get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. The current version is 2018-01-01-preview.
   --expand: string@expand-completer # The $expand=children query string parameter allows clients to request inclusion of children in the response payload.
-  --recurse: oneof<nothing, bool> # The $recurse=true query string parameter allows clients to request inclusion of entire hierarchy in the response payload. Note that  $expand=children must be passed up if $recurse is set to true.
+  --recurse: oneof<nothing, bool> # The $recurse=true query string parameter allows clients to request inclusion of entire hierarchy in the response payload. Note that $expand=children must be passed up if $recurse is set to true.
   --filter: string # A filter which allows the exclusion of subscriptions from results (i.e. '$filter=children.childType ne Subscription')
-  --Cache-Control: string # Indicates that the request shouldn't utilize any caches.
+  --cache-control: string # Indicates that the request shouldn't utilize any caches.
 ]: nothing -> record<id: string, name: string, properties: record<children: list<record>, details: record<parent: record, updatedBy: string, updatedTime: string, version: float>, displayName: string, roles: list<string>, tenantId: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$expand" $expand "scalar") (serialize-qp "$recurse" $recurse "scalar") (serialize-qp "$filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/providers/Microsoft.Management/managementGroups/($groupId)" $qp)
-  let extra_headers = {"Cache-Control": $Cache_Control} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/providers/Microsoft.Management/managementGroups/{group_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"Cache-Control": $cache_control} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Update a management group.
 #
 # PATCH /providers/Microsoft.Management/managementGroups/{groupId}
 # operationId: ManagementGroups_Update
-export def "providers-microsoft-management-management-groups Update" [
-  groupId: string
+export def "providers-microsoft-management-management-groups update" [
+  group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -252,27 +268,28 @@ export def "providers-microsoft-management-management-groups Update" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. The current version is 2018-01-01-preview.
-  --Cache-Control: string # Indicates that the request shouldn't utilize any caches.
+  --cache-control: string # Indicates that the request shouldn't utilize any caches.
 ]: nothing -> record<id: string, name: string, properties: record<children: list<record>, details: record<parent: record, updatedBy: string, updatedTime: string, version: float>, displayName: string, roles: list<string>, tenantId: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/providers/Microsoft.Management/managementGroups/($groupId)" $qp)
-  let extra_headers = {"Cache-Control": $Cache_Control} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/providers/Microsoft.Management/managementGroups/{group_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"Cache-Control": $cache_control} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Create or update a management group. If a management group is already created and a subsequent create request is issued with different properties, the management group properties will be updated.
 #
 # PUT /providers/Microsoft.Management/managementGroups/{groupId}
 # operationId: ManagementGroups_CreateOrUpdate
-export def "providers-microsoft-management-management-groups CreateOrUpdate" [
-  groupId: string
+export def "providers-microsoft-management-management-groups create-or-update" [
+  group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -280,27 +297,28 @@ export def "providers-microsoft-management-management-groups CreateOrUpdate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. The current version is 2018-01-01-preview.
-  --Cache-Control: string # Indicates that the request shouldn't utilize any caches.
+  --cache-control: string # Indicates that the request shouldn't utilize any caches.
 ]: nothing -> record<id: string, name: string, properties: record<children: list<record>, details: record<parent: record, updatedBy: string, updatedTime: string, version: float>, displayName: string, roles: list<string>, tenantId: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/providers/Microsoft.Management/managementGroups/($groupId)" $qp)
-  let extra_headers = {"Cache-Control": $Cache_Control} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/providers/Microsoft.Management/managementGroups/{group_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"Cache-Control": $cache_control} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # List all entities that descend from a management group.
 #
 # GET /providers/Microsoft.Management/managementGroups/{groupId}/descendants
 # operationId: ManagementGroups_GetDescendants
-export def "providers-microsoft-management-management-groups-descendants GetDescendants" [
-  groupId: string
+export def "providers-microsoft-management-management-groups-descendants get" [
+  group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -308,6 +326,7 @@ export def "providers-microsoft-management-management-groups-descendants GetDesc
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. The current version is 2018-01-01-preview.
   --skiptoken: string # Page continuation token is only used if a previous operation returned a partial result. If a previous response contains a nextLink element, the value of the nextLink element will include a token parameter that specifies a starting point to use for subsequent calls.
@@ -316,19 +335,19 @@ export def "providers-microsoft-management-management-groups-descendants GetDesc
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$skiptoken" $skiptoken "scalar") (serialize-qp "$top" $top "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/providers/Microsoft.Management/managementGroups/($groupId)/descendants" $qp)
+  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/providers/Microsoft.Management/managementGroups/{group_id}/descendants") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # De-associates subscription from the management group.
 #
 # DELETE /providers/Microsoft.Management/managementGroups/{groupId}/subscriptions/{subscriptionId}
 # operationId: ManagementGroupSubscriptions_Delete
-export def "providers-microsoft-management-management-groups-subscriptions Delete" [
-  groupId: string
-  subscriptionId: string
+export def "providers-microsoft-management-management-groups-subscriptions delete" [
+  group_id: string
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -336,28 +355,29 @@ export def "providers-microsoft-management-management-groups-subscriptions Delet
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. The current version is 2018-01-01-preview.
-  --Cache-Control: string # Indicates that the request shouldn't utilize any caches.
+  --cache-control: string # Indicates that the request shouldn't utilize any caches.
 ]: nothing -> record<error: record<code: string, details: string, message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/providers/Microsoft.Management/managementGroups/($groupId)/subscriptions/($subscriptionId)" $qp)
-  let extra_headers = {"Cache-Control": $Cache_Control} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id), subscription_id: (encode-path-segment $subscription_id)} | format pattern "/providers/Microsoft.Management/managementGroups/{group_id}/subscriptions/{subscription_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"Cache-Control": $cache_control} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Associates existing subscription with the management group.
 #
 # PUT /providers/Microsoft.Management/managementGroups/{groupId}/subscriptions/{subscriptionId}
 # operationId: ManagementGroupSubscriptions_Create
-export def "providers-microsoft-management-management-groups-subscriptions Create" [
-  groupId: string
-  subscriptionId: string
+export def "providers-microsoft-management-management-groups-subscriptions create" [
+  group_id: string
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -365,26 +385,27 @@ export def "providers-microsoft-management-management-groups-subscriptions Creat
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. The current version is 2018-01-01-preview.
-  --Cache-Control: string # Indicates that the request shouldn't utilize any caches.
+  --cache-control: string # Indicates that the request shouldn't utilize any caches.
 ]: nothing -> record<error: record<code: string, details: string, message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/providers/Microsoft.Management/managementGroups/($groupId)/subscriptions/($subscriptionId)" $qp)
-  let extra_headers = {"Cache-Control": $Cache_Control} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id), subscription_id: (encode-path-segment $subscription_id)} | format pattern "/providers/Microsoft.Management/managementGroups/{group_id}/subscriptions/{subscription_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"Cache-Control": $cache_control} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Lists all of the available Management REST API operations.
 #
 # GET /providers/Microsoft.Management/operations
 # operationId: Operations_List
-export def "providers-microsoft-management-operations List" [
+export def "providers-microsoft-management-operations list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -392,6 +413,7 @@ export def "providers-microsoft-management-operations List" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. The current version is 2018-01-01-preview.
 ]: nothing -> record<nextLink: string, value: table<display: record, name: string>> {
@@ -401,14 +423,14 @@ export def "providers-microsoft-management-operations List" [
   let full_url = (build-url $base "/providers/Microsoft.Management/operations" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Starts backfilling subscriptions for the Tenant.
 #
 # POST /providers/Microsoft.Management/startTenantBackfill
 # operationId: StartTenantBackfill
-export def "providers-microsoft-management-start-tenant-backfill StartTenantBackfill" [
+export def "providers-microsoft-management-start-tenant-backfill start" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -416,6 +438,7 @@ export def "providers-microsoft-management-start-tenant-backfill StartTenantBack
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. The current version is 2018-01-01-preview.
 ]: nothing -> record<status: string, tenantId: string> {
@@ -425,14 +448,14 @@ export def "providers-microsoft-management-start-tenant-backfill StartTenantBack
   let full_url = (build-url $base "/providers/Microsoft.Management/startTenantBackfill" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Gets tenant backfill status
 #
 # POST /providers/Microsoft.Management/tenantBackfillStatus
 # operationId: TenantBackfillStatus
-export def "providers-microsoft-management-tenant-backfill-status TenantBackfillStatus" [
+export def "providers-microsoft-management-tenant-backfill-status create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -440,6 +463,7 @@ export def "providers-microsoft-management-tenant-backfill-status TenantBackfill
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. The current version is 2018-01-01-preview.
 ]: nothing -> record<status: string, tenantId: string> {
@@ -449,5 +473,5 @@ export def "providers-microsoft-management-tenant-backfill-status TenantBackfill
   let full_url = (build-url $base "/providers/Microsoft.Management/tenantBackfillStatus" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }

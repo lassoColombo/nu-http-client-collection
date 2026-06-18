@@ -18,21 +18,32 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 }
 
 # Serialize a single query parameter based on collection style
+# Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
+# ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = ($name | url encode)
+  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
-  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
-    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
-    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
+    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
+    _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
+}
+
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Build URL from base, path, and optional query string
@@ -44,7 +55,7 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
@@ -53,13 +64,13 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
     "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "put" => { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "patch" => { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
   if ($method in ["head" "options"]) { return $resp }
-  if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
+  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
 def base-url-completer [] { ["https://integrations.googleapis.com"] }
@@ -69,18 +80,18 @@ def auth-scheme-completer [] { ["bearer"] }
 def xgafv-completer [] { ["1" "2"] }
 def alt-completer [] { ["json" "media" "proto"] }
 def product-completer [] { ["APIGEE" "IP" "SECURITY" "UNSPECIFIED_PRODUCT"] }
-def fileFormat-completer [] { ["FILE_FORMAT_UNSPECIFIED" "JSON" "YAML"] }
-def credentialType-completer [] { ["API_KEY" "AUTH_TOKEN" "CLIENT_CERTIFICATE_ONLY" "CREDENTIAL_TYPE_UNSPECIFIED" "JWT" "OAUTH2_AUTHORIZATION_CODE" "OAUTH2_CLIENT_CREDENTIALS" "OAUTH2_IMPLICIT" "OAUTH2_RESOURCE_OWNER_CREDENTIALS" "OIDC_TOKEN" "SERVICE_ACCOUNT" "USERNAME_AND_PASSWORD"] }
+def file-format-completer [] { ["FILE_FORMAT_UNSPECIFIED" "JSON" "YAML"] }
+def credential-type-completer [] { ["API_KEY" "AUTH_TOKEN" "CLIENT_CERTIFICATE_ONLY" "CREDENTIAL_TYPE_UNSPECIFIED" "JWT" "OAUTH2_AUTHORIZATION_CODE" "OAUTH2_CLIENT_CREDENTIALS" "OAUTH2_IMPLICIT" "OAUTH2_RESOURCE_OWNER_CREDENTIALS" "OIDC_TOKEN" "SERVICE_ACCOUNT" "USERNAME_AND_PASSWORD"] }
 def state-completer [] { ["EXPIRED" "INVALID" "SOFT_DELETED" "STATE_UNSPECIFIED" "UNAUTHORIZED" "UNSUPPORTED" "VALID"] }
 def visibility-completer [] { ["AUTH_CONFIG_VISIBILITY_UNSPECIFIED" "CLIENT_VISIBLE" "PRIVATE"] }
-def certificateStatus-completer [] { ["ACTIVE" "EXPIRED" "STATE_UNSPECIFIED"] }
-def databasePersistencePolicy-completer [] { ["DATABASE_PERSISTENCE_DISABLED" "DATABASE_PERSISTENCE_POLICY_UNSPECIFIED"] }
+def certificate-status-completer [] { ["ACTIVE" "EXPIRED" "STATE_UNSPECIFIED"] }
+def database-persistence-policy-completer [] { ["DATABASE_PERSISTENCE_DISABLED" "DATABASE_PERSISTENCE_POLICY_UNSPECIFIED"] }
 def origin-completer [] { ["APPLICATION_IP_PROVISIONING" "PIPER_V2" "PIPER_V3" "UI" "UNSPECIFIED"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "callback-generate-token integrationscallbackgenerateToken" } } | get name | first)
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "callback-generate-token generate" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -104,7 +115,7 @@ export def commands []: nothing -> table {
 #
 # GET /v1/callback:generateToken
 # operationId: integrations.callback.generateToken
-export def "callback-generate-token integrationscallbackgenerateToken" [
+export def "callback-generate-token generate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -112,6 +123,7 @@ export def "callback-generate-token integrationscallbackgenerateToken" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
@@ -120,30 +132,30 @@ export def "callback-generate-token integrationscallbackgenerateToken" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --code: string # The auth code for the given request
-  --gcpProjectId: string # The gcp project id of the request
+  --gcp-project-id: string # The gcp project id of the request
   --product: string@product-completer # Which product sends the request
-  --redirectUri: string # Redirect uri of the auth code request
+  --redirect-uri: string # Redirect uri of the auth code request
   --state: string # The auth config id for the given request
 ]: nothing -> record<message: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "code" $code "scalar") (serialize-qp "gcpProjectId" $gcpProjectId "scalar") (serialize-qp "product" $product "scalar") (serialize-qp "redirectUri" $redirectUri "scalar") (serialize-qp "state" $state "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "code" $code "scalar") (serialize-qp "gcpProjectId" $gcp_project_id "scalar") (serialize-qp "product" $product "scalar") (serialize-qp "redirectUri" $redirect_uri "scalar") (serialize-qp "state" $state "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/callback:generateToken" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Enumerates the regions for which Connector Platform is provisioned.
 #
 # GET /v1/connectorPlatformRegions:enumerate
 # operationId: integrations.connectorPlatformRegions.enumerate
-export def "connector-platform-regions-enumerate integrationsconnectorPlatformRegionsenumerate" [
+export def "connector-platform-regions-enumerate get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -151,6 +163,7 @@ export def "connector-platform-regions-enumerate integrationsconnectorPlatformRe
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
@@ -159,26 +172,26 @@ export def "connector-platform-regions-enumerate integrationsconnectorPlatformRe
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<regions: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/connectorPlatformRegions:enumerate" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Clears the `locked_by` and `locked_at_timestamp`in the DRAFT version of this integration. It then performs the same action as the CreateDraftIntegrationVersion (i.e., copies the DRAFT version of the integration as a SNAPSHOT and then creates a new DRAFT version with the `locked_by` set to the `user_taking_over` and the `locked_at_timestamp` set to the current timestamp). Both the `locked_by` and `user_taking_over` are notified via email about the takeover. This RPC throws an exception if the integration is not in DRAFT status or if the `locked_by` and `locked_at_timestamp` fields are not set.The TakeoverEdit lock is treated the same as an edit of the integration, and hence shares ACLs with edit. Audit fields updated include last_modified_timestamp, last_modified_by.
 #
 # POST /v1/{integrationVersion}:takeoverEditLock
 # operationId: integrations.projects.locations.products.integrations.versions.takeoverEditLock
-export def "projects integrationsprojectslocationsproductsintegrationsversionstakeoverEditLock" [
-  integrationVersion: string
+export def "projects lock-takeover-edit" [
+  integration_version: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -186,6 +199,7 @@ export def "projects integrationsprojectslocationsproductsintegrationsversionsta
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
@@ -194,28 +208,29 @@ export def "projects integrationsprojectslocationsproductsintegrationsversionsta
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --body: record
 ]: any -> record<integrationVersion: record<createTime: string, databasePersistencePolicy: string, description: string, errorCatcherConfigs: list<record>, integrationParameters: list<record>, integrationParametersInternal: record<parameters: list>, lastModifierEmail: string, lockHolder: string, name: string, origin: string, parentTemplateId: string, runAsServiceAccount: string, snapshotNumber: string, state: string, status: string, taskConfigs: list<record>, taskConfigsInternal: list<record>, teardown: record<teardownTaskConfigs: list>, triggerConfigs: list<record>, triggerConfigsInternal: list<record>, updateTime: string, userLabel: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/($integrationVersion):takeoverEditLock" $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({integration_version: (encode-path-segment $integration_version)} | format pattern "/v1/{integration_version}:takeoverEditLock") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Deletes an sfdc channel.
 #
 # DELETE /v1/{name}
 # operationId: integrations.projects.locations.sfdcInstances.sfdcChannels.delete
-export def "projects integrationsprojectslocationssfdcInstancessfdcChannelsdelete" [
+export def "projects delete-by-name" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -224,6 +239,7 @@ export def "projects integrationsprojectslocationssfdcInstancessfdcChannelsdelet
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
@@ -232,25 +248,25 @@ export def "projects integrationsprojectslocationssfdcInstancessfdcChannelsdelet
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/($name)" $qp)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Gets an sfdc channel. If the channel doesn't exist, Code.NOT_FOUND exception will be thrown.
 #
 # GET /v1/{name}
 # operationId: integrations.projects.locations.sfdcInstances.sfdcChannels.get
-export def "projects integrationsprojectslocationssfdcInstancessfdcChannelsget" [
+export def "projects get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -259,6 +275,7 @@ export def "projects integrationsprojectslocationssfdcInstancessfdcChannelsget" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
@@ -267,25 +284,25 @@ export def "projects integrationsprojectslocationssfdcInstancessfdcChannelsget" 
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<channelTopic: string, createTime: string, deleteTime: string, description: string, displayName: string, isActive: bool, lastReplayId: string, name: string, updateTime: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/($name)" $qp)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Updates an sfdc channel. Updates the sfdc channel in spanner. Returns the sfdc channel.
 #
 # PATCH /v1/{name}
 # operationId: integrations.projects.locations.sfdcInstances.sfdcChannels.patch
-export def "projects integrationsprojectslocationssfdcInstancessfdcChannelspatch" [
+export def "projects update" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -294,6 +311,7 @@ export def "projects integrationsprojectslocationssfdcInstancessfdcChannelspatch
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
@@ -302,37 +320,37 @@ export def "projects integrationsprojectslocationssfdcInstancessfdcChannelspatch
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --updateMask: string # Field mask specifying the fields in the above SfdcChannel that have been modified and need to be updated.
-  --clientCertificatepassphrase: string # 'passphrase' should be left unset if private key is not encrypted. Note that 'passphrase' is not the password for web server, but an extra layer of security to protected private key.
-  --clientCertificatesslCertificate: string # The ssl certificate encoded in PEM format. This string must include the begin header and end footer lines. For example, -----BEGIN CERTIFICATE----- MIICTTCCAbagAwIBAgIJAPT0tSKNxan/MA0GCSqGSIb3DQEBCwUAMCoxFzAVBgNV BAoTDkdvb2dsZSBURVNUSU5HMQ8wDQYDVQQDEwZ0ZXN0Q0EwHhcNMTUwMTAxMDAw MDAwWhcNMjUwMTAxMDAwMDAwWjAuMRcwFQYDVQQKEw5Hb29nbGUgVEVTVElORzET MBEGA1UEAwwKam9lQGJhbmFuYTCBnzANBgkqhkiG9w0BAQEFAAOBjQAwgYkCgYEA vDYFgMgxi5W488d9J7UpCInl0NXmZQpJDEHE4hvkaRlH7pnC71H0DLt0/3zATRP1 JzY2+eqBmbGl4/sgZKYv8UrLnNyQNUTsNx1iZAfPUflf5FwgVsai8BM0pUciq1NB xD429VFcrGZNucvFLh72RuRFIKH8WUpiK/iZNFkWhZ0CAwEAAaN3MHUwDgYDVR0P AQH/BAQDAgWgMB0GA1UdJQQWMBQGCCsGAQUFBwMBBggrBgEFBQcDAjAMBgNVHRMB Af8EAjAAMBkGA1UdDgQSBBCVgnFBCWgL/iwCqnGrhTPQMBsGA1UdIwQUMBKAEKey Um2o4k2WiEVA0ldQvNYwDQYJKoZIhvcNAQELBQADgYEAYK986R4E3L1v+Q6esBtW JrUwA9UmJRSQr0N5w3o9XzarU37/bkjOP0Fw0k/A6Vv1n3vlciYfBFaBIam1qRHr 5dMsYf4CZS6w50r7hyzqyrwDoyNxkLnd2PdcHT/sym1QmflsjEs7pejtnohO6N2H wQW6M0H7Zt8claGRla4fKkg= -----END CERTIFICATE-----
-  --channelTopic: string # The Channel topic defined by salesforce once an channel is opened
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --update-mask: string # Field mask specifying the fields in the above SfdcChannel that have been modified and need to be updated.
+  --client-certificate-passphrase: string # 'passphrase' should be left unset if private key is not encrypted. Note that 'passphrase' is not the password for web server, but an extra layer of security to protected private key.
+  --client-certificate-ssl-certificate: string # The ssl certificate encoded in PEM format. This string must include the begin header and end footer lines. For example, -----BEGIN CERTIFICATE----- MIICTTCCAbagAwIBAgIJAPT0tSKNxan/MA0GCSqGSIb3DQEBCwUAMCoxFzAVBgNV BAoTDkdvb2dsZSBURVNUSU5HMQ8wDQYDVQQDEwZ0ZXN0Q0EwHhcNMTUwMTAxMDAw MDAwWhcNMjUwMTAxMDAwMDAwWjAuMRcwFQYDVQQKEw5Hb29nbGUgVEVTVElORzET MBEGA1UEAwwKam9lQGJhbmFuYTCBnzANBgkqhkiG9w0BAQEFAAOBjQAwgYkCgYEA vDYFgMgxi5W488d9J7UpCInl0NXmZQpJDEHE4hvkaRlH7pnC71H0DLt0/3zATRP1 JzY2+eqBmbGl4/sgZKYv8UrLnNyQNUTsNx1iZAfPUflf5FwgVsai8BM0pUciq1NB xD429VFcrGZNucvFLh72RuRFIKH8WUpiK/iZNFkWhZ0CAwEAAaN3MHUwDgYDVR0P AQH/BAQDAgWgMB0GA1UdJQQWMBQGCCsGAQUFBwMBBggrBgEFBQcDAjAMBgNVHRMB Af8EAjAAMBkGA1UdDgQSBBCVgnFBCWgL/iwCqnGrhTPQMBsGA1UdIwQUMBKAEKey Um2o4k2WiEVA0ldQvNYwDQYJKoZIhvcNAQELBQADgYEAYK986R4E3L1v+Q6esBtW JrUwA9UmJRSQr0N5w3o9XzarU37/bkjOP0Fw0k/A6Vv1n3vlciYfBFaBIam1qRHr 5dMsYf4CZS6w50r7hyzqyrwDoyNxkLnd2PdcHT/sym1QmflsjEs7pejtnohO6N2H wQW6M0H7Zt8claGRla4fKkg= -----END CERTIFICATE-----
+  --channel-topic: string # The Channel topic defined by salesforce once an channel is opened
   --description: string # The description for this channel
-  --displayName: string # Client level unique name/alias to easily reference a channel.
-  --isActive: oneof<nothing, bool> # Indicated if a channel has any active integrations referencing it. Set to false when the channel is created, and set to true if there is any integration published with the channel configured in it.
-  --lastReplayId: string # Last sfdc messsage replay id for channel
+  --display-name: string # Client level unique name/alias to easily reference a channel.
+  --is-active: oneof<nothing, bool> # Indicated if a channel has any active integrations referencing it. Set to false when the channel is created, and set to true if there is any integration published with the channel configured in it.
+  --last-replay-id: string # Last sfdc messsage replay id for channel
   --body-name: string # Resource name of the SFDC channel projects/{project}/locations/{location}/sfdcInstances/{sfdc_instance}/sfdcChannels/{sfdc_channel}.
 ]: any -> record<channelTopic: string, createTime: string, deleteTime: string, description: string, displayName: string, isActive: bool, lastReplayId: string, name: string, updateTime: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "updateMask" $updateMask "scalar") (serialize-qp "clientCertificate.passphrase" $clientCertificatepassphrase "scalar") (serialize-qp "clientCertificate.sslCertificate" $clientCertificatesslCertificate "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/($name)" $qp)
-  let body = {channelTopic: $channelTopic, description: $description, displayName: $displayName, isActive: $isActive, lastReplayId: $lastReplayId, name: $body_name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "updateMask" $update_mask "scalar") (serialize-qp "clientCertificate.passphrase" $client_certificate_passphrase "scalar") (serialize-qp "clientCertificate.sslCertificate" $client_certificate_ssl_certificate "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/{name}") $qp)
+  let req_body = {"channelTopic": $channel_topic, "description": $description, "displayName": $display_name, "isActive": $is_active, "lastReplayId": $last_replay_id, "name": $body_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Cancellation of an execution
 #
 # POST /v1/{name}:cancel
 # operationId: integrations.projects.locations.products.integrations.executions.cancel
-export def "projects integrationsprojectslocationsproductsintegrationsexecutionscancel" [
+export def "projects cancel" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -341,6 +359,7 @@ export def "projects integrationsprojectslocationsproductsintegrationsexecutions
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
@@ -349,28 +368,29 @@ export def "projects integrationsprojectslocationsproductsintegrationsexecutions
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --body: record
 ]: any -> record<isCanceled: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/($name):cancel" $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/{name}:cancel") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Downloads an integration. Retrieves the `IntegrationVersion` for a given `integration_id` and returns the response as a string.
 #
 # GET /v1/{name}:download
 # operationId: integrations.projects.locations.products.integrations.versions.download
-export def "projects integrationsprojectslocationsproductsintegrationsversionsdownload" [
+export def "projects download" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -379,6 +399,7 @@ export def "projects integrationsprojectslocationsproductsintegrationsversionsdo
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
@@ -387,19 +408,19 @@ export def "projects integrationsprojectslocationsproductsintegrationsversionsdo
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --fileFormat: string@fileFormat-completer # File format for download request.
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --file-format: string@file-format-completer # File format for download request.
 ]: nothing -> record<content: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "fileFormat" $fileFormat "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/($name):download" $qp)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "fileFormat" $file_format "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/{name}:download") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Executes integrations synchronously by passing the trigger id in the request body. The request is not returned until the requested executions are either fulfilled or experienced an error. If the integration name is not specified (passing `-`), all of the associated integration under the given trigger_id will be executed. Otherwise only the specified integration for the given `trigger_id` is executed. This is helpful for execution the integration from UI.
@@ -408,7 +429,7 @@ export def "projects integrationsprojectslocationsproductsintegrationsversionsdo
 # operationId: integrations.projects.locations.products.integrations.execute
 # --parameterEntries item shape: {dataType?: "DATA_TYPE_UNSPECIFIED"|"STRING_VALUE"|"INT_VALUE"|"DOUBLE_VALUE"|"BOOLEAN_VALUE"|"PROTO_VALUE"|"SERIALIZED_OBJECT_VALUE"|"STRING_ARRAY"|"INT_ARRAY"|"DOUBLE_ARRAY"|"PROTO_ARRAY"|"PROTO_ENUM"|"BOOLEAN_ARRAY"|"PROTO_ENUM_ARRAY"|"BYTES"|"BYTES_ARRAY"|"NON_SERIALIZABLE_OBJECT"|"JSON_VALUE", key?: string, value?: record}
 # --parameters shape: {parameters?: list}
-export def "projects integrationsprojectslocationsproductsintegrationsexecute" [
+export def "projects create-execute" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -417,6 +438,7 @@ export def "projects integrationsprojectslocationsproductsintegrationsexecute" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
@@ -425,35 +447,35 @@ export def "projects integrationsprojectslocationsproductsintegrationsexecute" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --doNotPropagateError: oneof<nothing, bool> # Optional. Flag to determine how to should propagate errors. If this flag is set to be true, it will not throw an exception. Instead, it will return a {@link ExecuteIntegrationsResponse} with an execution id and error messages as PostWithTriggerIdExecutionException in {@link EventParameters}. The flag is set to be false by default.
-  --executionId: string # Optional. The id of the ON_HOLD execution to be resumed.
-  --inputParameters: record # Optional. Input parameters used by integration execution.
-  --parameterEntries: list # Optional. Parameters are a part of Event and can be used to communicate between different tasks that are part of the same integration execution. — item shape: {dataType?: "DATA_TYPE_UNSPECIFIED"|"STRING_VALUE"|"INT_VALUE"|"DOUBLE_VALUE"|"BOOLEAN_VALUE"|"PROTO_VALUE"|"SERIALIZED_OBJECT_VALUE"|"STRING_ARRAY"|"INT_ARRAY"|"DOUBLE_ARRAY"|"PROTO_ARRAY"|"PROTO_ENUM"|"BOOLEAN_ARRAY"|"PROTO_ENUM_ARRAY"|"BYTES"|"BYTES_ARRAY"|"NON_SERIALIZABLE_OBJECT"|"JSON_VALUE", key?: string, value?: record}
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --do-not-propagate-error: oneof<nothing, bool> # Optional. Flag to determine how to should propagate errors. If this flag is set to be true, it will not throw an exception. Instead, it will return a {@link ExecuteIntegrationsResponse} with an execution id and error messages as PostWithTriggerIdExecutionException in {@link EventParameters}. The flag is set to be false by default.
+  --execution-id: string # Optional. The id of the ON_HOLD execution to be resumed.
+  --input-parameters: record # Optional. Input parameters used by integration execution.
+  --parameter-entries: list # Optional. Parameters are a part of Event and can be used to communicate between different tasks that are part of the same integration execution. — item shape: {dataType?: "DATA_TYPE_UNSPECIFIED"|"STRING_VALUE"|"INT_VALUE"|"DOUBLE_VALUE"|"BOOLEAN_VALUE"|"PROTO_VALUE"|"SERIALIZED_OBJECT_VALUE"|"STRING_ARRAY"|"INT_ARRAY"|"DOUBLE_ARRAY"|"PROTO_ARRAY"|"PROTO_ENUM"|"BOOLEAN_ARRAY"|"PROTO_ENUM_ARRAY"|"BYTES"|"BYTES_ARRAY"|"NON_SERIALIZABLE_OBJECT"|"JSON_VALUE", key?: string, value?: record}
   --parameters: record # LINT.IfChange This message is used for processing and persisting (when applicable) key value pair parameters for each event in the event bus. Please see — shape: {parameters?: list}
-  --requestId: string # Optional. This is used to de-dup incoming request: if the duplicate request was detected, the response from the previous execution is returned.
-  --triggerId: string # Required. Matched against all {@link TriggerConfig}s across all integrations. i.e. TriggerConfig.trigger_id.equals(trigger_id). The trigger_id is in the format of `api_trigger/TRIGGER_NAME`.
+  --request-id: string # Optional. This is used to de-dup incoming request: if the duplicate request was detected, the response from the previous execution is returned.
+  --trigger-id: string # Required. Matched against all {@link TriggerConfig}s across all integrations. i.e. TriggerConfig.trigger_id.equals(trigger_id). The trigger_id is in the format of `api_trigger/TRIGGER_NAME`.
 ]: any -> record<eventParameters: record<parameters: list<record>>, executionFailed: bool, executionId: string, outputParameters: record, parameterEntries: table<dataType: string, key: string, value: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/($name):execute" $qp)
-  let body = {doNotPropagateError: $doNotPropagateError, executionId: $executionId, inputParameters: $inputParameters, parameterEntries: $parameterEntries, parameters: $parameters, requestId: $requestId, triggerId: $triggerId} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/{name}:execute") $qp)
+  let req_body = {"doNotPropagateError": $do_not_propagate_error, "executionId": $execution_id, "inputParameters": $input_parameters, "parameterEntries": $parameter_entries, "parameters": $parameters, "requestId": $request_id, "triggerId": $trigger_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # * Lifts suspension for advanced suspension task. Fetch corresponding suspension with provided suspension Id, resolve suspension, and set up suspension result for the Suspension Task.
 #
 # POST /v1/{name}:lift
 # operationId: integrations.projects.locations.products.integrations.executions.suspensions.lift
-export def "projects integrationsprojectslocationsproductsintegrationsexecutionssuspensionslift" [
+export def "projects create-lift" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -462,6 +484,7 @@ export def "projects integrationsprojectslocationsproductsintegrationsexecutions
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
@@ -470,29 +493,29 @@ export def "projects integrationsprojectslocationsproductsintegrationsexecutions
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --suspensionResult: string # User passed in suspension result and will be used to control workflow execution branching behavior by setting up corresponnding edge condition with suspension result. For example, if you want to lift the suspension, you can pass "Approved", or if you want to reject the suspension and terminate workfloe execution, you can pass "Rejected" and terminate the workflow execution with configuring the edge condition.
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --suspension-result: string # User passed in suspension result and will be used to control workflow execution branching behavior by setting up corresponnding edge condition with suspension result. For example, if you want to lift the suspension, you can pass "Approved", or if you want to reject the suspension and terminate workfloe execution, you can pass "Rejected" and terminate the workflow execution with configuring the edge condition.
 ]: any -> record<eventExecutionInfoId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/($name):lift" $qp)
-  let body = {suspensionResult: $suspensionResult} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/{name}:lift") $qp)
+  let req_body = {"suspensionResult": $suspension_result} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # This RPC throws an exception if the integration is in ARCHIVED or ACTIVE state. This RPC throws an exception if the version being published is DRAFT, and if the `locked_by` user is not the same as the user performing the Publish. Audit fields updated include last_published_timestamp, last_published_by, last_modified_timestamp, last_modified_by. Any existing lock is on this integration is released.
 #
 # POST /v1/{name}:publish
 # operationId: integrations.projects.locations.products.integrations.versions.publish
-export def "projects integrationsprojectslocationsproductsintegrationsversionspublish" [
+export def "projects publish" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -501,6 +524,7 @@ export def "projects integrationsprojectslocationsproductsintegrationsversionspu
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
@@ -509,21 +533,22 @@ export def "projects integrationsprojectslocationsproductsintegrationsversionspu
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --body: record
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/($name):publish" $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/{name}:publish") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # * Resolves (lifts/rejects) any number of suspensions. If the integration is already running, only the status of the suspension is updated. Otherwise, the suspended integration will begin execution again.
@@ -531,7 +556,7 @@ export def "projects integrationsprojectslocationsproductsintegrationsversionspu
 # POST /v1/{name}:resolve
 # operationId: integrations.projects.locations.products.integrations.executions.suspensions.resolve
 # --suspension shape: {approvalConfig?: record, audit?: record, eventExecutionInfoId?: string, integration?: string, name?: string, state?: "RESOLUTION_STATE_UNSPECIFIED"|"PENDING"|"REJECTED"|"LIFTED", suspensionConfig?: record, taskId?: string}
-export def "projects integrationsprojectslocationsproductsintegrationsexecutionssuspensionsresolve" [
+export def "projects create-resolve" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -540,6 +565,7 @@ export def "projects integrationsprojectslocationsproductsintegrationsexecutions
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
@@ -548,22 +574,22 @@ export def "projects integrationsprojectslocationsproductsintegrationsexecutions
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --suspension: record # A record representing a suspension. — shape: {approvalConfig?: record, audit?: record, eventExecutionInfoId?: string, integration?: string, name?: string, state?: "RESOLUTION_STATE_UNSPECIFIED"|"PENDING"|"REJECTED"|"LIFTED", suspensionConfig?: record, taskId?: string}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/($name):resolve" $qp)
-  let body = {suspension: $suspension} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/{name}:resolve") $qp)
+  let req_body = {"suspension": $suspension} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Schedules an integration for execution by passing the trigger id and the scheduled time in the request body.
@@ -572,7 +598,7 @@ export def "projects integrationsprojectslocationsproductsintegrationsexecutions
 # operationId: integrations.projects.locations.products.integrations.schedule
 # --parameterEntries item shape: {dataType?: "DATA_TYPE_UNSPECIFIED"|"STRING_VALUE"|"INT_VALUE"|"DOUBLE_VALUE"|"BOOLEAN_VALUE"|"PROTO_VALUE"|"SERIALIZED_OBJECT_VALUE"|"STRING_ARRAY"|"INT_ARRAY"|"DOUBLE_ARRAY"|"PROTO_ARRAY"|"PROTO_ENUM"|"BOOLEAN_ARRAY"|"PROTO_ENUM_ARRAY"|"BYTES"|"BYTES_ARRAY"|"NON_SERIALIZABLE_OBJECT"|"JSON_VALUE", key?: string, value?: record}
 # --parameters shape: {parameters?: list}
-export def "projects integrationsprojectslocationsproductsintegrationsschedule" [
+export def "projects create-schedule" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -581,6 +607,7 @@ export def "projects integrationsprojectslocationsproductsintegrationsschedule" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
@@ -589,36 +616,36 @@ export def "projects integrationsprojectslocationsproductsintegrationsschedule" 
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --inputParameters: record # Optional. Input parameters used by integration execution.
-  --parameterEntries: list # Parameters are a part of Event and can be used to communicate between different tasks that are part of the same integration execution. — item shape: {dataType?: "DATA_TYPE_UNSPECIFIED"|"STRING_VALUE"|"INT_VALUE"|"DOUBLE_VALUE"|"BOOLEAN_VALUE"|"PROTO_VALUE"|"SERIALIZED_OBJECT_VALUE"|"STRING_ARRAY"|"INT_ARRAY"|"DOUBLE_ARRAY"|"PROTO_ARRAY"|"PROTO_ENUM"|"BOOLEAN_ARRAY"|"PROTO_ENUM_ARRAY"|"BYTES"|"BYTES_ARRAY"|"NON_SERIALIZABLE_OBJECT"|"JSON_VALUE", key?: string, value?: record}
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --input-parameters: record # Optional. Input parameters used by integration execution.
+  --parameter-entries: list # Parameters are a part of Event and can be used to communicate between different tasks that are part of the same integration execution. — item shape: {dataType?: "DATA_TYPE_UNSPECIFIED"|"STRING_VALUE"|"INT_VALUE"|"DOUBLE_VALUE"|"BOOLEAN_VALUE"|"PROTO_VALUE"|"SERIALIZED_OBJECT_VALUE"|"STRING_ARRAY"|"INT_ARRAY"|"DOUBLE_ARRAY"|"PROTO_ARRAY"|"PROTO_ENUM"|"BOOLEAN_ARRAY"|"PROTO_ENUM_ARRAY"|"BYTES"|"BYTES_ARRAY"|"NON_SERIALIZABLE_OBJECT"|"JSON_VALUE", key?: string, value?: record}
   --parameters: record # LINT.IfChange This message is used for processing and persisting (when applicable) key value pair parameters for each event in the event bus. Please see — shape: {parameters?: list}
-  --requestId: string # This is used to de-dup incoming request: if the duplicate request was detected, the response from the previous execution is returned.
-  --scheduleTime: string # The time that the integration should be executed. If the time is less or equal to the current time, the integration is executed immediately. (format: google-datetime)
-  --triggerId: string # Matched against all {@link TriggerConfig}s across all integrations. i.e. TriggerConfig.trigger_id.equals(trigger_id)
+  --request-id: string # This is used to de-dup incoming request: if the duplicate request was detected, the response from the previous execution is returned.
+  --schedule-time: string # The time that the integration should be executed. If the time is less or equal to the current time, the integration is executed immediately. (format: google-datetime)
+  --trigger-id: string # Matched against all {@link TriggerConfig}s across all integrations. i.e. TriggerConfig.trigger_id.equals(trigger_id)
 ]: any -> record<executionInfoIds: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/($name):schedule" $qp)
-  let body = {inputParameters: $inputParameters, parameterEntries: $parameterEntries, parameters: $parameters, requestId: $requestId, scheduleTime: $scheduleTime, triggerId: $triggerId} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/{name}:schedule") $qp)
+  let req_body = {"inputParameters": $input_parameters, "parameterEntries": $parameter_entries, "parameters": $parameters, "requestId": $request_id, "scheduleTime": $schedule_time, "triggerId": $trigger_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Execute the integration in draft state
 #
 # POST /v1/{name}:test
 # operationId: integrations.projects.locations.products.integrations.test
-# --integrationVersion shape: {databasePersistencePolicy?: "DATABASE_PERSISTENCE_POLICY_UNSPECIFIED"|"DATABASE_PERSISTENCE_DISABLED", description?: string, errorCatcherConfigs?: list, integrationParameters?: list, integrationParametersInternal?: record, lastModifierEmail?: string, lockHolder?: string, origin?: "UNSPECIFIED"|"UI"|"PIPER_V2"|"PIPER_V3"|"APPLICATION_IP_PROVISIONING", parentTemplateId?: string, runAsServiceAccount?: string, snapshotNumber?: string, taskConfigs?: list, taskConfigsInternal?: list, teardown?: record, triggerConfigs?: list, triggerConfigsInternal?: list, userLabel?: string}
+# --integrationVersion shape: {databasePersistencePolicy?: "DATABASE_PERSISTENCE_POLICY_UNSPECIFIED"|"DATABASE_PERSISTENCE_DISABLED", description?: string, errorCatcherConfigs?: list, integrationParameters?: list, integrationParametersInternal?: record, lastModifierEmail?: string, lockHolder?: string, origin?: "UNSPECIFIED"|"UI"|"PIPER_V2"|"PIPER_V3"|"APPLICATION_IP_PROVISIONING", parentTemplateId?: string, runAsServiceAccount?: string, snapshotNumber?: string, taskConfigs?: list, taskConfigsInternal?: list, teardown?: record, ... (3 more fields)}
 # --parameters shape: {parameters?: list}
-export def "projects integrationsprojectslocationsproductsintegrationstest" [
+export def "projects test" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -627,6 +654,7 @@ export def "projects integrationsprojectslocationsproductsintegrationstest" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
@@ -635,35 +663,35 @@ export def "projects integrationsprojectslocationsproductsintegrationstest" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --clientId: string # Required. This is used to identify the client on whose behalf the event will be executed.
-  --deadlineSecondsTime: string # Optional. custom deadline of the rpc (format: google-datetime)
-  --inputParameters: record # Optional. Input parameters used during integration execution.
-  --integrationVersion: record # The integration version definition. — shape: {databasePersistencePolicy?: "DATABASE_PERSISTENCE_POLICY_UNSPECIFIED"|"DATABASE_PERSISTENCE_DISABLED", description?: string, errorCatcherConfigs?: list, integrationParameters?: list, integrationParametersInternal?: record, lastModifierEmail?: string, lockHolder?: string, origin?: "UNSPECIFIED"|"UI"|"PIPER_V2"|"PIPER_V3"|"APPLICATION_IP_PROVISIONING", parentTemplateId?: string, runAsServiceAccount?: string, snapshotNumber?: string, taskConfigs?: list, taskConfigsInternal?: list, teardown?: record, triggerConfigs?: list, triggerConfigsInternal?: list, userLabel?: string}
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --client-id: string # Required. This is used to identify the client on whose behalf the event will be executed.
+  --deadline-seconds-time: string # Optional. custom deadline of the rpc (format: google-datetime)
+  --input-parameters: record # Optional. Input parameters used during integration execution.
+  --integration-version: record # The integration version definition. — shape: {databasePersistencePolicy?: "DATABASE_PERSISTENCE_POLICY_UNSPECIFIED"|"DATABASE_PERSISTENCE_DISABLED", description?: string, errorCatcherConfigs?: list, integrationParameters?: list, integrationParametersInternal?: record, lastModifierEmail?: string, lockHolder?: string, origin?: "UNSPECIFIED"|"UI"|"PIPER_V2"|"PIPER_V3"|"APPLICATION_IP_PROVISIONING", parentTemplateId?: string, runAsServiceAccount?: string, snapshotNumber?: string, taskConfigs?: list, taskConfigsInternal?: list, teardown?: record, ... (3 more fields)}
   --parameters: record # LINT.IfChange This message is used for processing and persisting (when applicable) key value pair parameters for each event in the event bus. Please see — shape: {parameters?: list}
-  --testMode: oneof<nothing, bool> # Optional. Can be specified in the event request, otherwise false (default). If true, enables tasks with condition "test_mode = true". If false, disables tasks with condition "test_mode = true" if global test mode (set by platform) is also false {@link EventBusConfig}.
-  --triggerId: string # Required. The trigger id of the integration trigger config. If both trigger_id and client_id is present, the integration is executed from the start tasks provided by the matching trigger config otherwise it is executed from the default start tasks.
+  --test-mode: oneof<nothing, bool> # Optional. Can be specified in the event request, otherwise false (default). If true, enables tasks with condition "test_mode = true". If false, disables tasks with condition "test_mode = true" if global test mode (set by platform) is also false {@link EventBusConfig}.
+  --trigger-id: string # Required. The trigger id of the integration trigger config. If both trigger_id and client_id is present, the integration is executed from the start tasks provided by the matching trigger config otherwise it is executed from the default start tasks.
 ]: any -> record<eventParameters: record<parameters: list<record>>, executionFailed: bool, executionId: string, parameterEntries: table<dataType: string, key: string, value: record>, parameters: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/($name):test" $qp)
-  let body = {clientId: $clientId, deadlineSecondsTime: $deadlineSecondsTime, inputParameters: $inputParameters, integrationVersion: $integrationVersion, parameters: $parameters, testMode: $testMode, triggerId: $triggerId} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/{name}:test") $qp)
+  let req_body = {"clientId": $client_id, "deadlineSecondsTime": $deadline_seconds_time, "inputParameters": $input_parameters, "integrationVersion": $integration_version, "parameters": $parameters, "testMode": $test_mode, "triggerId": $trigger_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Sets the status of the ACTIVE integration to SNAPSHOT with a new tag "PREVIOUSLY_PUBLISHED" after validating it. The "HEAD" and "PUBLISH_REQUESTED" tags do not change. This RPC throws an exception if the version being snapshot is not ACTIVE. Audit fields added include action, action_by, action_timestamp.
 #
 # POST /v1/{name}:unpublish
 # operationId: integrations.projects.locations.products.integrations.versions.unpublish
-export def "projects integrationsprojectslocationsproductsintegrationsversionsunpublish" [
+export def "projects delete-by-name-1" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -672,6 +700,7 @@ export def "projects integrationsprojectslocationsproductsintegrationsversionsun
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
@@ -680,28 +709,29 @@ export def "projects integrationsprojectslocationsproductsintegrationsversionsun
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --body: record
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/($name):unpublish" $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/{name}:unpublish") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Creates an Apps Script project.
 #
 # POST /v1/{parent}/appsScriptProjects
 # operationId: integrations.projects.locations.appsScriptProjects.create
-export def "apps-script-projects integrationsprojectslocationsappsScriptProjectscreate" [
+export def "apps-script-projects create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -710,6 +740,7 @@ export def "apps-script-projects integrationsprojectslocationsappsScriptProjects
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
@@ -718,30 +749,30 @@ export def "apps-script-projects integrationsprojectslocationsappsScriptProjects
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --appsScriptProject: string # The name of the Apps Script project to be created.
-  --authConfigId: string # The auth config id necessary to fetch the necessary credentials to create the project for external clients
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --apps-script-project: string # The name of the Apps Script project to be created.
+  --auth-config-id: string # The auth config id necessary to fetch the necessary credentials to create the project for external clients
 ]: any -> record<projectId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/($parent)/appsScriptProjects" $qp)
-  let body = {appsScriptProject: $appsScriptProject, authConfigId: $authConfigId} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/appsScriptProjects") $qp)
+  let req_body = {"appsScriptProject": $apps_script_project, "authConfigId": $auth_config_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Links a existing Apps Script project.
 #
 # POST /v1/{parent}/appsScriptProjects:link
 # operationId: integrations.projects.locations.appsScriptProjects.link
-export def "apps-script-projects-link integrationsprojectslocationsappsScriptProjectslink" [
+export def "apps-script-projects-link create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -750,6 +781,7 @@ export def "apps-script-projects-link integrationsprojectslocationsappsScriptPro
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
@@ -758,29 +790,29 @@ export def "apps-script-projects-link integrationsprojectslocationsappsScriptPro
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --scriptId: string # The id of the Apps Script project to be linked.
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --script-id: string # The id of the Apps Script project to be linked.
 ]: any -> record<scriptId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/($parent)/appsScriptProjects:link" $qp)
-  let body = {scriptId: $scriptId} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/appsScriptProjects:link") $qp)
+  let req_body = {"scriptId": $script_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Lists all auth configs that match the filter. Restrict to auth configs belong to the current client only.
 #
 # GET /v1/{parent}/authConfigs
 # operationId: integrations.projects.locations.products.authConfigs.list
-export def "auth-configs integrationsprojectslocationsproductsauthConfigslist" [
+export def "auth-configs list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -789,6 +821,7 @@ export def "auth-configs integrationsprojectslocationsproductsauthConfigslist" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
@@ -797,22 +830,22 @@ export def "auth-configs integrationsprojectslocationsproductsauthConfigslist" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --filter: string # Filtering as supported in https://developers.google.com/authorized-buyers/apis/guides/v2/list-filters.
-  --pageSize: int # The size of entries in the response. If unspecified, defaults to 100.
-  --pageToken: string # The token returned in the previous response.
-  --readMask: string # The mask which specifies fields that need to be returned in the AuthConfig's response.
+  --page-size: int # The size of entries in the response. If unspecified, defaults to 100.
+  --page-token: string # The token returned in the previous response.
+  --read-mask: string # The mask which specifies fields that need to be returned in the AuthConfig's response.
 ]: nothing -> record<authConfigs: table<certificateId: string, createTime: string, creatorEmail: string, credentialType: string, decryptedCredential: record, description: string, displayName: string, encryptedCredential: string, expiryNotificationDuration: list, lastModifierEmail: string, name: string, overrideValidTime: string, reason: string, state: string, updateTime: string, validTime: string, visibility: string>, nextPageToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar") (serialize-qp "readMask" $readMask "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/($parent)/authConfigs" $qp)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "readMask" $read_mask "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/authConfigs") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Creates an auth config record. Fetch corresponding credentials for specific auth types, e.g. access token for OAuth 2.0, JWT token for JWT. Encrypt the auth config with Cloud KMS and store the encrypted credentials in Spanner. Returns the encrypted auth config.
@@ -820,7 +853,7 @@ export def "auth-configs integrationsprojectslocationsproductsauthConfigslist" [
 # POST /v1/{parent}/authConfigs
 # operationId: integrations.projects.locations.products.authConfigs.create
 # --decryptedCredential shape: {authToken?: record, credentialType?: "CREDENTIAL_TYPE_UNSPECIFIED"|"USERNAME_AND_PASSWORD"|"API_KEY"|"OAUTH2_AUTHORIZATION_CODE"|"OAUTH2_IMPLICIT"|"OAUTH2_CLIENT_CREDENTIALS"|"OAUTH2_RESOURCE_OWNER_CREDENTIALS"|"JWT"|"AUTH_TOKEN"|"SERVICE_ACCOUNT"|"CLIENT_CERTIFICATE_ONLY"|"OIDC_TOKEN", jwt?: record, oauth2AuthorizationCode?: record, oauth2ClientCredentials?: record, oauth2ResourceOwnerCredentials?: record, oidcToken?: record, serviceAccountCredentials?: record, usernameAndPassword?: record}
-export def "auth-configs integrationsprojectslocationsproductsauthConfigscreate" [
+export def "auth-configs create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -829,6 +862,7 @@ export def "auth-configs integrationsprojectslocationsproductsauthConfigscreate"
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
@@ -837,46 +871,46 @@ export def "auth-configs integrationsprojectslocationsproductsauthConfigscreate"
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --clientCertificateencryptedPrivateKey: string # The ssl certificate encoded in PEM format. This string must include the begin header and end footer lines. For example, -----BEGIN CERTIFICATE----- MIICTTCCAbagAwIBAgIJAPT0tSKNxan/MA0GCSqGSIb3DQEBCwUAMCoxFzAVBgNV BAoTDkdvb2dsZSBURVNUSU5HMQ8wDQYDVQQDEwZ0ZXN0Q0EwHhcNMTUwMTAxMDAw MDAwWhcNMjUwMTAxMDAwMDAwWjAuMRcwFQYDVQQKEw5Hb29nbGUgVEVTVElORzET MBEGA1UEAwwKam9lQGJhbmFuYTCBnzANBgkqhkiG9w0BAQEFAAOBjQAwgYkCgYEA vDYFgMgxi5W488d9J7UpCInl0NXmZQpJDEHE4hvkaRlH7pnC71H0DLt0/3zATRP1 JzY2+eqBmbGl4/sgZKYv8UrLnNyQNUTsNx1iZAfPUflf5FwgVsai8BM0pUciq1NB xD429VFcrGZNucvFLh72RuRFIKH8WUpiK/iZNFkWhZ0CAwEAAaN3MHUwDgYDVR0P AQH/BAQDAgWgMB0GA1UdJQQWMBQGCCsGAQUFBwMBBggrBgEFBQcDAjAMBgNVHRMB Af8EAjAAMBkGA1UdDgQSBBCVgnFBCWgL/iwCqnGrhTPQMBsGA1UdIwQUMBKAEKey Um2o4k2WiEVA0ldQvNYwDQYJKoZIhvcNAQELBQADgYEAYK986R4E3L1v+Q6esBtW JrUwA9UmJRSQr0N5w3o9XzarU37/bkjOP0Fw0k/A6Vv1n3vlciYfBFaBIam1qRHr 5dMsYf4CZS6w50r7hyzqyrwDoyNxkLnd2PdcHT/sym1QmflsjEs7pejtnohO6N2H wQW6M0H7Zt8claGRla4fKkg= -----END CERTIFICATE-----
-  --clientCertificatepassphrase: string # 'passphrase' should be left unset if private key is not encrypted. Note that 'passphrase' is not the password for web server, but an extra layer of security to protected private key.
-  --clientCertificatesslCertificate: string # The ssl certificate encoded in PEM format. This string must include the begin header and end footer lines. For example, -----BEGIN CERTIFICATE----- MIICTTCCAbagAwIBAgIJAPT0tSKNxan/MA0GCSqGSIb3DQEBCwUAMCoxFzAVBgNV BAoTDkdvb2dsZSBURVNUSU5HMQ8wDQYDVQQDEwZ0ZXN0Q0EwHhcNMTUwMTAxMDAw MDAwWhcNMjUwMTAxMDAwMDAwWjAuMRcwFQYDVQQKEw5Hb29nbGUgVEVTVElORzET MBEGA1UEAwwKam9lQGJhbmFuYTCBnzANBgkqhkiG9w0BAQEFAAOBjQAwgYkCgYEA vDYFgMgxi5W488d9J7UpCInl0NXmZQpJDEHE4hvkaRlH7pnC71H0DLt0/3zATRP1 JzY2+eqBmbGl4/sgZKYv8UrLnNyQNUTsNx1iZAfPUflf5FwgVsai8BM0pUciq1NB xD429VFcrGZNucvFLh72RuRFIKH8WUpiK/iZNFkWhZ0CAwEAAaN3MHUwDgYDVR0P AQH/BAQDAgWgMB0GA1UdJQQWMBQGCCsGAQUFBwMBBggrBgEFBQcDAjAMBgNVHRMB Af8EAjAAMBkGA1UdDgQSBBCVgnFBCWgL/iwCqnGrhTPQMBsGA1UdIwQUMBKAEKey Um2o4k2WiEVA0ldQvNYwDQYJKoZIhvcNAQELBQADgYEAYK986R4E3L1v+Q6esBtW JrUwA9UmJRSQr0N5w3o9XzarU37/bkjOP0Fw0k/A6Vv1n3vlciYfBFaBIam1qRHr 5dMsYf4CZS6w50r7hyzqyrwDoyNxkLnd2PdcHT/sym1QmflsjEs7pejtnohO6N2H wQW6M0H7Zt8claGRla4fKkg= -----END CERTIFICATE-----
-  --certificateId: string # Certificate id for client certificate
-  --creatorEmail: string # The creator's email address. Generated based on the End User Credentials/LOAS role of the user making the call.
-  --credentialType: string@credentialType-completer # Credential type of the encrypted credential.
-  --decryptedCredential: record # Defines parameters for a single, canonical credential. — shape: {authToken?: record, credentialType?: "CREDENTIAL_TYPE_UNSPECIFIED"|"USERNAME_AND_PASSWORD"|"API_KEY"|"OAUTH2_AUTHORIZATION_CODE"|"OAUTH2_IMPLICIT"|"OAUTH2_CLIENT_CREDENTIALS"|"OAUTH2_RESOURCE_OWNER_CREDENTIALS"|"JWT"|"AUTH_TOKEN"|"SERVICE_ACCOUNT"|"CLIENT_CERTIFICATE_ONLY"|"OIDC_TOKEN", jwt?: record, oauth2AuthorizationCode?: record, oauth2ClientCredentials?: record, oauth2ResourceOwnerCredentials?: record, oidcToken?: record, serviceAccountCredentials?: record, usernameAndPassword?: record}
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --client-certificate-encrypted-private-key: string # The ssl certificate encoded in PEM format. This string must include the begin header and end footer lines. For example, -----BEGIN CERTIFICATE----- MIICTTCCAbagAwIBAgIJAPT0tSKNxan/MA0GCSqGSIb3DQEBCwUAMCoxFzAVBgNV BAoTDkdvb2dsZSBURVNUSU5HMQ8wDQYDVQQDEwZ0ZXN0Q0EwHhcNMTUwMTAxMDAw MDAwWhcNMjUwMTAxMDAwMDAwWjAuMRcwFQYDVQQKEw5Hb29nbGUgVEVTVElORzET MBEGA1UEAwwKam9lQGJhbmFuYTCBnzANBgkqhkiG9w0BAQEFAAOBjQAwgYkCgYEA vDYFgMgxi5W488d9J7UpCInl0NXmZQpJDEHE4hvkaRlH7pnC71H0DLt0/3zATRP1 JzY2+eqBmbGl4/sgZKYv8UrLnNyQNUTsNx1iZAfPUflf5FwgVsai8BM0pUciq1NB xD429VFcrGZNucvFLh72RuRFIKH8WUpiK/iZNFkWhZ0CAwEAAaN3MHUwDgYDVR0P AQH/BAQDAgWgMB0GA1UdJQQWMBQGCCsGAQUFBwMBBggrBgEFBQcDAjAMBgNVHRMB Af8EAjAAMBkGA1UdDgQSBBCVgnFBCWgL/iwCqnGrhTPQMBsGA1UdIwQUMBKAEKey Um2o4k2WiEVA0ldQvNYwDQYJKoZIhvcNAQELBQADgYEAYK986R4E3L1v+Q6esBtW JrUwA9UmJRSQr0N5w3o9XzarU37/bkjOP0Fw0k/A6Vv1n3vlciYfBFaBIam1qRHr 5dMsYf4CZS6w50r7hyzqyrwDoyNxkLnd2PdcHT/sym1QmflsjEs7pejtnohO6N2H wQW6M0H7Zt8claGRla4fKkg= -----END CERTIFICATE-----
+  --client-certificate-passphrase: string # 'passphrase' should be left unset if private key is not encrypted. Note that 'passphrase' is not the password for web server, but an extra layer of security to protected private key.
+  --client-certificate-ssl-certificate: string # The ssl certificate encoded in PEM format. This string must include the begin header and end footer lines. For example, -----BEGIN CERTIFICATE----- MIICTTCCAbagAwIBAgIJAPT0tSKNxan/MA0GCSqGSIb3DQEBCwUAMCoxFzAVBgNV BAoTDkdvb2dsZSBURVNUSU5HMQ8wDQYDVQQDEwZ0ZXN0Q0EwHhcNMTUwMTAxMDAw MDAwWhcNMjUwMTAxMDAwMDAwWjAuMRcwFQYDVQQKEw5Hb29nbGUgVEVTVElORzET MBEGA1UEAwwKam9lQGJhbmFuYTCBnzANBgkqhkiG9w0BAQEFAAOBjQAwgYkCgYEA vDYFgMgxi5W488d9J7UpCInl0NXmZQpJDEHE4hvkaRlH7pnC71H0DLt0/3zATRP1 JzY2+eqBmbGl4/sgZKYv8UrLnNyQNUTsNx1iZAfPUflf5FwgVsai8BM0pUciq1NB xD429VFcrGZNucvFLh72RuRFIKH8WUpiK/iZNFkWhZ0CAwEAAaN3MHUwDgYDVR0P AQH/BAQDAgWgMB0GA1UdJQQWMBQGCCsGAQUFBwMBBggrBgEFBQcDAjAMBgNVHRMB Af8EAjAAMBkGA1UdDgQSBBCVgnFBCWgL/iwCqnGrhTPQMBsGA1UdIwQUMBKAEKey Um2o4k2WiEVA0ldQvNYwDQYJKoZIhvcNAQELBQADgYEAYK986R4E3L1v+Q6esBtW JrUwA9UmJRSQr0N5w3o9XzarU37/bkjOP0Fw0k/A6Vv1n3vlciYfBFaBIam1qRHr 5dMsYf4CZS6w50r7hyzqyrwDoyNxkLnd2PdcHT/sym1QmflsjEs7pejtnohO6N2H wQW6M0H7Zt8claGRla4fKkg= -----END CERTIFICATE-----
+  --certificate-id: string # Certificate id for client certificate
+  --creator-email: string # The creator's email address. Generated based on the End User Credentials/LOAS role of the user making the call.
+  --credential-type: string@credential-type-completer # Credential type of the encrypted credential.
+  --decrypted-credential: record # Defines parameters for a single, canonical credential. — shape: {authToken?: record, credentialType?: "CREDENTIAL_TYPE_UNSPECIFIED"|"USERNAME_AND_PASSWORD"|"API_KEY"|"OAUTH2_AUTHORIZATION_CODE"|"OAUTH2_IMPLICIT"|"OAUTH2_CLIENT_CREDENTIALS"|"OAUTH2_RESOURCE_OWNER_CREDENTIALS"|"JWT"|"AUTH_TOKEN"|"SERVICE_ACCOUNT"|"CLIENT_CERTIFICATE_ONLY"|"OIDC_TOKEN", jwt?: record, oauth2AuthorizationCode?: record, oauth2ClientCredentials?: record, oauth2ResourceOwnerCredentials?: record, oidcToken?: record, serviceAccountCredentials?: record, usernameAndPassword?: record}
   --description: string # A description of the auth config.
-  --displayName: string # The name of the auth config.
-  --encryptedCredential: string # Auth credential encrypted by Cloud KMS. Can be decrypted as Credential with proper KMS key. (format: byte)
-  --expiryNotificationDuration: list # User can define the time to receive notification after which the auth config becomes invalid. Support up to 30 days. Support granularity in hours.
-  --lastModifierEmail: string # The last modifier's email address. Generated based on the End User Credentials/LOAS role of the user making the call.
+  --display-name: string # The name of the auth config.
+  --encrypted-credential: string # Auth credential encrypted by Cloud KMS. Can be decrypted as Credential with proper KMS key. (format: byte)
+  --expiry-notification-duration: list<string> # User can define the time to receive notification after which the auth config becomes invalid. Support up to 30 days. Support granularity in hours.
+  --last-modifier-email: string # The last modifier's email address. Generated based on the End User Credentials/LOAS role of the user making the call.
   --name: string # Resource name of the SFDC instance projects/{project}/locations/{location}/authConfigs/{authConfig}.
-  --overrideValidTime: string # User provided expiry time to override. For the example of Salesforce, username/password credentials can be valid for 6 months depending on the instance settings. (format: google-datetime)
+  --override-valid-time: string # User provided expiry time to override. For the example of Salesforce, username/password credentials can be valid for 6 months depending on the instance settings. (format: google-datetime)
   --reason: string # The reason / details of the current status.
   --state: string@state-completer # The status of the auth config.
-  --validTime: string # The time until the auth config is valid. Empty or max value is considered the auth config won't expire. (format: google-datetime)
+  --valid-time: string # The time until the auth config is valid. Empty or max value is considered the auth config won't expire. (format: google-datetime)
   --visibility: string@visibility-completer # The visibility of the auth config.
 ]: any -> record<certificateId: string, createTime: string, creatorEmail: string, credentialType: string, decryptedCredential: record<authToken: record<token: string, type: string>, credentialType: string, jwt: record<jwt: string, jwtHeader: string, jwtPayload: string, secret: string>, oauth2AuthorizationCode: record<accessToken: record, applyReauthPolicy: bool, authCode: string, authEndpoint: string, authParams: record, clientId: string, clientSecret: string, requestType: string, scope: string, tokenEndpoint: string, tokenParams: record>, oauth2ClientCredentials: record<accessToken: record, clientId: string, clientSecret: string, requestType: string, scope: string, tokenEndpoint: string, tokenParams: record>, oauth2ResourceOwnerCredentials: record<accessToken: record, clientId: string, clientSecret: string, password: string, requestType: string, scope: string, tokenEndpoint: string, tokenParams: record, username: string>, oidcToken: record<audience: string, serviceAccountEmail: string, token: string, tokenExpireTime: string>, serviceAccountCredentials: record<scope: string, serviceAccount: string>, usernameAndPassword: record<password: string, username: string>>, description: string, displayName: string, encryptedCredential: string, expiryNotificationDuration: list<string>, lastModifierEmail: string, name: string, overrideValidTime: string, reason: string, state: string, updateTime: string, validTime: string, visibility: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "clientCertificate.encryptedPrivateKey" $clientCertificateencryptedPrivateKey "scalar") (serialize-qp "clientCertificate.passphrase" $clientCertificatepassphrase "scalar") (serialize-qp "clientCertificate.sslCertificate" $clientCertificatesslCertificate "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/($parent)/authConfigs" $qp)
-  let body = {certificateId: $certificateId, creatorEmail: $creatorEmail, credentialType: $credentialType, decryptedCredential: $decryptedCredential, description: $description, displayName: $displayName, encryptedCredential: $encryptedCredential, expiryNotificationDuration: $expiryNotificationDuration, lastModifierEmail: $lastModifierEmail, name: $name, overrideValidTime: $overrideValidTime, reason: $reason, state: $state, validTime: $validTime, visibility: $visibility} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "clientCertificate.encryptedPrivateKey" $client_certificate_encrypted_private_key "scalar") (serialize-qp "clientCertificate.passphrase" $client_certificate_passphrase "scalar") (serialize-qp "clientCertificate.sslCertificate" $client_certificate_ssl_certificate "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/authConfigs") $qp)
+  let req_body = {"certificateId": $certificate_id, "creatorEmail": $creator_email, "credentialType": $credential_type, "decryptedCredential": $decrypted_credential, "description": $description, "displayName": $display_name, "encryptedCredential": $encrypted_credential, "expiryNotificationDuration": $expiry_notification_duration, "lastModifierEmail": $last_modifier_email, "name": $name, "overrideValidTime": $override_valid_time, "reason": $reason, "state": $state, "validTime": $valid_time, "visibility": $visibility} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # List all the certificates that match the filter. Restrict to certificate of current client only.
 #
 # GET /v1/{parent}/certificates
 # operationId: integrations.projects.locations.products.certificates.list
-export def "certificates integrationsprojectslocationsproductscertificateslist" [
+export def "certificates list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -885,6 +919,7 @@ export def "certificates integrationsprojectslocationsproductscertificateslist" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
@@ -893,22 +928,22 @@ export def "certificates integrationsprojectslocationsproductscertificateslist" 
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --filter: string # Filtering as supported in https://developers.google.com/authorized-buyers/apis/guides/v2/list-filters.
-  --pageSize: int # The size of entries in the response. If unspecified, defaults to 100.
-  --pageToken: string # The token returned in the previous response.
-  --readMask: string # The mask which specifies fields that need to be returned in the Certificate's response.
+  --page-size: int # The size of entries in the response. If unspecified, defaults to 100.
+  --page-token: string # The token returned in the previous response.
+  --read-mask: string # The mask which specifies fields that need to be returned in the Certificate's response.
 ]: nothing -> record<certificates: table<certificateStatus: string, credentialId: string, description: string, displayName: string, name: string, rawCertificate: record, requestorId: string, validEndTime: string, validStartTime: string>, nextPageToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar") (serialize-qp "readMask" $readMask "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/($parent)/certificates" $qp)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "readMask" $read_mask "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/certificates") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Creates a new certificate. The certificate will be registered to the trawler service and will be encrypted using cloud KMS and stored in Spanner Returns the certificate.
@@ -916,7 +951,7 @@ export def "certificates integrationsprojectslocationsproductscertificateslist" 
 # POST /v1/{parent}/certificates
 # operationId: integrations.projects.locations.products.certificates.create
 # --rawCertificate shape: {encryptedPrivateKey?: string, passphrase?: string, sslCertificate?: string}
-export def "certificates integrationsprojectslocationsproductscertificatescreate" [
+export def "certificates create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -925,6 +960,7 @@ export def "certificates integrationsprojectslocationsproductscertificatescreate
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
@@ -933,34 +969,34 @@ export def "certificates integrationsprojectslocationsproductscertificatescreate
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --certificateStatus: string@certificateStatus-completer # Status of the certificate
-  --credentialId: string # Immutable. Credential id that will be used to register with trawler INTERNAL_ONLY
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --certificate-status: string@certificate-status-completer # Status of the certificate
+  --credential-id: string # Immutable. Credential id that will be used to register with trawler INTERNAL_ONLY
   --description: string # Description of the certificate
-  --displayName: string # Name of the certificate
-  --rawCertificate: record # Contains client certificate information — shape: {encryptedPrivateKey?: string, passphrase?: string, sslCertificate?: string}
-  --requestorId: string # Immutable. Requestor ID to be used to register certificate with trawler
+  --display-name: string # Name of the certificate
+  --raw-certificate: record # Contains client certificate information — shape: {encryptedPrivateKey?: string, passphrase?: string, sslCertificate?: string}
+  --requestor-id: string # Immutable. Requestor ID to be used to register certificate with trawler
 ]: any -> record<certificateStatus: string, credentialId: string, description: string, displayName: string, name: string, rawCertificate: record<encryptedPrivateKey: string, passphrase: string, sslCertificate: string>, requestorId: string, validEndTime: string, validStartTime: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/($parent)/certificates" $qp)
-  let body = {certificateStatus: $certificateStatus, credentialId: $credentialId, description: $description, displayName: $displayName, rawCertificate: $rawCertificate, requestorId: $requestorId} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/certificates") $qp)
+  let req_body = {"certificateStatus": $certificate_status, "credentialId": $credential_id, "description": $description, "displayName": $display_name, "rawCertificate": $raw_certificate, "requestorId": $requestor_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Gets the metadata info for the requested client
 #
 # GET /v1/{parent}/clientmetadata
 # operationId: integrations.projects.getClientmetadata
-export def "clientmetadata integrationsprojectsgetClientmetadata" [
+export def "clientmetadata get" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -969,6 +1005,7 @@ export def "clientmetadata integrationsprojectsgetClientmetadata" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
@@ -977,25 +1014,25 @@ export def "clientmetadata integrationsprojectsgetClientmetadata" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<properties: record<ipEnablementState: string, provisionedRegions: list<string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/($parent)/clientmetadata" $qp)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/clientmetadata") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Gets the client configuration for the given project and location resource name
 #
 # GET /v1/{parent}/clients
 # operationId: integrations.projects.locations.getClients
-export def "clients integrationsprojectslocationsgetClients" [
+export def "clients get" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1004,6 +1041,7 @@ export def "clients integrationsprojectslocationsgetClients" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
@@ -1012,25 +1050,25 @@ export def "clients integrationsprojectslocationsgetClients" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<client: record<billingType: string, clientState: string, cloudKmsConfig: record<key: string, keyVersion: string, kmsLocation: string, kmsProjectId: string, kmsRing: string>, cloudLoggingConfig: record<bucket: string, enableCloudLogging: bool>, createTime: string, description: string, id: string, p4ServiceAccount: string, projectId: string, region: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/($parent)/clients" $qp)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/clients") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Perform the deprovisioning steps to disable a user GCP project to use IP and purge all related data in a wipeout-compliant way.
 #
 # POST /v1/{parent}/clients:deprovision
 # operationId: integrations.projects.locations.clients.deprovision
-export def "clients-deprovision integrationsprojectslocationsclientsdeprovision" [
+export def "clients-deprovision create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1039,6 +1077,7 @@ export def "clients-deprovision integrationsprojectslocationsclientsdeprovision"
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
@@ -1047,21 +1086,22 @@ export def "clients-deprovision integrationsprojectslocationsclientsdeprovision"
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --body: record
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/($parent)/clients:deprovision" $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/clients:deprovision") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Perform the provisioning steps to enable a user GCP project to use IP. If GCP project already registered on IP end via Apigee Integration, provisioning will fail.
@@ -1069,7 +1109,7 @@ export def "clients-deprovision integrationsprojectslocationsclientsdeprovision"
 # POST /v1/{parent}/clients:provision
 # operationId: integrations.projects.locations.clients.provision
 # --cloudKmsConfig shape: {key?: string, keyVersion?: string, kmsLocation?: string, kmsProjectId?: string, kmsRing?: string}
-export def "clients-provision integrationsprojectslocationsclientsprovision" [
+export def "clients-provision create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1078,6 +1118,7 @@ export def "clients-provision integrationsprojectslocationsclientsprovision" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
@@ -1086,24 +1127,24 @@ export def "clients-provision integrationsprojectslocationsclientsprovision" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --cloudKmsConfig: record # Configuration information for Client's Cloud KMS information — shape: {key?: string, keyVersion?: string, kmsLocation?: string, kmsProjectId?: string, kmsRing?: string}
-  --createSampleWorkflows: oneof<nothing, bool> # Optional. Indicates if sample workflow should be created along with provisioning
-  --provisionGmek: oneof<nothing, bool> # Optional. Indicates provision with GMEK or CMEK
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --cloud-kms-config: record # Configuration information for Client's Cloud KMS information — shape: {key?: string, keyVersion?: string, kmsLocation?: string, kmsProjectId?: string, kmsRing?: string}
+  --create-sample-workflows: oneof<nothing, bool> # Optional. Indicates if sample workflow should be created along with provisioning
+  --provision-gmek: oneof<nothing, bool> # Optional. Indicates provision with GMEK or CMEK
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/($parent)/clients:provision" $qp)
-  let body = {cloudKmsConfig: $cloudKmsConfig, createSampleWorkflows: $createSampleWorkflows, provisionGmek: $provisionGmek} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/clients:provision") $qp)
+  let req_body = {"cloudKmsConfig": $cloud_kms_config, "createSampleWorkflows": $create_sample_workflows, "provisionGmek": $provision_gmek} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Update client from GMEK to CMEK
@@ -1111,7 +1152,7 @@ export def "clients-provision integrationsprojectslocationsclientsprovision" [
 # POST /v1/{parent}/clients:switch
 # operationId: integrations.projects.locations.clients.switch
 # --cloudKmsConfig shape: {key?: string, keyVersion?: string, kmsLocation?: string, kmsProjectId?: string, kmsRing?: string}
-export def "clients-switch integrationsprojectslocationsclientsswitch" [
+export def "clients-switch create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1120,6 +1161,7 @@ export def "clients-switch integrationsprojectslocationsclientsswitch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
@@ -1128,29 +1170,29 @@ export def "clients-switch integrationsprojectslocationsclientsswitch" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --cloudKmsConfig: record # Configuration information for Client's Cloud KMS information — shape: {key?: string, keyVersion?: string, kmsLocation?: string, kmsProjectId?: string, kmsRing?: string}
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --cloud-kms-config: record # Configuration information for Client's Cloud KMS information — shape: {key?: string, keyVersion?: string, kmsLocation?: string, kmsProjectId?: string, kmsRing?: string}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/($parent)/clients:switch" $qp)
-  let body = {cloudKmsConfig: $cloudKmsConfig} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/clients:switch") $qp)
+  let req_body = {"cloudKmsConfig": $cloud_kms_config} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Creates an cloud function project.
 #
 # POST /v1/{parent}/cloudFunctions
 # operationId: integrations.projects.locations.products.cloudFunctions.create
-export def "cloud-functions integrationsprojectslocationsproductscloudFunctionscreate" [
+export def "cloud-functions create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1159,6 +1201,7 @@ export def "cloud-functions integrationsprojectslocationsproductscloudFunctionsc
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
@@ -1167,31 +1210,31 @@ export def "cloud-functions integrationsprojectslocationsproductscloudFunctionsc
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --functionName: string # The function name of CF to be created
-  --functionRegion: string # The function region of CF to be created
-  --projectId: string # Indicates the id of the GCP project that the function will be created in.
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --function-name: string # The function name of CF to be created
+  --function-region: string # The function region of CF to be created
+  --project-id: string # Indicates the id of the GCP project that the function will be created in.
 ]: any -> record<triggerUrl: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/($parent)/cloudFunctions" $qp)
-  let body = {functionName: $functionName, functionRegion: $functionRegion, projectId: $projectId} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/cloudFunctions") $qp)
+  let req_body = {"functionName": $function_name, "functionRegion": $function_region, "projectId": $project_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Lists Connections in a given project and location.
 #
 # GET /v1/{parent}/connections
 # operationId: integrations.projects.locations.connections.list
-export def "connections integrationsprojectslocationsconnectionslist" [
+export def "connections list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1200,6 +1243,7 @@ export def "connections integrationsprojectslocationsconnectionslist" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
@@ -1208,29 +1252,29 @@ export def "connections integrationsprojectslocationsconnectionslist" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --filter: string # Filter.
-  --orderBy: string # Order by parameters.
-  --pageSize: int # Page size.
-  --pageToken: string # Page token.
+  --order-by: string # Order by parameters.
+  --page-size: int # Page size.
+  --page-token: string # Page token.
 ]: nothing -> record<connections: table<authConfig: record, configVariables: list, connectorVersion: string, createTime: string, description: string, destinationConfigs: list, envoyImageLocation: string, imageLocation: string, labels: record, lockConfig: record, logConfig: record, name: string, nodeConfig: record, serviceAccount: string, serviceDirectory: string, sslConfig: record, status: record, suspended: bool, updateTime: string>, nextPageToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $orderBy "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/($parent)/connections" $qp)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/connections") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Lists the results of all the integration executions. The response includes the same information as the [execution log](https://cloud.google.com/application-integration/docs/viewing-logs) in the Integration UI.
 #
 # GET /v1/{parent}/executions
 # operationId: integrations.projects.locations.products.integrations.executions.list
-export def "executions integrationsprojectslocationsproductsintegrationsexecutionslist" [
+export def "executions list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1239,6 +1283,7 @@ export def "executions integrationsprojectslocationsproductsintegrationsexecutio
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
@@ -1247,44 +1292,44 @@ export def "executions integrationsprojectslocationsproductsintegrationsexecutio
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --filter: string # Optional. Standard filter field, we support filtering on following fields: workflow_name: the name of the integration. CreateTimestamp: the execution created time. event_execution_state: the state of the executions. execution_id: the id of the execution. trigger_id: the id of the trigger. parameter_type: the type of the parameters involved in the execution. All fields support for EQUALS, in additional: CreateTimestamp support for LESS_THAN, GREATER_THAN ParameterType support for HAS For example: "parameter_type" HAS \"string\" Also supports operators like AND, OR, NOT For example, trigger_id=\"id1\" AND workflow_name=\"testWorkflow\"
-  --filterParamscustomFilter: string # Optional user-provided custom filter.
-  --filterParamsendTime: string # End timestamp.
-  --filterParamseventStatuses: list # List of possible event statuses.
-  --filterParamsexecutionId: string # Execution id.
-  --filterParamsparameterKey: string # Param key. DEPRECATED. User parameter_pair_key instead.
-  --filterParamsparameterPairKey: string # Param key in the key value pair filter.
-  --filterParamsparameterPairValue: string # Param value in the key value pair filter.
-  --filterParamsparameterType: string # Param type.
-  --filterParamsparameterValue: string # Param value. DEPRECATED. User parameter_pair_value instead.
-  --filterParamsstartTime: string # Start timestamp.
-  --filterParamstaskStatuses: list # List of possible task statuses.
-  --filterParamsworkflowName: string # Workflow name.
-  --orderBy: string # Optional. The results would be returned in order you specified here. Currently supporting "last_modified_time" and "create_time".
-  --pageSize: int # Optional. The size of entries in the response.
-  --pageToken: string # Optional. The token returned in the previous response.
-  --readMask: string # Optional. View mask for the response data. If set, only the field specified will be returned as part of the result. If not set, all fields in event execution info will be filled and returned.
-  --refreshAcl: oneof<nothing, bool> # Optional. If true, the service will use the most recent acl information to list event execution infos and renew the acl cache. Note that fetching the most recent acl is synchronous, so it will increase RPC call latency.
-  --truncateParams: oneof<nothing, bool> # Optional. If true, the service will truncate the params to only keep the first 1000 characters of string params and empty the executions in order to make response smaller. Only works for UI and when the params fields are not filtered out.
+  --filter-params-custom-filter: string # Optional user-provided custom filter.
+  --filter-params-end-time: string # End timestamp.
+  --filter-params-event-statuses: list<string> # List of possible event statuses.
+  --filter-params-execution-id: string # Execution id.
+  --filter-params-parameter-key: string # Param key. DEPRECATED. User parameter_pair_key instead.
+  --filter-params-parameter-pair-key: string # Param key in the key value pair filter.
+  --filter-params-parameter-pair-value: string # Param value in the key value pair filter.
+  --filter-params-parameter-type: string # Param type.
+  --filter-params-parameter-value: string # Param value. DEPRECATED. User parameter_pair_value instead.
+  --filter-params-start-time: string # Start timestamp.
+  --filter-params-task-statuses: list<string> # List of possible task statuses.
+  --filter-params-workflow-name: string # Workflow name.
+  --order-by: string # Optional. The results would be returned in order you specified here. Currently supporting "last_modified_time" and "create_time".
+  --page-size: int # Optional. The size of entries in the response.
+  --page-token: string # Optional. The token returned in the previous response.
+  --read-mask: string # Optional. View mask for the response data. If set, only the field specified will be returned as part of the result. If not set, all fields in event execution info will be filled and returned.
+  --refresh-acl: oneof<nothing, bool> # Optional. If true, the service will use the most recent acl information to list event execution infos and renew the acl cache. Note that fetching the most recent acl is synchronous, so it will increase RPC call latency.
+  --truncate-params: oneof<nothing, bool> # Optional. If true, the service will truncate the params to only keep the first 1000 characters of string params and empty the executions in order to make response smaller. Only works for UI and when the params fields are not filtered out.
 ]: nothing -> record<executionInfos: table<clientId: string, createTime: string, errorCode: record, errors: list, eventExecutionDetails: record, eventExecutionInfoId: string, executionTraceInfo: record, lastModifiedTime: string, postMethod: string, product: string, requestId: string, requestParams: record, responseParams: record, snapshotNumber: string, tenant: string, triggerId: string, workflowId: string, workflowName: string, workflowRetryBackoffIntervalSeconds: string>, executions: table<createTime: string, directSubExecutions: list, eventExecutionDetails: record, executionDetails: record, executionMethod: string, name: string, requestParameters: record, requestParams: list, responseParameters: record, responseParams: list, triggerId: string, updateTime: string>, nextPageToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "filterParams.customFilter" $filterParamscustomFilter "scalar") (serialize-qp "filterParams.endTime" $filterParamsendTime "scalar") (serialize-qp "filterParams.eventStatuses" $filterParamseventStatuses "multi") (serialize-qp "filterParams.executionId" $filterParamsexecutionId "scalar") (serialize-qp "filterParams.parameterKey" $filterParamsparameterKey "scalar") (serialize-qp "filterParams.parameterPairKey" $filterParamsparameterPairKey "scalar") (serialize-qp "filterParams.parameterPairValue" $filterParamsparameterPairValue "scalar") (serialize-qp "filterParams.parameterType" $filterParamsparameterType "scalar") (serialize-qp "filterParams.parameterValue" $filterParamsparameterValue "scalar") (serialize-qp "filterParams.startTime" $filterParamsstartTime "scalar") (serialize-qp "filterParams.taskStatuses" $filterParamstaskStatuses "multi") (serialize-qp "filterParams.workflowName" $filterParamsworkflowName "scalar") (serialize-qp "orderBy" $orderBy "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar") (serialize-qp "readMask" $readMask "scalar") (serialize-qp "refreshAcl" $refreshAcl "scalar") (serialize-qp "truncateParams" $truncateParams "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/($parent)/executions" $qp)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "filterParams.customFilter" $filter_params_custom_filter "scalar") (serialize-qp "filterParams.endTime" $filter_params_end_time "scalar") (serialize-qp "filterParams.eventStatuses" $filter_params_event_statuses "multi") (serialize-qp "filterParams.executionId" $filter_params_execution_id "scalar") (serialize-qp "filterParams.parameterKey" $filter_params_parameter_key "scalar") (serialize-qp "filterParams.parameterPairKey" $filter_params_parameter_pair_key "scalar") (serialize-qp "filterParams.parameterPairValue" $filter_params_parameter_pair_value "scalar") (serialize-qp "filterParams.parameterType" $filter_params_parameter_type "scalar") (serialize-qp "filterParams.parameterValue" $filter_params_parameter_value "scalar") (serialize-qp "filterParams.startTime" $filter_params_start_time "scalar") (serialize-qp "filterParams.taskStatuses" $filter_params_task_statuses "multi") (serialize-qp "filterParams.workflowName" $filter_params_workflow_name "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "readMask" $read_mask "scalar") (serialize-qp "refreshAcl" $refresh_acl "scalar") (serialize-qp "truncateParams" $truncate_params "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/executions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Returns the list of all integrations in the specified project.
 #
 # GET /v1/{parent}/integrations
 # operationId: integrations.projects.locations.products.integrations.list
-export def "integrations integrationsprojectslocationsproductsintegrationslist" [
+export def "integrations list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1293,6 +1338,7 @@ export def "integrations integrationsprojectslocationsproductsintegrationslist" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
@@ -1301,29 +1347,29 @@ export def "integrations integrationsprojectslocationsproductsintegrationslist" 
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --filter: string # Filter on fields of IntegrationVersion. Fields can be compared with literal values by use of ":" (containment), "=" (equality), ">" (greater), "<" (less than), >=" (greater than or equal to), "<=" (less than or equal to), and "!=" (inequality) operators. Negation, conjunction, and disjunction are written using NOT, AND, and OR keywords. For example, organization_id=\"1\" AND state=ACTIVE AND description:"test". Filtering cannot be performed on repeated fields like `task_config`.
-  --orderBy: string # The results would be returned in order you specified here. Supported sort keys are: Descending sort order by "last_modified_time", "created_time", "snapshot_number". Ascending sort order by the integration name.
-  --pageSize: int # The page size for the resquest.
-  --pageToken: string # The page token for the resquest.
+  --order-by: string # The results would be returned in order you specified here. Supported sort keys are: Descending sort order by "last_modified_time", "created_time", "snapshot_number". Ascending sort order by the integration name.
+  --page-size: int # The page size for the resquest.
+  --page-token: string # The page token for the resquest.
 ]: nothing -> record<integrations: table<active: bool, description: string, name: string, updateTime: string>, nextPageToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $orderBy "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/($parent)/integrations" $qp)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/integrations") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Lists the JSON schemas for the inputs and outputs of actions, filtered by action name.
 #
 # GET /v1/{parent}/runtimeActionSchemas
 # operationId: integrations.projects.locations.connections.runtimeActionSchemas.list
-export def "runtime-action-schemas integrationsprojectslocationsconnectionsruntimeActionSchemaslist" [
+export def "runtime-action-schemas list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1332,6 +1378,7 @@ export def "runtime-action-schemas integrationsprojectslocationsconnectionsrunti
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
@@ -1340,28 +1387,28 @@ export def "runtime-action-schemas integrationsprojectslocationsconnectionsrunti
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --filter: string # Filter. Only the action field with literal equality operator is supported.
-  --pageSize: int # Page size.
-  --pageToken: string # Page token.
+  --page-size: int # Page size.
+  --page-token: string # Page token.
 ]: nothing -> record<nextPageToken: string, runtimeActionSchemas: table<action: string, inputSchema: string, outputSchema: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/($parent)/runtimeActionSchemas" $qp)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/runtimeActionSchemas") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Lists the JSON schemas for the properties of runtime entities, filtered by entity name.
 #
 # GET /v1/{parent}/runtimeEntitySchemas
 # operationId: integrations.projects.locations.connections.runtimeEntitySchemas.list
-export def "runtime-entity-schemas integrationsprojectslocationsconnectionsruntimeEntitySchemaslist" [
+export def "runtime-entity-schemas list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1370,6 +1417,7 @@ export def "runtime-entity-schemas integrationsprojectslocationsconnectionsrunti
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
@@ -1378,28 +1426,28 @@ export def "runtime-entity-schemas integrationsprojectslocationsconnectionsrunti
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --filter: string # Filter. Only the entity field with literal equality operator is supported.
-  --pageSize: int # Page size.
-  --pageToken: string # Page token.
+  --page-size: int # Page size.
+  --page-token: string # Page token.
 ]: nothing -> record<nextPageToken: string, runtimeEntitySchemas: table<arrayFieldSchema: string, entity: string, fieldSchema: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/($parent)/runtimeEntitySchemas" $qp)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/runtimeEntitySchemas") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Lists all sfdc channels that match the filter. Restrict to sfdc channels belonging to the current client only.
 #
 # GET /v1/{parent}/sfdcChannels
 # operationId: integrations.projects.locations.sfdcInstances.sfdcChannels.list
-export def "sfdc-channels integrationsprojectslocationssfdcInstancessfdcChannelslist" [
+export def "sfdc-channels list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1408,6 +1456,7 @@ export def "sfdc-channels integrationsprojectslocationssfdcInstancessfdcChannels
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
@@ -1416,29 +1465,29 @@ export def "sfdc-channels integrationsprojectslocationssfdcInstancessfdcChannels
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --filter: string # Filtering as supported in https://developers.google.com/authorized-buyers/apis/guides/v2/list-filters.
-  --pageSize: int # The size of entries in the response. If unspecified, defaults to 100.
-  --pageToken: string # The token returned in the previous response.
-  --readMask: string # The mask which specifies fields that need to be returned in the SfdcChannel's response.
+  --page-size: int # The size of entries in the response. If unspecified, defaults to 100.
+  --page-token: string # The token returned in the previous response.
+  --read-mask: string # The mask which specifies fields that need to be returned in the SfdcChannel's response.
 ]: nothing -> record<nextPageToken: string, sfdcChannels: table<channelTopic: string, createTime: string, deleteTime: string, description: string, displayName: string, isActive: bool, lastReplayId: string, name: string, updateTime: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar") (serialize-qp "readMask" $readMask "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/($parent)/sfdcChannels" $qp)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "readMask" $read_mask "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/sfdcChannels") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Creates an sfdc channel record. Store the sfdc channel in Spanner. Returns the sfdc channel.
 #
 # POST /v1/{parent}/sfdcChannels
 # operationId: integrations.projects.locations.sfdcInstances.sfdcChannels.create
-export def "sfdc-channels integrationsprojectslocationssfdcInstancessfdcChannelscreate" [
+export def "sfdc-channels create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1447,6 +1496,7 @@ export def "sfdc-channels integrationsprojectslocationssfdcInstancessfdcChannels
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
@@ -1455,34 +1505,34 @@ export def "sfdc-channels integrationsprojectslocationssfdcInstancessfdcChannels
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --channelTopic: string # The Channel topic defined by salesforce once an channel is opened
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --channel-topic: string # The Channel topic defined by salesforce once an channel is opened
   --description: string # The description for this channel
-  --displayName: string # Client level unique name/alias to easily reference a channel.
-  --isActive: oneof<nothing, bool> # Indicated if a channel has any active integrations referencing it. Set to false when the channel is created, and set to true if there is any integration published with the channel configured in it.
-  --lastReplayId: string # Last sfdc messsage replay id for channel
+  --display-name: string # Client level unique name/alias to easily reference a channel.
+  --is-active: oneof<nothing, bool> # Indicated if a channel has any active integrations referencing it. Set to false when the channel is created, and set to true if there is any integration published with the channel configured in it.
+  --last-replay-id: string # Last sfdc messsage replay id for channel
   --name: string # Resource name of the SFDC channel projects/{project}/locations/{location}/sfdcInstances/{sfdc_instance}/sfdcChannels/{sfdc_channel}.
 ]: any -> record<channelTopic: string, createTime: string, deleteTime: string, description: string, displayName: string, isActive: bool, lastReplayId: string, name: string, updateTime: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/($parent)/sfdcChannels" $qp)
-  let body = {channelTopic: $channelTopic, description: $description, displayName: $displayName, isActive: $isActive, lastReplayId: $lastReplayId, name: $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/sfdcChannels") $qp)
+  let req_body = {"channelTopic": $channel_topic, "description": $description, "displayName": $display_name, "isActive": $is_active, "lastReplayId": $last_replay_id, "name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Lists all sfdc instances that match the filter. Restrict to sfdc instances belonging to the current client only.
 #
 # GET /v1/{parent}/sfdcInstances
 # operationId: integrations.projects.locations.sfdcInstances.list
-export def "sfdc-instances integrationsprojectslocationssfdcInstanceslist" [
+export def "sfdc-instances list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1491,6 +1541,7 @@ export def "sfdc-instances integrationsprojectslocationssfdcInstanceslist" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
@@ -1499,29 +1550,29 @@ export def "sfdc-instances integrationsprojectslocationssfdcInstanceslist" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --filter: string # Filtering as supported in https://developers.google.com/authorized-buyers/apis/guides/v2/list-filters.
-  --pageSize: int # The size of entries in the response. If unspecified, defaults to 100.
-  --pageToken: string # The token returned in the previous response.
-  --readMask: string # The mask which specifies fields that need to be returned in the SfdcInstance's response.
+  --page-size: int # The size of entries in the response. If unspecified, defaults to 100.
+  --page-token: string # The token returned in the previous response.
+  --read-mask: string # The mask which specifies fields that need to be returned in the SfdcInstance's response.
 ]: nothing -> record<nextPageToken: string, sfdcInstances: table<authConfigId: list, createTime: string, deleteTime: string, description: string, displayName: string, name: string, serviceAuthority: string, sfdcOrgId: string, updateTime: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar") (serialize-qp "readMask" $readMask "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/($parent)/sfdcInstances" $qp)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "readMask" $read_mask "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/sfdcInstances") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Creates an sfdc instance record. Store the sfdc instance in Spanner. Returns the sfdc instance.
 #
 # POST /v1/{parent}/sfdcInstances
 # operationId: integrations.projects.locations.sfdcInstances.create
-export def "sfdc-instances integrationsprojectslocationssfdcInstancescreate" [
+export def "sfdc-instances create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1530,6 +1581,7 @@ export def "sfdc-instances integrationsprojectslocationssfdcInstancescreate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
@@ -1538,34 +1590,34 @@ export def "sfdc-instances integrationsprojectslocationssfdcInstancescreate" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --authConfigId: list # A list of AuthConfigs that can be tried to open the channel to SFDC
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --auth-config-id: list<string> # A list of AuthConfigs that can be tried to open the channel to SFDC
   --description: string # A description of the sfdc instance.
-  --displayName: string # User selected unique name/alias to easily reference an instance.
+  --display-name: string # User selected unique name/alias to easily reference an instance.
   --name: string # Resource name of the SFDC instance projects/{project}/locations/{location}/sfdcInstances/{sfdcInstance}.
-  --serviceAuthority: string # URL used for API calls after authentication (the login authority is configured within the referenced AuthConfig).
-  --sfdcOrgId: string # The SFDC Org Id. This is defined in salesforce.
+  --service-authority: string # URL used for API calls after authentication (the login authority is configured within the referenced AuthConfig).
+  --sfdc-org-id: string # The SFDC Org Id. This is defined in salesforce.
 ]: any -> record<authConfigId: list<string>, createTime: string, deleteTime: string, description: string, displayName: string, name: string, serviceAuthority: string, sfdcOrgId: string, updateTime: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/($parent)/sfdcInstances" $qp)
-  let body = {authConfigId: $authConfigId, description: $description, displayName: $displayName, name: $name, serviceAuthority: $serviceAuthority, sfdcOrgId: $sfdcOrgId} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/sfdcInstances") $qp)
+  let req_body = {"authConfigId": $auth_config_id, "description": $description, "displayName": $display_name, "name": $name, "serviceAuthority": $service_authority, "sfdcOrgId": $sfdc_org_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # * Lists suspensions associated with a specific execution. Only those with permissions to resolve the relevant suspensions will be able to view them.
 #
 # GET /v1/{parent}/suspensions
 # operationId: integrations.projects.locations.products.integrations.executions.suspensions.list
-export def "suspensions integrationsprojectslocationsproductsintegrationsexecutionssuspensionslist" [
+export def "suspensions list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1574,6 +1626,7 @@ export def "suspensions integrationsprojectslocationsproductsintegrationsexecuti
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
@@ -1582,29 +1635,29 @@ export def "suspensions integrationsprojectslocationsproductsintegrationsexecuti
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --filter: string # Standard filter field.
-  --orderBy: string # Field name to order by.
-  --pageSize: int # Maximum number of entries in the response.
-  --pageToken: string # Token to retrieve a specific page.
+  --order-by: string # Field name to order by.
+  --page-size: int # Maximum number of entries in the response.
+  --page-token: string # Token to retrieve a specific page.
 ]: nothing -> record<nextPageToken: string, suspensions: table<approvalConfig: record, audit: record, createTime: string, eventExecutionInfoId: string, integration: string, lastModifyTime: string, name: string, state: string, suspensionConfig: record, taskId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $orderBy "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/($parent)/suspensions" $qp)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/suspensions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Returns the list of all integration versions in the specified project.
 #
 # GET /v1/{parent}/versions
 # operationId: integrations.projects.locations.products.integrations.versions.list
-export def "versions integrationsprojectslocationsproductsintegrationsversionslist" [
+export def "versions list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1613,6 +1666,7 @@ export def "versions integrationsprojectslocationsproductsintegrationsversionsli
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
@@ -1621,23 +1675,23 @@ export def "versions integrationsprojectslocationsproductsintegrationsversionsli
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --fieldMask: string # The field mask which specifies the particular data to be returned.
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --field-mask: string # The field mask which specifies the particular data to be returned.
   --filter: string # Filter on fields of IntegrationVersion. Fields can be compared with literal values by use of ":" (containment), "=" (equality), ">" (greater), "<" (less than), >=" (greater than or equal to), "<=" (less than or equal to), and "!=" (inequality) operators. Negation, conjunction, and disjunction are written using NOT, AND, and OR keywords. For example, organization_id=\"1\" AND state=ACTIVE AND description:"test". Filtering cannot be performed on repeated fields like `task_config`.
-  --orderBy: string # The results would be returned in order you specified here. Currently supported sort keys are: Descending sort order for "last_modified_time", "created_time", "snapshot_number" Ascending sort order for "name".
-  --pageSize: int # The maximum number of versions to return. The service may return fewer than this value. If unspecified, at most 50 versions will be returned. The maximum value is 1000; values above 1000 will be coerced to 1000.
-  --pageToken: string # A page token, received from a previous `ListIntegrationVersions` call. Provide this to retrieve the subsequent page. When paginating, all other parameters provided to `ListIntegrationVersions` must match the call that provided the page token.
+  --order-by: string # The results would be returned in order you specified here. Currently supported sort keys are: Descending sort order for "last_modified_time", "created_time", "snapshot_number" Ascending sort order for "name".
+  --page-size: int # The maximum number of versions to return. The service may return fewer than this value. If unspecified, at most 50 versions will be returned. The maximum value is 1000; values above 1000 will be coerced to 1000.
+  --page-token: string # A page token, received from a previous `ListIntegrationVersions` call. Provide this to retrieve the subsequent page. When paginating, all other parameters provided to `ListIntegrationVersions` must match the call that provided the page token.
 ]: nothing -> record<integrationVersions: table<createTime: string, databasePersistencePolicy: string, description: string, errorCatcherConfigs: list, integrationParameters: list, integrationParametersInternal: record, lastModifierEmail: string, lockHolder: string, name: string, origin: string, parentTemplateId: string, runAsServiceAccount: string, snapshotNumber: string, state: string, status: string, taskConfigs: list, taskConfigsInternal: list, teardown: record, triggerConfigs: list, triggerConfigsInternal: list, updateTime: string, userLabel: string>, nextPageToken: string, noPermission: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "fieldMask" $fieldMask "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $orderBy "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/($parent)/versions" $qp)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "fieldMask" $field_mask "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/versions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Create a integration with a draft version in the specified project.
@@ -1647,12 +1701,12 @@ export def "versions integrationsprojectslocationsproductsintegrationsversionsli
 # --errorCatcherConfigs item shape: {description?: string, errorCatcherId?: string, errorCatcherNumber?: string, label?: string, position?: record, startErrorTasks?: list}
 # --integrationParameters item shape: {dataType?: "INTEGRATION_PARAMETER_DATA_TYPE_UNSPECIFIED"|"STRING_VALUE"|"INT_VALUE"|"DOUBLE_VALUE"|"BOOLEAN_VALUE"|"STRING_ARRAY"|"INT_ARRAY"|"DOUBLE_ARRAY"|"BOOLEAN_ARRAY"|"JSON_VALUE"|"PROTO_VALUE"|"PROTO_ARRAY", defaultValue?: record, displayName?: string, inputOutputType?: "IN_OUT_TYPE_UNSPECIFIED"|"IN"|"OUT"|"IN_OUT", isTransient?: bool, jsonSchema?: string, key?: string, producer?: string, searchable?: bool}
 # --integrationParametersInternal shape: {parameters?: list}
-# --taskConfigs item shape: {description?: string, displayName?: string, errorCatcherId?: string, externalTaskType?: "EXTERNAL_TASK_TYPE_UNSPECIFIED"|"NORMAL_TASK"|"ERROR_TASK", failurePolicy?: record, jsonValidationOption?: "JSON_VALIDATION_OPTION_UNSPECIFIED"|"SKIP"|"PRE_EXECUTION"|"POST_EXECUTION"|"PRE_POST_EXECUTION", nextTasks?: list, nextTasksExecutionPolicy?: "NEXT_TASKS_EXECUTION_POLICY_UNSPECIFIED"|"RUN_ALL_MATCH"|"RUN_FIRST_MATCH", parameters?: record, position?: record, successPolicy?: record, synchronousCallFailurePolicy?: record, task?: string, taskExecutionStrategy?: "TASK_EXECUTION_STRATEGY_UNSPECIFIED"|"WHEN_ALL_SUCCEED"|"WHEN_ANY_SUCCEED"|"WHEN_ALL_TASKS_AND_CONDITIONS_SUCCEED", taskId?: string, taskTemplate?: string}
-# --taskConfigsInternal item shape: {alertConfigs?: list, createTime?: string, creatorEmail?: string, description?: string, disableStrictTypeValidation?: bool, errorCatcherId?: string, externalTaskType?: "EXTERNAL_TASK_TYPE_UNSPECIFIED"|"NORMAL_TASK"|"ERROR_TASK", failurePolicy?: record, incomingEdgeCount?: int, jsonValidationOption?: "UNSPECIFIED_JSON_VALIDATION_OPTION"|"SKIP"|"PRE_EXECUTION"|"POST_EXECUTION"|"PRE_POST_EXECUTION", label?: string, lastModifiedTime?: string, nextTasks?: list, nextTasksExecutionPolicy?: "UNSPECIFIED"|"RUN_ALL_MATCH"|"RUN_FIRST_MATCH", parameters?: record, position?: record, precondition?: string, preconditionLabel?: string, rollbackStrategy?: record, successPolicy?: record, synchronousCallFailurePolicy?: record, taskEntity?: record, taskExecutionStrategy?: "WHEN_ALL_SUCCEED"|"WHEN_ANY_SUCCEED"|"WHEN_ALL_TASKS_AND_CONDITIONS_SUCCEED", taskName?: string, taskNumber?: string, taskSpec?: string, taskTemplateName?: string, taskType?: "TASK"|"ASIS_TEMPLATE"|"IO_TEMPLATE"}
+# --taskConfigs item shape: {description?: string, displayName?: string, errorCatcherId?: string, externalTaskType?: "EXTERNAL_TASK_TYPE_UNSPECIFIED"|"NORMAL_TASK"|"ERROR_TASK", failurePolicy?: record, jsonValidationOption?: "JSON_VALIDATION_OPTION_UNSPECIFIED"|"SKIP"|"PRE_EXECUTION"|"POST_EXECUTION"|"PRE_POST_EXECUTION", nextTasks?: list, nextTasksExecutionPolicy?: "NEXT_TASKS_EXECUTION_POLICY_UNSPECIFIED"|"RUN_ALL_MATCH"|"RUN_FIRST_MATCH", parameters?: record, position?: record, successPolicy?: record, ... (5 more fields)}
+# --taskConfigsInternal item shape: {alertConfigs?: list, createTime?: string, creatorEmail?: string, description?: string, disableStrictTypeValidation?: bool, errorCatcherId?: string, externalTaskType?: "EXTERNAL_TASK_TYPE_UNSPECIFIED"|"NORMAL_TASK"|"ERROR_TASK", failurePolicy?: record, incomingEdgeCount?: int, jsonValidationOption?: "UNSPECIFIED_JSON_VALIDATION_OPTION"|"SKIP"|"PRE_EXECUTION"|"POST_EXECUTION"|"PRE_POST_EXECUTION", label?: string, lastModifiedTime?: string, nextTasks?: list, ... (15 more fields)}
 # --teardown shape: {teardownTaskConfigs?: list}
 # --triggerConfigs item shape: {alertConfig?: list, cloudSchedulerConfig?: record, description?: string, errorCatcherId?: string, label?: string, nextTasksExecutionPolicy?: "NEXT_TASKS_EXECUTION_POLICY_UNSPECIFIED"|"RUN_ALL_MATCH"|"RUN_FIRST_MATCH", position?: record, properties?: record, startTasks?: list, triggerId?: string, triggerNumber?: string, triggerType?: "TRIGGER_TYPE_UNSPECIFIED"|"CRON"|"API"|"SFDC_CHANNEL"|"CLOUD_PUBSUB_EXTERNAL"|"SFDC_CDC_CHANNEL"|"CLOUD_SCHEDULER"}
-# --triggerConfigsInternal item shape: {alertConfig?: list, cloudSchedulerConfig?: record, description?: string, enabledClients?: list, errorCatcherId?: string, label?: string, nextTasksExecutionPolicy?: "UNSPECIFIED"|"RUN_ALL_MATCH"|"RUN_FIRST_MATCH", pauseWorkflowExecutions?: bool, position?: record, properties?: record, startTasks?: list, triggerCriteria?: record, triggerId?: string, triggerNumber?: string, triggerType?: "UNKNOWN"|"CLOUD_PUBSUB"|"GOOPS"|"SFDC_SYNC"|"CRON"|"API"|"MANIFOLD_TRIGGER"|"DATALAYER_DATA_CHANGE"|"SFDC_CHANNEL"|"CLOUD_PUBSUB_EXTERNAL"|"SFDC_CDC_CHANNEL"|"SFDC_PLATFORM_EVENTS_CHANNEL"|"CLOUD_SCHEDULER"}
-export def "versions integrationsprojectslocationsproductsintegrationsversionscreate" [
+# --triggerConfigsInternal item shape: {alertConfig?: list, cloudSchedulerConfig?: record, description?: string, enabledClients?: list<string>, errorCatcherId?: string, label?: string, nextTasksExecutionPolicy?: "UNSPECIFIED"|"RUN_ALL_MATCH"|"RUN_FIRST_MATCH", pauseWorkflowExecutions?: bool, position?: record, properties?: record, startTasks?: list, triggerCriteria?: record, triggerId?: string, triggerNumber?: string, ... (1 more fields)}
+export def "versions create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1661,6 +1715,7 @@ export def "versions integrationsprojectslocationsproductsintegrationsversionscr
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
@@ -1669,46 +1724,46 @@ export def "versions integrationsprojectslocationsproductsintegrationsversionscr
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --newIntegration: oneof<nothing, bool> # Set this flag to true, if draft version is to be created for a brand new integration. False, if the request is for an existing integration. For backward compatibility reasons, even if this flag is set to `false` and no existing integration is found, a new draft integration will still be created.
-  --databasePersistencePolicy: string@databasePersistencePolicy-completer # Optional. Flag to disable database persistence for execution data, including event execution info, execution export info, execution metadata index and execution param index.
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --new-integration: oneof<nothing, bool> # Set this flag to true, if draft version is to be created for a brand new integration. False, if the request is for an existing integration. For backward compatibility reasons, even if this flag is set to `false` and no existing integration is found, a new draft integration will still be created.
+  --database-persistence-policy: string@database-persistence-policy-completer # Optional. Flag to disable database persistence for execution data, including event execution info, execution export info, execution metadata index and execution param index.
   --description: string # Optional. The integration description.
-  --errorCatcherConfigs: list # Optional. Error Catch Task configuration for the integration. It's optional. — item shape: {description?: string, errorCatcherId?: string, errorCatcherNumber?: string, label?: string, position?: record, startErrorTasks?: list}
-  --integrationParameters: list # Optional. Parameters that are expected to be passed to the integration when an event is triggered. This consists of all the parameters that are expected in the integration execution. This gives the user the ability to provide default values, add information like PII and also provide data types of each parameter. — item shape: {dataType?: "INTEGRATION_PARAMETER_DATA_TYPE_UNSPECIFIED"|"STRING_VALUE"|"INT_VALUE"|"DOUBLE_VALUE"|"BOOLEAN_VALUE"|"STRING_ARRAY"|"INT_ARRAY"|"DOUBLE_ARRAY"|"BOOLEAN_ARRAY"|"JSON_VALUE"|"PROTO_VALUE"|"PROTO_ARRAY", defaultValue?: record, displayName?: string, inputOutputType?: "IN_OUT_TYPE_UNSPECIFIED"|"IN"|"OUT"|"IN_OUT", isTransient?: bool, jsonSchema?: string, key?: string, producer?: string, searchable?: bool}
-  --integrationParametersInternal: record # LINT.IfChange This is the frontend version of WorkflowParameters. It's exactly like the backend version except that instead of flattening protobuf parameters and treating every field and subfield of a protobuf parameter as a separate parameter, the fields/subfields of a protobuf parameter will be nested as "children" (see 'children' field below) parameters of the parent parameter. Please refer to enterprise/crm/eventbus/proto/workflow_parameters.proto for more information about WorkflowParameters. — shape: {parameters?: list}
-  --lastModifierEmail: string # Optional. The last modifier's email address. Generated based on the End User Credentials/LOAS role of the user making the call.
-  --lockHolder: string # Optional. The edit lock holder's email address. Generated based on the End User Credentials/LOAS role of the user making the call.
+  --error-catcher-configs: list # Optional. Error Catch Task configuration for the integration. It's optional. — item shape: {description?: string, errorCatcherId?: string, errorCatcherNumber?: string, label?: string, position?: record, startErrorTasks?: list}
+  --integration-parameters: list # Optional. Parameters that are expected to be passed to the integration when an event is triggered. This consists of all the parameters that are expected in the integration execution. This gives the user the ability to provide default values, add information like PII and also provide data types of each parameter. — item shape: {dataType?: "INTEGRATION_PARAMETER_DATA_TYPE_UNSPECIFIED"|"STRING_VALUE"|"INT_VALUE"|"DOUBLE_VALUE"|"BOOLEAN_VALUE"|"STRING_ARRAY"|"INT_ARRAY"|"DOUBLE_ARRAY"|"BOOLEAN_ARRAY"|"JSON_VALUE"|"PROTO_VALUE"|"PROTO_ARRAY", defaultValue?: record, displayName?: string, inputOutputType?: "IN_OUT_TYPE_UNSPECIFIED"|"IN"|"OUT"|"IN_OUT", isTransient?: bool, jsonSchema?: string, key?: string, producer?: string, searchable?: bool}
+  --integration-parameters-internal: record # LINT.IfChange This is the frontend version of WorkflowParameters. It's exactly like the backend version except that instead of flattening protobuf parameters and treating every field and subfield of a protobuf parameter as a separate parameter, the fields/subfields of a protobuf parameter will be nested as "children" (see 'children' field below) parameters of the parent parameter. Please refer to enterprise/crm/eventbus/proto/workflow_parameters.proto for more information about WorkflowParameters. — shape: {parameters?: list}
+  --last-modifier-email: string # Optional. The last modifier's email address. Generated based on the End User Credentials/LOAS role of the user making the call.
+  --lock-holder: string # Optional. The edit lock holder's email address. Generated based on the End User Credentials/LOAS role of the user making the call.
   --origin: string@origin-completer # Optional. The origin that indicates where this integration is coming from.
-  --parentTemplateId: string # Optional. The id of the template which was used to create this integration_version.
-  --runAsServiceAccount: string # Optional. The run-as service account email, if set and auth config is not configured, that will be used to generate auth token to be used in Connector task, Rest caller task and Cloud function task.
-  --snapshotNumber: string # Optional. An increasing sequence that is set when a new snapshot is created. The last created snapshot can be identified by [workflow_name, org_id latest(snapshot_number)]. However, last created snapshot need not be same as the HEAD. So users should always use "HEAD" tag to identify the head. (format: int64)
-  --taskConfigs: list # Optional. Task configuration for the integration. It's optional, but the integration doesn't do anything without task_configs. — item shape: {description?: string, displayName?: string, errorCatcherId?: string, externalTaskType?: "EXTERNAL_TASK_TYPE_UNSPECIFIED"|"NORMAL_TASK"|"ERROR_TASK", failurePolicy?: record, jsonValidationOption?: "JSON_VALIDATION_OPTION_UNSPECIFIED"|"SKIP"|"PRE_EXECUTION"|"POST_EXECUTION"|"PRE_POST_EXECUTION", nextTasks?: list, nextTasksExecutionPolicy?: "NEXT_TASKS_EXECUTION_POLICY_UNSPECIFIED"|"RUN_ALL_MATCH"|"RUN_FIRST_MATCH", parameters?: record, position?: record, successPolicy?: record, synchronousCallFailurePolicy?: record, task?: string, taskExecutionStrategy?: "TASK_EXECUTION_STRATEGY_UNSPECIFIED"|"WHEN_ALL_SUCCEED"|"WHEN_ANY_SUCCEED"|"WHEN_ALL_TASKS_AND_CONDITIONS_SUCCEED", taskId?: string, taskTemplate?: string}
-  --taskConfigsInternal: list # Optional. Task configuration for the integration. It's optional, but the integration doesn't do anything without task_configs. — item shape: {alertConfigs?: list, createTime?: string, creatorEmail?: string, description?: string, disableStrictTypeValidation?: bool, errorCatcherId?: string, externalTaskType?: "EXTERNAL_TASK_TYPE_UNSPECIFIED"|"NORMAL_TASK"|"ERROR_TASK", failurePolicy?: record, incomingEdgeCount?: int, jsonValidationOption?: "UNSPECIFIED_JSON_VALIDATION_OPTION"|"SKIP"|"PRE_EXECUTION"|"POST_EXECUTION"|"PRE_POST_EXECUTION", label?: string, lastModifiedTime?: string, nextTasks?: list, nextTasksExecutionPolicy?: "UNSPECIFIED"|"RUN_ALL_MATCH"|"RUN_FIRST_MATCH", parameters?: record, position?: record, precondition?: string, preconditionLabel?: string, rollbackStrategy?: record, successPolicy?: record, synchronousCallFailurePolicy?: record, taskEntity?: record, taskExecutionStrategy?: "WHEN_ALL_SUCCEED"|"WHEN_ANY_SUCCEED"|"WHEN_ALL_TASKS_AND_CONDITIONS_SUCCEED", taskName?: string, taskNumber?: string, taskSpec?: string, taskTemplateName?: string, taskType?: "TASK"|"ASIS_TEMPLATE"|"IO_TEMPLATE"}
+  --parent-template-id: string # Optional. The id of the template which was used to create this integration_version.
+  --run-as-service-account: string # Optional. The run-as service account email, if set and auth config is not configured, that will be used to generate auth token to be used in Connector task, Rest caller task and Cloud function task.
+  --snapshot-number: string # Optional. An increasing sequence that is set when a new snapshot is created. The last created snapshot can be identified by [workflow_name, org_id latest(snapshot_number)]. However, last created snapshot need not be same as the HEAD. So users should always use "HEAD" tag to identify the head. (format: int64)
+  --task-configs: list # Optional. Task configuration for the integration. It's optional, but the integration doesn't do anything without task_configs. — item shape: {description?: string, displayName?: string, errorCatcherId?: string, externalTaskType?: "EXTERNAL_TASK_TYPE_UNSPECIFIED"|"NORMAL_TASK"|"ERROR_TASK", failurePolicy?: record, jsonValidationOption?: "JSON_VALIDATION_OPTION_UNSPECIFIED"|"SKIP"|"PRE_EXECUTION"|"POST_EXECUTION"|"PRE_POST_EXECUTION", nextTasks?: list, nextTasksExecutionPolicy?: "NEXT_TASKS_EXECUTION_POLICY_UNSPECIFIED"|"RUN_ALL_MATCH"|"RUN_FIRST_MATCH", parameters?: record, position?: record, successPolicy?: record, ... (5 more fields)}
+  --task-configs-internal: list # Optional. Task configuration for the integration. It's optional, but the integration doesn't do anything without task_configs. — item shape: {alertConfigs?: list, createTime?: string, creatorEmail?: string, description?: string, disableStrictTypeValidation?: bool, errorCatcherId?: string, externalTaskType?: "EXTERNAL_TASK_TYPE_UNSPECIFIED"|"NORMAL_TASK"|"ERROR_TASK", failurePolicy?: record, incomingEdgeCount?: int, jsonValidationOption?: "UNSPECIFIED_JSON_VALIDATION_OPTION"|"SKIP"|"PRE_EXECUTION"|"POST_EXECUTION"|"PRE_POST_EXECUTION", label?: string, lastModifiedTime?: string, nextTasks?: list, ... (15 more fields)}
   --teardown: record # shape: {teardownTaskConfigs?: list}
-  --triggerConfigs: list # Optional. Trigger configurations. — item shape: {alertConfig?: list, cloudSchedulerConfig?: record, description?: string, errorCatcherId?: string, label?: string, nextTasksExecutionPolicy?: "NEXT_TASKS_EXECUTION_POLICY_UNSPECIFIED"|"RUN_ALL_MATCH"|"RUN_FIRST_MATCH", position?: record, properties?: record, startTasks?: list, triggerId?: string, triggerNumber?: string, triggerType?: "TRIGGER_TYPE_UNSPECIFIED"|"CRON"|"API"|"SFDC_CHANNEL"|"CLOUD_PUBSUB_EXTERNAL"|"SFDC_CDC_CHANNEL"|"CLOUD_SCHEDULER"}
-  --triggerConfigsInternal: list # Optional. Trigger configurations. — item shape: {alertConfig?: list, cloudSchedulerConfig?: record, description?: string, enabledClients?: list, errorCatcherId?: string, label?: string, nextTasksExecutionPolicy?: "UNSPECIFIED"|"RUN_ALL_MATCH"|"RUN_FIRST_MATCH", pauseWorkflowExecutions?: bool, position?: record, properties?: record, startTasks?: list, triggerCriteria?: record, triggerId?: string, triggerNumber?: string, triggerType?: "UNKNOWN"|"CLOUD_PUBSUB"|"GOOPS"|"SFDC_SYNC"|"CRON"|"API"|"MANIFOLD_TRIGGER"|"DATALAYER_DATA_CHANGE"|"SFDC_CHANNEL"|"CLOUD_PUBSUB_EXTERNAL"|"SFDC_CDC_CHANNEL"|"SFDC_PLATFORM_EVENTS_CHANNEL"|"CLOUD_SCHEDULER"}
-  --userLabel: string # Optional. A user-defined label that annotates an integration version. Typically, this is only set when the integration version is created.
+  --trigger-configs: list # Optional. Trigger configurations. — item shape: {alertConfig?: list, cloudSchedulerConfig?: record, description?: string, errorCatcherId?: string, label?: string, nextTasksExecutionPolicy?: "NEXT_TASKS_EXECUTION_POLICY_UNSPECIFIED"|"RUN_ALL_MATCH"|"RUN_FIRST_MATCH", position?: record, properties?: record, startTasks?: list, triggerId?: string, triggerNumber?: string, triggerType?: "TRIGGER_TYPE_UNSPECIFIED"|"CRON"|"API"|"SFDC_CHANNEL"|"CLOUD_PUBSUB_EXTERNAL"|"SFDC_CDC_CHANNEL"|"CLOUD_SCHEDULER"}
+  --trigger-configs-internal: list # Optional. Trigger configurations. — item shape: {alertConfig?: list, cloudSchedulerConfig?: record, description?: string, enabledClients?: list<string>, errorCatcherId?: string, label?: string, nextTasksExecutionPolicy?: "UNSPECIFIED"|"RUN_ALL_MATCH"|"RUN_FIRST_MATCH", pauseWorkflowExecutions?: bool, position?: record, properties?: record, startTasks?: list, triggerCriteria?: record, triggerId?: string, triggerNumber?: string, ... (1 more fields)}
+  --user-label: string # Optional. A user-defined label that annotates an integration version. Typically, this is only set when the integration version is created.
 ]: any -> record<createTime: string, databasePersistencePolicy: string, description: string, errorCatcherConfigs: table<description: string, errorCatcherId: string, errorCatcherNumber: string, label: string, position: record, startErrorTasks: list>, integrationParameters: table<dataType: string, defaultValue: record, displayName: string, inputOutputType: string, isTransient: bool, jsonSchema: string, key: string, producer: string, searchable: bool>, integrationParametersInternal: record<parameters: list<record>>, lastModifierEmail: string, lockHolder: string, name: string, origin: string, parentTemplateId: string, runAsServiceAccount: string, snapshotNumber: string, state: string, status: string, taskConfigs: table<description: string, displayName: string, errorCatcherId: string, externalTaskType: string, failurePolicy: record, jsonValidationOption: string, nextTasks: list, nextTasksExecutionPolicy: string, parameters: record, position: record, successPolicy: record, synchronousCallFailurePolicy: record, task: string, taskExecutionStrategy: string, taskId: string, taskTemplate: string>, taskConfigsInternal: table<alertConfigs: list, createTime: string, creatorEmail: string, description: string, disableStrictTypeValidation: bool, errorCatcherId: string, externalTaskType: string, failurePolicy: record, incomingEdgeCount: int, jsonValidationOption: string, label: string, lastModifiedTime: string, nextTasks: list, nextTasksExecutionPolicy: string, parameters: record, position: record, precondition: string, preconditionLabel: string, rollbackStrategy: record, successPolicy: record, synchronousCallFailurePolicy: record, taskEntity: record, taskExecutionStrategy: string, taskName: string, taskNumber: string, taskSpec: string, taskTemplateName: string, taskType: string>, teardown: record<teardownTaskConfigs: list<record>>, triggerConfigs: table<alertConfig: list, cloudSchedulerConfig: record, description: string, errorCatcherId: string, label: string, nextTasksExecutionPolicy: string, position: record, properties: record, startTasks: list, triggerId: string, triggerNumber: string, triggerType: string>, triggerConfigsInternal: table<alertConfig: list, cloudSchedulerConfig: record, description: string, enabledClients: list, errorCatcherId: string, label: string, nextTasksExecutionPolicy: string, pauseWorkflowExecutions: bool, position: record, properties: record, startTasks: list, triggerCriteria: record, triggerId: string, triggerNumber: string, triggerType: string>, updateTime: string, userLabel: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "newIntegration" $newIntegration "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/($parent)/versions" $qp)
-  let body = {databasePersistencePolicy: $databasePersistencePolicy, description: $description, errorCatcherConfigs: $errorCatcherConfigs, integrationParameters: $integrationParameters, integrationParametersInternal: $integrationParametersInternal, lastModifierEmail: $lastModifierEmail, lockHolder: $lockHolder, origin: $origin, parentTemplateId: $parentTemplateId, runAsServiceAccount: $runAsServiceAccount, snapshotNumber: $snapshotNumber, taskConfigs: $taskConfigs, taskConfigsInternal: $taskConfigsInternal, teardown: $teardown, triggerConfigs: $triggerConfigs, triggerConfigsInternal: $triggerConfigsInternal, userLabel: $userLabel} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "newIntegration" $new_integration "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/versions") $qp)
+  let req_body = {"databasePersistencePolicy": $database_persistence_policy, "description": $description, "errorCatcherConfigs": $error_catcher_configs, "integrationParameters": $integration_parameters, "integrationParametersInternal": $integration_parameters_internal, "lastModifierEmail": $last_modifier_email, "lockHolder": $lock_holder, "origin": $origin, "parentTemplateId": $parent_template_id, "runAsServiceAccount": $run_as_service_account, "snapshotNumber": $snapshot_number, "taskConfigs": $task_configs, "taskConfigsInternal": $task_configs_internal, "teardown": $teardown, "triggerConfigs": $trigger_configs, "triggerConfigsInternal": $trigger_configs_internal, "userLabel": $user_label} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Uploads an integration. The content can be a previously downloaded integration. Performs the same function as CreateDraftIntegrationVersion, but accepts input in a string format, which holds the complete representation of the IntegrationVersion content.
 #
 # POST /v1/{parent}/versions:upload
 # operationId: integrations.projects.locations.products.integrations.versions.upload
-export def "versions-upload integrationsprojectslocationsproductsintegrationsversionsupload" [
+export def "versions-upload upload" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1717,6 +1772,7 @@ export def "versions-upload integrationsprojectslocationsproductsintegrationsver
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
@@ -1725,21 +1781,21 @@ export def "versions-upload integrationsprojectslocationsproductsintegrationsver
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --content: string # The textproto of the integration_version.
-  --fileFormat: string@fileFormat-completer # File format for upload request.
+  --file-format: string@file-format-completer # File format for upload request.
 ]: any -> record<integrationVersion: record<createTime: string, databasePersistencePolicy: string, description: string, errorCatcherConfigs: list<record>, integrationParameters: list<record>, integrationParametersInternal: record<parameters: list>, lastModifierEmail: string, lockHolder: string, name: string, origin: string, parentTemplateId: string, runAsServiceAccount: string, snapshotNumber: string, state: string, status: string, taskConfigs: list<record>, taskConfigsInternal: list<record>, teardown: record<teardownTaskConfigs: list>, triggerConfigs: list<record>, triggerConfigsInternal: list<record>, updateTime: string, userLabel: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/($parent)/versions:upload" $qp)
-  let body = {content: $content, fileFormat: $fileFormat} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/versions:upload") $qp)
+  let req_body = {"content": $content, "fileFormat": $file_format} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }

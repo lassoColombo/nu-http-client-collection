@@ -18,21 +18,32 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 }
 
 # Serialize a single query parameter based on collection style
+# Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
+# ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = ($name | url encode)
+  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
-  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
-    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
-    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
+    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
+    _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
+}
+
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Build URL from base, path, and optional query string
@@ -44,7 +55,7 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
@@ -53,26 +64,26 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
     "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "put" => { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "patch" => { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
   if ($method in ["head" "options"]) { return $resp }
-  if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
+  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
 def base-url-completer [] { ["https://api.codat.io"] }
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
-def reportType-completer [] { ["audit" "enhancedFinancials"] }
-def periodUnit-completer [] { ["Day" "Month" "Week" "Year"] }
+def report-type-completer [] { ["audit" "enhancedFinancials"] }
+def period-unit-completer [] { ["Day" "Month" "Week" "Year"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "companies-reports-enhanced-balance-sheet-accounts get-accounts-for-enhanced-balance-sheet" } } | get name | first)
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "companies-reports-enhanced-balance-sheet-accounts get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -96,8 +107,8 @@ export def commands []: nothing -> table {
 #
 # GET /companies/{companyId}/reports/enhancedBalanceSheet/accounts
 # operationId: get-accounts-for-enhanced-balance-sheet
-export def "companies-reports-enhanced-balance-sheet-accounts get-accounts-for-enhanced-balance-sheet" [
-  companyId: any
+export def "companies-reports-enhanced-balance-sheet-accounts get" [
+  company_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -105,25 +116,26 @@ export def "companies-reports-enhanced-balance-sheet-accounts get-accounts-for-e
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --reportDate: string # The date in which the report is created up to. Users must specify a specific date, however the response will be provided for the full month. (e.g. 29-09-2020)
-  --numberOfPeriods: int # The number of periods to return.  There will be no pagination as a query parameter, however Codat will limit the number of periods to request to 12 periods.
-]: nothing -> record<reportInfo: any, reportItems: table<accountCategory: any, accountId: string, accountName: string, balance: float, date: any>> {
+  --report-date: string # The date in which the report is created up to. Users must specify a specific date, however the response will be provided for the full month. (e.g. 29-09-2020)
+  --number-of-periods: int # The number of periods to return. There will be no pagination as a query parameter, however Codat will limit the number of periods to request to 12 periods.
+]: nothing -> record<reportInfo: record<companyName: string, currency: string, generatedDate: string, reportName: string>, reportItems: table<accountCategory: record, accountId: string, accountName: string, balance: float, date: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "reportDate" $reportDate "scalar") (serialize-qp "numberOfPeriods" $numberOfPeriods "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/companies/($companyId)/reports/enhancedBalanceSheet/accounts" $qp)
+  let qp = [(serialize-qp "reportDate" $report_date "scalar") (serialize-qp "numberOfPeriods" $number_of_periods "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id)} | format pattern "/companies/{company_id}/reports/enhancedBalanceSheet/accounts") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get enhanced cash flow report
 #
 # GET /companies/{companyId}/reports/enhancedCashFlow/transactions
 # operationId: get-enhanced-cash-flow-transactions
-export def "companies-reports-enhanced-cash-flow-transactions get-enhanced-cash-flow-transactions" [
-  companyId: any
+export def "companies-reports-enhanced-cash-flow-transactions get" [
+  company_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -131,26 +143,27 @@ export def "companies-reports-enhanced-cash-flow-transactions get-enhanced-cash-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Page number. [Read more](https://docs.codat.io/using-the-api/paging). (format: int32, default: 1, e.g. 1)
-  --pageSize: int # Number of records to return in a page. [Read more](https://docs.codat.io/using-the-api/paging). (format: int32, default: 100, e.g. 100)
+  --page-size: int # Number of records to return in a page. [Read more](https://docs.codat.io/using-the-api/paging). (format: int32, default: 100, e.g. 100)
   --query: string # Codat query string. [Read more](https://docs.codat.io/using-the-api/querying).
-]: nothing -> record<dataSources: list<any>, reportInfo: any, reportItems: list<any>> {
+]: nothing -> record<dataSources: table<accounts: list>, reportInfo: record<companyName: string, generatedDate: string, pageNumber: int, pageSize: int, reportName: string, totalResults: int>, reportItems: table<transactions: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "query" $query "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/companies/($companyId)/reports/enhancedCashFlow/transactions" $qp)
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "query" $query "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id)} | format pattern "/companies/{company_id}/reports/enhancedCashFlow/transactions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Enhanced Invoices Report
 #
 # GET /companies/{companyId}/reports/enhancedInvoices
 # operationId: get-enhanced-invoices-report
-export def "companies-reports-enhanced-invoices get-enhanced-invoices-report" [
-  companyId: any
+export def "companies-reports-enhanced-invoices get" [
+  company_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -158,26 +171,27 @@ export def "companies-reports-enhanced-invoices get-enhanced-invoices-report" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Page number. [Read more](https://docs.codat.io/using-the-api/paging). (format: int32, default: 1, e.g. 1)
-  --pageSize: int # Number of records to return in a page. [Read more](https://docs.codat.io/using-the-api/paging). (format: int32, default: 100, e.g. 100)
+  --page-size: int # Number of records to return in a page. [Read more](https://docs.codat.io/using-the-api/paging). (format: int32, default: 100, e.g. 100)
   --query: string # Codat query string. [Read more](https://docs.codat.io/using-the-api/querying).
-]: nothing -> record<reportInfo: any, reportItems: table<invoices: list>> {
+]: nothing -> record<reportInfo: record<companyName: string, generatedDate: string, pageNumber: int, pageSize: int, reportName: string, totalResults: int>, reportItems: table<invoices: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "query" $query "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/companies/($companyId)/reports/enhancedInvoices" $qp)
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "query" $query "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id)} | format pattern "/companies/{company_id}/reports/enhancedInvoices") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Enhanced Profit and Loss Accounts
 #
 # GET /companies/{companyId}/reports/enhancedProfitAndLoss/accounts
 # operationId: get-accounts-for-enhanced-profit-and-loss
-export def "companies-reports-enhanced-profit-and-loss-accounts get-accounts-for-enhanced-profit-and-loss" [
-  companyId: any
+export def "companies-reports-enhanced-profit-and-loss-accounts get" [
+  company_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -185,17 +199,18 @@ export def "companies-reports-enhanced-profit-and-loss-accounts get-accounts-for
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --reportDate: string # The date in which the report is created up to. Users must specify a specific date, however the response will be provided for the full month. (e.g. 29-09-2020)
-  --numberOfPeriods: int # The number of periods to return.  There will be no pagination as a query parameter, however Codat will limit the number of periods to request to 12 periods.
-]: nothing -> record<reportInfo: any, reportItems: table<accountCategory: any, accountId: string, accountName: string, balance: float, date: any>> {
+  --report-date: string # The date in which the report is created up to. Users must specify a specific date, however the response will be provided for the full month. (e.g. 29-09-2020)
+  --number-of-periods: int # The number of periods to return. There will be no pagination as a query parameter, however Codat will limit the number of periods to request to 12 periods.
+]: nothing -> record<reportInfo: record<companyName: string, currency: string, generatedDate: string, reportName: string>, reportItems: table<accountCategory: record, accountId: string, accountName: string, balance: float, date: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "reportDate" $reportDate "scalar") (serialize-qp "numberOfPeriods" $numberOfPeriods "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/companies/($companyId)/reports/enhancedProfitAndLoss/accounts" $qp)
+  let qp = [(serialize-qp "reportDate" $report_date "scalar") (serialize-qp "numberOfPeriods" $number_of_periods "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id)} | format pattern "/companies/{company_id}/reports/enhancedProfitAndLoss/accounts") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # List account categories
@@ -204,7 +219,7 @@ export def "companies-reports-enhanced-profit-and-loss-accounts get-accounts-for
 # DEPRECATED
 # operationId: list-available-account-categories
 @deprecated
-export def "data-assess-accounts-categories list-available-account-categories" [
+export def "data-assess-accounts-categories list-available" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -212,6 +227,7 @@ export def "data-assess-accounts-categories list-available-account-categories" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<detailType: string, subtype: string, type: string, detailTypeDescription: string, detailTypeDisplayName: string, subtypeDisplayName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -219,16 +235,16 @@ export def "data-assess-accounts-categories list-available-account-categories" [
   let full_url = (build-url $base "/data/assess/accounts/categories")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Lists data integrity details for date type
 #
 # GET /data/companies/{companyId}/assess/dataTypes/{dataType}/dataIntegrity/details
 # operationId: get-data-integrity-details
-export def "data-companies-assess-data-types-data-integrity-details get-data-integrity-details" [
-  companyId: any
-  dataType: any
+export def "data-companies-assess-data-types-data-integrity-details get" [
+  company_id: any
+  data_type: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -236,28 +252,29 @@ export def "data-companies-assess-data-types-data-integrity-details get-data-int
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Page number. [Read more](https://docs.codat.io/using-the-api/paging). (format: int32, default: 1, e.g. 1)
-  --pageSize: int # Number of records to return in a page. [Read more](https://docs.codat.io/using-the-api/paging). (format: int32, default: 100, e.g. 100)
+  --page-size: int # Number of records to return in a page. [Read more](https://docs.codat.io/using-the-api/paging). (format: int32, default: 100, e.g. 100)
   --query: string # Codat query string. [Read more](https://docs.codat.io/using-the-api/querying).
-  --orderBy: string # Field to order results by. [Read more](https://docs.codat.io/using-the-api/ordering-results). (e.g. -modifiedDate)
-]: nothing -> record<results: table<amount: float, connectionId: string, currency: string, date: any, description: string, id: string, matches: list, type: string>, _links: record<current: record<href: string>, next: record<href: string>, previous: record<href: string>, self: record<href: string>>, pageNumber: int, pageSize: int, totalResults: int> {
+  --order-by: string # Field to order results by. [Read more](https://docs.codat.io/using-the-api/ordering-results). (e.g. -modifiedDate)
+]: nothing -> record<results: table<amount: float, connectionId: string, currency: string, date: string, description: string, id: string, matches: list, type: string>, _links: record<current: record<href: string>, next: record<href: string>, previous: record<href: string>, self: record<href: string>>, pageNumber: int, pageSize: int, totalResults: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "orderBy" $orderBy "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/data/companies/($companyId)/assess/dataTypes/($dataType)/dataIntegrity/details" $qp)
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "orderBy" $order_by "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), data_type: (encode-path-segment $data_type)} | format pattern "/data/companies/{company_id}/assess/dataTypes/{data_type}/dataIntegrity/details") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get data integrity status
 #
 # GET /data/companies/{companyId}/assess/dataTypes/{dataType}/dataIntegrity/status
 # operationId: get-data-integrity-status
-export def "data-companies-assess-data-types-data-integrity-status get-data-integrity-status" [
-  companyId: string
-  dataType: string
+export def "data-companies-assess-data-types-data-integrity-status get" [
+  company_id: string
+  data_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -265,23 +282,24 @@ export def "data-companies-assess-data-types-data-integrity-status get-data-inte
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<metadata: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/data/companies/($companyId)/assess/dataTypes/($dataType)/dataIntegrity/status")
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), data_type: (encode-path-segment $data_type)} | format pattern "/data/companies/{company_id}/assess/dataTypes/{data_type}/dataIntegrity/status"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get data integrity summary
 #
 # GET /data/companies/{companyId}/assess/dataTypes/{dataType}/dataIntegrity/summaries
 # operationId: get-data-integrity-summaries
-export def "data-companies-assess-data-types-data-integrity-summaries get-data-integrity-summaries" [
-  companyId: any
-  dataType: any
+export def "data-companies-assess-data-types-data-integrity-summaries get" [
+  company_id: any
+  data_type: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -289,24 +307,25 @@ export def "data-companies-assess-data-types-data-integrity-summaries get-data-i
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --query: string # Codat query string. [Read more](https://docs.codat.io/using-the-api/querying).
 ]: nothing -> record<summaries: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/data/companies/($companyId)/assess/dataTypes/($dataType)/dataIntegrity/summaries" $qp)
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), data_type: (encode-path-segment $data_type)} | format pattern "/data/companies/{company_id}/assess/dataTypes/{data_type}/dataIntegrity/summaries") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get status of Excel report
 #
 # GET /data/companies/{companyId}/assess/excel
 # operationId: get-excel-report-generation-status
-export def "data-companies-assess-excel get-excel-report-generation-status" [
-  companyId: any
+export def "data-companies-assess-excel get-report-generation-status" [
+  company_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -314,24 +333,25 @@ export def "data-companies-assess-excel get-excel-report-generation-status" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --reportType: string@reportType-completer # The type of report you want to generate and download.
+  --report-type: string@report-type-completer # The type of report you want to generate and download.
 ]: nothing -> record<errorMessage: string, fileSize: int, inProgress: bool, lastGenerated: string, lastInvocationId: string, queued: string, reportType: string, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "reportType" $reportType "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/data/companies/($companyId)/assess/excel" $qp)
+  let qp = [(serialize-qp "reportType" $report_type "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id)} | format pattern "/data/companies/{company_id}/assess/excel") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Generate an Excel report
 #
 # POST /data/companies/{companyId}/assess/excel
 # operationId: generate-excel-report
-export def "data-companies-assess-excel generate-excel-report" [
-  companyId: any
+export def "data-companies-assess-excel generate-report" [
+  company_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -339,24 +359,25 @@ export def "data-companies-assess-excel generate-excel-report" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --reportType: string@reportType-completer # The type of report you want to generate and download.
+  --report-type: string@report-type-completer # The type of report you want to generate and download.
 ]: nothing -> record<errorMessage: string, fileSize: int, inProgress: bool, lastGenerated: string, lastInvocationId: string, queued: string, reportType: string, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "reportType" $reportType "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/data/companies/($companyId)/assess/excel" $qp)
+  let qp = [(serialize-qp "reportType" $report_type "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id)} | format pattern "/data/companies/{company_id}/assess/excel") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Download generated excel report
 #
 # GET /data/companies/{companyId}/assess/excel/download
 # operationId: get-excel-report
-export def "data-companies-assess-excel-download get-excel-report" [
-  companyId: any
+export def "data-companies-assess-excel-download get-report" [
+  company_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -364,16 +385,17 @@ export def "data-companies-assess-excel-download get-excel-report" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --reportType: string@reportType-completer # The type of report you want to generate and download.
+  --report-type: string@report-type-completer # The type of report you want to generate and download.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "reportType" $reportType "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/data/companies/($companyId)/assess/excel/download" $qp)
+  let qp = [(serialize-qp "reportType" $report_type "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id)} | format pattern "/data/companies/{company_id}/assess/excel/download") $qp)
   let accept_val = "application/octet-stream"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Download generated excel report
@@ -382,8 +404,8 @@ export def "data-companies-assess-excel-download get-excel-report" [
 # DEPRECATED
 # operationId: download-excel-report
 @deprecated
-export def "data-companies-assess-excel-download download-excel-report" [
-  companyId: any
+export def "data-companies-assess-excel-download download-report" [
+  company_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -391,25 +413,26 @@ export def "data-companies-assess-excel-download download-excel-report" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --reportType: string@reportType-completer # The type of report you want to generate and download.
+  --report-type: string@report-type-completer # The type of report you want to generate and download.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "reportType" $reportType "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/data/companies/($companyId)/assess/excel/download" $qp)
+  let qp = [(serialize-qp "reportType" $report_type "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id)} | format pattern "/data/companies/{company_id}/assess/excel/download") $qp)
   let accept_val = "application/octet-stream"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get the marketing metrics from an accounting source for a given company.
 #
 # GET /data/companies/{companyId}/connections/{connectionId}/assess/accountingMetrics/marketing
 # operationId: get-accounting-marketing-metrics
-export def "data-companies-connections-assess-accounting-metrics-marketing get-accounting-marketing-metrics" [
-  companyId: any
-  connectionId: any
+export def "data-companies-connections-assess-accounting-metrics-marketing get" [
+  company_id: any
+  connection_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -417,21 +440,22 @@ export def "data-companies-connections-assess-accounting-metrics-marketing get-a
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --reportDate: string # The date in which the report is created up to. Users must specify a specific date, however the response will be provided for the full month. (e.g. 29-09-2020)
-  --periodLength: int # The number of months per period. E.g. 2 = 2 months per period.
-  --numberOfPeriods: int # The number of periods to return.  There will be no pagination as a query parameter, however Codat will limit the number of periods to request to 12 periods.
-  --periodUnit: string@periodUnit-completer # The period unit of time returned.
-  --includeDisplayNames: oneof<nothing, bool> # Shows the dimensionDisplayName and itemDisplayName in measures to make the report data human-readable.
-  --showInputValues: oneof<nothing, bool> # If set to true, then the system includes the input values within the response.
-]: nothing -> record<dimensions: list<any>, errors: list<any>, measures: list<any>, reportData: list<any>, reportInfo: record> {
+  --report-date: string # The date in which the report is created up to. Users must specify a specific date, however the response will be provided for the full month. (e.g. 29-09-2020)
+  --period-length: int # The number of months per period. E.g. 2 = 2 months per period.
+  --number-of-periods: int # The number of periods to return. There will be no pagination as a query parameter, however Codat will limit the number of periods to request to 12 periods.
+  --period-unit: string@period-unit-completer # The period unit of time returned.
+  --include-display-names: oneof<nothing, bool> # Shows the dimensionDisplayName and itemDisplayName in measures to make the report data human-readable.
+  --show-input-values: oneof<nothing, bool> # If set to true, then the system includes the input values within the response.
+]: nothing -> record<dimensions: table<displayName: string, index: int, items: list, type: string>, errors: table<details: record, message: string, type: string>, measures: table<displayName: string, index: int, type: string, units: string>, reportData: table<components: list, dimension: int, dimensionDisplayName: string, item: int, itemDisplayName: string, measures: list>, reportInfo: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "reportDate" $reportDate "scalar") (serialize-qp "periodLength" $periodLength "scalar") (serialize-qp "numberOfPeriods" $numberOfPeriods "scalar") (serialize-qp "periodUnit" $periodUnit "scalar") (serialize-qp "includeDisplayNames" $includeDisplayNames "scalar") (serialize-qp "showInputValues" $showInputValues "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/data/companies/($companyId)/connections/($connectionId)/assess/accountingMetrics/marketing" $qp)
+  let qp = [(serialize-qp "reportDate" $report_date "scalar") (serialize-qp "periodLength" $period_length "scalar") (serialize-qp "numberOfPeriods" $number_of_periods "scalar") (serialize-qp "periodUnit" $period_unit "scalar") (serialize-qp "includeDisplayNames" $include_display_names "scalar") (serialize-qp "showInputValues" $show_input_values "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id)} | format pattern "/data/companies/{company_id}/connections/{connection_id}/assess/accountingMetrics/marketing") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # List suggested and confirmed account categories
@@ -440,9 +464,9 @@ export def "data-companies-connections-assess-accounting-metrics-marketing get-a
 # DEPRECATED
 # operationId: list-accounts-categories
 @deprecated
-export def "data-companies-connections-assess-accounts-categories list-accounts-categories" [
-  companyId: any
-  connectionId: any
+export def "data-companies-connections-assess-accounts-categories list" [
+  company_id: any
+  connection_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -450,19 +474,20 @@ export def "data-companies-connections-assess-accounts-categories list-accounts-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Page number. [Read more](https://docs.codat.io/using-the-api/paging). (format: int32, default: 1, e.g. 1)
-  --pageSize: int # Number of records to return in a page. [Read more](https://docs.codat.io/using-the-api/paging). (format: int32, default: 100, e.g. 100)
+  --page-size: int # Number of records to return in a page. [Read more](https://docs.codat.io/using-the-api/paging). (format: int32, default: 100, e.g. 100)
   --query: string # Codat query string. [Read more](https://docs.codat.io/using-the-api/querying).
-  --orderBy: string # Field to order results by. [Read more](https://docs.codat.io/using-the-api/ordering-results). (e.g. -modifiedDate)
-]: nothing -> record<results: table<accountRef: any, confirmed: any, suggested: any>, _links: record<current: record<href: string>, next: record<href: string>, previous: record<href: string>, self: record<href: string>>, pageNumber: int, pageSize: int, totalResults: int> {
+  --order-by: string # Field to order results by. [Read more](https://docs.codat.io/using-the-api/ordering-results). (e.g. -modifiedDate)
+]: nothing -> record<results: table<accountRef: record, confirmed: record, suggested: record>, _links: record<current: record<href: string>, next: record<href: string>, previous: record<href: string>, self: record<href: string>>, pageNumber: int, pageSize: int, totalResults: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "orderBy" $orderBy "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/data/companies/($companyId)/connections/($connectionId)/assess/accounts/categories" $qp)
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "orderBy" $order_by "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id)} | format pattern "/data/companies/{company_id}/connections/{connection_id}/assess/accounts/categories") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Confirm categories for accounts
@@ -472,9 +497,9 @@ export def "data-companies-connections-assess-accounts-categories list-accounts-
 # operationId: update-accounts-categories
 # --categories item shape: {accountRef?: record, confirmed?: record}
 @deprecated
-export def "data-companies-connections-assess-accounts-categories update-accounts-categories" [
-  companyId: string
-  connectionId: string
+export def "data-companies-connections-assess-accounts-categories update" [
+  company_id: string
+  connection_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -482,18 +507,19 @@ export def "data-companies-connections-assess-accounts-categories update-account
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --categories: list # List of confirmed account categories set manually by the user.  — item shape: {accountRef?: record, confirmed?: record}
-]: any -> table<accountRef: any, confirmed: any, suggested: any> {
+  --categories: list # List of confirmed account categories set manually by the user. — item shape: {accountRef?: record, confirmed?: record}
+]: any -> table<accountRef: record<id: string, name: string>, confirmed: record, suggested: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/data/companies/($companyId)/connections/($connectionId)/assess/accounts/categories")
-  let body = {categories: $categories} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id)} | format pattern "/data/companies/{company_id}/connections/{connection_id}/assess/accounts/categories"))
+  let req_body = {"categories": $categories} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Get suggested and/or confirmed category for a specific account
@@ -502,10 +528,10 @@ export def "data-companies-connections-assess-accounts-categories update-account
 # DEPRECATED
 # operationId: get-account-category
 @deprecated
-export def "data-companies-connections-assess-accounts-categories get-account-category" [
-  companyId: string
-  connectionId: string
-  accountId: string
+export def "data-companies-connections-assess-accounts-categories get-category" [
+  company_id: string
+  connection_id: string
+  account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -513,14 +539,15 @@ export def "data-companies-connections-assess-accounts-categories get-account-ca
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<accountRef: any, confirmed: any, suggested: any> {
+]: nothing -> record<accountRef: record<id: string, name: string>, confirmed: record, suggested: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/data/companies/($companyId)/connections/($connectionId)/assess/accounts/($accountId)/categories")
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id), account_id: (encode-path-segment $account_id)} | format pattern "/data/companies/{company_id}/connections/{connection_id}/assess/accounts/{account_id}/categories"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Patch account categories
@@ -530,10 +557,10 @@ export def "data-companies-connections-assess-accounts-categories get-account-ca
 # operationId: update-account-category
 # --confirmed shape: {detailType?: string, subtype?: string, type?: string}
 @deprecated
-export def "data-companies-connections-assess-accounts-categories update-account-category" [
-  companyId: string
-  connectionId: string
-  accountId: string
+export def "data-companies-connections-assess-accounts-categories update-category" [
+  company_id: string
+  connection_id: string
+  account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -541,27 +568,28 @@ export def "data-companies-connections-assess-accounts-categories update-account
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   confirmed: record # shape: {detailType?: string, subtype?: string, type?: string}
-]: any -> record<accountRef: any, confirmed: any, suggested: any> {
+]: any -> record<accountRef: record<id: string, name: string>, confirmed: record, suggested: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/data/companies/($companyId)/connections/($connectionId)/assess/accounts/($accountId)/categories")
-  let body = {confirmed: $confirmed} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id), account_id: (encode-path-segment $account_id)} | format pattern "/data/companies/{company_id}/connections/{connection_id}/assess/accounts/{account_id}/categories"))
+  let req_body = {"confirmed": $confirmed} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Get the customer retention metrics for a specific company.
 #
 # GET /data/companies/{companyId}/connections/{connectionId}/assess/commerceMetrics/customerRetention
 # operationId: get-commerce-customer-retention-metrics
-export def "data-companies-connections-assess-commerce-metrics-customer-retention get-commerce-customer-retention-metrics" [
-  companyId: any
-  connectionId: any
+export def "data-companies-connections-assess-commerce-metrics-customer-retention get" [
+  company_id: any
+  connection_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -569,29 +597,30 @@ export def "data-companies-connections-assess-commerce-metrics-customer-retentio
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --reportDate: string # The date in which the report is created up to. Users must specify a specific date, however the response will be provided for the full month. (e.g. 29-09-2020)
-  --periodLength: int # The number of months per period. E.g. 2 = 2 months per period.
-  --numberOfPeriods: int # The number of periods to return.  There will be no pagination as a query parameter, however Codat will limit the number of periods to request to 12 periods.
-  --periodUnit: string@periodUnit-completer # The period unit of time returned.
-  --includeDisplayNames: oneof<nothing, bool> # Shows the dimensionDisplayName and itemDisplayName in measures to make the report data human-readable.
-]: nothing -> record<dimensions: list<any>, errors: list<any>, measures: list<any>, reportData: list<any>, reportInfo: record> {
+  --report-date: string # The date in which the report is created up to. Users must specify a specific date, however the response will be provided for the full month. (e.g. 29-09-2020)
+  --period-length: int # The number of months per period. E.g. 2 = 2 months per period.
+  --number-of-periods: int # The number of periods to return. There will be no pagination as a query parameter, however Codat will limit the number of periods to request to 12 periods.
+  --period-unit: string@period-unit-completer # The period unit of time returned.
+  --include-display-names: oneof<nothing, bool> # Shows the dimensionDisplayName and itemDisplayName in measures to make the report data human-readable.
+]: nothing -> record<dimensions: table<displayName: string, index: int, items: list, type: string>, errors: table<details: record, message: string, type: string>, measures: table<displayName: string, index: int, type: string, units: string>, reportData: table<components: list, dimension: int, dimensionDisplayName: string, item: int, itemDisplayName: string, measures: list>, reportInfo: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "reportDate" $reportDate "scalar") (serialize-qp "periodLength" $periodLength "scalar") (serialize-qp "numberOfPeriods" $numberOfPeriods "scalar") (serialize-qp "periodUnit" $periodUnit "scalar") (serialize-qp "includeDisplayNames" $includeDisplayNames "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/data/companies/($companyId)/connections/($connectionId)/assess/commerceMetrics/customerRetention" $qp)
+  let qp = [(serialize-qp "reportDate" $report_date "scalar") (serialize-qp "periodLength" $period_length "scalar") (serialize-qp "numberOfPeriods" $number_of_periods "scalar") (serialize-qp "periodUnit" $period_unit "scalar") (serialize-qp "includeDisplayNames" $include_display_names "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id)} | format pattern "/data/companies/{company_id}/connections/{connection_id}/assess/commerceMetrics/customerRetention") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get the lifetime value metric for a specific company.
 #
 # GET /data/companies/{companyId}/connections/{connectionId}/assess/commerceMetrics/lifetimeValue
 # operationId: get-commerce-lifetime-value-metrics
-export def "data-companies-connections-assess-commerce-metrics-lifetime-value get-commerce-lifetime-value-metrics" [
-  companyId: any
-  connectionId: any
+export def "data-companies-connections-assess-commerce-metrics-lifetime-value get" [
+  company_id: any
+  connection_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -599,29 +628,30 @@ export def "data-companies-connections-assess-commerce-metrics-lifetime-value ge
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --reportDate: string # The date in which the report is created up to. Users must specify a specific date, however the response will be provided for the full month. (e.g. 29-09-2020)
-  --periodLength: int # The number of months per period. E.g. 2 = 2 months per period.
-  --numberOfPeriods: int # The number of periods to return.  There will be no pagination as a query parameter, however Codat will limit the number of periods to request to 12 periods.
-  --periodUnit: string@periodUnit-completer # The period unit of time returned.
-  --includeDisplayNames: oneof<nothing, bool> # Shows the dimensionDisplayName and itemDisplayName in measures to make the report data human-readable.
-]: nothing -> record<dimensions: list<any>, errors: list<any>, measures: list<any>, reportData: list<any>, reportInfo: record> {
+  --report-date: string # The date in which the report is created up to. Users must specify a specific date, however the response will be provided for the full month. (e.g. 29-09-2020)
+  --period-length: int # The number of months per period. E.g. 2 = 2 months per period.
+  --number-of-periods: int # The number of periods to return. There will be no pagination as a query parameter, however Codat will limit the number of periods to request to 12 periods.
+  --period-unit: string@period-unit-completer # The period unit of time returned.
+  --include-display-names: oneof<nothing, bool> # Shows the dimensionDisplayName and itemDisplayName in measures to make the report data human-readable.
+]: nothing -> record<dimensions: table<displayName: string, index: int, items: list, type: string>, errors: table<details: record, message: string, type: string>, measures: table<displayName: string, index: int, type: string, units: string>, reportData: table<components: list, dimension: int, dimensionDisplayName: string, item: int, itemDisplayName: string, measures: list>, reportInfo: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "reportDate" $reportDate "scalar") (serialize-qp "periodLength" $periodLength "scalar") (serialize-qp "numberOfPeriods" $numberOfPeriods "scalar") (serialize-qp "periodUnit" $periodUnit "scalar") (serialize-qp "includeDisplayNames" $includeDisplayNames "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/data/companies/($companyId)/connections/($connectionId)/assess/commerceMetrics/lifetimeValue" $qp)
+  let qp = [(serialize-qp "reportDate" $report_date "scalar") (serialize-qp "periodLength" $period_length "scalar") (serialize-qp "numberOfPeriods" $number_of_periods "scalar") (serialize-qp "periodUnit" $period_unit "scalar") (serialize-qp "includeDisplayNames" $include_display_names "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id)} | format pattern "/data/companies/{company_id}/connections/{connection_id}/assess/commerceMetrics/lifetimeValue") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get order information for a specific company
 #
 # GET /data/companies/{companyId}/connections/{connectionId}/assess/commerceMetrics/orders
 # operationId: get-commerce-orders-metrics
-export def "data-companies-connections-assess-commerce-metrics-orders get-commerce-orders-metrics" [
-  companyId: any
-  connectionId: any
+export def "data-companies-connections-assess-commerce-metrics-orders get" [
+  company_id: any
+  connection_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -629,29 +659,30 @@ export def "data-companies-connections-assess-commerce-metrics-orders get-commer
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --reportDate: string # The date in which the report is created up to. Users must specify a specific date, however the response will be provided for the full month. (e.g. 29-09-2020)
-  --periodLength: int # The number of months per period. E.g. 2 = 2 months per period.
-  --numberOfPeriods: int # The number of periods to return.  There will be no pagination as a query parameter, however Codat will limit the number of periods to request to 12 periods.
-  --periodUnit: string@periodUnit-completer # The period unit of time returned.
-  --includeDisplayNames: oneof<nothing, bool> # Shows the dimensionDisplayName and itemDisplayName in measures to make the report data human-readable.
-]: nothing -> record<dimensions: list<any>, errors: list<any>, measures: list<any>, reportData: list<any>, reportInfo: record> {
+  --report-date: string # The date in which the report is created up to. Users must specify a specific date, however the response will be provided for the full month. (e.g. 29-09-2020)
+  --period-length: int # The number of months per period. E.g. 2 = 2 months per period.
+  --number-of-periods: int # The number of periods to return. There will be no pagination as a query parameter, however Codat will limit the number of periods to request to 12 periods.
+  --period-unit: string@period-unit-completer # The period unit of time returned.
+  --include-display-names: oneof<nothing, bool> # Shows the dimensionDisplayName and itemDisplayName in measures to make the report data human-readable.
+]: nothing -> record<dimensions: table<displayName: string, index: int, items: list, type: string>, errors: table<details: record, message: string, type: string>, measures: table<displayName: string, index: int, type: string, units: string>, reportData: table<components: list, dimension: int, dimensionDisplayName: string, item: int, itemDisplayName: string, measures: list>, reportInfo: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "reportDate" $reportDate "scalar") (serialize-qp "periodLength" $periodLength "scalar") (serialize-qp "numberOfPeriods" $numberOfPeriods "scalar") (serialize-qp "periodUnit" $periodUnit "scalar") (serialize-qp "includeDisplayNames" $includeDisplayNames "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/data/companies/($companyId)/connections/($connectionId)/assess/commerceMetrics/orders" $qp)
+  let qp = [(serialize-qp "reportDate" $report_date "scalar") (serialize-qp "periodLength" $period_length "scalar") (serialize-qp "numberOfPeriods" $number_of_periods "scalar") (serialize-qp "periodUnit" $period_unit "scalar") (serialize-qp "includeDisplayNames" $include_display_names "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id)} | format pattern "/data/companies/{company_id}/connections/{connection_id}/assess/commerceMetrics/orders") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get the refunds information for a specific company
 #
 # GET /data/companies/{companyId}/connections/{connectionId}/assess/commerceMetrics/refunds
 # operationId: get-commerce-refunds-metrics
-export def "data-companies-connections-assess-commerce-metrics-refunds get-commerce-refunds-metrics" [
-  companyId: any
-  connectionId: any
+export def "data-companies-connections-assess-commerce-metrics-refunds get" [
+  company_id: any
+  connection_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -659,29 +690,30 @@ export def "data-companies-connections-assess-commerce-metrics-refunds get-comme
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --reportDate: string # The date in which the report is created up to. Users must specify a specific date, however the response will be provided for the full month. (e.g. 29-09-2020)
-  --periodLength: int # The number of months per period. E.g. 2 = 2 months per period.
-  --numberOfPeriods: int # The number of periods to return.  There will be no pagination as a query parameter, however Codat will limit the number of periods to request to 12 periods.
-  --periodUnit: string@periodUnit-completer # The period unit of time returned.
-  --includeDisplayNames: oneof<nothing, bool> # Shows the dimensionDisplayName and itemDisplayName in measures to make the report data human-readable.
-]: nothing -> record<dimensions: list<any>, errors: list<any>, measures: list<any>, reportData: list<any>, reportInfo: record> {
+  --report-date: string # The date in which the report is created up to. Users must specify a specific date, however the response will be provided for the full month. (e.g. 29-09-2020)
+  --period-length: int # The number of months per period. E.g. 2 = 2 months per period.
+  --number-of-periods: int # The number of periods to return. There will be no pagination as a query parameter, however Codat will limit the number of periods to request to 12 periods.
+  --period-unit: string@period-unit-completer # The period unit of time returned.
+  --include-display-names: oneof<nothing, bool> # Shows the dimensionDisplayName and itemDisplayName in measures to make the report data human-readable.
+]: nothing -> record<dimensions: table<displayName: string, index: int, items: list, type: string>, errors: table<details: record, message: string, type: string>, measures: table<displayName: string, index: int, type: string, units: string>, reportData: table<components: list, dimension: int, dimensionDisplayName: string, item: int, itemDisplayName: string, measures: list>, reportInfo: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "reportDate" $reportDate "scalar") (serialize-qp "periodLength" $periodLength "scalar") (serialize-qp "numberOfPeriods" $numberOfPeriods "scalar") (serialize-qp "periodUnit" $periodUnit "scalar") (serialize-qp "includeDisplayNames" $includeDisplayNames "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/data/companies/($companyId)/connections/($connectionId)/assess/commerceMetrics/refunds" $qp)
+  let qp = [(serialize-qp "reportDate" $report_date "scalar") (serialize-qp "periodLength" $period_length "scalar") (serialize-qp "numberOfPeriods" $number_of_periods "scalar") (serialize-qp "periodUnit" $period_unit "scalar") (serialize-qp "includeDisplayNames" $include_display_names "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id)} | format pattern "/data/companies/{company_id}/connections/{connection_id}/assess/commerceMetrics/refunds") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Commerce Revenue Metrics
 #
 # GET /data/companies/{companyId}/connections/{connectionId}/assess/commerceMetrics/revenue
 # operationId: get-commerce-revenue-metrics
-export def "data-companies-connections-assess-commerce-metrics-revenue get-commerce-revenue-metrics" [
-  companyId: any
-  connectionId: any
+export def "data-companies-connections-assess-commerce-metrics-revenue get" [
+  company_id: any
+  connection_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -689,20 +721,21 @@ export def "data-companies-connections-assess-commerce-metrics-revenue get-comme
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --reportDate: string # The date in which the report is created up to. Users must specify a specific date, however the response will be provided for the full month. (e.g. 29-09-2020)
-  --periodLength: int # The number of months per period. E.g. 2 = 2 months per period.
-  --numberOfPeriods: int # The number of periods to return.  There will be no pagination as a query parameter, however Codat will limit the number of periods to request to 12 periods.
-  --periodUnit: string@periodUnit-completer # The period unit of time returned.
-  --includeDisplayNames: oneof<nothing, bool> # Shows the dimensionDisplayName and itemDisplayName in measures to make the report data human-readable.
-]: nothing -> record<dimensions: list<any>, errors: list<any>, measures: list<any>, reportData: list<any>, reportInfo: record> {
+  --report-date: string # The date in which the report is created up to. Users must specify a specific date, however the response will be provided for the full month. (e.g. 29-09-2020)
+  --period-length: int # The number of months per period. E.g. 2 = 2 months per period.
+  --number-of-periods: int # The number of periods to return. There will be no pagination as a query parameter, however Codat will limit the number of periods to request to 12 periods.
+  --period-unit: string@period-unit-completer # The period unit of time returned.
+  --include-display-names: oneof<nothing, bool> # Shows the dimensionDisplayName and itemDisplayName in measures to make the report data human-readable.
+]: nothing -> record<dimensions: table<displayName: string, index: int, items: list, type: string>, errors: table<details: record, message: string, type: string>, measures: table<displayName: string, index: int, type: string, units: string>, reportData: table<components: list, dimension: int, dimensionDisplayName: string, item: int, itemDisplayName: string, measures: list>, reportInfo: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "reportDate" $reportDate "scalar") (serialize-qp "periodLength" $periodLength "scalar") (serialize-qp "numberOfPeriods" $numberOfPeriods "scalar") (serialize-qp "periodUnit" $periodUnit "scalar") (serialize-qp "includeDisplayNames" $includeDisplayNames "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/data/companies/($companyId)/connections/($connectionId)/assess/commerceMetrics/revenue" $qp)
+  let qp = [(serialize-qp "reportDate" $report_date "scalar") (serialize-qp "periodLength" $period_length "scalar") (serialize-qp "numberOfPeriods" $number_of_periods "scalar") (serialize-qp "periodUnit" $period_unit "scalar") (serialize-qp "includeDisplayNames" $include_display_names "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id)} | format pattern "/data/companies/{company_id}/connections/{connection_id}/assess/commerceMetrics/revenue") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Enhanced Balance Sheet
@@ -711,9 +744,9 @@ export def "data-companies-connections-assess-commerce-metrics-revenue get-comme
 # DEPRECATED
 # operationId: get-enhanced-balance-sheet
 @deprecated
-export def "data-companies-connections-assess-enhanced-balance-sheet get-enhanced-balance-sheet" [
-  companyId: any
-  connectionId: any
+export def "data-companies-connections-assess-enhanced-balance-sheet get" [
+  company_id: any
+  connection_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -721,19 +754,20 @@ export def "data-companies-connections-assess-enhanced-balance-sheet get-enhance
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --reportDate: string # The date in which the report is created up to. Users must specify a specific date, however the response will be provided for the full month. (e.g. 29-09-2020)
-  --periodLength: int # The number of months per period. E.g. 2 = 2 months per period.
-  --numberOfPeriods: int # The number of periods to return.  There will be no pagination as a query parameter, however Codat will limit the number of periods to request to 12 periods.
-  --includeDisplayNames: oneof<nothing, bool> # Shows the dimensionDisplayName and itemDisplayName in measures to make the report data human-readable.
-]: nothing -> record<dimensions: list<any>, errors: list<any>, measures: list<any>, reportData: list<any>, reportInfo: record> {
+  --report-date: string # The date in which the report is created up to. Users must specify a specific date, however the response will be provided for the full month. (e.g. 29-09-2020)
+  --period-length: int # The number of months per period. E.g. 2 = 2 months per period.
+  --number-of-periods: int # The number of periods to return. There will be no pagination as a query parameter, however Codat will limit the number of periods to request to 12 periods.
+  --include-display-names: oneof<nothing, bool> # Shows the dimensionDisplayName and itemDisplayName in measures to make the report data human-readable.
+]: nothing -> record<dimensions: table<displayName: string, index: int, items: list, type: string>, errors: table<details: record, message: string, type: string>, measures: table<displayName: string, index: int, type: string, units: string>, reportData: table<components: list, dimension: int, dimensionDisplayName: string, item: int, itemDisplayName: string, measures: list>, reportInfo: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "reportDate" $reportDate "scalar") (serialize-qp "periodLength" $periodLength "scalar") (serialize-qp "numberOfPeriods" $numberOfPeriods "scalar") (serialize-qp "includeDisplayNames" $includeDisplayNames "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/data/companies/($companyId)/connections/($connectionId)/assess/enhancedBalanceSheet" $qp)
+  let qp = [(serialize-qp "reportDate" $report_date "scalar") (serialize-qp "periodLength" $period_length "scalar") (serialize-qp "numberOfPeriods" $number_of_periods "scalar") (serialize-qp "includeDisplayNames" $include_display_names "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id)} | format pattern "/data/companies/{company_id}/connections/{connection_id}/assess/enhancedBalanceSheet") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Enhanced Profit and Loss
@@ -742,9 +776,9 @@ export def "data-companies-connections-assess-enhanced-balance-sheet get-enhance
 # DEPRECATED
 # operationId: get-enhanced-profit-and-loss
 @deprecated
-export def "data-companies-connections-assess-enhanced-profit-and-loss get-enhanced-profit-and-loss" [
-  companyId: any
-  connectionId: any
+export def "data-companies-connections-assess-enhanced-profit-and-loss get" [
+  company_id: any
+  connection_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -752,19 +786,20 @@ export def "data-companies-connections-assess-enhanced-profit-and-loss get-enhan
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --reportDate: string # The date in which the report is created up to. Users must specify a specific date, however the response will be provided for the full month. (e.g. 29-09-2020)
-  --periodLength: int # The number of months per period. E.g. 2 = 2 months per period.
-  --numberOfPeriods: int # The number of periods to return.  There will be no pagination as a query parameter, however Codat will limit the number of periods to request to 12 periods.
-  --includeDisplayNames: oneof<nothing, bool> # Shows the dimensionDisplayName and itemDisplayName in measures to make the report data human-readable.
-]: nothing -> record<dimensions: list<any>, errors: list<any>, measures: list<any>, reportData: list<any>, reportInfo: record> {
+  --report-date: string # The date in which the report is created up to. Users must specify a specific date, however the response will be provided for the full month. (e.g. 29-09-2020)
+  --period-length: int # The number of months per period. E.g. 2 = 2 months per period.
+  --number-of-periods: int # The number of periods to return. There will be no pagination as a query parameter, however Codat will limit the number of periods to request to 12 periods.
+  --include-display-names: oneof<nothing, bool> # Shows the dimensionDisplayName and itemDisplayName in measures to make the report data human-readable.
+]: nothing -> record<dimensions: table<displayName: string, index: int, items: list, type: string>, errors: table<details: record, message: string, type: string>, measures: table<displayName: string, index: int, type: string, units: string>, reportData: table<components: list, dimension: int, dimensionDisplayName: string, item: int, itemDisplayName: string, measures: list>, reportInfo: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "reportDate" $reportDate "scalar") (serialize-qp "periodLength" $periodLength "scalar") (serialize-qp "numberOfPeriods" $numberOfPeriods "scalar") (serialize-qp "includeDisplayNames" $includeDisplayNames "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/data/companies/($companyId)/connections/($connectionId)/assess/enhancedProfitAndLoss" $qp)
+  let qp = [(serialize-qp "reportDate" $report_date "scalar") (serialize-qp "periodLength" $period_length "scalar") (serialize-qp "numberOfPeriods" $number_of_periods "scalar") (serialize-qp "includeDisplayNames" $include_display_names "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id)} | format pattern "/data/companies/{company_id}/connections/{connection_id}/assess/enhancedProfitAndLoss") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # List financial metrics
@@ -773,9 +808,9 @@ export def "data-companies-connections-assess-enhanced-profit-and-loss get-enhan
 # DEPRECATED
 # operationId: get-enhanced-financial-metrics
 @deprecated
-export def "data-companies-connections-assess-financial-metrics get-enhanced-financial-metrics" [
-  companyId: any
-  connectionId: any
+export def "data-companies-connections-assess-financial-metrics get-enhanced" [
+  company_id: any
+  connection_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -783,19 +818,20 @@ export def "data-companies-connections-assess-financial-metrics get-enhanced-fin
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --reportDate: string # The date in which the report is created up to. Users must specify a specific date, however the response will be provided for the full month. (e.g. 29-09-2020)
-  --periodLength: int # The number of months per period. E.g. 2 = 2 months per period.
-  --numberOfPeriods: int # The number of periods to return.  There will be no pagination as a query parameter, however Codat will limit the number of periods to request to 12 periods.
-  --showMetricInputs: oneof<nothing, bool> # If set to true, then the system includes the input values within the response.
-]: nothing -> record<currency: string, errors: list<any>, metrics: list<any>, periodUnit: string> {
+  --report-date: string # The date in which the report is created up to. Users must specify a specific date, however the response will be provided for the full month. (e.g. 29-09-2020)
+  --period-length: int # The number of months per period. E.g. 2 = 2 months per period.
+  --number-of-periods: int # The number of periods to return. There will be no pagination as a query parameter, however Codat will limit the number of periods to request to 12 periods.
+  --show-metric-inputs: oneof<nothing, bool> # If set to true, then the system includes the input values within the response.
+]: nothing -> record<currency: string, errors: table<message: string, type: string>, metrics: table<errors: list, key: string, metricUnit: string, name: string, periods: list>, periodUnit: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "reportDate" $reportDate "scalar") (serialize-qp "periodLength" $periodLength "scalar") (serialize-qp "numberOfPeriods" $numberOfPeriods "scalar") (serialize-qp "showMetricInputs" $showMetricInputs "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/data/companies/($companyId)/connections/($connectionId)/assess/financialMetrics" $qp)
+  let qp = [(serialize-qp "reportDate" $report_date "scalar") (serialize-qp "periodLength" $period_length "scalar") (serialize-qp "numberOfPeriods" $number_of_periods "scalar") (serialize-qp "showMetricInputs" $show_metric_inputs "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id)} | format pattern "/data/companies/{company_id}/connections/{connection_id}/assess/financialMetrics") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get key metrics for subscription revenue
@@ -803,8 +839,8 @@ export def "data-companies-connections-assess-financial-metrics get-enhanced-fin
 # GET /data/companies/{companyId}/connections/{connectionId}/assess/subscriptions/mrr
 # operationId: get-recurring-revenue-metrics
 export def "data-companies-connections-assess-subscriptions-mrr get-recurring-revenue-metrics" [
-  companyId: string
-  connectionId: string
+  company_id: string
+  connection_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -812,14 +848,15 @@ export def "data-companies-connections-assess-subscriptions-mrr get-recurring-re
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<dimensions: list<any>, errors: list<any>, measures: list<any>, reportData: list<any>, reportInfo: record> {
+]: nothing -> record<dimensions: table<displayName: string, index: int, items: list, type: string>, errors: table<details: record, message: string, type: string>, measures: table<displayName: string, index: int, type: string, units: string>, reportData: table<components: list, dimension: int, dimensionDisplayName: string, item: int, itemDisplayName: string, measures: list>, reportInfo: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/data/companies/($companyId)/connections/($connectionId)/assess/subscriptions/mrr")
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id)} | format pattern "/data/companies/{company_id}/connections/{connection_id}/assess/subscriptions/mrr"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Request production of key subscription revenue metrics
@@ -827,8 +864,8 @@ export def "data-companies-connections-assess-subscriptions-mrr get-recurring-re
 # GET /data/companies/{companyId}/connections/{connectionId}/assess/subscriptions/process
 # operationId: request-recurring-revenue-metrics
 export def "data-companies-connections-assess-subscriptions-process request-recurring-revenue-metrics" [
-  companyId: string
-  connectionId: string
+  company_id: string
+  connection_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -836,12 +873,13 @@ export def "data-companies-connections-assess-subscriptions-process request-recu
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<dimensions: list<any>, errors: list<any>, measures: list<any>, reportData: list<any>, reportInfo: record> {
+]: nothing -> record<dimensions: table<displayName: string, index: int, items: list, type: string>, errors: table<details: record, message: string, type: string>, measures: table<displayName: string, index: int, type: string, units: string>, reportData: table<components: list, dimension: int, dimensionDisplayName: string, item: int, itemDisplayName: string, measures: list>, reportInfo: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/data/companies/($companyId)/connections/($connectionId)/assess/subscriptions/process")
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id)} | format pattern "/data/companies/{company_id}/connections/{connection_id}/assess/subscriptions/process"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }

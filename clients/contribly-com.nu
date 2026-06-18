@@ -18,21 +18,32 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 }
 
 # Serialize a single query parameter based on collection style
+# Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
+# ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = ($name | url encode)
+  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
-  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
-    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
-    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
+    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
+    _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
+}
+
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Build URL from base, path, and optional query string
@@ -44,7 +55,7 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
@@ -53,13 +64,13 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
     "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "put" => { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "patch" => { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
   if ($method in ["head" "options"]) { return $resp }
-  if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
+  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
 def base-url-completer [] { ["https://api.contribly.com/1"] }
@@ -68,7 +79,7 @@ def auth-scheme-completer [] { ["bearer"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "artifact-formats get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -100,6 +111,7 @@ export def "artifact-formats get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<contribution: table<contentType: string, fileExtension: string, forContentType: string, label: string, preserveAspectRatio: bool, public: bool, upscaleAllowed: bool>, cover: table<contentType: string, fileExtension: string, forContentType: string, label: string, preserveAspectRatio: bool, public: bool, upscaleAllowed: bool>, profileImage: table<contentType: string, fileExtension: string, forContentType: string, label: string, preserveAspectRatio: bool, public: bool, upscaleAllowed: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -107,7 +119,7 @@ export def "artifact-formats get" [
   let full_url = (build-url $base "/artifact-formats")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # List assignments
@@ -121,24 +133,25 @@ export def "assignments list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ownedBy: string # Restrict results to assignments owned by this user.
+  --owned-by: string # Restrict results to assignments owned by this user.
   --page: int # Pagination page
-  --pageSize: int # Pagination page size
+  --page-size: int # Pagination page size
   --q: string # Restrict results to assignments whose name or description matches this keyword.
-  --urlWords: string # Select an assignment by urlWords.
+  --url-words: string # Select an assignment by urlWords.
   --qp-open: oneof<nothing, bool> # Select open or closed assignments
-  --alwaysOpen: oneof<nothing, bool> # Select assignments with no closing date.
+  --always-open: oneof<nothing, bool> # Select assignments with no closing date.
   --tag: string # Restrict results to assignments which are tagged with this tag.
   --name: string # Restrict results to the assignment (or potentially assignments) with this exact name
 ]: nothing -> table<allowsAnonymousContributions: bool, callToAction: string, cover: record<artifacts: list, id: string, media: record>, created: string, description: string, embargo: string, ends: string, featured: bool, id: string, mediaRequired: bool, moderator: string, name: string, open: bool, receiptMessage: string, starts: string, tags: list<record>, urlWords: string, webUrl: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "ownedBy" $ownedBy "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "urlWords" $urlWords "scalar") (serialize-qp "open" $qp_open "scalar") (serialize-qp "alwaysOpen" $alwaysOpen "scalar") (serialize-qp "tag" $tag "scalar") (serialize-qp "name" $name "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "ownedBy" $owned_by "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "urlWords" $url_words "scalar") (serialize-qp "open" $qp_open "scalar") (serialize-qp "alwaysOpen" $always_open "scalar") (serialize-qp "tag" $tag "scalar") (serialize-qp "name" $name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/assignments" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Create a new assignment
@@ -146,7 +159,7 @@ export def "assignments list" [
 # POST /assignments
 # --cover shape: {artifacts?: list, id?: string, media?: record}
 # --tags item shape: {colour?: string, id: string, name: string, tagSet?: record, urlWords?: string}
-export def "assignments post" [
+export def "assignments create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -154,31 +167,32 @@ export def "assignments post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --allowsAnonymousContributions: oneof<nothing, bool>
+  --allows-anonymous-contributions: oneof<nothing, bool>
   --cover: record # shape: {artifacts?: list, id?: string, media?: record}
   --description: string
   --embargo: string # format: date-time
   --ends: string # format: date-time
   --featured: oneof<nothing, bool>
   --id: string
-  --mediaRequired: oneof<nothing, bool>
+  --media-required: oneof<nothing, bool>
   --moderator: string # Optional credential id of the login which will moderator this assignment.
   name: string
-  --receiptMessage: string # An optional assignment specific message to be displayed on successful contribution submission. For example, this might be used to inform contributors of assignment specific moderation time frames.
+  --receipt-message: string # An optional assignment specific message to be displayed on successful contribution submission. For example, this might be used to inform contributors of assignment specific moderation time frames.
   --starts: string # format: date-time
   --tags: list # item shape: {colour?: string, id: string, name: string, tagSet?: record, urlWords?: string}
-  --urlWords: string
+  --url-words: string
 ]: any -> record<allowsAnonymousContributions: bool, callToAction: string, cover: record<artifacts: list<record>, id: string, media: record<duration: float, id: string, place: record, type: string>>, created: string, description: string, embargo: string, ends: string, featured: bool, id: string, mediaRequired: bool, moderator: string, name: string, open: bool, receiptMessage: string, starts: string, tags: table<colour: string, id: string, name: string, tagSet: record, urlWords: string>, urlWords: string, webUrl: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/assignments")
-  let body = {allowsAnonymousContributions: $allowsAnonymousContributions, cover: $cover, description: $description, embargo: $embargo, ends: $ends, featured: $featured, id: $id, mediaRequired: $mediaRequired, moderator: $moderator, name: $name, receiptMessage: $receiptMessage, starts: $starts, tags: $tags, urlWords: $urlWords} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"allowsAnonymousContributions": $allows_anonymous_contributions, "cover": $cover, "description": $description, "embargo": $embargo, "ends": $ends, "featured": $featured, "id": $id, "mediaRequired": $media_required, "moderator": $moderator, "name": $name, "receiptMessage": $receipt_message, "starts": $starts, "tags": $tags, "urlWords": $url_words} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Delete this assignment and all of it's contributions
@@ -193,14 +207,15 @@ export def "assignments delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/assignments/($id)")
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/assignments/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get a single assigment by id
@@ -215,14 +230,15 @@ export def "assignments get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<allowsAnonymousContributions: bool, callToAction: string, cover: record<artifacts: list<record>, id: string, media: record<duration: float, id: string, place: record, type: string>>, created: string, description: string, embargo: string, ends: string, featured: bool, id: string, mediaRequired: bool, moderator: string, name: string, open: bool, receiptMessage: string, starts: string, tags: table<colour: string, id: string, name: string, tagSet: record, urlWords: string>, urlWords: string, webUrl: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/assignments/($id)")
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/assignments/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Recent changes
@@ -236,6 +252,7 @@ export def "change-log get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<date: string, description: string, title: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -243,7 +260,7 @@ export def "change-log get" [
   let full_url = (build-url $base "/change-log")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # List valid contribution refinement types
@@ -257,6 +274,7 @@ export def "contribution-refinement-types get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -264,7 +282,7 @@ export def "contribution-refinement-types get" [
   let full_url = (build-url $base "/contribution-refinement-types")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # List contribution refinement options
@@ -278,30 +296,31 @@ export def "contribution-refinements get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --assignment: string # Restrict results to contributions submitted to this assignment.
   --country: string # Limit results to contributions which have a publicly visible location within the given country (specified by two letter country code).
-  --createdBefore: string # Limit results to contributions created before this date time. (format: date-time)
-  --createdAfter: string # Limit results to contributions created after this date time. (format: date-time)
+  --created-before: string # Limit results to contributions created before this date time. (format: date-time)
+  --created-after: string # Limit results to contributions created after this date time. (format: date-time)
   --geohash: string # Restrict results to contributions which have specified a location which falls within this geohash (or comma seperated list of multiple geohashes)
-  --hasLocation: oneof<nothing, bool> # Restrict results to contributions which have a publicly visible location.
-  --latLong: string # Limit results to contributions with location near this latitude and longitude (comma seperated lat/long pair). Also see radius
+  --has-location: oneof<nothing, bool> # Restrict results to contributions which have a publicly visible location.
+  --lat-long: string # Limit results to contributions with location near this latitude and longitude (comma seperated lat/long pair). Also see radius
   --radius: float # When limiting result by location with the latLong parameter, specify the radius in kilometers. (format: double)
-  --mediaType: string # Restrict results to contributions which include a media file of the given type (ie. image / video)
-  --ownedBy: string # Restrict results to contributions which are fall under the jurisdiction by this user.
+  --media-type: string # Restrict results to contributions which include a media file of the given type (ie. image / video)
+  --owned-by: string # Restrict results to contributions which are fall under the jurisdiction by this user.
   --q: string # Restrict results to contributions whose headline text matches this keyword.
-  --urlWords: string # Locate a specific contribution by URL words
+  --url-words: string # Locate a specific contribution by URL words
   --user: string # Restrict results to contributions by this user identified by id.
   --refinements: string # Comma seperated list of refinement names.
-  --refinementSize: float # Number of refinement options to return.
+  --refinement-size: float # Number of refinement options to return.
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "assignment" $assignment "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "createdBefore" $createdBefore "scalar") (serialize-qp "createdAfter" $createdAfter "scalar") (serialize-qp "geohash" $geohash "scalar") (serialize-qp "hasLocation" $hasLocation "scalar") (serialize-qp "latLong" $latLong "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "mediaType" $mediaType "scalar") (serialize-qp "ownedBy" $ownedBy "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "urlWords" $urlWords "scalar") (serialize-qp "user" $user "scalar") (serialize-qp "refinements" $refinements "scalar") (serialize-qp "refinementSize" $refinementSize "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "assignment" $assignment "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "createdBefore" $created_before "scalar") (serialize-qp "createdAfter" $created_after "scalar") (serialize-qp "geohash" $geohash "scalar") (serialize-qp "hasLocation" $has_location "scalar") (serialize-qp "latLong" $lat_long "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "mediaType" $media_type "scalar") (serialize-qp "ownedBy" $owned_by "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "urlWords" $url_words "scalar") (serialize-qp "user" $user "scalar") (serialize-qp "refinements" $refinements "scalar") (serialize-qp "refinementSize" $refinement_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/contribution-refinements" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # List contributions
@@ -315,32 +334,33 @@ export def "contributions list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --assignment: string # Restrict results to contributions submitted to this assignment.
   --country: string # Limit results to contributions which have a publicly visible location within the given country (specified by two letter country code).
-  --createdBefore: string # Limit results to contributions created before this date time. (format: date-time)
-  --createdAfter: string # Limit results to contributions created after this date time. (format: date-time)
-  --createdDay: string # Limit results to contributions created on this day. (format: date)
-  --createdMonth: string # Limit results to contributions created during this month.
+  --created-before: string # Limit results to contributions created before this date time. (format: date-time)
+  --created-after: string # Limit results to contributions created after this date time. (format: date-time)
+  --created-day: string # Limit results to contributions created on this day. (format: date)
+  --created-month: string # Limit results to contributions created during this month.
   --geohash: string # Restrict results to contributions which have specified a location which falls within this geohash (or comma seperated list of multiple geohashes)
-  --hasLocation: oneof<nothing, bool> # Restrict results to contributions which have a publicly visible location.
-  --latLong: string # Limit results to contributions with location near this latitude and longitude (comma seperated lat/long pair). Also see radius
+  --has-location: oneof<nothing, bool> # Restrict results to contributions which have a publicly visible location.
+  --lat-long: string # Limit results to contributions with location near this latitude and longitude (comma seperated lat/long pair). Also see radius
   --radius: float # When limiting result by location with the latLong parameter, specify the radius in kilometers. (format: double)
-  --mediaType: string # Restrict results to contributions which include a media file of the given type (ie. image / video)
-  --ownedBy: string # Restrict results to contributions which are fall under the jurisdiction by this user.
+  --media-type: string # Restrict results to contributions which include a media file of the given type (ie. image / video)
+  --owned-by: string # Restrict results to contributions which are fall under the jurisdiction by this user.
   --q: string # Restrict results to contributions whose headline text matches this keyword.
-  --urlWords: string # Locate a specific contribution by URL words
+  --url-words: string # Locate a specific contribution by URL words
   --user: string # Restrict results to contributions by this user identified by id.
   --ids: string # Restrict results to a list of specific contributions identified by a comma seperated list of ids.
   --format: string # Select output format. 'json' or 'rss'. Defaults to JSON.
 ]: nothing -> table<assignment: record<allowsAnonymousContributions: bool, callToAction: string, cover: record, created: string, description: string, embargo: string, ends: string, featured: bool, id: string, mediaRequired: bool, moderator: string, name: string, open: bool, receiptMessage: string, starts: string, tags: list, urlWords: string, webUrl: string>, attribution: string, body: string, created: string, headline: string, id: string, mediaUsages: list<record>, moderationHistory: list<record>, place: record<country: string, geohash: string, google: string, latLong: record, name: string, osm: record>, urlWords: string, via: record<authority: record, ipAddress: string, ipAddressPlace: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "assignment" $assignment "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "createdBefore" $createdBefore "scalar") (serialize-qp "createdAfter" $createdAfter "scalar") (serialize-qp "createdDay" $createdDay "scalar") (serialize-qp "createdMonth" $createdMonth "scalar") (serialize-qp "geohash" $geohash "scalar") (serialize-qp "hasLocation" $hasLocation "scalar") (serialize-qp "latLong" $latLong "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "mediaType" $mediaType "scalar") (serialize-qp "ownedBy" $ownedBy "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "urlWords" $urlWords "scalar") (serialize-qp "user" $user "scalar") (serialize-qp "ids" $ids "scalar") (serialize-qp "format" $format "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "assignment" $assignment "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "createdBefore" $created_before "scalar") (serialize-qp "createdAfter" $created_after "scalar") (serialize-qp "createdDay" $created_day "scalar") (serialize-qp "createdMonth" $created_month "scalar") (serialize-qp "geohash" $geohash "scalar") (serialize-qp "hasLocation" $has_location "scalar") (serialize-qp "latLong" $lat_long "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "mediaType" $media_type "scalar") (serialize-qp "ownedBy" $owned_by "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "urlWords" $url_words "scalar") (serialize-qp "user" $user "scalar") (serialize-qp "ids" $ids "scalar") (serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/contributions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Create a new contribution
@@ -351,7 +371,7 @@ export def "contributions list" [
 # --moderationHistory item shape: {action?: record, date: string, notes?: string}
 # --place shape: {country?: string, geohash?: string, google?: string, latLong?: record, name?: string, osm?: record}
 # --via shape: {authority?: record, ipAddress?: string, ipAddressPlace?: record}
-export def "contributions post" [
+export def "contributions create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -359,28 +379,29 @@ export def "contributions post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --assignment: record # shape: {allowsAnonymousContributions?: bool, callToAction?: string, cover?: record, created?: string, description?: string, embargo?: string, ends?: string, featured?: bool, id?: string, mediaRequired?: bool, moderator?: string, name?: string, open?: bool, receiptMessage?: string, starts?: string, tags?: list, urlWords?: string, webUrl?: string}
   --attribution: string # The public attribution for this contribution. This will be the display name of the registered user or the contributor's first and last name if they provided them while making a non authenticated contribution. A blank attribution field indicates and anonymous contribution.
-  --body-body: string
+  --body: string
   --created: string # format: date-time
   --headline: string
   --id: string
-  --mediaUsages: list # item shape: {artifacts?: list, id?: string, media?: record}
-  --moderationHistory: list # item shape: {action?: record, date: string, notes?: string}
+  --media-usages: list # item shape: {artifacts?: list, id?: string, media?: record}
+  --moderation-history: list # item shape: {action?: record, date: string, notes?: string}
   --place: record # shape: {country?: string, geohash?: string, google?: string, latLong?: record, name?: string, osm?: record}
-  --urlWords: string
+  --url-words: string
   --via: record # shape: {authority?: record, ipAddress?: string, ipAddressPlace?: record}
 ]: any -> record<assignment: record<allowsAnonymousContributions: bool, callToAction: string, cover: record<artifacts: list, id: string, media: record>, created: string, description: string, embargo: string, ends: string, featured: bool, id: string, mediaRequired: bool, moderator: string, name: string, open: bool, receiptMessage: string, starts: string, tags: list<record>, urlWords: string, webUrl: string>, attribution: string, body: string, created: string, headline: string, id: string, mediaUsages: table<artifacts: list, id: string, media: record>, moderationHistory: table<action: record, date: string, notes: string>, place: record<country: string, geohash: string, google: string, latLong: record<latitude: float, longitude: float>, name: string, osm: record<osmId: float, osmType: string>>, urlWords: string, via: record<authority: record<client: record, id: string, user: record>, ipAddress: string, ipAddressPlace: record<country: string, geohash: string, google: string, latLong: record, name: string, osm: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/contributions")
-  let body = {assignment: $assignment, attribution: $attribution, body: $body_body, created: $created, headline: $headline, id: $id, mediaUsages: $mediaUsages, moderationHistory: $moderationHistory, place: $place, urlWords: $urlWords, via: $via} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"assignment": $assignment, "attribution": $attribution, "body": $body, "created": $created, "headline": $headline, "id": $id, "mediaUsages": $media_usages, "moderationHistory": $moderation_history, "place": $place, "urlWords": $url_words, "via": $via} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Delete this contribution
@@ -395,14 +416,15 @@ export def "contributions delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<assignment: record<allowsAnonymousContributions: bool, callToAction: string, cover: record<artifacts: list, id: string, media: record>, created: string, description: string, embargo: string, ends: string, featured: bool, id: string, mediaRequired: bool, moderator: string, name: string, open: bool, receiptMessage: string, starts: string, tags: list<record>, urlWords: string, webUrl: string>, attribution: string, body: string, created: string, headline: string, id: string, mediaUsages: table<artifacts: list, id: string, media: record>, moderationHistory: table<action: record, date: string, notes: string>, place: record<country: string, geohash: string, google: string, latLong: record<latitude: float, longitude: float>, name: string, osm: record<osmId: float, osmType: string>>, urlWords: string, via: record<authority: record<client: record, id: string, user: record>, ipAddress: string, ipAddressPlace: record<country: string, geohash: string, google: string, latLong: record, name: string, osm: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/contributions/($id)")
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/contributions/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get a single contribution by id
@@ -417,20 +439,21 @@ export def "contributions get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<assignment: record<allowsAnonymousContributions: bool, callToAction: string, cover: record<artifacts: list, id: string, media: record>, created: string, description: string, embargo: string, ends: string, featured: bool, id: string, mediaRequired: bool, moderator: string, name: string, open: bool, receiptMessage: string, starts: string, tags: list<record>, urlWords: string, webUrl: string>, attribution: string, body: string, created: string, headline: string, id: string, mediaUsages: table<artifacts: list, id: string, media: record>, moderationHistory: table<action: record, date: string, notes: string>, place: record<country: string, geohash: string, google: string, latLong: record<latitude: float, longitude: float>, name: string, osm: record<osmId: float, osmType: string>>, urlWords: string, via: record<authority: record<client: record, id: string, user: record>, ipAddress: string, ipAddressPlace: record<country: string, geohash: string, google: string, latLong: record, name: string, osm: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/contributions/($id)")
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/contributions/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Raise a flag against this contribution
 #
 # POST /contributions/{id}/flag
-export def "contributions-flag post" [
+export def "contributions-flag create" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -439,6 +462,7 @@ export def "contributions-flag post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --date: string # format: date-time
   --email: string
@@ -449,18 +473,18 @@ export def "contributions-flag post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/contributions/($id)/flag")
-  let body = {date: $date, email: $email, id: $body_id, notes: $notes, type: $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/contributions/{id}/flag"))
+  let req_body = {"date": $date, "email": $email, "id": $body_id, "notes": $notes, "type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Allows a user to mark a contribution as liked
 #
 # POST /contributions/{id}/like
-export def "contributions-like post" [
+export def "contributions-like create" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -469,14 +493,15 @@ export def "contributions-like post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> float {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/contributions/($id)/like")
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/contributions/{id}/like"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # List users who have liked this contributions
@@ -491,21 +516,22 @@ export def "contributions-likes get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/contributions/($id)/likes")
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/contributions/{id}/likes"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Perform a moderation action on this contribution
 #
 # POST /contributions/{id}/moderate
 # --action shape: {id: string, label: string, resultingState: record}
-export def "contributions-moderate post" [
+export def "contributions-moderate create" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -514,6 +540,7 @@ export def "contributions-moderate post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --action: record # shape: {id: string, label: string, resultingState: record}
   --notes: string
@@ -521,12 +548,12 @@ export def "contributions-moderate post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/contributions/($id)/moderate")
-  let body = {action: $action, notes: $notes} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/contributions/{id}/moderate"))
+  let req_body = {"action": $action, "notes": $notes} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # List the credentials associated with the authenticated user.
@@ -540,6 +567,7 @@ export def "credentials get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<scopes: list<string>, type: string, user: string, value: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -547,7 +575,7 @@ export def "credentials get" [
   let full_url = (build-url $base "/credentials")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Event types
@@ -561,6 +589,7 @@ export def "event-types get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<id: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -568,13 +597,13 @@ export def "event-types get" [
   let full_url = (build-url $base "/event-types")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Export contributions.
 #
 # POST /export
-export def "export post" [
+export def "export create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -582,19 +611,20 @@ export def "export post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --assignment: string # Restrict results to contributions submitted to this assignment.
   --country: string # Limit results to contributions which have a publicly visible location within the given country (specified by two letter country code).
-  --createdBefore: string # Limit results to contributions created before this date time. (format: date-time)
-  --createdAfter: string # Limit results to contributions created after this date time. (format: date-time)
+  --created-before: string # Limit results to contributions created before this date time. (format: date-time)
+  --created-after: string # Limit results to contributions created after this date time. (format: date-time)
   --geohash: string # Restrict results to contributions which have specified a location which falls within this geohash (or comma seperated list of multiple geohashes)
-  --hasLocation: oneof<nothing, bool> # Restrict results to contributions which have a publicly visible location.
-  --latLong: string # Limit results to contributions with location near this latitude and longitude (comma seperated lat/long pair). Also see radius
+  --has-location: oneof<nothing, bool> # Restrict results to contributions which have a publicly visible location.
+  --lat-long: string # Limit results to contributions with location near this latitude and longitude (comma seperated lat/long pair). Also see radius
   --radius: float # When limiting result by location with the latLong parameter, specify the radius in kilometers. (format: double)
-  --mediaType: string # Restrict results to contributions which include a media file of the given type (ie. image / video)
-  --ownedBy: string # Restrict results to contributions which are fall under the jurisdiction by this user.
+  --media-type: string # Restrict results to contributions which include a media file of the given type (ie. image / video)
+  --owned-by: string # Restrict results to contributions which are fall under the jurisdiction by this user.
   --q: string # Restrict results to contributions whose headline text matches this keyword.
-  --urlWords: string # Locate a specific contribution by URL words
+  --url-words: string # Locate a specific contribution by URL words
   --user: string # Restrict results to contributions by this user identified by id.
   --tagged: oneof<nothing, bool> # Should exported media files be tagged with metadata. Deprecated; use format instead.
   --combined: oneof<nothing, bool> # Included a combined file with all contribution text.
@@ -604,17 +634,17 @@ export def "export post" [
 ]: nothing -> record<downloadUrl: string, finished: string, id: string, owner: string, progress: float, started: string, step: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "assignment" $assignment "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "createdBefore" $createdBefore "scalar") (serialize-qp "createdAfter" $createdAfter "scalar") (serialize-qp "geohash" $geohash "scalar") (serialize-qp "hasLocation" $hasLocation "scalar") (serialize-qp "latLong" $latLong "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "mediaType" $mediaType "scalar") (serialize-qp "ownedBy" $ownedBy "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "urlWords" $urlWords "scalar") (serialize-qp "user" $user "scalar") (serialize-qp "tagged" $tagged "scalar") (serialize-qp "combined" $combined "scalar") (serialize-qp "individual" $individual "scalar") (serialize-qp "format" $format "scalar") (serialize-qp "json" $json "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "assignment" $assignment "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "createdBefore" $created_before "scalar") (serialize-qp "createdAfter" $created_after "scalar") (serialize-qp "geohash" $geohash "scalar") (serialize-qp "hasLocation" $has_location "scalar") (serialize-qp "latLong" $lat_long "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "mediaType" $media_type "scalar") (serialize-qp "ownedBy" $owned_by "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "urlWords" $url_words "scalar") (serialize-qp "user" $user "scalar") (serialize-qp "tagged" $tagged "scalar") (serialize-qp "combined" $combined "scalar") (serialize-qp "individual" $individual "scalar") (serialize-qp "format" $format "scalar") (serialize-qp "json" $json "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/export" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Export contributions preflight summary.
 #
 # POST /export-summary
-export def "export-summary post" [
+export def "export-summary create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -622,28 +652,29 @@ export def "export-summary post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --assignment: string # Restrict results to contributions submitted to this assignment.
   --country: string # Limit results to contributions which have a publicly visible location within the given country (specified by two letter country code).
-  --createdBefore: string # Limit results to contributions created before this date time. (format: date-time)
-  --createdAfter: string # Limit results to contributions created after this date time. (format: date-time)
+  --created-before: string # Limit results to contributions created before this date time. (format: date-time)
+  --created-after: string # Limit results to contributions created after this date time. (format: date-time)
   --geohash: string # Restrict results to contributions which have specified a location which falls within this geohash (or comma seperated list of multiple geohashes)
-  --hasLocation: oneof<nothing, bool> # Restrict results to contributions which have a publicly visible location.
-  --latLong: string # Limit results to contributions with location near this latitude and longitude (comma seperated lat/long pair). Also see radius
+  --has-location: oneof<nothing, bool> # Restrict results to contributions which have a publicly visible location.
+  --lat-long: string # Limit results to contributions with location near this latitude and longitude (comma seperated lat/long pair). Also see radius
   --radius: float # When limiting result by location with the latLong parameter, specify the radius in kilometers. (format: double)
-  --mediaType: string # Restrict results to contributions which include a media file of the given type (ie. image / video)
-  --ownedBy: string # Restrict results to contributions which are fall under the jurisdiction by this user.
+  --media-type: string # Restrict results to contributions which include a media file of the given type (ie. image / video)
+  --owned-by: string # Restrict results to contributions which are fall under the jurisdiction by this user.
   --q: string # Restrict results to contributions whose headline text matches this keyword.
-  --urlWords: string # Locate a specific contribution by URL words
+  --url-words: string # Locate a specific contribution by URL words
   --user: string # Restrict results to contributions by this user identified by id.
 ]: nothing -> record<contributions: float, estimatedSize: string, media: float, totalMediaSize: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "assignment" $assignment "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "createdBefore" $createdBefore "scalar") (serialize-qp "createdAfter" $createdAfter "scalar") (serialize-qp "geohash" $geohash "scalar") (serialize-qp "hasLocation" $hasLocation "scalar") (serialize-qp "latLong" $latLong "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "mediaType" $mediaType "scalar") (serialize-qp "ownedBy" $ownedBy "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "urlWords" $urlWords "scalar") (serialize-qp "user" $user "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "assignment" $assignment "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "createdBefore" $created_before "scalar") (serialize-qp "createdAfter" $created_after "scalar") (serialize-qp "geohash" $geohash "scalar") (serialize-qp "hasLocation" $has_location "scalar") (serialize-qp "latLong" $lat_long "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "mediaType" $media_type "scalar") (serialize-qp "ownedBy" $owned_by "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "urlWords" $url_words "scalar") (serialize-qp "user" $user "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/export-summary" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get a single export job; poll to follow export progress.
@@ -658,14 +689,15 @@ export def "exports get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<downloadUrl: string, finished: string, id: string, owner: string, progress: float, started: string, step: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/exports/($id)")
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/exports/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # List form responses
@@ -679,6 +711,7 @@ export def "form-responses list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --user: string # Restrict results to responses submitted by this user.
   --form: string # Restrict results to responses submitted to this form.
@@ -690,13 +723,13 @@ export def "form-responses list" [
   let full_url = (build-url $base "/form-responses" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Submit a response to a form
 #
 # POST /form-responses
-export def "form-responses post" [
+export def "form-responses create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -704,6 +737,7 @@ export def "form-responses post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --contribution: string
   --form: string
@@ -713,11 +747,11 @@ export def "form-responses post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/form-responses")
-  let body = {contribution: $contribution, form: $form, responses: $responses} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"contribution": $contribution, "form": $form, "responses": $responses} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Get a single form response by id
@@ -732,14 +766,15 @@ export def "form-responses get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<contribution: string, date: string, form: string, id: string, responses: record, user: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/form-responses/($id)")
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/form-responses/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # List forms
@@ -753,24 +788,25 @@ export def "forms list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ownedBy: string # Restrict results to forms owned by this user.
+  --owned-by: string # Restrict results to forms owned by this user.
 ]: nothing -> table<callToAction: string, cssUrl: string, fields: list<record>, heading: string, id: string, name: string, noCss: bool, ownedBy: string, tags: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "ownedBy" $ownedBy "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "ownedBy" $owned_by "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/forms" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Create a form
 #
 # POST /forms
-# --fields item shape: {description?: string, label?: string, name?: string, options?: list, public?: bool, required?: bool, type?: string}
+# --fields item shape: {description?: string, label?: string, name?: string, options?: list<string>, public?: bool, required?: bool, type?: string}
 # --tags item shape: {colour?: string, id: string, name: string, tagSet?: record, urlWords?: string}
-export def "forms post" [
+export def "forms create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -778,24 +814,25 @@ export def "forms post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --callToAction: string
-  --cssUrl: string
-  --fields: list # item shape: {description?: string, label?: string, name?: string, options?: list, public?: bool, required?: bool, type?: string}
+  --call-to-action: string
+  --css-url: string
+  --fields: list # item shape: {description?: string, label?: string, name?: string, options?: list<string>, public?: bool, required?: bool, type?: string}
   --heading: string
   --name: string
-  --noCss: oneof<nothing, bool>
+  --no-css: oneof<nothing, bool>
   --tags: list # item shape: {colour?: string, id: string, name: string, tagSet?: record, urlWords?: string}
 ]: any -> record<callToAction: string, cssUrl: string, fields: table<description: string, label: string, name: string, options: list, public: bool, required: bool, type: string>, heading: string, id: string, name: string, noCss: bool, ownedBy: string, tags: table<colour: string, id: string, name: string, tagSet: record, urlWords: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/forms")
-  let body = {callToAction: $callToAction, cssUrl: $cssUrl, fields: $fields, heading: $heading, name: $name, noCss: $noCss, tags: $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"callToAction": $call_to_action, "cssUrl": $css_url, "fields": $fields, "heading": $heading, "name": $name, "noCss": $no_css, "tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Delete this form and all of it's responses.
@@ -810,14 +847,15 @@ export def "forms delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/forms/($id)")
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/forms/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get a single form by id
@@ -832,20 +870,21 @@ export def "forms get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<callToAction: string, cssUrl: string, fields: table<description: string, label: string, name: string, options: list, public: bool, required: bool, type: string>, heading: string, id: string, name: string, noCss: bool, ownedBy: string, tags: table<colour: string, id: string, name: string, tagSet: record, urlWords: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/forms/($id)")
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/forms/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Submit a new media file
 #
 # POST /media
-export def "media post" [
+export def "media create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -853,17 +892,19 @@ export def "media post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body: record
+  --body: string
 ]: any -> record<duration: float, id: string, place: record<country: string, geohash: string, google: string, latLong: record<latitude: float, longitude: float>, name: string, osm: record<osmId: float, osmType: string>>, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/media")
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # GET /notifications/contributions/{id}/preview
@@ -876,16 +917,17 @@ export def "notifications-contributions-preview get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --message: string # Type of message to preview.
 ]: nothing -> record<email: string, html: string, subject: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "message" $message "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/notifications/contributions/($id)/preview" $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/notifications/contributions/{id}/preview") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Scopes
@@ -899,6 +941,7 @@ export def "scopes get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -906,7 +949,7 @@ export def "scopes get" [
   let full_url = (build-url $base "/scopes")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Subscription types
@@ -920,6 +963,7 @@ export def "subscription-types get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<id: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -927,7 +971,7 @@ export def "subscription-types get" [
   let full_url = (build-url $base "/subscription-types")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # List subscriptions for the authorised user.
@@ -941,23 +985,24 @@ export def "subscriptions get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --assignment: string
   --email: string
-  --includeBody: oneof<nothing, bool>
-  --includeThumbenail: oneof<nothing, bool>
-  --slackChannel: string
-  types: list
+  --include-body: oneof<nothing, bool>
+  --include-thumbenail: oneof<nothing, bool>
+  --slack-channel: string
+  types: list<string>
 ]: any -> table<assignment: string, email: string, id: string, includeBody: bool, includeThumbenail: bool, slackChannel: string, token: string, types: list<string>, user: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/subscriptions")
-  let body = {assignment: $assignment, email: $email, includeBody: $includeBody, includeThumbenail: $includeThumbenail, slackChannel: $slackChannel, types: $types} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"assignment": $assignment, "email": $email, "includeBody": $include_body, "includeThumbenail": $include_thumbenail, "slackChannel": $slack_channel, "types": $types} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Delete a subscription.
@@ -972,14 +1017,15 @@ export def "subscriptions delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/subscriptions/($id)")
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/subscriptions/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # List tags
@@ -993,25 +1039,26 @@ export def "tags list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ownedBy: string # Restrict results to those owned by this user.
-  --tagSet: string # Restrict results to tags belonging to this tag set.
-  --urlWords: string # Restrict results by urlWords. Should be used with ownedBy when searching for one of your own tags.
+  --owned-by: string # Restrict results to those owned by this user.
+  --tag-set: string # Restrict results to tags belonging to this tag set.
+  --url-words: string # Restrict results by urlWords. Should be used with ownedBy when searching for one of your own tags.
 ]: nothing -> table<colour: string, id: string, name: string, tagSet: record<id: string, name: string>, urlWords: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "ownedBy" $ownedBy "scalar") (serialize-qp "tagSet" $tagSet "scalar") (serialize-qp "urlWords" $urlWords "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "ownedBy" $owned_by "scalar") (serialize-qp "tagSet" $tag_set "scalar") (serialize-qp "urlWords" $url_words "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/tags" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Create a new tag
 #
 # POST /tags
 # --tagSet shape: {id: string, name: string}
-export def "tags post" [
+export def "tags create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1019,21 +1066,22 @@ export def "tags post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --colour: string
   name: string
-  --tagSet: record # shape: {id: string, name: string}
-  --urlWords: string
+  --tag-set: record # shape: {id: string, name: string}
+  --url-words: string
 ]: any -> record<colour: string, id: string, name: string, tagSet: record<id: string, name: string>, urlWords: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/tags")
-  let body = {colour: $colour, name: $name, tagSet: $tagSet, urlWords: $urlWords} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"colour": $colour, "name": $name, "tagSet": $tag_set, "urlWords": $url_words} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Retrieve a single tag by id
@@ -1048,14 +1096,15 @@ export def "tags get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<colour: string, id: string, name: string, tagSet: record<id: string, name: string>, urlWords: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/tags/($id)")
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/tags/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # List tag sets
@@ -1069,23 +1118,24 @@ export def "tagsets list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ownedBy: string # Restrict results to those owned by this user.
-  --urlWords: string # Restrict results by urlWords. Should be used with ownedBy when searching for one of your own tag sets.
+  --owned-by: string # Restrict results to those owned by this user.
+  --url-words: string # Restrict results by urlWords. Should be used with ownedBy when searching for one of your own tag sets.
 ]: nothing -> table<id: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "ownedBy" $ownedBy "scalar") (serialize-qp "urlWords" $urlWords "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "ownedBy" $owned_by "scalar") (serialize-qp "urlWords" $url_words "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/tagsets" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Create a new tag set
 #
 # POST /tagsets
-export def "tagsets post" [
+export def "tagsets create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1093,19 +1143,20 @@ export def "tagsets post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   name: string
-  urlWords: string
+  url_words: string
 ]: any -> record<id: string, name: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/tagsets")
-  let body = {name: $name, urlWords: $urlWords} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"name": $name, "urlWords": $url_words} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Retrieve a single tag set by id
@@ -1120,14 +1171,15 @@ export def "tagsets get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/tagsets/($id)")
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/tagsets/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # List users
@@ -1141,23 +1193,24 @@ export def "users list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --assignment: string # Restrict results to the users who have contributed to this assignment.
   --country: string # Restrict results to the users who have submitted a contribution with a public location located within this country.
-  --minimumContributions: float # Restrict results to the users who have submitted at least this many contributions.
-  --linkedProfile: string # Restrict results to the users who a linked profile of this type.
-  --ownedBy: string # Restrict results to the users who are owned by of this owner.
-  --submittedBefore: string # Limit results to users who have submitted at least one contribution before this date time. (format: date-time)
-  --submittedAfter: string # Limit results to users who have submitted at least one contribution after this date time. (format: date-time)
+  --minimum-contributions: float # Restrict results to the users who have submitted at least this many contributions.
+  --linked-profile: string # Restrict results to the users who a linked profile of this type.
+  --owned-by: string # Restrict results to the users who are owned by of this owner.
+  --submitted-before: string # Limit results to users who have submitted at least one contribution before this date time. (format: date-time)
+  --submitted-after: string # Limit results to users who have submitted at least one contribution after this date time. (format: date-time)
   --username: string # Restrict results to the user with this username.
 ]: nothing -> table<bio: string, displayName: string, id: string, registered: string, username: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "assignment" $assignment "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "minimumContributions" $minimumContributions "scalar") (serialize-qp "linkedProfile" $linkedProfile "scalar") (serialize-qp "ownedBy" $ownedBy "scalar") (serialize-qp "submittedBefore" $submittedBefore "scalar") (serialize-qp "submittedAfter" $submittedAfter "scalar") (serialize-qp "username" $username "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "assignment" $assignment "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "minimumContributions" $minimum_contributions "scalar") (serialize-qp "linkedProfile" $linked_profile "scalar") (serialize-qp "ownedBy" $owned_by "scalar") (serialize-qp "submittedBefore" $submitted_before "scalar") (serialize-qp "submittedAfter" $submitted_after "scalar") (serialize-qp "username" $username "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/users" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Retrieve a single user by id
@@ -1172,14 +1225,15 @@ export def "users get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<bio: string, displayName: string, id: string, registered: string, username: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($id)")
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/users/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Retrieve a users linked profile by type
@@ -1195,20 +1249,21 @@ export def "users-linked get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<bio: string, email: string, id: string, name: string, picture: string, profile: string, registered: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($id)/linked/($type)")
+  let full_url = (build-url $base ({id: (encode-path-segment $id), type: (encode-path-segment $type)} | format pattern "/users/{id}/linked/{type}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Verify token and return details of the owning user
 #
 # POST /verify
-export def "verify post" [
+export def "verify create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1216,6 +1271,7 @@ export def "verify post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<client: record<id: string, name: string>, id: string, user: record<bio: string, displayName: string, id: string, registered: string, username: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1223,5 +1279,5 @@ export def "verify post" [
   let full_url = (build-url $base "/verify")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }

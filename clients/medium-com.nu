@@ -19,21 +19,32 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 }
 
 # Serialize a single query parameter based on collection style
+# Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
+# ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = ($name | url encode)
+  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
-  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
-    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
-    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
+    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
+    _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
+}
+
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Build URL from base, path, and optional query string
@@ -45,7 +56,7 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
@@ -54,13 +65,13 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
     "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "put" => { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "patch" => { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
   if ($method in ["head" "options"]) { return $resp }
-  if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
+  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
 def base-url-completer [] { ["https://medium2.p.rapidapi.com"] }
@@ -69,7 +80,7 @@ def auth-scheme-completer [] { ["x-rapidapi-host" "x-rapidapi-key"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "welcome get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -101,6 +112,7 @@ export def "welcome get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<developer: string, documentation: string, email: string, linkedin: string, name: string, twitter: string, website: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-host"))
@@ -108,7 +120,7 @@ export def "welcome get" [
   let full_url = (build-url $base "/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get Article Info
@@ -123,14 +135,15 @@ export def "article get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<author: string, claps: int, id: string, image_url: string, is_locked: bool, is_series: bool, lang: string, last_modified_at: string, publication_id: string, published_at: string, reading_time: float, responses_count: int, subtitle: string, tags: list<string>, title: string, topics: list<string>, url: string, voters: int, word_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-host"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/article/($article_id)")
+  let full_url = (build-url $base ({article_id: (encode-path-segment $article_id)} | format pattern "/article/{article_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get Article's Content
@@ -145,14 +158,15 @@ export def "article-content get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<content: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-host"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/article/($article_id)/content")
+  let full_url = (build-url $base ({article_id: (encode-path-segment $article_id)} | format pattern "/article/{article_id}/content"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get Article Fans
@@ -167,14 +181,15 @@ export def "article-fans get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<article_id: string, count: int, voters: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-host"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/article/($article_id)/fans")
+  let full_url = (build-url $base ({article_id: (encode-path-segment $article_id)} | format pattern "/article/{article_id}/fans"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get Article's Markdown
@@ -189,14 +204,15 @@ export def "article-markdown get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<markdown: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-host"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/article/($article_id)/markdown")
+  let full_url = (build-url $base ({article_id: (encode-path-segment $article_id)} | format pattern "/article/{article_id}/markdown"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get Related Articles
@@ -211,14 +227,15 @@ export def "article-related get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, related_articles: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-host"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/article/($article_id)/related")
+  let full_url = (build-url $base ({article_id: (encode-path-segment $article_id)} | format pattern "/article/{article_id}/related"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get Article Responses
@@ -233,14 +250,15 @@ export def "article-responses get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, responses: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-host"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/article/($article_id)/responses")
+  let full_url = (build-url $base ({article_id: (encode-path-segment $article_id)} | format pattern "/article/{article_id}/responses"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get Latest Posts
@@ -255,14 +273,15 @@ export def "latestposts get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<latestposts: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-host"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/latestposts/($topic_slug)")
+  let full_url = (build-url $base ({topic_slug: (encode-path-segment $topic_slug)} | format pattern "/latestposts/{topic_slug}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get List Info
@@ -277,14 +296,15 @@ export def "list get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<author: string, claps: int, count: int, created_at: string, description: string, id: string, last_item_inserted_at: string, name: string, responses_count: int, thumbnail: string, voters: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-host"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/list/($list_id)")
+  let full_url = (build-url $base ({list_id: (encode-path-segment $list_id)} | format pattern "/list/{list_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get List Articles
@@ -299,14 +319,15 @@ export def "list-articles get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, list_articles: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-host"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/list/($list_id)/articles")
+  let full_url = (build-url $base ({list_id: (encode-path-segment $list_id)} | format pattern "/list/{list_id}/articles"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get List Responses
@@ -321,14 +342,15 @@ export def "list-responses get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, responses: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-host"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/list/($list_id)/responses")
+  let full_url = (build-url $base ({list_id: (encode-path-segment $list_id)} | format pattern "/list/{list_id}/responses"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get Publication ID
@@ -343,14 +365,15 @@ export def "publication-id-for get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<publication_id: string, publication_slug: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-host"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/publication/id_for/($publication_slug)")
+  let full_url = (build-url $base ({publication_slug: (encode-path-segment $publication_slug)} | format pattern "/publication/id_for/{publication_slug}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get Publication Info
@@ -365,14 +388,15 @@ export def "publication get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<creator: string, description: string, editors: list<string>, facebook_pagename: string, followers: int, id: string, instagram_username: string, name: string, slug: string, tagline: string, tags: list<string>, twitter_username: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-host"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/publication/($publication_id)")
+  let full_url = (build-url $base ({publication_id: (encode-path-segment $publication_id)} | format pattern "/publication/{publication_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get Publication Articles
@@ -387,16 +411,17 @@ export def "publication-articles get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --qp-from: string # To get the articles before specified date and time. (e.g. 2023-01-31T13:10:00)
 ]: nothing -> record<publication_articles: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-host"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "from" $qp_from "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/publication/($publication_id)/articles" $qp)
+  let full_url = (build-url $base ({publication_id: (encode-path-segment $publication_id)} | format pattern "/publication/{publication_id}/articles") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get Publication Newsletter
@@ -411,14 +436,15 @@ export def "publication-newsletter get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<creator_id: string, description: string, id: string, image: string, name: string, slug: string, subscribers: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-host"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/publication/($publication_id)/newsletter")
+  let full_url = (build-url $base ({publication_id: (encode-path-segment $publication_id)} | format pattern "/publication/{publication_id}/newsletter"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get Related Tags
@@ -433,14 +459,15 @@ export def "related-tags get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<given_tag: string, related_tags: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-host"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/related_tags/($tag)")
+  let full_url = (build-url $base ({tag: (encode-path-segment $tag)} | format pattern "/related_tags/{tag}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Search Articles
@@ -455,16 +482,17 @@ export def "search-articles-query-query get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --query: string # Search query (e.g. startup)
 ]: nothing -> record<articles: list<string>, search_query: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-host"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/search/articles?query=($query)" $qp)
+  let full_url = (build-url $base ({query: (encode-path-segment $query)} | format pattern "/search/articles?query={query}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Search Lists
@@ -479,16 +507,17 @@ export def "search-lists-query-query get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --query: string # Search query (e.g. artificial intelligence)
 ]: nothing -> record<lists: list<string>, search_query: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-host"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/search/lists?query=($query)" $qp)
+  let full_url = (build-url $base ({query: (encode-path-segment $query)} | format pattern "/search/lists?query={query}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Search Publications
@@ -503,16 +532,17 @@ export def "search-publications-query-query get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --query: string # Search query (e.g. mental health)
 ]: nothing -> record<publications: list<string>, search_query: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-host"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/search/publications?query=($query)" $qp)
+  let full_url = (build-url $base ({query: (encode-path-segment $query)} | format pattern "/search/publications?query={query}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Search Tags
@@ -527,16 +557,17 @@ export def "search-tags-query-query get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --query: string # Search query (e.g. blockchain)
 ]: nothing -> record<search_query: string, tags: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-host"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/search/tags?query=($query)" $qp)
+  let full_url = (build-url $base ({query: (encode-path-segment $query)} | format pattern "/search/tags?query={query}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Search Users
@@ -551,16 +582,17 @@ export def "search-users-query-query get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --query: string # Search query (e.g. data engineer)
 ]: nothing -> record<search_query: string, users: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-host"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/search/users?query=($query)" $qp)
+  let full_url = (build-url $base ({query: (encode-path-segment $query)} | format pattern "/search/users?query={query}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get Top Writers
@@ -575,16 +607,17 @@ export def "top-writer get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --count: int # Limits the number of `article_ids` in the result. (e.g. 10)
 ]: nothing -> record<top_writers: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-host"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "count" $count "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/top_writer/($topic_slug)" $qp)
+  let full_url = (build-url $base ({topic_slug: (encode-path-segment $topic_slug)} | format pattern "/top_writer/{topic_slug}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get Topfeeds
@@ -600,17 +633,18 @@ export def "topfeeds get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --after: int # To get the subsequent top feeds. (`after` &lt; 250) (default: 0, e.g. 10)
-  --count: int # To limit the number of top feeds. (`count` &lt; 25) (default: 25, e.g. 20)
+  --after: int # To get the subsequent top feeds. (`after` < 250) (default: 0, e.g. 10)
+  --count: int # To limit the number of top feeds. (`count` < 25) (default: 25, e.g. 20)
 ]: nothing -> record<topfeeds: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-host"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "after" $after "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/topfeeds/($tag)/($mode)" $qp)
+  let full_url = (build-url $base ({tag: (encode-path-segment $tag), mode: (encode-path-segment $mode)} | format pattern "/topfeeds/{tag}/{mode}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get User ID
@@ -625,14 +659,15 @@ export def "user-id-for get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-host"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/user/id_for/($username)")
+  let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/user/id_for/{username}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get User Info
@@ -647,14 +682,15 @@ export def "user get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<allow_notes: bool, bio: string, followers_count: int, following_count: int, fullname: string, has_list: bool, id: string, image_url: string, is_book_author: bool, is_suspended: bool, is_writer_program_enrolled: bool, medium_member_at: string, top_writer_in: list<string>, twitter_username: string, username: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-host"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/user/($user_id)")
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/user/{user_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get User's Articles
@@ -669,14 +705,15 @@ export def "user-articles get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<associated_articles: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-host"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/user/($user_id)/articles")
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/user/{user_id}/articles"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get User Followers
@@ -691,16 +728,17 @@ export def "user-followers get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --count: int # To limit the number of results. (count &lt; 1500) (e.g. 10)
+  --count: int # To limit the number of results. (count < 1500) (e.g. 10)
 ]: nothing -> record<followers: list<string>, id: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-host"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "count" $count "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/user/($user_id)/followers" $qp)
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/user/{user_id}/followers") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get User Following
@@ -715,16 +753,17 @@ export def "user-following get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --count: int # To limit the number of results. (count &lt; 1500) (e.g. 10)
+  --count: int # To limit the number of results. (count < 1500) (e.g. 10)
 ]: nothing -> record<following: list<string>, id: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-host"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "count" $count "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/user/($user_id)/following" $qp)
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/user/{user_id}/following") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get User's Interests
@@ -739,14 +778,15 @@ export def "user-interests get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<tags_followed: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-host"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/user/($user_id)/interests")
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/user/{user_id}/interests"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get User's Lists
@@ -761,14 +801,15 @@ export def "user-lists get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<lists: list<string>, user_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-host"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/user/($user_id)/lists")
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/user/{user_id}/lists"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get User's Publications
@@ -783,14 +824,15 @@ export def "user-publications get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<publications: list<string>, user_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-host"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/user/($user_id)/publications")
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/user/{user_id}/publications"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get User's Top Articles
@@ -805,12 +847,13 @@ export def "user-top-articles get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<associated_articles: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-host"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/user/($user_id)/top_articles")
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/user/{user_id}/top_articles"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }

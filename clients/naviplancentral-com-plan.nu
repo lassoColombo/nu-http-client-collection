@@ -17,21 +17,32 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 }
 
 # Serialize a single query parameter based on collection style
+# Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
+# ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = ($name | url encode)
+  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
-  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
-    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
-    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
+    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
+    _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
+}
+
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Build URL from base, path, and optional query string
@@ -43,7 +54,7 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
@@ -52,13 +63,13 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
     "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "put" => { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "patch" => { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
   if ($method in ["head" "options"]) { return $resp }
-  if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
+  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
 def base-url-completer [] { ["https://demo.uat.naviplancentral.com/plan" "http://demo.uat.naviplancentral.com/plan"] }
@@ -69,8 +80,8 @@ def accept-completer [] { ["application/json" "text/json"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "advisors Get" } } | get name | first)
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "advisors get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -94,7 +105,7 @@ export def commands []: nothing -> table {
 #
 # GET /api/Advisors
 # operationId: Advisors_Get
-export def "advisors Get" [
+export def "advisors get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -102,6 +113,7 @@ export def "advisors Get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<advisors: table<addressLine1: string, addressLine2: string, advisorId: string, advisorTitle: string, businessPhone: string, cellPhone: string, city: string, emailAddress: string, faxPhone: string, firstName: string, homePhone: string, lastName: string, links: list, middleName: string, officeName: string, officeWebsite: string, pagerNumber: string, postalCode: string, stateProvince: string>> {
@@ -110,16 +122,16 @@ export def "advisors Get" [
   let full_url = (build-url $base "/api/Advisors")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Retrieve Advisors for a Client
 #
 # GET /api/Advisors/{householdId}/{clientId}
 # operationId: Advisors_GetByHouseholdidClientid
-export def "advisors GetByHouseholdidClientid" [
-  householdId: int
-  clientId: string
+export def "advisors get-by-householdId-clientId" [
+  household_id: int
+  client_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -127,22 +139,23 @@ export def "advisors GetByHouseholdidClientid" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<advisors: table<addressLine1: string, addressLine2: string, advisorId: string, advisorTitle: string, businessPhone: string, cellPhone: string, city: string, emailAddress: string, faxPhone: string, firstName: string, homePhone: string, lastName: string, links: list, middleName: string, officeName: string, officeWebsite: string, pagerNumber: string, postalCode: string, stateProvince: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/Advisors/($householdId)/($clientId)")
+  let full_url = (build-url $base ({household_id: (encode-path-segment $household_id), client_id: (encode-path-segment $client_id)} | format pattern "/api/Advisors/{household_id}/{client_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Retrieve an Advisor
 #
 # GET /api/Advisors/{id}
 # operationId: Advisors_GetById
-export def "advisors GetById" [
+export def "advisors get-by-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -151,22 +164,23 @@ export def "advisors GetById" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<addressLine1: string, addressLine2: string, advisorId: string, advisorTitle: string, businessPhone: string, cellPhone: string, city: string, emailAddress: string, faxPhone: string, firstName: string, homePhone: string, lastName: string, links: table<href: string, rel: string>, middleName: string, officeName: string, officeWebsite: string, pagerNumber: string, postalCode: string, stateProvince: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/Advisors/($id)")
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Advisors/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Retrieve plan assumptions
 #
 # GET /api/Assumptions
 # operationId: Assumptions_GetByPlanid
-export def "assumptions GetByPlanid" [
+export def "assumptions get-by-planid" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -174,24 +188,25 @@ export def "assumptions GetByPlanid" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --planId: string # Id of the plan to retrieve data from (e.g. 1001-11-3).
+  --plan-id: string # Id of the plan to retrieve data from (e.g. 1001-11-3).
 ]: nothing -> record<assumptions: record<anyHeadAlreadyRetired: bool, bothRetired: bool, bucketing: record<distributionBucketTargetBalance: record, endDate: record, indexedAt: record, returnRate: record, standardDeviation: record, startDate: record>, client: record<alreadyRetired: bool, deceasedAge: int, deceasedDate: record, estateIncomeTaxes: record, governmentPensions: record, maritalOrTaxFilingStatus: record, preRetirementIncomeTaxes: record, retirementAge: int, retirementDate: record, retirementIncomeTaxes: record>, coClient: record<alreadyRetired: bool, deceasedAge: int, deceasedDate: record, estateIncomeTaxes: record, governmentPensions: record, maritalOrTaxFilingStatus: record, preRetirementIncomeTaxes: record, retirementAge: int, retirementDate: record, retirementIncomeTaxes: record>, firstToDieDate: record<day: int, formatted: string, formattedMMMMddyyyy: string, formattedMMMdd: string, formattedMMMddyyyy: string, formattedMMMyyyy: string, formattedNA: string, month: int, toDateTime: string, urlEncoded: string, year: int>, firstToDieMember: string, firstToRetireDate: record<day: int, formatted: string, formattedMMMMddyyyy: string, formattedMMMdd: string, formattedMMMddyyyy: string, formattedMMMyyyy: string, formattedNA: string, month: int, toDateTime: string, urlEncoded: string, year: int>, inflationRate: record<formattedDoubleDecimal: string, formattedNoDecimal: string, formattedSingleDecimal: string, raw: float, rawCappedAt100: float>, lastToDieDate: record<day: int, formatted: string, formattedMMMMddyyyy: string, formattedMMMdd: string, formattedMMMddyyyy: string, formattedMMMyyyy: string, formattedNA: string, month: int, toDateTime: string, urlEncoded: string, year: int>, lastToDieMember: string, lastToRetireDate: record<day: int, formatted: string, formattedMMMMddyyyy: string, formattedMMMdd: string, formattedMMMddyyyy: string, formattedMMMyyyy: string, formattedNA: string, month: int, toDateTime: string, urlEncoded: string, year: int>, retirementYearAdjustedIfAlreadyRetired: record<raw: int>, splitSurplusSavingsStrategiesEnabled: bool, taxMethod: string>, links: table<href: string, rel: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "planId" $planId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "planId" $plan_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/Assumptions" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Retrieve business entities
 #
 # GET /api/BusinessEntities
 # operationId: BusinessEntities_GetByPlanid
-export def "business-entities GetByPlanid" [
+export def "business-entities list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -199,24 +214,25 @@ export def "business-entities GetByPlanid" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --planId: string # Id of the plan to retrieve data from (e.g. 1001-11-3).
+  --plan-id: string # Id of the plan to retrieve data from (e.g. 1001-11-3).
 ]: nothing -> record<businessEntities: table<activities: list, assetId: record, businessType: string, businessTypeFormatted: string, currentAnnualDistributions: record, currentAnnualDividends: record, currentAnnualGrowthRate: record, currentAnnualNetIncome: record, entityName: string, liquidationEvent: record, marketValuationDate: record, marketValue: record, owner: string, purchaseAmount: record, purchaseDate: record, standardDeviation: record>, links: table<href: string, rel: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "planId" $planId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "planId" $plan_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/BusinessEntities" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Retrieve a business entity
 #
 # GET /api/BusinessEntities/{id}
 # operationId: BusinessEntities_GetByIdPlanid
-export def "business-entities GetByIdPlanid" [
+export def "business-entities get-by-planid" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -225,24 +241,25 @@ export def "business-entities GetByIdPlanid" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --planId: string # Id of the plan to retrieve data from (e.g. 1001-11-3).
+  --plan-id: string # Id of the plan to retrieve data from (e.g. 1001-11-3).
 ]: nothing -> record<businessEntity: record<activities: list<record>, assetId: record<rawId: int>, businessType: string, businessTypeFormatted: string, currentAnnualDistributions: record<formattedDecimal: string, formattedNoDecimal: string, raw: float>, currentAnnualDividends: record<formattedDecimal: string, formattedNoDecimal: string, raw: float>, currentAnnualGrowthRate: record<formattedDoubleDecimal: string, formattedNoDecimal: string, formattedSingleDecimal: string, raw: float, rawCappedAt100: float>, currentAnnualNetIncome: record<formattedDecimal: string, formattedNoDecimal: string, raw: float>, entityName: string, liquidationEvent: record<firstSaleDate: record, lastSaleDate: record, liquidationType: string, liquidationTypeDescription: string, saleDatesDescription: string>, marketValuationDate: record<day: int, formatted: string, formattedMMMMddyyyy: string, formattedMMMdd: string, formattedMMMddyyyy: string, formattedMMMyyyy: string, formattedNA: string, month: int, toDateTime: string, urlEncoded: string, year: int>, marketValue: record<formattedDecimal: string, formattedNoDecimal: string, raw: float>, owner: string, purchaseAmount: record<formattedDecimal: string, formattedNoDecimal: string, raw: float>, purchaseDate: record<day: int, formatted: string, formattedMMMMddyyyy: string, formattedMMMdd: string, formattedMMMddyyyy: string, formattedMMMyyyy: string, formattedNA: string, month: int, toDateTime: string, urlEncoded: string, year: int>, standardDeviation: record<formattedDoubleDecimal: string, formattedNoDecimal: string, formattedSingleDecimal: string, raw: float, rawCappedAt100: float>>, links: table<href: string, rel: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "planId" $planId "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/BusinessEntities/($id)" $qp)
+  let qp = [(serialize-qp "planId" $plan_id "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/BusinessEntities/{id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Retrieve Monte Carlo results from standalone calc service
 #
 # GET /api/Calculations/MonteCarlo
 # operationId: Calculations_GetByPlanid
-export def "calculations-monte-carlo GetByPlanid" [
+export def "calculations-monte-carlo get-by-planid" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -250,24 +267,25 @@ export def "calculations-monte-carlo GetByPlanid" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --planId: string # Id of the plan to retrieve data from (e.g. 1001-11-3).
+  --plan-id: string # Id of the plan to retrieve data from (e.g. 1001-11-3).
 ]: nothing -> bool {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "planId" $planId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "planId" $plan_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/Calculations/MonteCarlo" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Retrieve defined benefit pensions
 #
 # GET /api/DefinedBenefitPensions
 # operationId: DefinedBenefitPensions_GetByPlanid
-export def "defined-benefit-pensions GetByPlanid" [
+export def "defined-benefit-pensions list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -275,24 +293,25 @@ export def "defined-benefit-pensions GetByPlanid" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --planId: string # Id of the plan to retrieve data from (e.g. 1001-11-3).
+  --plan-id: string # Id of the plan to retrieve data from (e.g. 1001-11-3).
 ]: nothing -> record<definedBenefitPensions: table<benefit: record, description: string, isBenefitFormula: bool, isBenefitIntegratedWithCppQpp: bool, isFormulaIntegratedWithCppQpp: bool, owner: string, pensionType: string, percentPayableToSurvivor: record, projectedYearsOfService: int, startDate: record>, links: table<href: string, rel: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "planId" $planId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "planId" $plan_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/DefinedBenefitPensions" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Retrieve a definedBenefitPension
 #
 # GET /api/DefinedBenefitPensions/{id}
 # operationId: DefinedBenefitPensions_GetByIdPlanid
-export def "defined-benefit-pensions GetByIdPlanid" [
+export def "defined-benefit-pensions get-by-planid" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -301,24 +320,25 @@ export def "defined-benefit-pensions GetByIdPlanid" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --planId: string # Id of the plan to retrieve data from (e.g. 1001-11-3).
+  --plan-id: string # Id of the plan to retrieve data from (e.g. 1001-11-3).
 ]: nothing -> record<definedBenefitPension: record<benefit: record<enabled: bool, populated: bool, value: record>, description: string, isBenefitFormula: bool, isBenefitIntegratedWithCppQpp: bool, isFormulaIntegratedWithCppQpp: bool, owner: string, pensionType: string, percentPayableToSurvivor: record<formattedDoubleDecimal: string, formattedNoDecimal: string, formattedSingleDecimal: string, raw: float, rawCappedAt100: float>, projectedYearsOfService: int, startDate: record<day: int, formatted: string, formattedMMMMddyyyy: string, formattedMMMdd: string, formattedMMMddyyyy: string, formattedMMMyyyy: string, formattedNA: string, month: int, toDateTime: string, urlEncoded: string, year: int>>, links: table<href: string, rel: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "planId" $planId "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/DefinedBenefitPensions/($id)" $qp)
+  let qp = [(serialize-qp "planId" $plan_id "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/DefinedBenefitPensions/{id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Accepts the EULA
 #
 # POST /api/Eula/Accept
 # operationId: Eula_Accept
-export def "eula-accept Accept" [
+export def "eula-accept create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -326,6 +346,7 @@ export def "eula-accept Accept" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> any {
@@ -334,14 +355,14 @@ export def "eula-accept Accept" [
   let full_url = (build-url $base "/api/Eula/Accept")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Retrieve family
 #
 # GET /api/Family
 # operationId: Family_GetByPlanid
-export def "family GetByPlanid" [
+export def "family get-by-planid" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -349,24 +370,25 @@ export def "family GetByPlanid" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --planId: string # Id of the plan to retrieve data from (e.g. 1001-11-3).
+  --plan-id: string # Id of the plan to retrieve data from (e.g. 1001-11-3).
 ]: nothing -> record<family: record<address: record<city: string, combinedCityStateProvince: string, country: string, stateOrProvince: string, stateOrProvinceAbbrev: string, street1: string, street2: string, zipOrPostalCode: string>, client: record<address: record, ageAsOfPlanDate: int, birthdate: record, citizenship: string, email: string, employer: record, gender: record, name: record, ownershipId: string, phone: record>, coClient: record<address: record, ageAsOfPlanDate: int, birthdate: record, citizenship: string, email: string, employer: record, gender: record, name: record, ownershipId: string, phone: record>, dependents: list<record>, headFullNames: string>, links: table<href: string, rel: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "planId" $planId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "planId" $plan_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/Family" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Retrieve the adjustments
 #
 # GET /api/GoalAdjustments/Education/{id}/Adjustments
 # operationId: GoalAdjustments_GetEducationByIdClientidPlanid
-export def "goal-adjustments-education-adjustments GetEducationByIdClientidPlanid" [
+export def "goal-adjustments-education-adjustments get-by-clientid-planid" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -375,18 +397,19 @@ export def "goal-adjustments-education-adjustments GetEducationByIdClientidPlani
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --clientId: string # Id of the client user for the plan. Required if current session user is an advisor. Ignored for client user sessions.
-  --planId: string # Id of the Plan to retrieve or update data for (e.g. 1001-11-3).
+  --client-id: string # Id of the client user for the plan. Required if current session user is an advisor. Ignored for client user sessions.
+  --plan-id: string # Id of the Plan to retrieve or update data for (e.g. 1001-11-3).
 ]: nothing -> record<adjustedValues: record<duration: float, expensesCovered: float, lumpSumContribution: float, lumpSumDate: string, monthlySavingsContribution: float>, created: string, goalId: int, projectedResults: record<goalId: int, percentCovered: float, projections: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "clientId" $clientId "scalar") (serialize-qp "planId" $planId "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/GoalAdjustments/Education/($id)/Adjustments" $qp)
+  let qp = [(serialize-qp "clientId" $client_id "scalar") (serialize-qp "planId" $plan_id "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/GoalAdjustments/Education/{id}/Adjustments") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Perform calculations
@@ -394,7 +417,7 @@ export def "goal-adjustments-education-adjustments GetEducationByIdClientidPlani
 # POST /api/GoalAdjustments/Education/{id}/Calculations
 # operationId: GoalAdjustments_PostEducationByIdGoaladjustmentsPlanid
 # --adjustedValues shape: {duration?: float, expensesCovered?: float, lumpSumContribution?: float, lumpSumDate?: string, monthlySavingsContribution?: float}
-export def "goal-adjustments-education-calculations PostEducationByIdGoaladjustmentsPlanid" [
+export def "goal-adjustments-education-calculations create-by-goaladjustments-planid" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -403,28 +426,29 @@ export def "goal-adjustments-education-calculations PostEducationByIdGoaladjustm
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --planId: string # Id of the Plan to retrieve or update data for (e.g. 1001-11-3).
-  --adjustedValues: record # shape: {duration?: float, expensesCovered?: float, lumpSumContribution?: float, lumpSumDate?: string, monthlySavingsContribution?: float}
+  --plan-id: string # Id of the Plan to retrieve or update data for (e.g. 1001-11-3).
+  --adjusted-values: record # shape: {duration?: float, expensesCovered?: float, lumpSumContribution?: float, lumpSumDate?: string, monthlySavingsContribution?: float}
 ]: any -> record<goalAdjustments: record<adjustedValues: record<duration: float, expensesCovered: float, lumpSumContribution: float, lumpSumDate: string, monthlySavingsContribution: float>, created: string, goalId: int>, projectedResults: record<goalId: int, percentCovered: float, projections: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "planId" $planId "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/GoalAdjustments/Education/($id)/Calculations" $qp)
-  let body = {adjustedValues: $adjustedValues} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let qp = [(serialize-qp "planId" $plan_id "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/GoalAdjustments/Education/{id}/Calculations") $qp)
+  let req_body = {"adjustedValues": $adjusted_values} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Returns a list of goals with their relevant success rates.
 #
 # GET /api/GoalAdjustments/GoalSuccessRates
 # operationId: GoalAdjustments_GetGoalSuccessRatesByClientidPlanid
-export def "goal-adjustments-goal-success-rates GetGoalSuccessRatesByClientidPlanid" [
+export def "goal-adjustments-goal-success-rates get-by-clientid-planid" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -432,25 +456,26 @@ export def "goal-adjustments-goal-success-rates GetGoalSuccessRatesByClientidPla
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --clientId: string # Id of the client user for the plan. Required if current session user is an advisor. Ignored for client user sessions.
-  --planId: string # Id of the Plan to retrieve or update data for (e.g. 1001-11-3).
+  --client-id: string # Id of the client user for the plan. Required if current session user is an advisor. Ignored for client user sessions.
+  --plan-id: string # Id of the Plan to retrieve or update data for (e.g. 1001-11-3).
 ]: nothing -> record<goalSuccessRateResults: table<description: string, goalId: int, successRate: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "clientId" $clientId "scalar") (serialize-qp "planId" $planId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "clientId" $client_id "scalar") (serialize-qp "planId" $plan_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/GoalAdjustments/GoalSuccessRates" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Retrieve the adjustments
 #
 # GET /api/GoalAdjustments/MajorPurchase/{id}/Adjustments
 # operationId: GoalAdjustments_GetMajorPurchaseByIdClientidPlanid
-export def "goal-adjustments-major-purchase-adjustments GetMajorPurchaseByIdClientidPlanid" [
+export def "goal-adjustments-major-purchase-adjustments get-by-clientid-planid" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -459,18 +484,19 @@ export def "goal-adjustments-major-purchase-adjustments GetMajorPurchaseByIdClie
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --clientId: string # Id of the client user for the plan. Required if current session user is an advisor. Ignored for client user sessions.
-  --planId: string # Id of the Plan to retrieve or update data for (e.g. 1001-11-3).
+  --client-id: string # Id of the client user for the plan. Required if current session user is an advisor. Ignored for client user sessions.
+  --plan-id: string # Id of the Plan to retrieve or update data for (e.g. 1001-11-3).
 ]: nothing -> record<adjustedValues: record<lumpSumContribution: float, lumpSumDate: string, monthlySavingsContribution: float, targetDate: string, totalNeed: float>, created: string, goalId: int, projectedResults: record<goalId: int, percentCovered: float, projections: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "clientId" $clientId "scalar") (serialize-qp "planId" $planId "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/GoalAdjustments/MajorPurchase/($id)/Adjustments" $qp)
+  let qp = [(serialize-qp "clientId" $client_id "scalar") (serialize-qp "planId" $plan_id "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/GoalAdjustments/MajorPurchase/{id}/Adjustments") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Perform calculations
@@ -478,7 +504,7 @@ export def "goal-adjustments-major-purchase-adjustments GetMajorPurchaseByIdClie
 # POST /api/GoalAdjustments/MajorPurchase/{id}/Calculations
 # operationId: GoalAdjustments_PostMajorPurchaseByIdGoaladjustmentsPlanid
 # --adjustedValues shape: {lumpSumContribution?: float, lumpSumDate?: string, monthlySavingsContribution?: float, targetDate?: string, totalNeed?: float}
-export def "goal-adjustments-major-purchase-calculations PostMajorPurchaseByIdGoaladjustmentsPlanid" [
+export def "goal-adjustments-major-purchase-calculations create-by-goaladjustments-planid" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -487,28 +513,29 @@ export def "goal-adjustments-major-purchase-calculations PostMajorPurchaseByIdGo
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --planId: string # Id of the Plan to retrieve or update data for (e.g. 1001-11-3).
-  --adjustedValues: record # shape: {lumpSumContribution?: float, lumpSumDate?: string, monthlySavingsContribution?: float, targetDate?: string, totalNeed?: float}
+  --plan-id: string # Id of the Plan to retrieve or update data for (e.g. 1001-11-3).
+  --adjusted-values: record # shape: {lumpSumContribution?: float, lumpSumDate?: string, monthlySavingsContribution?: float, targetDate?: string, totalNeed?: float}
 ]: any -> record<goalAdjustments: record<adjustedValues: record<lumpSumContribution: float, lumpSumDate: string, monthlySavingsContribution: float, targetDate: string, totalNeed: float>, created: string, goalId: int>, projectedResults: record<goalId: int, percentCovered: float, projections: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "planId" $planId "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/GoalAdjustments/MajorPurchase/($id)/Calculations" $qp)
-  let body = {adjustedValues: $adjustedValues} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let qp = [(serialize-qp "planId" $plan_id "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/GoalAdjustments/MajorPurchase/{id}/Calculations") $qp)
+  let req_body = {"adjustedValues": $adjusted_values} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Returns a list of goal adjustment restrictions.
 #
 # GET /api/GoalAdjustments/Restrictions
 # operationId: GoalAdjustments_GetGoalAdjustmentRestrictionsByClientidPlanid
-export def "goal-adjustments-restrictions GetGoalAdjustmentRestrictionsByClientidPlanid" [
+export def "goal-adjustments-restrictions get-by-clientid-planid" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -516,25 +543,26 @@ export def "goal-adjustments-restrictions GetGoalAdjustmentRestrictionsByClienti
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --clientId: string # Id of the client user for the plan. Required if current session user is an advisor. Ignored for client user sessions.
-  --planId: string # Id of the Plan to retrieve or update data for (e.g. 1001-11-3).
+  --client-id: string # Id of the client user for the plan. Required if current session user is an advisor. Ignored for client user sessions.
+  --plan-id: string # Id of the Plan to retrieve or update data for (e.g. 1001-11-3).
 ]: nothing -> record<educationRestrictions: table<canChangeDuration: bool, goalId: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "clientId" $clientId "scalar") (serialize-qp "planId" $planId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "clientId" $client_id "scalar") (serialize-qp "planId" $plan_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/GoalAdjustments/Restrictions" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Retrieve the adjustments
 #
 # GET /api/GoalAdjustments/Retirement/Adjustments
 # operationId: GoalAdjustments_GetRetirementByClientidPlanid
-export def "goal-adjustments-retirement-adjustments GetRetirementByClientidPlanid" [
+export def "goal-adjustments-retirement-adjustments get-by-clientid-planid" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -542,18 +570,19 @@ export def "goal-adjustments-retirement-adjustments GetRetirementByClientidPlani
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --clientId: string # Id of the client user for the plan. Required if current session user is an advisor. Ignored for client user sessions.
-  --planId: string # Id of the Plan to retrieve or update data for (e.g. 1001-11-3).
+  --client-id: string # Id of the client user for the plan. Required if current session user is an advisor. Ignored for client user sessions.
+  --plan-id: string # Id of the Plan to retrieve or update data for (e.g. 1001-11-3).
 ]: nothing -> record<adjustedValues: record<clientRetirementAge: float, coClientRetirementAge: float, discretionaryExpenseCoverage: float, fixedExpenseCoverage: float, lumpSumContribution: float, lumpSumDate: string, monthlySavingsContribution: float>, created: string, goalId: int, projectedResults: record<goalId: int, percentCovered: float, projections: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "clientId" $clientId "scalar") (serialize-qp "planId" $planId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "clientId" $client_id "scalar") (serialize-qp "planId" $plan_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/GoalAdjustments/Retirement/Adjustments" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Perform calculations
@@ -561,7 +590,7 @@ export def "goal-adjustments-retirement-adjustments GetRetirementByClientidPlani
 # POST /api/GoalAdjustments/Retirement/Calculations
 # operationId: GoalAdjustments_PostRetirementByGoaladjustmentsPlanid
 # --adjustedValues shape: {clientRetirementAge?: float, coClientRetirementAge?: float, discretionaryExpenseCoverage?: float, fixedExpenseCoverage?: float, lumpSumContribution?: float, lumpSumDate?: string, monthlySavingsContribution?: float}
-export def "goal-adjustments-retirement-calculations PostRetirementByGoaladjustmentsPlanid" [
+export def "goal-adjustments-retirement-calculations create-by-goaladjustments-planid" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -569,28 +598,29 @@ export def "goal-adjustments-retirement-calculations PostRetirementByGoaladjustm
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --planId: string # Id of the Plan to retrieve or update data for (e.g. 1001-11-3).
-  --adjustedValues: record # shape: {clientRetirementAge?: float, coClientRetirementAge?: float, discretionaryExpenseCoverage?: float, fixedExpenseCoverage?: float, lumpSumContribution?: float, lumpSumDate?: string, monthlySavingsContribution?: float}
+  --plan-id: string # Id of the Plan to retrieve or update data for (e.g. 1001-11-3).
+  --adjusted-values: record # shape: {clientRetirementAge?: float, coClientRetirementAge?: float, discretionaryExpenseCoverage?: float, fixedExpenseCoverage?: float, lumpSumContribution?: float, lumpSumDate?: string, monthlySavingsContribution?: float}
 ]: any -> record<goalAdjustments: record<adjustedValues: record<clientRetirementAge: float, coClientRetirementAge: float, discretionaryExpenseCoverage: float, fixedExpenseCoverage: float, lumpSumContribution: float, lumpSumDate: string, monthlySavingsContribution: float>, created: string, goalId: int>, projectedResults: record<goalId: int, percentCovered: float, projections: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "planId" $planId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "planId" $plan_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/GoalAdjustments/Retirement/Calculations" $qp)
-  let body = {adjustedValues: $adjustedValues} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"adjustedValues": $adjusted_values} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Returns WAMO values for current goal
 #
 # GET /api/GoalAdjustments/{id}/WhatAreMyOptions
 # operationId: GoalAdjustments_GetWhatAreMyOptionsByIdClientidPlanid
-export def "goal-adjustments-what-are-my-options GetWhatAreMyOptionsByIdClientidPlanid" [
+export def "goal-adjustments-what-are-my-options get-by-clientid-planid" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -599,25 +629,26 @@ export def "goal-adjustments-what-are-my-options GetWhatAreMyOptionsByIdClientid
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --clientId: string # Id of the client user for the plan. Required if current session user is an advisor. Ignored for client user sessions.
-  --planId: string # Id of the Plan to retrieve or update data for (e.g. 1001-11-3).
+  --client-id: string # Id of the client user for the plan. Required if current session user is an advisor. Ignored for client user sessions.
+  --plan-id: string # Id of the Plan to retrieve or update data for (e.g. 1001-11-3).
 ]: nothing -> record<additionalMonthlySavings: float, clientRetirementAge: int, clientRetirementAgeDate: string, coClientRetirementAge: int, coClientRetirementAgeDate: string, expenseCoverageDollars: float, expenseCoveragePercentage: float, lumpSumSavings: float, purchaseDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "clientId" $clientId "scalar") (serialize-qp "planId" $planId "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/GoalAdjustments/($id)/WhatAreMyOptions" $qp)
+  let qp = [(serialize-qp "clientId" $client_id "scalar") (serialize-qp "planId" $plan_id "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/GoalAdjustments/{id}/WhatAreMyOptions") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Retrieve goals
 #
 # GET /api/Goals
 # operationId: Goals_GetByPlanid
-export def "goals GetByPlanid" [
+export def "goals list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -625,24 +656,25 @@ export def "goals GetByPlanid" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --planId: string # Id of the plan to retrieve data from (e.g. 1001-11-3).
+  --plan-id: string # Id of the plan to retrieve data from (e.g. 1001-11-3).
 ]: nothing -> record<goals: table<assetsRemainingAfterFundingGoal: record, coverage: record, description: string, endDate: record, identifier: record, startDate: record, type: string, yearAssetsDepleted: record>, links: table<href: string, rel: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "planId" $planId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "planId" $plan_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/Goals" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Retrieve goals
 #
 # GET /api/Goals/{id}
 # operationId: Goals_GetByIdPlanid
-export def "goals GetByIdPlanid" [
+export def "goals get-by-planid" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -651,24 +683,25 @@ export def "goals GetByIdPlanid" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --planId: string # Id of the plan to retrieve data from (e.g. 1001-11-3).
+  --plan-id: string # Id of the plan to retrieve data from (e.g. 1001-11-3).
 ]: nothing -> record<goal: record<assetsRemainingAfterFundingGoal: record<enabled: bool, populated: bool, value: record>, coverage: record<enabled: bool, populated: bool, value: record>, description: string, endDate: record<day: int, formatted: string, formattedMMMMddyyyy: string, formattedMMMdd: string, formattedMMMddyyyy: string, formattedMMMyyyy: string, formattedNA: string, month: int, toDateTime: string, urlEncoded: string, year: int>, identifier: record<id: int>, startDate: record<day: int, formatted: string, formattedMMMMddyyyy: string, formattedMMMdd: string, formattedMMMddyyyy: string, formattedMMMyyyy: string, formattedNA: string, month: int, toDateTime: string, urlEncoded: string, year: int>, type: string, yearAssetsDepleted: record<enabled: bool, populated: bool, value: record>>, links: table<href: string, rel: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "planId" $planId "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/Goals/($id)" $qp)
+  let qp = [(serialize-qp "planId" $plan_id "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Goals/{id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Retrieve holding companies
 #
 # GET /api/HoldingCompanies
 # operationId: HoldingCompanies_GetByPlanid
-export def "holding-companies GetByPlanid" [
+export def "holding-companies list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -676,24 +709,25 @@ export def "holding-companies GetByPlanid" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --planId: string # Id of the plan to retrieve data from (e.g. 1001-11-3).
+  --plan-id: string # Id of the plan to retrieve data from (e.g. 1001-11-3).
 ]: nothing -> record<holdingCompanies: table<annualDividendYield: record, ccpc: record, commonSharesOutstanding: int, contributions: record, corporateYearEnd: record, description: string, dividendType: string, dividendTypeFormatted: string, estateDetails: record, historicalData: record, id: string, investmentAccounts: list, liabilities: list, lifeInsurancePolicies: list, marketValue: record, numPreferredShareClasses: int, otherAssets: list, ownershipAsOfDate: record, ownershipDetails: record, preferredSharesOutstanding: int, provinceOfIncorporation: string, provinceOfTaxation: string, realEstateAssets: list, valueOfAllCommonShares: record, valueOfAllPreferredShares: record, withdrawals: record>, links: table<href: string, rel: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "planId" $planId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "planId" $plan_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/HoldingCompanies" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Retrieve a holding company
 #
 # GET /api/HoldingCompanies/{id}
 # operationId: HoldingCompanies_GetByIdPlanid
-export def "holding-companies GetByIdPlanid" [
+export def "holding-companies get-by-planid" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -702,24 +736,25 @@ export def "holding-companies GetByIdPlanid" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --planId: string # Id of the plan to retrieve data from (e.g. 1001-11-3).
+  --plan-id: string # Id of the plan to retrieve data from (e.g. 1001-11-3).
 ]: nothing -> record<holdingCompany: record<annualDividendYield: record<formattedDoubleDecimal: string, formattedNoDecimal: string, formattedSingleDecimal: string, raw: float, rawCappedAt100: float>, ccpc: record<rawValue: bool, valueAsYesNo: string>, commonSharesOutstanding: int, contributions: record<interCompanyDividendsReceived: list, sharePurchases: list, shareholderLoans: list>, corporateYearEnd: record<day: int, formatted: string, formattedMMMMddyyyy: string, formattedMMMdd: string, formattedMMMddyyyy: string, formattedMMMyyyy: string, formattedNA: string, month: int, toDateTime: string, urlEncoded: string, year: int>, description: string, dividendType: string, dividendTypeFormatted: string, estateDetails: record<enableFiftyPercentSolution: record, estateFreeze: record, estateFreezeDate: record, shareOptionsAtFirstDeath: string, shareOptionsAtSecondDeathAndDeathInTheSameYear: string>, historicalData: record<generalSetups: record, notionalAccounts: record, outstandingShareholderLoans: record>, id: string, investmentAccounts: list<record>, liabilities: list<record>, lifeInsurancePolicies: list<record>, marketValue: record<formattedDecimal: string, formattedNoDecimal: string, raw: float>, numPreferredShareClasses: int, otherAssets: list<record>, ownershipAsOfDate: record<day: int, formatted: string, formattedMMMMddyyyy: string, formattedMMMdd: string, formattedMMMddyyyy: string, formattedMMMyyyy: string, formattedNA: string, month: int, toDateTime: string, urlEncoded: string, year: int>, ownershipDetails: record<common: list, commonSharesDetails: list, preferred: list, preferredSharesDetails: list, shareholderPercentOwnership: list>, preferredSharesOutstanding: int, provinceOfIncorporation: string, provinceOfTaxation: string, realEstateAssets: list<record>, valueOfAllCommonShares: record<formattedDecimal: string, formattedNoDecimal: string, raw: float>, valueOfAllPreferredShares: record<formattedDecimal: string, formattedNoDecimal: string, raw: float>, withdrawals: record<loanRepaymentsToShareholder: list, manualDividendDistributions: list, shareRedemptions: list>>, links: table<href: string, rel: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "planId" $planId "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/HoldingCompanies/($id)" $qp)
+  let qp = [(serialize-qp "planId" $plan_id "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/HoldingCompanies/{id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Retrieve all Households associated with the user
 #
 # GET /api/Households
 # operationId: Households_GetByHouseholdid
-export def "households GetByHouseholdid" [
+export def "households get-by-householdid" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -727,24 +762,25 @@ export def "households GetByHouseholdid" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --householdId: int # The Id of the specific household to retrieve (format: int32)
+  --household-id: int # The Id of the specific household to retrieve (format: int32)
 ]: nothing -> record<households: table<accessiblePlans: list, clientDescription: string, householdId: int>, links: table<href: string, rel: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "householdId" $householdId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "householdId" $household_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/Households" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Retrieve liabilities
 #
 # GET /api/Liabilities
 # operationId: Liabilities_GetByPlanid
-export def "liabilities GetByPlanid" [
+export def "liabilities list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -752,24 +788,25 @@ export def "liabilities GetByPlanid" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --planId: string # Id of the plan to retrieve data from (e.g. 1001-11-3).
+  --plan-id: string # Id of the plan to retrieve data from (e.g. 1001-11-3).
 ]: nothing -> record<liabilities: table<annualPaymentAmount: record, balanceAsOf: record, balanceAsOfPlanDate: record, debtModStrategies: record, description: string, id: string, insuredForDisability: record, insuredForLife: record, interestRate: record, isInterestRateVariable: record, isPaymentVariable: record, linkedAssetId: string, linkedAssetName: string, loanDate: record, originalBalance: record, owner: string, paidOffByRetirement: record, payOffDate: record, payOffOptionType: record, paymentAmount: record, paymentFrequency: record, paymentType: record, type: record>, links: table<href: string, rel: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "planId" $planId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "planId" $plan_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/Liabilities" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Retrieve a liability
 #
 # GET /api/Liabilities/{id}
 # operationId: Liabilities_GetByIdPlanid
-export def "liabilities GetByIdPlanid" [
+export def "liabilities get-by-planid" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -778,24 +815,25 @@ export def "liabilities GetByIdPlanid" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --planId: string # Id of the plan to retrieve data from (e.g. 1001-11-3).
+  --plan-id: string # Id of the plan to retrieve data from (e.g. 1001-11-3).
 ]: nothing -> record<liability: record<annualPaymentAmount: record<formattedDecimal: string, formattedNoDecimal: string, raw: float>, balanceAsOf: record<date: record, formattedDecimal: string, formattedNoDecimal: string, raw: float>, balanceAsOfPlanDate: record<formattedDecimal: string, formattedNoDecimal: string, raw: float>, debtModStrategies: record<lumpSumDebtModStrategies: list, periodicDebtModStrategies: list>, description: string, id: string, insuredForDisability: record<rawValue: bool, valueAsYesNo: string>, insuredForLife: record<rawValue: bool, valueAsYesNo: string>, interestRate: record<formattedDoubleDecimal: string, formattedNoDecimal: string, formattedSingleDecimal: string, raw: float, rawCappedAt100: float>, isInterestRateVariable: record<rawValue: bool, valueAsYesNo: string>, isPaymentVariable: record<rawValue: bool, valueAsYesNo: string>, linkedAssetId: string, linkedAssetName: string, loanDate: record<day: int, formatted: string, formattedMMMMddyyyy: string, formattedMMMdd: string, formattedMMMddyyyy: string, formattedMMMyyyy: string, formattedNA: string, month: int, toDateTime: string, urlEncoded: string, year: int>, originalBalance: record<formattedDecimal: string, formattedNoDecimal: string, raw: float>, owner: string, paidOffByRetirement: record<enabled: bool, populated: bool, value: record>, payOffDate: record<enabled: bool, populated: bool, value: record>, payOffOptionType: record<value: string>, paymentAmount: record<enabled: bool, populated: bool, value: record>, paymentFrequency: record<value: string>, paymentType: record<value: string>, type: record<value: string>>, links: table<href: string, rel: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "planId" $planId "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/Liabilities/($id)" $qp)
+  let qp = [(serialize-qp "planId" $plan_id "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Liabilities/{id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Retrieve lifestyle assets
 #
 # GET /api/LifestyleAssets
 # operationId: LifestyleAssets_GetByPlanid
-export def "lifestyle-assets GetByPlanid" [
+export def "lifestyle-assets list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -803,24 +841,25 @@ export def "lifestyle-assets GetByPlanid" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --planId: string # Id of the plan to retrieve data from (e.g. 1001-11-3).
+  --plan-id: string # Id of the plan to retrieve data from (e.g. 1001-11-3).
 ]: nothing -> record<lifestyleAssets: table<afterTaxProceedsAccountName: string, description: string, futureValueProjectedGrossSaleValue: record, id: string, isMajorPurchaseGoal: bool, marketValueAsOf: record, owner: string, preTaxGrowthRate: record, presentValueProjectedGrossSaleValue: record, projectedSaleDate: record, purchaseAmount: record, purchaseDate: record, sellingCostPercent: record, standardDeviation: record, type: record>, links: table<href: string, rel: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "planId" $planId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "planId" $plan_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/LifestyleAssets" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Retrieve lifestyle assets
 #
 # GET /api/LifestyleAssets/{id}
 # operationId: LifestyleAssets_GetByIdPlanid
-export def "lifestyle-assets GetByIdPlanid" [
+export def "lifestyle-assets get-by-planid" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -829,24 +868,25 @@ export def "lifestyle-assets GetByIdPlanid" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --planId: string # Id of the plan to retrieve data from (e.g. 1001-11-3).
+  --plan-id: string # Id of the plan to retrieve data from (e.g. 1001-11-3).
 ]: nothing -> record<lifestyleAsset: record<afterTaxProceedsAccountName: string, description: string, futureValueProjectedGrossSaleValue: record<formattedDecimal: string, formattedNoDecimal: string, raw: float>, id: string, isMajorPurchaseGoal: bool, marketValueAsOf: record<date: record, formattedDecimal: string, formattedNoDecimal: string, raw: float>, owner: string, preTaxGrowthRate: record<formattedDoubleDecimal: string, formattedNoDecimal: string, formattedSingleDecimal: string, raw: float, rawCappedAt100: float>, presentValueProjectedGrossSaleValue: record<formattedDecimal: string, formattedNoDecimal: string, raw: float>, projectedSaleDate: record<day: int, formatted: string, formattedMMMMddyyyy: string, formattedMMMdd: string, formattedMMMddyyyy: string, formattedMMMyyyy: string, formattedNA: string, month: int, toDateTime: string, urlEncoded: string, year: int>, purchaseAmount: record<formattedDecimal: string, formattedNoDecimal: string, raw: float>, purchaseDate: record<day: int, formatted: string, formattedMMMMddyyyy: string, formattedMMMdd: string, formattedMMMddyyyy: string, formattedMMMyyyy: string, formattedNA: string, month: int, toDateTime: string, urlEncoded: string, year: int>, sellingCostPercent: record<formattedDoubleDecimal: string, formattedNoDecimal: string, formattedSingleDecimal: string, raw: float, rawCappedAt100: float>, standardDeviation: record<formattedDoubleDecimal: string, formattedNoDecimal: string, formattedSingleDecimal: string, raw: float, rawCappedAt100: float>, type: record<formatted: string, value: string>>, links: table<href: string, rel: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "planId" $planId "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/LifestyleAssets/($id)" $qp)
+  let qp = [(serialize-qp "planId" $plan_id "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/LifestyleAssets/{id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Retrieves all goals from the live plan
 #
 # GET /api/LivePlan/Goals
 # operationId: LivePlan_GetGoalsByClientidPlanid
-export def "live-plan-goals GetGoalsByClientidPlanid" [
+export def "live-plan-goals get-by-clientid-planid" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -854,25 +894,26 @@ export def "live-plan-goals GetGoalsByClientidPlanid" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --clientId: string # Id of the client user for the plan. Required if current session user is an advisor. Ignored for client user sessions.
-  --planId: string # Id of the Plan to retrieve or update data for (e.g. 1001-11-3).
+  --client-id: string # Id of the client user for the plan. Required if current session user is an advisor. Ignored for client user sessions.
+  --plan-id: string # Id of the Plan to retrieve or update data for (e.g. 1001-11-3).
 ]: nothing -> record<clientDescription: string, clientId: int, goals: table<amount: float, coveragePercentage: float, description: string, endDate: string, id: int, inflationRate: float, owners: list, startDate: string, type: string>, planDescription: string, planLastUpdateTime: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "clientId" $clientId "scalar") (serialize-qp "planId" $planId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "clientId" $client_id "scalar") (serialize-qp "planId" $plan_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/LivePlan/Goals" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Retrieve a list of funding accounts
 #
 # GET /api/LivePlan/Goals/Funding
 # operationId: LivePlan_GetGoalFundingListByClientidPlanid
-export def "live-plan-goals-funding GetGoalFundingListByClientidPlanid" [
+export def "live-plan-goals-funding get-list-by-clientid-planid" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -880,25 +921,26 @@ export def "live-plan-goals-funding GetGoalFundingListByClientidPlanid" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --clientId: string # Id of the client user for the plan. Required if current session user is an advisor. Ignored for client user sessions.
-  --planId: string # Id of the Plan to retrieve or update data for (e.g. 1001-11-3).
+  --client-id: string # Id of the client user for the plan. Required if current session user is an advisor. Ignored for client user sessions.
+  --plan-id: string # Id of the Plan to retrieve or update data for (e.g. 1001-11-3).
 ]: nothing -> record<goals: table<description: string, fundingAccounts: list, goalId: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "clientId" $clientId "scalar") (serialize-qp "planId" $planId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "clientId" $client_id "scalar") (serialize-qp "planId" $plan_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/LivePlan/Goals/Funding" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Retrieve WAMO values for a given goal
 #
 # GET /api/LivePlan/Goals/{id}/WhatAreMyOptions
 # operationId: LivePlan_GetWhatAreMyOptionsByIdClientidPlanid
-export def "live-plan-goals-what-are-my-options GetWhatAreMyOptionsByIdClientidPlanid" [
+export def "live-plan-goals-what-are-my-options get-by-clientid-planid" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -907,25 +949,26 @@ export def "live-plan-goals-what-are-my-options GetWhatAreMyOptionsByIdClientidP
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --clientId: string # Id of the client user for the plan. Required if current session user is an advisor. Ignored for client user sessions.
-  --planId: string # Id of the Plan to retrieve or update data for (e.g. 1001-11-3).
+  --client-id: string # Id of the client user for the plan. Required if current session user is an advisor. Ignored for client user sessions.
+  --plan-id: string # Id of the Plan to retrieve or update data for (e.g. 1001-11-3).
 ]: nothing -> record<additionalMonthlySavings: float, clientRetirementAge: int, clientRetirementAgeDate: string, coClientRetirementAge: int, coClientRetirementAgeDate: string, expenseCoverageDollars: float, expenseCoveragePercentage: float, lumpSumSavings: float, purchaseDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "clientId" $clientId "scalar") (serialize-qp "planId" $planId "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/LivePlan/Goals/($id)/WhatAreMyOptions" $qp)
+  let qp = [(serialize-qp "clientId" $client_id "scalar") (serialize-qp "planId" $plan_id "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/LivePlan/Goals/{id}/WhatAreMyOptions") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Retrieves accounts for a given plan
 #
 # GET /api/LivePlan/NetWorth/Accounts
 # operationId: LivePlan_GetAccountsByClientidPlanid
-export def "live-plan-net-worth-accounts GetAccountsByClientidPlanid" [
+export def "live-plan-net-worth-accounts get-by-clientid-planid" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -933,25 +976,26 @@ export def "live-plan-net-worth-accounts GetAccountsByClientidPlanid" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --clientId: string # Id of the client user for the plan. Required if current session user is an advisor. Ignored for client user sessions.
-  --planId: string # Id of the Plan to retrieve or update data for (e.g. 1001-11-3).
+  --client-id: string # Id of the client user for the plan. Required if current session user is an advisor. Ignored for client user sessions.
+  --plan-id: string # Id of the Plan to retrieve or update data for (e.g. 1001-11-3).
 ]: nothing -> record<accounts: table<description: string, holdings: list, id: int, legacyId: string, owner: record, type: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "clientId" $clientId "scalar") (serialize-qp "planId" $planId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "clientId" $client_id "scalar") (serialize-qp "planId" $plan_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/LivePlan/NetWorth/Accounts" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Retrieves liabilities for a given plan
 #
 # GET /api/LivePlan/NetWorth/Liabilities
 # operationId: LivePlan_GetLiabilitiesByClientidPlanid
-export def "live-plan-net-worth-liabilities GetLiabilitiesByClientidPlanid" [
+export def "live-plan-net-worth-liabilities get-by-clientid-planid" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -959,25 +1003,26 @@ export def "live-plan-net-worth-liabilities GetLiabilitiesByClientidPlanid" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --clientId: string # Id of the client user for the plan. Required if current session user is an advisor. Ignored for client user sessions.
-  --planId: string # Id of the Plan to retrieve or update data for (e.g. 1001-11-3).
+  --client-id: string # Id of the client user for the plan. Required if current session user is an advisor. Ignored for client user sessions.
+  --plan-id: string # Id of the Plan to retrieve or update data for (e.g. 1001-11-3).
 ]: nothing -> record<liabilities: table<description: string, endDate: string, id: int, legacyId: string, outstandingPrincipal: float, outstandingPrincipalAsOfDate: string, owner: record, startDate: string, type: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "clientId" $clientId "scalar") (serialize-qp "planId" $planId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "clientId" $client_id "scalar") (serialize-qp "planId" $plan_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/LivePlan/NetWorth/Liabilities" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Retrieves lifestyle assets for a given plan
 #
 # GET /api/LivePlan/NetWorth/LifestyleAssets
 # operationId: LivePlan_GetLifestyleAssetsByClientidPlanid
-export def "live-plan-net-worth-lifestyle-assets GetLifestyleAssetsByClientidPlanid" [
+export def "live-plan-net-worth-lifestyle-assets get-by-clientid-planid" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -985,25 +1030,26 @@ export def "live-plan-net-worth-lifestyle-assets GetLifestyleAssetsByClientidPla
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --clientId: string # Id of the client user for the plan. Required if current session user is an advisor. Ignored for client user sessions.
-  --planId: string # Id of the Plan to retrieve or update data for (e.g. 1001-11-3).
+  --client-id: string # Id of the client user for the plan. Required if current session user is an advisor. Ignored for client user sessions.
+  --plan-id: string # Id of the Plan to retrieve or update data for (e.g. 1001-11-3).
 ]: nothing -> record<lifestyleAssets: table<description: string, id: int, owner: record, purchaseDate: string, purchaseValue: float, type: int, valuationDate: string, valuationValue: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "clientId" $clientId "scalar") (serialize-qp "planId" $planId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "clientId" $client_id "scalar") (serialize-qp "planId" $plan_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/LivePlan/NetWorth/LifestyleAssets" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Retrieves real estate accounts for a given plan
 #
 # GET /api/LivePlan/NetWorth/RealEstate
 # operationId: LivePlan_GetRealEstateAssetsByClientidPlanid
-export def "live-plan-net-worth-real-estate GetRealEstateAssetsByClientidPlanid" [
+export def "live-plan-net-worth-real-estate get-assets-by-clientid-planid" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1011,25 +1057,26 @@ export def "live-plan-net-worth-real-estate GetRealEstateAssetsByClientidPlanid"
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --clientId: string # Id of the client user for the plan. Required if current session user is an advisor. Ignored for client user sessions.
-  --planId: string # Id of the Plan to retrieve or update data for (e.g. 1001-11-3).
+  --client-id: string # Id of the client user for the plan. Required if current session user is an advisor. Ignored for client user sessions.
+  --plan-id: string # Id of the Plan to retrieve or update data for (e.g. 1001-11-3).
 ]: nothing -> record<realEstateAssets: table<description: string, id: int, legacyId: string, marketValue: float, owner: record, purchaseAmount: float, purchaseDate: string, valuationDate: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "clientId" $clientId "scalar") (serialize-qp "planId" $planId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "clientId" $client_id "scalar") (serialize-qp "planId" $plan_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/LivePlan/NetWorth/RealEstate" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Retrieves net worth projections
 #
 # GET /api/LivePlan/Projections/NetWorth
 # operationId: LivePlan_GetProjectedNetWorthByClientidPlanid
-export def "live-plan-projections-net-worth GetProjectedNetWorthByClientidPlanid" [
+export def "live-plan-projections-net-worth get-projected-by-clientid-planid" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1037,25 +1084,26 @@ export def "live-plan-projections-net-worth GetProjectedNetWorthByClientidPlanid
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --clientId: string # Id of the client user for the plan. Required if current session user is an advisor. Ignored for client user sessions.
-  --planId: string # Id of the Plan to retrieve or update data for (e.g. 1001-11-3).
+  --client-id: string # Id of the client user for the plan. Required if current session user is an advisor. Ignored for client user sessions.
+  --plan-id: string # Id of the Plan to retrieve or update data for (e.g. 1001-11-3).
 ]: nothing -> record<netWorthProjections: table<endOfYearRetirementAssets: float, endOfYearTotalAssets: float, year: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "clientId" $clientId "scalar") (serialize-qp "planId" $planId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "clientId" $client_id "scalar") (serialize-qp "planId" $plan_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/LivePlan/Projections/NetWorth" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Retrieves needs vs abilities projections
 #
 # GET /api/LivePlan/Projections/{id}/NeedsVsAbilities
 # operationId: LivePlan_GetProjectedNeedsVsAbilitiesByIdClientidPlanid
-export def "live-plan-projections-needs-vs-abilities GetProjectedNeedsVsAbilitiesByIdClientidPlanid" [
+export def "live-plan-projections-needs-vs-abilities get-projected-by-clientid-planid" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1064,25 +1112,26 @@ export def "live-plan-projections-needs-vs-abilities GetProjectedNeedsVsAbilitie
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --clientId: string # Id of the client user for the plan. Required if current session user is an advisor. Ignored for client user sessions.
-  --planId: string # Id of the Plan to retrieve or update data for (e.g. 1001-11-3).
+  --client-id: string # Id of the client user for the plan. Required if current session user is an advisor. Ignored for client user sessions.
+  --plan-id: string # Id of the Plan to retrieve or update data for (e.g. 1001-11-3).
 ]: nothing -> record<goalId: int, percentCovered: float, projections: table<projectedAbilities: float, projectedNeed: float, year: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "clientId" $clientId "scalar") (serialize-qp "planId" $planId "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/LivePlan/Projections/($id)/NeedsVsAbilities" $qp)
+  let qp = [(serialize-qp "clientId" $client_id "scalar") (serialize-qp "planId" $plan_id "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/LivePlan/Projections/{id}/NeedsVsAbilities") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Retrieve net worth
 #
 # GET /api/NetWorth
 # operationId: NetWorth_GetByPlanid
-export def "net-worth GetByPlanid" [
+export def "net-worth get-by-planid" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1090,24 +1139,25 @@ export def "net-worth GetByPlanid" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --planId: string # Id of the plan to retrieve data from (e.g. 1001-11-3).
+  --plan-id: string # Id of the plan to retrieve data from (e.g. 1001-11-3).
 ]: nothing -> record<links: table<href: string, rel: string>, netWorth: record<netWorthAtPlanDate: record<assets: record, assetsFundingRetirement: record, clientNetWorth: record, coClientNetWorth: record, communityPropertyNetWorth: record, jointNetWorth: record, liabilities: record, totalNetWorth: record>, netWorthAtPlanEnd: record<enabled: bool, populated: bool, value: record>, netWorthAtRetirement: record<enabled: bool, populated: bool, value: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "planId" $planId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "planId" $plan_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/NetWorth" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Determines if the currently logged in user has set their own password
 #
 # POST /api/Password/HasUserSetPassword
 # operationId: Password_HasUserSetPassword
-export def "password-has-user-set-password HasUserSetPassword" [
+export def "password-has-user-set-password update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1115,6 +1165,7 @@ export def "password-has-user-set-password HasUserSetPassword" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> any {
@@ -1123,14 +1174,14 @@ export def "password-has-user-set-password HasUserSetPassword" [
   let full_url = (build-url $base "/api/Password/HasUserSetPassword")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Gets the password complexity requirements
 #
 # GET /api/Password/PasswordRequirements
 # operationId: Password_PasswordRequirements
-export def "password-password-requirements PasswordRequirements" [
+export def "password-password-requirements get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1138,6 +1189,7 @@ export def "password-password-requirements PasswordRequirements" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> any {
@@ -1146,14 +1198,14 @@ export def "password-password-requirements PasswordRequirements" [
   let full_url = (build-url $base "/api/Password/PasswordRequirements")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Resets the password for the supplied user name
 #
 # POST /api/Password/Reset
 # operationId: Password_ResetByModel
-export def "password-reset ResetByModel" [
+export def "password-reset reset-by-model" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1161,27 +1213,28 @@ export def "password-reset ResetByModel" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   locale: string # Supported locales are: "en-US", "en-CA", and "fr-CA"
-  userName: string
+  user_name: string
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/Password/Reset")
-  let body = {locale: $locale, userName: $userName} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"locale": $locale, "userName": $user_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Sets the password for the currently logged in user
 #
 # POST /api/Password/Set
 # operationId: Password_SetByModel
-export def "password-set SetByModel" [
+export def "password-set update-by-model" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1189,27 +1242,28 @@ export def "password-set SetByModel" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --newPassword: string
-  --oldPassword: string
+  --new-password: string
+  --old-password: string
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/Password/Set")
-  let body = {newPassword: $newPassword, oldPassword: $oldPassword} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"newPassword": $new_password, "oldPassword": $old_password} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Retrieve plan information
 #
 # GET /api/PlanInformation
 # operationId: PlanInformation_GetByPlanid
-export def "plan-information GetByPlanid" [
+export def "plan-information get-by-planid" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1217,24 +1271,25 @@ export def "plan-information GetByPlanid" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --planId: string # Id of the plan to retrieve data from (e.g. 1001-11-3).
+  --plan-id: string # Id of the plan to retrieve data from (e.g. 1001-11-3).
 ]: nothing -> record<country: string, description: string, isJointAnalysis: bool, links: table<href: string, rel: string>, locale: string, planDate: record<day: int, formatted: string, formattedMMMMddyyyy: string, formattedMMMdd: string, formattedMMMddyyyy: string, formattedMMMyyyy: string, formattedNA: string, month: int, toDateTime: string, urlEncoded: string, year: int>, planDescription: string, planId: string, planLevel: string, planModules: record<isCriticalIllnessModuleEnabled: bool, isDisabilityIncomeModuleEnabled: bool, isEstatePlanningModuleEabled: bool, isLongTermCareModuleEnabled: bool, isSurvivorIncomeModuleEnabled: bool>, planType: string, publishDate: record<day: int, formatted: string, formattedMMMMddyyyy: string, formattedMMMdd: string, formattedMMMddyyyy: string, formattedMMMyyyy: string, formattedNA: string, month: int, toDateTime: string, urlEncoded: string, year: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "planId" $planId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "planId" $plan_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/PlanInformation" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Retrieve plan data statuses
 #
 # GET /api/PlanStatuses
 # operationId: PlanStatuses_GetByPlanid
-export def "plan-statuses GetByPlanid" [
+export def "plan-statuses get-by-planid" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1242,24 +1297,25 @@ export def "plan-statuses GetByPlanid" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --planId: string # Id of the plan to retrieve data from (e.g. 1001-11-3)
+  --plan-id: string # Id of the plan to retrieve data from (e.g. 1001-11-3)
 ]: nothing -> record<hasIntegratedAccounts: string, links: table<href: string, rel: string>, planDataStatus: string, serializedDataStatus: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "planId" $planId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "planId" $plan_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/PlanStatuses" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Retrieve portfolio accounts
 #
 # GET /api/PortfolioAccounts
 # operationId: PortfolioAccounts_GetByPlanid
-export def "portfolio-accounts GetByPlanid" [
+export def "portfolio-accounts list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1267,24 +1323,25 @@ export def "portfolio-accounts GetByPlanid" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --planId: string # Id of the plan to retrieve data from (e.g. 1001-11-3).
+  --plan-id: string # Id of the plan to retrieve data from (e.g. 1001-11-3).
 ]: nothing -> record<links: table<href: string, rel: string>, portfolioAccounts: table<accountReturnRatesNoLongerCorrelateToAssumedAssetMixDueToOverrideInGsm: bool, annualFee: record, applicableRangeRetirementLiquidatedAssets: record, costBasis: record, description: string, descriptionWithOwner: string, excludeInAA: bool, holdings: list, id: string, isSystemGenerated: bool, marketValue: record, owner: string, portfolioAssets: list, rateOfReturn: record, savingsStrategies: record, seppRedemptionStrategy: record, type: string, valuationDate: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "planId" $planId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "planId" $plan_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/PortfolioAccounts" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Retrieve a portfolio account
 #
 # GET /api/PortfolioAccounts/{id}
 # operationId: PortfolioAccounts_GetByIdPlanid
-export def "portfolio-accounts GetByIdPlanid" [
+export def "portfolio-accounts get-by-planid" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1293,24 +1350,25 @@ export def "portfolio-accounts GetByIdPlanid" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --planId: string # Id of the plan to retrieve data from (e.g. 1001-11-3).
+  --plan-id: string # Id of the plan to retrieve data from (e.g. 1001-11-3).
 ]: nothing -> record<links: table<href: string, rel: string>, portfolioAccount: record<accountReturnRatesNoLongerCorrelateToAssumedAssetMixDueToOverrideInGsm: bool, annualFee: record<formattedDoubleDecimal: string, formattedNoDecimal: string, formattedSingleDecimal: string, raw: float, rawCappedAt100: float>, applicableRangeRetirementLiquidatedAssets: record<endDate: record, startDate: record>, costBasis: record<formattedDecimal: string, formattedNoDecimal: string, raw: float>, description: string, descriptionWithOwner: string, excludeInAA: bool, holdings: list<record>, id: string, isSystemGenerated: bool, marketValue: record<formattedDecimal: string, formattedNoDecimal: string, raw: float>, owner: string, portfolioAssets: list<record>, rateOfReturn: record<preRetirement: record, retirement: record>, savingsStrategies: record<lumpSumSavingsStrategies: list, periodicSavingsStrategies: list, rrspMaximizerStrategies: list, surplusSavingsStrategies: list>, seppRedemptionStrategy: record<applicableDateRange: record, distributionMethod: record, lifeExpectancyTable: record, redemptionFrequency: record>, type: string, valuationDate: record<day: int, formatted: string, formattedMMMMddyyyy: string, formattedMMMdd: string, formattedMMMddyyyy: string, formattedMMMyyyy: string, formattedNA: string, month: int, toDateTime: string, urlEncoded: string, year: int>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "planId" $planId "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/PortfolioAccounts/($id)" $qp)
+  let qp = [(serialize-qp "planId" $plan_id "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/PortfolioAccounts/{id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Retrieve projected annual summaries
 #
 # GET /api/ProjectedAnnualSummary
 # operationId: ProjectedAnnualSummary_GetByPlanid
-export def "projected-annual-summary GetByPlanid" [
+export def "projected-annual-summary list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1318,24 +1376,25 @@ export def "projected-annual-summary GetByPlanid" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --planId: string # Id of the plan to retrieve data from (e.g. 1001-11-3).
+  --plan-id: string # Id of the plan to retrieve data from (e.g. 1001-11-3).
 ]: nothing -> record<links: table<href: string, rel: string>, projections: table<annualSummary: record, links: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "planId" $planId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "planId" $plan_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/ProjectedAnnualSummary" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Retrieve projected annual summary by id
 #
 # GET /api/ProjectedAnnualSummary/{id}
 # operationId: ProjectedAnnualSummary_GetByIdPlanid
-export def "projected-annual-summary GetByIdPlanid" [
+export def "projected-annual-summary get-by-planid" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1344,24 +1403,25 @@ export def "projected-annual-summary GetByIdPlanid" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --planId: string # Id of the plan to retrieve data from (e.g. 1001-11-3).
+  --plan-id: string # Id of the plan to retrieve data from (e.g. 1001-11-3).
 ]: nothing -> record<annualSummary: record<cashFlow: record<surplusDeficit: float, totalIncome: float, totalOutflowsWithTaxes: float, totalOutflowsWithoutTaxes: float, totalTaxes: float>, clientAge: int, coClientAge: int, netWorth: record<totalAssets: float, totalLiabilities: float, totalNetWorth: float>, year: int>, links: table<href: string, rel: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "planId" $planId "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/ProjectedAnnualSummary/($id)" $qp)
+  let qp = [(serialize-qp "planId" $plan_id "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/ProjectedAnnualSummary/{id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Retrieve projected cash flow
 #
 # GET /api/ProjectedCashFlow
 # operationId: ProjectedCashFlow_GetByPlanid
-export def "projected-cash-flow GetByPlanid" [
+export def "projected-cash-flow list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1369,24 +1429,25 @@ export def "projected-cash-flow GetByPlanid" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --planId: string # Id of the plan to retrieve data from (e.g. 1001-11-3).
+  --plan-id: string # Id of the plan to retrieve data from (e.g. 1001-11-3).
 ]: nothing -> record<links: table<href: string, rel: string>, projections: table<cashFlow: record, links: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "planId" $planId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "planId" $plan_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/ProjectedCashFlow" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Retrieve projected cash flow by id
 #
 # GET /api/ProjectedCashFlow/{id}
 # operationId: ProjectedCashFlow_GetByIdPlanid
-export def "projected-cash-flow GetByIdPlanid" [
+export def "projected-cash-flow get-by-planid" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1395,24 +1456,25 @@ export def "projected-cash-flow GetByIdPlanid" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --planId: string # Id of the plan to retrieve data from (e.g. 1001-11-3).
+  --plan-id: string # Id of the plan to retrieve data from (e.g. 1001-11-3).
 ]: nothing -> record<cashFlow: record<cashFlow: record<clientCashFlow: record, coClientCashFlow: record, totalCashFlow: record>, clientAge: int, coClientAge: int, year: int>, links: table<href: string, rel: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "planId" $planId "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/ProjectedCashFlow/($id)" $qp)
+  let qp = [(serialize-qp "planId" $plan_id "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/ProjectedCashFlow/{id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Retrieve assets funding goals over time
 #
 # GET /api/ProjectedGoals/AssetsFundingGoals
 # operationId: ProjectedGoals_GetAssetsFundingGoalsByPlanid
-export def "projected-goals-assets-funding-goals GetAssetsFundingGoalsByPlanid" [
+export def "projected-goals-assets-funding-goals get-by-planid" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1420,24 +1482,25 @@ export def "projected-goals-assets-funding-goals GetAssetsFundingGoalsByPlanid" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --planId: string # Id of the plan to retrieve data from (e.g. 1001-11-3).
+  --plan-id: string # Id of the plan to retrieve data from (e.g. 1001-11-3).
 ]: nothing -> record<links: table<href: string, rel: string>, projections: table<clientAge: int, coClientAge: int, goals: list, year: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "planId" $planId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "planId" $plan_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/ProjectedGoals/AssetsFundingGoals" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Retrieve needs vs abilities data
 #
 # GET /api/ProjectedGoals/NeedsVsAbilities
 # operationId: ProjectedGoals_GetNeedsVsAbilitiesByPlanid
-export def "projected-goals-needs-vs-abilities GetNeedsVsAbilitiesByPlanid" [
+export def "projected-goals-needs-vs-abilities get-by-planid" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1445,24 +1508,25 @@ export def "projected-goals-needs-vs-abilities GetNeedsVsAbilitiesByPlanid" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --planId: string # Id of the plan to retrieve data from (e.g. 1001-11-3).
+  --plan-id: string # Id of the plan to retrieve data from (e.g. 1001-11-3).
 ]: nothing -> record<links: table<href: string, rel: string>, projections: table<clientAge: int, coClientAge: int, goals: list, year: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "planId" $planId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "planId" $plan_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/ProjectedGoals/NeedsVsAbilities" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Retrieve projected net worth
 #
 # GET /api/ProjectedNetWorth
 # operationId: ProjectedNetWorth_GetByPlanid
-export def "projected-net-worth GetByPlanid" [
+export def "projected-net-worth list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1470,24 +1534,25 @@ export def "projected-net-worth GetByPlanid" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --planId: string # Id of the plan to retrieve data from (e.g. 1001-11-3).
+  --plan-id: string # Id of the plan to retrieve data from (e.g. 1001-11-3).
 ]: nothing -> record<links: table<href: string, rel: string>, projections: table<links: list, netWorth: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "planId" $planId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "planId" $plan_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/ProjectedNetWorth" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Retrieve projected net worth by id
 #
 # GET /api/ProjectedNetWorth/{id}
 # operationId: ProjectedNetWorth_GetByIdPlanid
-export def "projected-net-worth GetByIdPlanid" [
+export def "projected-net-worth get-by-planid" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1496,24 +1561,25 @@ export def "projected-net-worth GetByIdPlanid" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --planId: string # Id of the plan to retrieve data from (e.g. 1001-11-3).
+  --plan-id: string # Id of the plan to retrieve data from (e.g. 1001-11-3).
 ]: nothing -> record<links: table<href: string, rel: string>, netWorth: record<clientAge: int, coClientAge: int, endOfYearNetWorth: record<assets: record, assetsFundingRetirement: record, clientNetWorth: record, coClientNetWorth: record, communityPropertyNetWorth: record, jointNetWorth: record, liabilities: record, totalNetWorth: record>, year: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "planId" $planId "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/ProjectedNetWorth/($id)" $qp)
+  let qp = [(serialize-qp "planId" $plan_id "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/ProjectedNetWorth/{id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Retrieve restricted stocks
 #
 # GET /api/RestrictedStocks
 # operationId: RestrictedStocks_GetByPlanid
-export def "restricted-stocks GetByPlanid" [
+export def "restricted-stocks list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1521,24 +1587,25 @@ export def "restricted-stocks GetByPlanid" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --planId: string # Id of the plan to retrieve data from (e.g. 1001-11-3).
+  --plan-id: string # Id of the plan to retrieve data from (e.g. 1001-11-3).
 ]: nothing -> record<links: table<href: string, rel: string>, restrictedStocks: table<annualDividendPerUnit: record, applicableRangeRetirementLiquidatedAssets: record, awardedDate: record, currentUnitValue: record, description: string, growthRate: record, id: string, numberOfUnits: int, owner: string, pricePaidForAward: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "planId" $planId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "planId" $plan_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/RestrictedStocks" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Retrieve a restricted stock
 #
 # GET /api/RestrictedStocks/{id}
 # operationId: RestrictedStocks_GetByIdPlanid
-export def "restricted-stocks GetByIdPlanid" [
+export def "restricted-stocks get-by-planid" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1547,24 +1614,25 @@ export def "restricted-stocks GetByIdPlanid" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --planId: string # Id of the plan to retrieve data from (e.g. 1001-11-3).
+  --plan-id: string # Id of the plan to retrieve data from (e.g. 1001-11-3).
 ]: nothing -> record<links: table<href: string, rel: string>, restrictedStock: record<annualDividendPerUnit: record<formattedDecimal: string, formattedNoDecimal: string, raw: float>, applicableRangeRetirementLiquidatedAssets: record<endDate: record, startDate: record>, awardedDate: record<day: int, formatted: string, formattedMMMMddyyyy: string, formattedMMMdd: string, formattedMMMddyyyy: string, formattedMMMyyyy: string, formattedNA: string, month: int, toDateTime: string, urlEncoded: string, year: int>, currentUnitValue: record<formattedDecimal: string, formattedNoDecimal: string, raw: float>, description: string, growthRate: record<formattedDoubleDecimal: string, formattedNoDecimal: string, formattedSingleDecimal: string, raw: float, rawCappedAt100: float>, id: string, numberOfUnits: int, owner: string, pricePaidForAward: record<formattedDecimal: string, formattedNoDecimal: string, raw: float>, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "planId" $planId "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/RestrictedStocks/($id)" $qp)
+  let qp = [(serialize-qp "planId" $plan_id "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/RestrictedStocks/{id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # This resource can be used to check the status of the service.
 #
 # GET /api/ServiceInformation/Statistics
 # operationId: ServiceInformation_Statistics
-export def "service-information-statistics Statistics" [
+export def "service-information-statistics get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1572,6 +1640,7 @@ export def "service-information-statistics Statistics" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<altairConnectionStatus: bool, name: string, pomVersion: string, serviceVersion: string, status: string> {
@@ -1580,14 +1649,14 @@ export def "service-information-statistics Statistics" [
   let full_url = (build-url $base "/api/ServiceInformation/Statistics")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Retrieve stock options
 #
 # GET /api/StockOptions
 # operationId: StockOptions_GetByPlanid
-export def "stock-options GetByPlanid" [
+export def "stock-options list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1595,24 +1664,25 @@ export def "stock-options GetByPlanid" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --planId: string # Id of the plan to retrieve data from (e.g. 1001-11-3).
+  --plan-id: string # Id of the plan to retrieve data from (e.g. 1001-11-3).
 ]: nothing -> record<links: table<href: string, rel: string>, stockOptions: table<annualDividendPerUnit: record, applicableRangeRetirementLiquidatedAssets: record, company: string, currentUnitPrice: record, currentUnitPriceDate: record, description: string, endOfPlanYearExercisableGrossValue: record, exerciseCost: record, expirationDate: record, grantDate: record, grantedOptions: int, growthRate: record, id: string, optionsExercisable: int, optionsExercised: int, optionsVested: int, owner: string, preTaxProfit: record, startOfYearAMTBasis: record, startOfYearCostBasis: record, startOfYearUnitPrice: record, strikePrice: record, symbol: string, type: string, typeFormatted: string, vestingSchedule: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "planId" $planId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "planId" $plan_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/StockOptions" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Retrieve a stock option
 #
 # GET /api/StockOptions/{id}
 # operationId: StockOptions_GetByIdPlanid
-export def "stock-options GetByIdPlanid" [
+export def "stock-options get-by-planid" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1621,24 +1691,25 @@ export def "stock-options GetByIdPlanid" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --planId: string # Id of the plan to retrieve data from (e.g. 1001-11-3).
+  --plan-id: string # Id of the plan to retrieve data from (e.g. 1001-11-3).
 ]: nothing -> record<links: table<href: string, rel: string>, stockOption: record<annualDividendPerUnit: record<formattedDecimal: string, formattedNoDecimal: string, raw: float>, applicableRangeRetirementLiquidatedAssets: record<endDate: record, startDate: record>, company: string, currentUnitPrice: record<formattedDecimal: string, formattedNoDecimal: string, raw: float>, currentUnitPriceDate: record<day: int, formatted: string, formattedMMMMddyyyy: string, formattedMMMdd: string, formattedMMMddyyyy: string, formattedMMMyyyy: string, formattedNA: string, month: int, toDateTime: string, urlEncoded: string, year: int>, description: string, endOfPlanYearExercisableGrossValue: record<formattedDecimal: string, formattedNoDecimal: string, raw: float>, exerciseCost: record<formattedDecimal: string, formattedNoDecimal: string, raw: float>, expirationDate: record<day: int, formatted: string, formattedMMMMddyyyy: string, formattedMMMdd: string, formattedMMMddyyyy: string, formattedMMMyyyy: string, formattedNA: string, month: int, toDateTime: string, urlEncoded: string, year: int>, grantDate: record<day: int, formatted: string, formattedMMMMddyyyy: string, formattedMMMdd: string, formattedMMMddyyyy: string, formattedMMMyyyy: string, formattedNA: string, month: int, toDateTime: string, urlEncoded: string, year: int>, grantedOptions: int, growthRate: record<formattedDoubleDecimal: string, formattedNoDecimal: string, formattedSingleDecimal: string, raw: float, rawCappedAt100: float>, id: string, optionsExercisable: int, optionsExercised: int, optionsVested: int, owner: string, preTaxProfit: record<formattedDecimal: string, formattedNoDecimal: string, raw: float>, startOfYearAMTBasis: record<formattedDecimal: string, formattedNoDecimal: string, raw: float>, startOfYearCostBasis: record<formattedDecimal: string, formattedNoDecimal: string, raw: float>, startOfYearUnitPrice: record<formattedDecimal: string, formattedNoDecimal: string, raw: float>, strikePrice: record<formattedDecimal: string, formattedNoDecimal: string, raw: float>, symbol: string, type: string, typeFormatted: string, vestingSchedule: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "planId" $planId "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/StockOptions/($id)" $qp)
+  let qp = [(serialize-qp "planId" $plan_id "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/StockOptions/{id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Start a session with the DomainProviders user store
 #
 # POST /api/auth/Login
 # operationId: Auth_LoginByModel
-export def "auth-login LoginByModel" [
+export def "auth-login create-by-model" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1646,6 +1717,7 @@ export def "auth-login LoginByModel" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --password: string
@@ -1655,18 +1727,18 @@ export def "auth-login LoginByModel" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/auth/Login")
-  let body = {password: $password, username: $username} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"password": $password, "username": $username} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Gets the login rules
 #
 # GET /api/auth/LoginConfiguration
 # operationId: Auth_PasswordRequirements
-export def "auth-login-configuration PasswordRequirements" [
+export def "auth-login-configuration get-password-requirements" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1674,6 +1746,7 @@ export def "auth-login-configuration PasswordRequirements" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> any {
@@ -1682,13 +1755,13 @@ export def "auth-login-configuration PasswordRequirements" [
   let full_url = (build-url $base "/api/auth/LoginConfiguration")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # POST /api/auth/Logout
 #
 # operationId: Auth_Logout
-export def "auth-logout Logout" [
+export def "auth-logout create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1696,6 +1769,7 @@ export def "auth-logout Logout" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> any {
@@ -1704,14 +1778,14 @@ export def "auth-logout Logout" [
   let full_url = (build-url $base "/api/auth/Logout")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Validate and extend the duration of a session
 #
 # POST /api/auth/ResumeSession
 # operationId: Auth_ResumeSession
-export def "auth-resume-session ResumeSession" [
+export def "auth-resume-session create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1719,6 +1793,7 @@ export def "auth-resume-session ResumeSession" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<eulaAccepted: bool, hasAccountAggregation: bool, hasGoalWhatIfing: bool, hasUserSetPassword: bool, isAdmin: bool, isAdvisor: bool, isClient: bool, isPasswordExpired: bool, userId: string, userName: string> {
@@ -1727,5 +1802,5 @@ export def "auth-resume-session ResumeSession" [
   let full_url = (build-url $base "/api/auth/ResumeSession")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }

@@ -18,21 +18,32 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 }
 
 # Serialize a single query parameter based on collection style
+# Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
+# ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = ($name | url encode)
+  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
-  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
-    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
-    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
+    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
+    _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
+}
+
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Build URL from base, path, and optional query string
@@ -44,7 +55,7 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
@@ -53,13 +64,13 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
     "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "put" => { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "patch" => { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
   if ($method in ["head" "options"]) { return $resp }
-  if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
+  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
 def base-url-completer [] { ["https://www.winsms.co.za/api/rest/v1"] }
@@ -68,7 +79,7 @@ def auth-scheme-completer [] { ["bearer"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "credits-balance get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -101,6 +112,7 @@ export def "credits-balance get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<creditBalance: float, statusCode: int, timeStamp: string, version: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -108,14 +120,14 @@ export def "credits-balance get" [
   let full_url = (build-url $base "/credits/balance")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Transfer credits between main and sub accounts.
 #
 # POST /credits/transfer
 # operationId: transferCredits
-export def "credits-transfer transferCredits" [
+export def "credits-transfer create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -123,27 +135,28 @@ export def "credits-transfer transferCredits" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  receivingAccountNumber: int # The WinSMS account number of the account to which credits will be added. (e.g. 10345)
-  sendingAccountNumber: int # The WinSMS account number of the account from which credits will be deducted. (e.g. 7564)
-  transferQuantity: int # The number of credits to transfer from the sending account to the receiving account. (e.g. 100)
+  receiving_account_number: int # The WinSMS account number of the account to which credits will be added. (e.g. 10345)
+  sending_account_number: int # The WinSMS account number of the account from which credits will be deducted. (e.g. 7564)
+  transfer_quantity: int # The number of credits to transfer from the sending account to the receiving account. (e.g. 100)
 ]: any -> record<statusCode: int, timeStamp: string, transferSuccessful: bool, version: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/credits/transfer")
-  let body = {receivingAccountNumber: $receivingAccountNumber, sendingAccountNumber: $sendingAccountNumber, transferQuantity: $transferQuantity} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"receivingAccountNumber": $receiving_account_number, "sendingAccountNumber": $sending_account_number, "transferQuantity": $transfer_quantity} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Get a list of incoming short/long code messages
 #
 # GET /shortcode/incoming
 # operationId: getShortCodeMessages
-export def "shortcode-incoming get" [
+export def "shortcode-incoming get-short-code-messages" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -151,9 +164,10 @@ export def "shortcode-incoming get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --offset: int # ***Optional*** - The number of items to skip before starting to return results. Default 0. Minimum 0.  (default: 0)
-  --limit: int # ***Optional*** - The number of items to return. Default 100. Minimum 1. Maximum 1000.  (default: 100)
+  --offset: int # ***Optional*** - The number of items to skip before starting to return results. Default 0. Minimum 0. (default: 0)
+  --limit: int # ***Optional*** - The number of items to return. Default 100. Minimum 1. Maximum 1000. (default: 100)
 ]: nothing -> record<resultsLimit: int, resultsOffset: int, resultsTotalAvailable: int, shortcodeMessages: table<incomingApiMessageId: float, messageText: string, mobileNumber: string, receiveTime: string>, statusCode: int, timeStamp: string, version: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -161,14 +175,14 @@ export def "shortcode-incoming get" [
   let full_url = (build-url $base "/shortcode/incoming" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get a list of incoming SMS messages
 #
 # GET /sms/incoming
 # operationId: getIncomingMessages
-export def "sms-incoming get" [
+export def "sms-incoming get-messages" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -176,9 +190,10 @@ export def "sms-incoming get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --offset: int # ***Optional*** - The number of items to skip before starting to return results. Default 0. Minimum 0.  (default: 0)
-  --limit: int # ***Optional*** - The number of items to return. Default 100. Minimum 1. Maximum 1000.  (default: 100)
+  --offset: int # ***Optional*** - The number of items to skip before starting to return results. Default 0. Minimum 0. (default: 0)
+  --limit: int # ***Optional*** - The number of items to return. Default 100. Minimum 1. Maximum 1000. (default: 100)
 ]: nothing -> record<incomingMessages: table<incomingApiMessageId: float, messageText: string, mobileNumber: string, outgoingApiMessageId: float, receiveTime: string>, resultsLimit: int, resultsOffset: int, resultsTotalAvailable: int, statusCode: int, timeStamp: string, version: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -186,14 +201,14 @@ export def "sms-incoming get" [
   let full_url = (build-url $base "/sms/incoming" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get a list of incoming opt-out SMS messages
 #
 # GET /sms/incoming/optout
 # operationId: getOptoutMessages
-export def "sms-incoming-optout get" [
+export def "sms-incoming-optout get-messages" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -201,6 +216,7 @@ export def "sms-incoming-optout get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<incomingOptoutMessages: table<incomingApiMessageId: float, messageText: string, mobileNumber: string, receiveTime: string>, statusCode: int, timeStamp: string, version: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -208,7 +224,7 @@ export def "sms-incoming-optout get" [
   let full_url = (build-url $base "/sms/incoming/optout")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Send SMS messages
@@ -216,7 +232,7 @@ export def "sms-incoming-optout get" [
 # POST /sms/outgoing/send
 # operationId: smsSend
 # --recipients item shape: {clientMessageId?: string, mobileNumber: string}
-export def "sms-outgoing-send smsSend" [
+export def "sms-outgoing-send send" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -224,21 +240,22 @@ export def "sms-outgoing-send smsSend" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --maxSegments: int # ***Optional*** - The maximum [GSM Encoded segment count]("https://support.winsms.co.za/rest/GSM") that the message is allowed to utilise.  This defaults to 1, allowing for a maximum GSM Encoded message length of 160 characters.  The maximum value is 6, which allows for a GSM Encoded message length of 918 characters.  If you intend to send a message longer than 160 characters, this value should be specified.  (default: 1, e.g. 3)
+  --max-segments: int # ***Optional*** - The maximum [GSM Encoded segment count]("https://support.winsms.co.za/rest/GSM") that the message is allowed to utilise. This defaults to 1, allowing for a maximum GSM Encoded message length of 160 characters. The maximum value is 6, which allows for a GSM Encoded message length of 918 characters. If you intend to send a message longer than 160 characters, this value should be specified. (default: 1, e.g. 3)
   message: string # The SMS text to be sent. (e.g. Happy holidays from all at TelAmeriCorp.)
   recipients: list # An array of messageRecipientDetails objects. — item shape: {clientMessageId?: string, mobileNumber: string}
-  --scheduledTime: string # ***Optional*** - The date and time that an SMS should be delivered. If not specified, or is set for a date/time prior to the current date/time, the SMS message will be sent immediately.  If specified, this value should have the format YYYYMMDDHHmm.  (e.g. 201712251430)
+  --scheduled-time: string # ***Optional*** - The date and time that an SMS should be delivered. If not specified, or is set for a date/time prior to the current date/time, the SMS message will be sent immediately. If specified, this value should have the format YYYYMMDDHHmm. (e.g. 201712251430)
 ]: any -> record<recipients: table<acceptError: string, accepted: bool, apiMessageId: int, clientMessageId: string, creditCost: float, mobileNumber: string, newCreditBalance: float, scheduledTime: string>, statusCode: int, timeStamp: string, version: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sms/outgoing/send")
-  let body = {maxSegments: $maxSegments, message: $message, recipients: $recipients, scheduledTime: $scheduledTime} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"maxSegments": $max_segments, "message": $message, "recipients": $recipients, "scheduledTime": $scheduled_time} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Send multiple different SMS messages
@@ -246,7 +263,7 @@ export def "sms-outgoing-send smsSend" [
 # POST /sms/outgoing/sendmulti
 # operationId: smsSendBatch
 # --messages item shape: {maxSegments?: int, message: string, recipients: list, scheduledTime?: string}
-export def "sms-outgoing-sendmulti smsSendBatch" [
+export def "sms-outgoing-sendmulti send-batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -254,6 +271,7 @@ export def "sms-outgoing-sendmulti smsSendBatch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --messages: list # item shape: {maxSegments?: int, message: string, recipients: list, scheduledTime?: string}
 ]: any -> record<messages: table<message: string, recipients: list>, statusCode: int, timeStamp: string, version: string> {
@@ -261,18 +279,18 @@ export def "sms-outgoing-sendmulti smsSendBatch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sms/outgoing/sendmulti")
-  let body = {messages: $messages} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"messages": $messages} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Get SMS delivery statuses
 #
 # POST /sms/outgoing/status
 # operationId: smsStatus
-export def "sms-outgoing-status smsStatus" [
+export def "sms-outgoing-status create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -280,24 +298,26 @@ export def "sms-outgoing-status smsStatus" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body: record
+  --body: list
 ]: any -> record<messageStatuses: table<apiMessageId: int, creditCost: float, mobileNumber: string, statusDelivered: bool, statusErrorCode: string, statusTime: string>, statusCode: int, timeStamp: string, version: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sms/outgoing/status")
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Get a list of scheduled SMS messages
 #
 # GET /sms/scheduled
 # operationId: getScheduledMessages
-export def "sms-scheduled get" [
+export def "sms-scheduled get-messages" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -305,9 +325,10 @@ export def "sms-scheduled get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --offset: int # ***Optional*** - The number of items to skip before starting to return results. Default 0. Minimum 0.  (default: 0)
-  --limit: int # ***Optional*** - The number of items to return. Default 100. Minimum 1. Maximum 1000.  (default: 100)
+  --offset: int # ***Optional*** - The number of items to skip before starting to return results. Default 0. Minimum 0. (default: 0)
+  --limit: int # ***Optional*** - The number of items to return. Default 100. Minimum 1. Maximum 1000. (default: 100)
 ]: nothing -> record<resultsLimit: int, resultsOffset: int, resultsTotalAvailable: int, scheduledMessages: table<apiMessageId: int, creditCost: float, mobileNumber: string, scheduledSendTime: string, submitTime: string>, statusCode: int, timeStamp: string, version: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -315,14 +336,14 @@ export def "sms-scheduled get" [
   let full_url = (build-url $base "/sms/scheduled" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Delete scheduled SMS messages and refund credits
 #
 # POST /sms/scheduled/delete
 # operationId: deleteScheduledMessages
-export def "sms-scheduled-delete post" [
+export def "sms-scheduled-delete delete-messages" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -330,24 +351,26 @@ export def "sms-scheduled-delete post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body: record
+  --body: list
 ]: any -> record<deletedMessageStatuses: table<apiMessageId: int, creditCost: float, deleteError: string, deleted: bool, mobileNumber: string>, statusCode: int, timeStamp: string, version: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sms/scheduled/delete")
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Get a list of all Sub Accounts.
 #
 # GET /subaccounts
 # operationId: getSubAccounts
-export def "subaccounts get" [
+export def "subaccounts get-sub-accounts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -355,6 +378,7 @@ export def "subaccounts get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<statusCode: int, subAccounts: table<accountNumber: int, creditBalance: float, firstName: string, loginName: string, surname: string>, timeStamp: string, version: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -362,5 +386,5 @@ export def "subaccounts get" [
   let full_url = (build-url $base "/subaccounts")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }

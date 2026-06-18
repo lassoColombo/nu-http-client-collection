@@ -18,21 +18,32 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 }
 
 # Serialize a single query parameter based on collection style
+# Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
+# ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = ($name | url encode)
+  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
-  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
-    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
-    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
+    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
+    _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
+}
+
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Build URL from base, path, and optional query string
@@ -44,7 +55,7 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
@@ -53,13 +64,13 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
     "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "put" => { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "patch" => { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
   if ($method in ["head" "options"]) { return $resp }
-  if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
+  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
 def base-url-completer [] { ["https://management.azure.com"] }
@@ -67,12 +78,12 @@ def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
 def type-completer [] { ["Microsoft.Batch/batchAccounts"] }
-def keyName-completer [] { ["Primary" "Secondary"] }
+def key-name-completer [] { ["Primary" "Secondary"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-batch-operations List" } } | get name | first)
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-batch-operations list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -96,7 +107,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.Batch/operations
 # operationId: Operations_List
-export def "providers-microsoft-batch-operations List" [
+export def "providers-microsoft-batch-operations list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -104,6 +115,7 @@ export def "providers-microsoft-batch-operations List" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to be used with the HTTP request.
 ]: nothing -> record<nextLink: string, value: table<display: record, name: string, origin: string, properties: record>> {
@@ -113,15 +125,15 @@ export def "providers-microsoft-batch-operations List" [
   let full_url = (build-url $base "/providers/Microsoft.Batch/operations" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Gets information about the Batch accounts associated with the subscription.
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Batch/batchAccounts
 # operationId: BatchAccount_List
-export def "subscriptions-providers-microsoft-batch-batch-accounts List" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-batch-batch-accounts list" [
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -129,25 +141,26 @@ export def "subscriptions-providers-microsoft-batch-batch-accounts List" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to be used with the HTTP request.
 ]: nothing -> record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Batch/batchAccounts" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Batch/batchAccounts") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Checks whether the Batch account name is available in the specified region.
 #
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.Batch/locations/{locationName}/checkNameAvailability
 # operationId: Location_CheckNameAvailability
-export def "subscriptions-providers-microsoft-batch-locations-check-name-availability CheckNameAvailability" [
-  locationName: string
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-batch-locations-check-name-availability check" [
+  subscription_id: string
+  location_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -155,6 +168,7 @@ export def "subscriptions-providers-microsoft-batch-locations-check-name-availab
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to be used with the HTTP request.
   name: string # The name to check for availability
@@ -164,21 +178,21 @@ export def "subscriptions-providers-microsoft-batch-locations-check-name-availab
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Batch/locations/($locationName)/checkNameAvailability" $qp)
-  let body = {name: $name, type: $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), location_name: (encode-path-segment $location_name)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Batch/locations/{location_name}/checkNameAvailability") $qp)
+  let req_body = {"name": $name, "type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Gets the Batch service quotas for the specified subscription at the given location.
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Batch/locations/{locationName}/quotas
 # operationId: Location_GetQuotas
-export def "subscriptions-providers-microsoft-batch-locations-quotas GetQuotas" [
-  locationName: string
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-batch-locations-quotas get" [
+  subscription_id: string
+  location_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -186,25 +200,26 @@ export def "subscriptions-providers-microsoft-batch-locations-quotas GetQuotas" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to be used with the HTTP request.
 ]: nothing -> record<accountQuota: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Batch/locations/($locationName)/quotas" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), location_name: (encode-path-segment $location_name)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Batch/locations/{location_name}/quotas") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Gets information about the Batch accounts associated with the specified resource group.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Batch/batchAccounts
 # operationId: BatchAccount_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accounts ListByResourceGroup" [
-  resourceGroupName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accounts list" [
+  subscription_id: string
+  resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -212,26 +227,27 @@ export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accoun
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to be used with the HTTP request.
 ]: nothing -> record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Batch/batchAccounts" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Batch/batchAccounts") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Deletes the specified Batch account.
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Batch/batchAccounts/{accountName}
 # operationId: BatchAccount_Delete
-export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accounts Delete" [
-  resourceGroupName: string
-  accountName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accounts delete" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -239,26 +255,27 @@ export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accoun
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to be used with the HTTP request.
 ]: nothing -> record<error: record<code: string, details: list<any>, message: string, target: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Batch/batchAccounts/($accountName)" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Batch/batchAccounts/{account_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Gets information about the specified Batch account.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Batch/batchAccounts/{accountName}
 # operationId: BatchAccount_Get
-export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accounts Get" [
-  resourceGroupName: string
-  accountName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accounts get" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -266,16 +283,17 @@ export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accoun
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to be used with the HTTP request.
 ]: nothing -> record<properties: record<accountEndpoint: string, activeJobAndJobScheduleQuota: int, autoStorage: record<lastKeySync: string, storageAccountId: string>, dedicatedCoreQuota: int, dedicatedCoreQuotaPerVMFamily: list<record>, dedicatedCoreQuotaPerVMFamilyEnforced: bool, keyVaultReference: record<id: string, url: string>, lowPriorityCoreQuota: int, poolAllocationMode: string, poolQuota: int, provisioningState: string>, id: string, location: string, name: string, tags: record, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Batch/batchAccounts/($accountName)" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Batch/batchAccounts/{account_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Updates the properties of an existing Batch account.
@@ -283,10 +301,10 @@ export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accoun
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Batch/batchAccounts/{accountName}
 # operationId: BatchAccount_Update
 # --properties shape: {autoStorage?: any}
-export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accounts Update" [
-  resourceGroupName: string
-  accountName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accounts update" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -294,6 +312,7 @@ export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accoun
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to be used with the HTTP request.
   --properties: any # The properties of a Batch account. — shape: {autoStorage?: any}
@@ -303,12 +322,12 @@ export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accoun
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Batch/batchAccounts/($accountName)" $qp)
-  let body = {properties: $properties, tags: $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Batch/batchAccounts/{account_name}") $qp)
+  let req_body = {"properties": $properties, "tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Creates a new Batch account with the specified parameters. Existing accounts cannot be updated with this API and should instead be updated with the Update Batch Account API.
@@ -316,10 +335,10 @@ export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accoun
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Batch/batchAccounts/{accountName}
 # operationId: BatchAccount_Create
 # --properties shape: {autoStorage?: any, keyVaultReference?: any, poolAllocationMode?: "BatchService"|"UserSubscription"}
-export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accounts Create" [
-  resourceGroupName: string
-  accountName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accounts create" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -327,6 +346,7 @@ export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accoun
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to be used with the HTTP request.
   location: string # The region in which to create the account.
@@ -337,22 +357,22 @@ export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accoun
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Batch/batchAccounts/($accountName)" $qp)
-  let body = {location: $location, properties: $properties, tags: $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Batch/batchAccounts/{account_name}") $qp)
+  let req_body = {"location": $location, "properties": $properties, "tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Lists all of the applications in the specified account.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Batch/batchAccounts/{accountName}/applications
 # operationId: Application_List
-export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accounts-applications List" [
-  resourceGroupName: string
-  accountName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accounts-applications list" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -360,6 +380,7 @@ export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accoun
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --maxresults: int # The maximum number of items to return in the response. (format: int32)
   --api-version: string # The API version to be used with the HTTP request.
@@ -367,21 +388,21 @@ export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accoun
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "maxresults" $maxresults "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Batch/batchAccounts/($accountName)/applications" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Batch/batchAccounts/{account_name}/applications") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Deletes an application.
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Batch/batchAccounts/{accountName}/applications/{applicationName}
 # operationId: Application_Delete
-export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accounts-applications Delete" [
-  resourceGroupName: string
-  accountName: string
-  applicationName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accounts-applications delete" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  application_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -389,27 +410,28 @@ export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accoun
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to be used with the HTTP request.
 ]: nothing -> record<error: record<code: string, details: list<any>, message: string, target: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Batch/batchAccounts/($accountName)/applications/($applicationName)" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name), application_name: (encode-path-segment $application_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Batch/batchAccounts/{account_name}/applications/{application_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Gets information about the specified application.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Batch/batchAccounts/{accountName}/applications/{applicationName}
 # operationId: Application_Get
-export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accounts-applications Get" [
-  resourceGroupName: string
-  accountName: string
-  applicationName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accounts-applications get" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  application_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -417,16 +439,17 @@ export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accoun
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to be used with the HTTP request.
 ]: nothing -> record<properties: record<allowUpdates: bool, defaultVersion: string, displayName: string>, etag: string, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Batch/batchAccounts/($accountName)/applications/($applicationName)" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name), application_name: (encode-path-segment $application_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Batch/batchAccounts/{account_name}/applications/{application_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Updates settings for the specified application.
@@ -434,11 +457,11 @@ export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accoun
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Batch/batchAccounts/{accountName}/applications/{applicationName}
 # operationId: Application_Update
 # --properties shape: {allowUpdates?: bool, defaultVersion?: string, displayName?: string}
-export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accounts-applications Update" [
-  resourceGroupName: string
-  accountName: string
-  applicationName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accounts-applications update" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  application_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -446,6 +469,7 @@ export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accoun
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to be used with the HTTP request.
   --properties: any # The properties associated with the Application. — shape: {allowUpdates?: bool, defaultVersion?: string, displayName?: string}
@@ -454,12 +478,12 @@ export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accoun
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Batch/batchAccounts/($accountName)/applications/($applicationName)" $qp)
-  let body = {properties: $properties} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name), application_name: (encode-path-segment $application_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Batch/batchAccounts/{account_name}/applications/{application_name}") $qp)
+  let req_body = {"properties": $properties} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Adds an application to the specified Batch account.
@@ -467,11 +491,11 @@ export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accoun
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Batch/batchAccounts/{accountName}/applications/{applicationName}
 # operationId: Application_Create
 # --properties shape: {allowUpdates?: bool, defaultVersion?: string, displayName?: string}
-export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accounts-applications Create" [
-  resourceGroupName: string
-  accountName: string
-  applicationName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accounts-applications create" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  application_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -479,6 +503,7 @@ export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accoun
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to be used with the HTTP request.
   --properties: any # The properties associated with the Application. — shape: {allowUpdates?: bool, defaultVersion?: string, displayName?: string}
@@ -487,23 +512,23 @@ export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accoun
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Batch/batchAccounts/($accountName)/applications/($applicationName)" $qp)
-  let body = {properties: $properties} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name), application_name: (encode-path-segment $application_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Batch/batchAccounts/{account_name}/applications/{application_name}") $qp)
+  let req_body = {"properties": $properties} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Lists all of the application packages in the specified application.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Batch/batchAccounts/{accountName}/applications/{applicationName}/versions
 # operationId: ApplicationPackage_List
-export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accounts-applications-versions List" [
-  resourceGroupName: string
-  accountName: string
-  applicationName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accounts-applications-versions list-package" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  application_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -511,6 +536,7 @@ export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accoun
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --maxresults: int # The maximum number of items to return in the response. (format: int32)
   --api-version: string # The API version to be used with the HTTP request.
@@ -518,22 +544,22 @@ export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accoun
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "maxresults" $maxresults "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Batch/batchAccounts/($accountName)/applications/($applicationName)/versions" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name), application_name: (encode-path-segment $application_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Batch/batchAccounts/{account_name}/applications/{application_name}/versions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Deletes an application package record and its associated binary file.
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Batch/batchAccounts/{accountName}/applications/{applicationName}/versions/{versionName}
 # operationId: ApplicationPackage_Delete
-export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accounts-applications-versions Delete" [
-  resourceGroupName: string
-  accountName: string
-  applicationName: string
-  versionName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accounts-applications-versions delete-package" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  application_name: string
+  version_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -541,28 +567,29 @@ export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accoun
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to be used with the HTTP request.
 ]: nothing -> record<error: record<code: string, details: list<any>, message: string, target: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Batch/batchAccounts/($accountName)/applications/($applicationName)/versions/($versionName)" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name), application_name: (encode-path-segment $application_name), version_name: (encode-path-segment $version_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Batch/batchAccounts/{account_name}/applications/{application_name}/versions/{version_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Gets information about the specified application package.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Batch/batchAccounts/{accountName}/applications/{applicationName}/versions/{versionName}
 # operationId: ApplicationPackage_Get
-export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accounts-applications-versions Get" [
-  resourceGroupName: string
-  accountName: string
-  applicationName: string
-  versionName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accounts-applications-versions get-package" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  application_name: string
+  version_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -570,28 +597,29 @@ export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accoun
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to be used with the HTTP request.
 ]: nothing -> record<properties: record<format: string, lastActivationTime: string, state: string, storageUrl: string, storageUrlExpiry: string>, etag: string, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Batch/batchAccounts/($accountName)/applications/($applicationName)/versions/($versionName)" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name), application_name: (encode-path-segment $application_name), version_name: (encode-path-segment $version_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Batch/batchAccounts/{account_name}/applications/{application_name}/versions/{version_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
-# Creates an application package record. The record contains the SAS where the package should be uploaded to.  Once it is uploaded the `ApplicationPackage` needs to be activated using `ApplicationPackageActive` before it can be used.
+# Creates an application package record. The record contains the SAS where the package should be uploaded to. Once it is uploaded the `ApplicationPackage` needs to be activated using `ApplicationPackageActive` before it can be used.
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Batch/batchAccounts/{accountName}/applications/{applicationName}/versions/{versionName}
 # operationId: ApplicationPackage_Create
-export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accounts-applications-versions Create" [
-  resourceGroupName: string
-  accountName: string
-  applicationName: string
-  versionName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accounts-applications-versions create-package" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  application_name: string
+  version_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -599,6 +627,7 @@ export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accoun
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to be used with the HTTP request.
   --properties: any # Properties of an application package
@@ -607,24 +636,24 @@ export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accoun
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Batch/batchAccounts/($accountName)/applications/($applicationName)/versions/($versionName)" $qp)
-  let body = {properties: $properties} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name), application_name: (encode-path-segment $application_name), version_name: (encode-path-segment $version_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Batch/batchAccounts/{account_name}/applications/{application_name}/versions/{version_name}") $qp)
+  let req_body = {"properties": $properties} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Activates the specified application package. This should be done after the `ApplicationPackage` was created and uploaded. This needs to be done before an `ApplicationPackage` can be used on Pools or Tasks
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Batch/batchAccounts/{accountName}/applications/{applicationName}/versions/{versionName}/activate
 # operationId: ApplicationPackage_Activate
-export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accounts-applications-versions-activate Activate" [
-  resourceGroupName: string
-  accountName: string
-  applicationName: string
-  versionName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accounts-applications-versions-activate create-package" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  application_name: string
+  version_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -632,6 +661,7 @@ export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accoun
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to be used with the HTTP request.
   format: string # The format of the application package binary file.
@@ -640,22 +670,22 @@ export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accoun
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Batch/batchAccounts/($accountName)/applications/($applicationName)/versions/($versionName)/activate" $qp)
-  let body = {format: $format} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name), application_name: (encode-path-segment $application_name), version_name: (encode-path-segment $version_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Batch/batchAccounts/{account_name}/applications/{application_name}/versions/{version_name}/activate") $qp)
+  let req_body = {"format": $format} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Lists all of the certificates in the specified account.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Batch/batchAccounts/{accountName}/certificates
 # operationId: Certificate_ListByBatchAccount
-export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accounts-certificates ListByBatchAccount" [
-  resourceGroupName: string
-  accountName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accounts-certificates list" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -663,6 +693,7 @@ export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accoun
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --maxresults: int # The maximum number of items to return in the response. (format: int32)
   --select: string # Comma separated list of properties that should be returned. e.g. "properties/provisioningState". Only top level properties under properties/ are valid for selection.
@@ -672,21 +703,21 @@ export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accoun
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "maxresults" $maxresults "scalar") (serialize-qp "$select" $select "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Batch/batchAccounts/($accountName)/certificates" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Batch/batchAccounts/{account_name}/certificates") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Deletes the specified certificate.
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Batch/batchAccounts/{accountName}/certificates/{certificateName}
 # operationId: Certificate_Delete
-export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accounts-certificates Delete" [
-  resourceGroupName: string
-  accountName: string
-  certificateName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accounts-certificates delete" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  certificate_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -694,27 +725,28 @@ export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accoun
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to be used with the HTTP request.
 ]: nothing -> record<error: record<code: string, details: list<any>, message: string, target: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Batch/batchAccounts/($accountName)/certificates/($certificateName)" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name), certificate_name: (encode-path-segment $certificate_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Batch/batchAccounts/{account_name}/certificates/{certificate_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Gets information about the specified certificate.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Batch/batchAccounts/{accountName}/certificates/{certificateName}
 # operationId: Certificate_Get
-export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accounts-certificates Get" [
-  resourceGroupName: string
-  accountName: string
-  certificateName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accounts-certificates get" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  certificate_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -722,16 +754,17 @@ export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accoun
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to be used with the HTTP request.
 ]: nothing -> record<properties: record<deleteCertificateError: record<code: string, details: list, message: string, target: string>, previousProvisioningState: string, previousProvisioningStateTransitionTime: string, provisioningState: string, provisioningStateTransitionTime: string, publicData: string, format: string, thumbprint: string, thumbprintAlgorithm: string>, etag: string, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Batch/batchAccounts/($accountName)/certificates/($certificateName)" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name), certificate_name: (encode-path-segment $certificate_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Batch/batchAccounts/{account_name}/certificates/{certificate_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Updates the properties of an existing certificate.
@@ -739,11 +772,11 @@ export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accoun
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Batch/batchAccounts/{accountName}/certificates/{certificateName}
 # operationId: Certificate_Update
 # --properties shape: {data: string, password?: string, format?: "Pfx"|"Cer", thumbprint?: string, thumbprintAlgorithm?: string}
-export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accounts-certificates Update" [
-  resourceGroupName: string
-  accountName: string
-  certificateName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accounts-certificates update" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  certificate_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -751,23 +784,24 @@ export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accoun
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to be used with the HTTP request.
-  --If-Match: string # The entity state (ETag) version of the certificate to update. This value can be omitted or set to "*" to apply the operation unconditionally.
+  --if-match: string # The entity state (ETag) version of the certificate to update. This value can be omitted or set to "*" to apply the operation unconditionally.
   --properties: any # Certificate properties for create operations — shape: {data: string, password?: string, format?: "Pfx"|"Cer", thumbprint?: string, thumbprintAlgorithm?: string}
 ]: any -> record<properties: record<deleteCertificateError: record<code: string, details: list, message: string, target: string>, previousProvisioningState: string, previousProvisioningStateTransitionTime: string, provisioningState: string, provisioningStateTransitionTime: string, publicData: string, format: string, thumbprint: string, thumbprintAlgorithm: string>, etag: string, id: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Batch/batchAccounts/($accountName)/certificates/($certificateName)" $qp)
-  let body = {properties: $properties} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"If-Match": $If_Match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name), certificate_name: (encode-path-segment $certificate_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Batch/batchAccounts/{account_name}/certificates/{certificate_name}") $qp)
+  let req_body = {"properties": $properties} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"If-Match": $if_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Creates a new certificate inside the specified account.
@@ -775,11 +809,11 @@ export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accoun
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Batch/batchAccounts/{accountName}/certificates/{certificateName}
 # operationId: Certificate_Create
 # --properties shape: {data: string, password?: string, format?: "Pfx"|"Cer", thumbprint?: string, thumbprintAlgorithm?: string}
-export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accounts-certificates Create" [
-  resourceGroupName: string
-  accountName: string
-  certificateName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accounts-certificates create" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  certificate_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -787,35 +821,36 @@ export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accoun
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to be used with the HTTP request.
-  --If-Match: string # The entity state (ETag) version of the certificate to update. A value of "*" can be used to apply the operation only if the certificate already exists. If omitted, this operation will always be applied.
-  --If-None-Match: string # Set to '*' to allow a new certificate to be created, but to prevent updating an existing certificate. Other values will be ignored.
+  --if-match: string # The entity state (ETag) version of the certificate to update. A value of "*" can be used to apply the operation only if the certificate already exists. If omitted, this operation will always be applied.
+  --if-none-match: string # Set to '*' to allow a new certificate to be created, but to prevent updating an existing certificate. Other values will be ignored.
   --properties: any # Certificate properties for create operations — shape: {data: string, password?: string, format?: "Pfx"|"Cer", thumbprint?: string, thumbprintAlgorithm?: string}
 ]: any -> record<properties: record<deleteCertificateError: record<code: string, details: list, message: string, target: string>, previousProvisioningState: string, previousProvisioningStateTransitionTime: string, provisioningState: string, provisioningStateTransitionTime: string, publicData: string, format: string, thumbprint: string, thumbprintAlgorithm: string>, etag: string, id: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Batch/batchAccounts/($accountName)/certificates/($certificateName)" $qp)
-  let body = {properties: $properties} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"If-Match": $If_Match, "If-None-Match": $If_None_Match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name), certificate_name: (encode-path-segment $certificate_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Batch/batchAccounts/{account_name}/certificates/{certificate_name}") $qp)
+  let req_body = {"properties": $properties} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"If-Match": $if_match, "If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Cancels a failed deletion of a certificate from the specified account.
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Batch/batchAccounts/{accountName}/certificates/{certificateName}/cancelDelete
 # operationId: Certificate_CancelDeletion
-export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accounts-certificates-cancel-delete CancelDeletion" [
-  resourceGroupName: string
-  accountName: string
-  certificateName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accounts-certificates-cancel-delete cancel-deletion" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  certificate_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -823,26 +858,27 @@ export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accoun
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to be used with the HTTP request.
 ]: nothing -> record<properties: record<deleteCertificateError: record<code: string, details: list, message: string, target: string>, previousProvisioningState: string, previousProvisioningStateTransitionTime: string, provisioningState: string, provisioningStateTransitionTime: string, publicData: string, format: string, thumbprint: string, thumbprintAlgorithm: string>, etag: string, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Batch/batchAccounts/($accountName)/certificates/($certificateName)/cancelDelete" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name), certificate_name: (encode-path-segment $certificate_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Batch/batchAccounts/{account_name}/certificates/{certificate_name}/cancelDelete") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Gets the account keys for the specified Batch account.
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Batch/batchAccounts/{accountName}/listKeys
 # operationId: BatchAccount_GetKeys
-export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accounts-list-keys GetKeys" [
-  resourceGroupName: string
-  accountName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accounts-list-keys get" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -850,26 +886,27 @@ export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accoun
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to be used with the HTTP request.
 ]: nothing -> record<accountName: string, primary: string, secondary: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Batch/batchAccounts/($accountName)/listKeys" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Batch/batchAccounts/{account_name}/listKeys") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Lists all of the pools in the specified account.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Batch/batchAccounts/{accountName}/pools
 # operationId: Pool_ListByBatchAccount
-export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accounts-pools ListByBatchAccount" [
-  resourceGroupName: string
-  accountName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accounts-pools list" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -877,30 +914,31 @@ export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accoun
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --maxresults: int # The maximum number of items to return in the response. (format: int32)
   --select: string # Comma separated list of properties that should be returned. e.g. "properties/provisioningState". Only top level properties under properties/ are valid for selection.
-  --filter: string # OData filter expression. Valid properties for filtering are:   name  properties/allocationState  properties/allocationStateTransitionTime  properties/creationTime  properties/provisioningState  properties/provisioningStateTransitionTime  properties/lastModified  properties/vmSize  properties/interNodeCommunication  properties/scaleSettings/autoScale  properties/scaleSettings/fixedScale
+  --filter: string # OData filter expression. Valid properties for filtering are: name properties/allocationState properties/allocationStateTransitionTime properties/creationTime properties/provisioningState properties/provisioningStateTransitionTime properties/lastModified properties/vmSize properties/interNodeCommunication properties/scaleSettings/autoScale properties/scaleSettings/fixedScale
   --api-version: string # The API version to be used with the HTTP request.
 ]: nothing -> record<nextLink: string, value: table<properties: record, etag: string, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "maxresults" $maxresults "scalar") (serialize-qp "$select" $select "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Batch/batchAccounts/($accountName)/pools" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Batch/batchAccounts/{account_name}/pools") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Deletes the specified pool.
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Batch/batchAccounts/{accountName}/pools/{poolName}
 # operationId: Pool_Delete
-export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accounts-pools Delete" [
-  resourceGroupName: string
-  accountName: string
-  poolName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accounts-pools delete" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  pool_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -908,27 +946,28 @@ export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accoun
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to be used with the HTTP request.
 ]: nothing -> record<error: record<code: string, details: list<any>, message: string, target: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Batch/batchAccounts/($accountName)/pools/($poolName)" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name), pool_name: (encode-path-segment $pool_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Batch/batchAccounts/{account_name}/pools/{pool_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Gets information about the specified pool.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Batch/batchAccounts/{accountName}/pools/{poolName}
 # operationId: Pool_Get
-export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accounts-pools Get" [
-  resourceGroupName: string
-  accountName: string
-  poolName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accounts-pools get" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  pool_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -936,28 +975,29 @@ export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accoun
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to be used with the HTTP request.
 ]: nothing -> record<properties: record<allocationState: string, allocationStateTransitionTime: string, applicationLicenses: list<string>, applicationPackages: list<record>, autoScaleRun: record<error: record, evaluationTime: string, results: string>, certificates: list<record>, creationTime: string, currentDedicatedNodes: int, currentLowPriorityNodes: int, deploymentConfiguration: record<cloudServiceConfiguration: record, virtualMachineConfiguration: record>, displayName: string, interNodeCommunication: string, lastModified: string, maxTasksPerNode: int, metadata: list<record>, mountConfiguration: list<record>, networkConfiguration: record<endpointConfiguration: record, publicIPs: list, subnetId: string>, provisioningState: string, provisioningStateTransitionTime: string, resizeOperationStatus: record<errors: list, nodeDeallocationOption: string, resizeTimeout: string, startTime: string, targetDedicatedNodes: int, targetLowPriorityNodes: int>, scaleSettings: record<autoScale: record, fixedScale: record>, startTask: record<commandLine: string, containerSettings: record, environmentSettings: list, maxTaskRetryCount: int, resourceFiles: list, userIdentity: record, waitForSuccess: bool>, taskSchedulingPolicy: record<nodeFillType: string>, userAccounts: list<record>, vmSize: string>, etag: string, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Batch/batchAccounts/($accountName)/pools/($poolName)" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name), pool_name: (encode-path-segment $pool_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Batch/batchAccounts/{account_name}/pools/{pool_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Updates the properties of an existing pool.
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Batch/batchAccounts/{accountName}/pools/{poolName}
 # operationId: Pool_Update
-# --properties shape: {applicationLicenses?: list, applicationPackages?: list, autoScaleRun?: any, certificates?: list, deploymentConfiguration?: any, displayName?: string, interNodeCommunication?: "Enabled"|"Disabled", maxTasksPerNode?: int, metadata?: list, mountConfiguration?: list, networkConfiguration?: any, resizeOperationStatus?: any, scaleSettings?: any, startTask?: any, taskSchedulingPolicy?: any, userAccounts?: list, vmSize?: string}
-export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accounts-pools Update" [
-  resourceGroupName: string
-  accountName: string
-  poolName: string
-  subscriptionId: string
+# --properties shape: {applicationLicenses?: list<string>, applicationPackages?: list, autoScaleRun?: any, certificates?: list, deploymentConfiguration?: any, displayName?: string, interNodeCommunication?: "Enabled"|"Disabled", maxTasksPerNode?: int, metadata?: list, mountConfiguration?: list, networkConfiguration?: any, resizeOperationStatus?: any, scaleSettings?: any, startTask?: any, taskSchedulingPolicy?: any, userAccounts?: list, vmSize?: string}
+export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accounts-pools update" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  pool_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -965,35 +1005,36 @@ export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accoun
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to be used with the HTTP request.
-  --If-Match: string # The entity state (ETag) version of the pool to update. This value can be omitted or set to "*" to apply the operation unconditionally.
-  --properties: any # Pool properties. — shape: {applicationLicenses?: list, applicationPackages?: list, autoScaleRun?: any, certificates?: list, deploymentConfiguration?: any, displayName?: string, interNodeCommunication?: "Enabled"|"Disabled", maxTasksPerNode?: int, metadata?: list, mountConfiguration?: list, networkConfiguration?: any, resizeOperationStatus?: any, scaleSettings?: any, startTask?: any, taskSchedulingPolicy?: any, userAccounts?: list, vmSize?: string}
+  --if-match: string # The entity state (ETag) version of the pool to update. This value can be omitted or set to "*" to apply the operation unconditionally.
+  --properties: any # Pool properties. — shape: {applicationLicenses?: list<string>, applicationPackages?: list, autoScaleRun?: any, certificates?: list, deploymentConfiguration?: any, displayName?: string, interNodeCommunication?: "Enabled"|"Disabled", maxTasksPerNode?: int, metadata?: list, mountConfiguration?: list, networkConfiguration?: any, resizeOperationStatus?: any, scaleSettings?: any, startTask?: any, taskSchedulingPolicy?: any, userAccounts?: list, vmSize?: string}
 ]: any -> record<properties: record<allocationState: string, allocationStateTransitionTime: string, applicationLicenses: list<string>, applicationPackages: list<record>, autoScaleRun: record<error: record, evaluationTime: string, results: string>, certificates: list<record>, creationTime: string, currentDedicatedNodes: int, currentLowPriorityNodes: int, deploymentConfiguration: record<cloudServiceConfiguration: record, virtualMachineConfiguration: record>, displayName: string, interNodeCommunication: string, lastModified: string, maxTasksPerNode: int, metadata: list<record>, mountConfiguration: list<record>, networkConfiguration: record<endpointConfiguration: record, publicIPs: list, subnetId: string>, provisioningState: string, provisioningStateTransitionTime: string, resizeOperationStatus: record<errors: list, nodeDeallocationOption: string, resizeTimeout: string, startTime: string, targetDedicatedNodes: int, targetLowPriorityNodes: int>, scaleSettings: record<autoScale: record, fixedScale: record>, startTask: record<commandLine: string, containerSettings: record, environmentSettings: list, maxTaskRetryCount: int, resourceFiles: list, userIdentity: record, waitForSuccess: bool>, taskSchedulingPolicy: record<nodeFillType: string>, userAccounts: list<record>, vmSize: string>, etag: string, id: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Batch/batchAccounts/($accountName)/pools/($poolName)" $qp)
-  let body = {properties: $properties} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"If-Match": $If_Match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name), pool_name: (encode-path-segment $pool_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Batch/batchAccounts/{account_name}/pools/{pool_name}") $qp)
+  let req_body = {"properties": $properties} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"If-Match": $if_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Creates a new pool inside the specified account.
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Batch/batchAccounts/{accountName}/pools/{poolName}
 # operationId: Pool_Create
-# --properties shape: {applicationLicenses?: list, applicationPackages?: list, autoScaleRun?: any, certificates?: list, deploymentConfiguration?: any, displayName?: string, interNodeCommunication?: "Enabled"|"Disabled", maxTasksPerNode?: int, metadata?: list, mountConfiguration?: list, networkConfiguration?: any, resizeOperationStatus?: any, scaleSettings?: any, startTask?: any, taskSchedulingPolicy?: any, userAccounts?: list, vmSize?: string}
-export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accounts-pools Create" [
-  resourceGroupName: string
-  accountName: string
-  poolName: string
-  subscriptionId: string
+# --properties shape: {applicationLicenses?: list<string>, applicationPackages?: list, autoScaleRun?: any, certificates?: list, deploymentConfiguration?: any, displayName?: string, interNodeCommunication?: "Enabled"|"Disabled", maxTasksPerNode?: int, metadata?: list, mountConfiguration?: list, networkConfiguration?: any, resizeOperationStatus?: any, scaleSettings?: any, startTask?: any, taskSchedulingPolicy?: any, userAccounts?: list, vmSize?: string}
+export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accounts-pools create" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  pool_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1001,35 +1042,36 @@ export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accoun
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to be used with the HTTP request.
-  --If-Match: string # The entity state (ETag) version of the pool to update. A value of "*" can be used to apply the operation only if the pool already exists. If omitted, this operation will always be applied.
-  --If-None-Match: string # Set to '*' to allow a new pool to be created, but to prevent updating an existing pool. Other values will be ignored.
-  --properties: any # Pool properties. — shape: {applicationLicenses?: list, applicationPackages?: list, autoScaleRun?: any, certificates?: list, deploymentConfiguration?: any, displayName?: string, interNodeCommunication?: "Enabled"|"Disabled", maxTasksPerNode?: int, metadata?: list, mountConfiguration?: list, networkConfiguration?: any, resizeOperationStatus?: any, scaleSettings?: any, startTask?: any, taskSchedulingPolicy?: any, userAccounts?: list, vmSize?: string}
+  --if-match: string # The entity state (ETag) version of the pool to update. A value of "*" can be used to apply the operation only if the pool already exists. If omitted, this operation will always be applied.
+  --if-none-match: string # Set to '*' to allow a new pool to be created, but to prevent updating an existing pool. Other values will be ignored.
+  --properties: any # Pool properties. — shape: {applicationLicenses?: list<string>, applicationPackages?: list, autoScaleRun?: any, certificates?: list, deploymentConfiguration?: any, displayName?: string, interNodeCommunication?: "Enabled"|"Disabled", maxTasksPerNode?: int, metadata?: list, mountConfiguration?: list, networkConfiguration?: any, resizeOperationStatus?: any, scaleSettings?: any, startTask?: any, taskSchedulingPolicy?: any, userAccounts?: list, vmSize?: string}
 ]: any -> record<properties: record<allocationState: string, allocationStateTransitionTime: string, applicationLicenses: list<string>, applicationPackages: list<record>, autoScaleRun: record<error: record, evaluationTime: string, results: string>, certificates: list<record>, creationTime: string, currentDedicatedNodes: int, currentLowPriorityNodes: int, deploymentConfiguration: record<cloudServiceConfiguration: record, virtualMachineConfiguration: record>, displayName: string, interNodeCommunication: string, lastModified: string, maxTasksPerNode: int, metadata: list<record>, mountConfiguration: list<record>, networkConfiguration: record<endpointConfiguration: record, publicIPs: list, subnetId: string>, provisioningState: string, provisioningStateTransitionTime: string, resizeOperationStatus: record<errors: list, nodeDeallocationOption: string, resizeTimeout: string, startTime: string, targetDedicatedNodes: int, targetLowPriorityNodes: int>, scaleSettings: record<autoScale: record, fixedScale: record>, startTask: record<commandLine: string, containerSettings: record, environmentSettings: list, maxTaskRetryCount: int, resourceFiles: list, userIdentity: record, waitForSuccess: bool>, taskSchedulingPolicy: record<nodeFillType: string>, userAccounts: list<record>, vmSize: string>, etag: string, id: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Batch/batchAccounts/($accountName)/pools/($poolName)" $qp)
-  let body = {properties: $properties} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"If-Match": $If_Match, "If-None-Match": $If_None_Match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name), pool_name: (encode-path-segment $pool_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Batch/batchAccounts/{account_name}/pools/{pool_name}") $qp)
+  let req_body = {"properties": $properties} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"If-Match": $if_match, "If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Disables automatic scaling for a pool.
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Batch/batchAccounts/{accountName}/pools/{poolName}/disableAutoScale
 # operationId: Pool_DisableAutoScale
-export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accounts-pools-disable-auto-scale DisableAutoScale" [
-  resourceGroupName: string
-  accountName: string
-  poolName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accounts-pools-disable-auto-scale disable" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  pool_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1037,27 +1079,28 @@ export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accoun
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to be used with the HTTP request.
 ]: nothing -> record<properties: record<allocationState: string, allocationStateTransitionTime: string, applicationLicenses: list<string>, applicationPackages: list<record>, autoScaleRun: record<error: record, evaluationTime: string, results: string>, certificates: list<record>, creationTime: string, currentDedicatedNodes: int, currentLowPriorityNodes: int, deploymentConfiguration: record<cloudServiceConfiguration: record, virtualMachineConfiguration: record>, displayName: string, interNodeCommunication: string, lastModified: string, maxTasksPerNode: int, metadata: list<record>, mountConfiguration: list<record>, networkConfiguration: record<endpointConfiguration: record, publicIPs: list, subnetId: string>, provisioningState: string, provisioningStateTransitionTime: string, resizeOperationStatus: record<errors: list, nodeDeallocationOption: string, resizeTimeout: string, startTime: string, targetDedicatedNodes: int, targetLowPriorityNodes: int>, scaleSettings: record<autoScale: record, fixedScale: record>, startTask: record<commandLine: string, containerSettings: record, environmentSettings: list, maxTaskRetryCount: int, resourceFiles: list, userIdentity: record, waitForSuccess: bool>, taskSchedulingPolicy: record<nodeFillType: string>, userAccounts: list<record>, vmSize: string>, etag: string, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Batch/batchAccounts/($accountName)/pools/($poolName)/disableAutoScale" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name), pool_name: (encode-path-segment $pool_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Batch/batchAccounts/{account_name}/pools/{pool_name}/disableAutoScale") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Stops an ongoing resize operation on the pool.
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Batch/batchAccounts/{accountName}/pools/{poolName}/stopResize
 # operationId: Pool_StopResize
-export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accounts-pools-stop-resize StopResize" [
-  resourceGroupName: string
-  accountName: string
-  poolName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accounts-pools-stop-resize stop" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  pool_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1065,26 +1108,27 @@ export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accoun
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to be used with the HTTP request.
 ]: nothing -> record<properties: record<allocationState: string, allocationStateTransitionTime: string, applicationLicenses: list<string>, applicationPackages: list<record>, autoScaleRun: record<error: record, evaluationTime: string, results: string>, certificates: list<record>, creationTime: string, currentDedicatedNodes: int, currentLowPriorityNodes: int, deploymentConfiguration: record<cloudServiceConfiguration: record, virtualMachineConfiguration: record>, displayName: string, interNodeCommunication: string, lastModified: string, maxTasksPerNode: int, metadata: list<record>, mountConfiguration: list<record>, networkConfiguration: record<endpointConfiguration: record, publicIPs: list, subnetId: string>, provisioningState: string, provisioningStateTransitionTime: string, resizeOperationStatus: record<errors: list, nodeDeallocationOption: string, resizeTimeout: string, startTime: string, targetDedicatedNodes: int, targetLowPriorityNodes: int>, scaleSettings: record<autoScale: record, fixedScale: record>, startTask: record<commandLine: string, containerSettings: record, environmentSettings: list, maxTaskRetryCount: int, resourceFiles: list, userIdentity: record, waitForSuccess: bool>, taskSchedulingPolicy: record<nodeFillType: string>, userAccounts: list<record>, vmSize: string>, etag: string, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Batch/batchAccounts/($accountName)/pools/($poolName)/stopResize" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name), pool_name: (encode-path-segment $pool_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Batch/batchAccounts/{account_name}/pools/{pool_name}/stopResize") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Regenerates the specified account key for the Batch account.
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Batch/batchAccounts/{accountName}/regenerateKeys
 # operationId: BatchAccount_RegenerateKey
-export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accounts-regenerate-keys RegenerateKey" [
-  resourceGroupName: string
-  accountName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accounts-regenerate-keys create" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1092,30 +1136,31 @@ export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accoun
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to be used with the HTTP request.
-  keyName: string@keyName-completer # The type of account key to regenerate.
+  key_name: string@key-name-completer # The type of account key to regenerate.
 ]: any -> record<accountName: string, primary: string, secondary: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Batch/batchAccounts/($accountName)/regenerateKeys" $qp)
-  let body = {keyName: $keyName} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Batch/batchAccounts/{account_name}/regenerateKeys") $qp)
+  let req_body = {"keyName": $key_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Synchronizes access keys for the auto-storage account configured for the specified Batch account.
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Batch/batchAccounts/{accountName}/syncAutoStorageKeys
 # operationId: BatchAccount_SynchronizeAutoStorageKeys
-export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accounts-sync-auto-storage-keys SynchronizeAutoStorageKeys" [
-  resourceGroupName: string
-  accountName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accounts-sync-auto-storage-keys create-synchronize" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1123,14 +1168,15 @@ export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accoun
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to be used with the HTTP request.
 ]: nothing -> record<error: record<code: string, details: list<any>, message: string, target: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Batch/batchAccounts/($accountName)/syncAutoStorageKeys" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Batch/batchAccounts/{account_name}/syncAutoStorageKeys") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }

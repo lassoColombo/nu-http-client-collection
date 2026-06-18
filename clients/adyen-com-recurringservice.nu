@@ -13,27 +13,39 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   match $scheme {
     "x-api-key" => { {headers: {X-API-Key: $token_val}, query: ""} }
     "basic" => { {headers: {Authorization: $"Basic ($token_val)"}, query: ""} }
+    "basic-credentials" => { {headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: ""} }
     "none" => { {headers: {}, query: ""} }
     _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
   }
 }
 
 # Serialize a single query parameter based on collection style
+# Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
+# ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = ($name | url encode)
+  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
-  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
-    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
-    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
+    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
+    _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
+}
+
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Build URL from base, path, and optional query string
@@ -45,7 +57,7 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
@@ -54,23 +66,23 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
     "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "put" => { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "patch" => { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
   if ($method in ["head" "options"]) { return $resp }
-  if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
+  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
 def base-url-completer [] { ["https://pal-test.adyen.com/pal/servlet/Recurring/v68"] }
-def auth-scheme-completer [] { ["x-api-key" "basic"] }
+def auth-scheme-completer [] { ["x-api-key" "basic" "basic-credentials"] }
 
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "create-permit post-createPermit" } } | get name | first)
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "create-permit create" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -95,7 +107,7 @@ export def commands []: nothing -> table {
 # POST /createPermit
 # operationId: post-createPermit
 # --permits item shape: {partnerId?: string, profileReference?: string, restriction?: record, resultKey?: string, validTillDate?: string}
-export def "create-permit post-createPermit" [
+export def "create-permit create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -103,28 +115,29 @@ export def "create-permit post-createPermit" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  merchantAccount: string # The merchant account identifier, with which you want to process the transaction.
+  merchant_account: string # The merchant account identifier, with which you want to process the transaction.
   permits: list # The permits to create for this recurring contract. — item shape: {partnerId?: string, profileReference?: string, restriction?: record, resultKey?: string, validTillDate?: string}
-  recurringDetailReference: string # The recurring contract the new permits will use.
-  shopperReference: string # The shopper's reference to uniquely identify this shopper (e.g. user ID or account ID).
+  recurring_detail_reference: string # The recurring contract the new permits will use.
+  shopper_reference: string # The shopper's reference to uniquely identify this shopper (e.g. user ID or account ID).
 ]: any -> record<permitResultList: table<resultKey: string, token: string>, pspReference: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/createPermit")
-  let body = {merchantAccount: $merchantAccount, permits: $permits, recurringDetailReference: $recurringDetailReference, shopperReference: $shopperReference} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"merchantAccount": $merchant_account, "permits": $permits, "recurringDetailReference": $recurring_detail_reference, "shopperReference": $shopper_reference} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Disable stored payment details
 #
 # POST /disable
 # operationId: post-disable
-export def "disable post-disable" [
+export def "disable create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -132,28 +145,29 @@ export def "disable post-disable" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --contract: string # Specify the contract if you only want to disable a specific use.  This field can be set to one of the following values, or to their combination (comma-separated): * ONECLICK * RECURRING * PAYOUT
-  merchantAccount: string # The merchant account identifier with which you want to process the transaction.
-  --recurringDetailReference: string # The ID that uniquely identifies the recurring detail reference.  If it is not provided, the whole recurring contract of the `shopperReference` will be disabled, which includes all recurring details.
-  shopperReference: string # The ID that uniquely identifies the shopper.  This `shopperReference` must be the same as the `shopperReference` used in the initial payment.
+  --contract: string # Specify the contract if you only want to disable a specific use. This field can be set to one of the following values, or to their combination (comma-separated): * ONECLICK * RECURRING * PAYOUT
+  merchant_account: string # The merchant account identifier with which you want to process the transaction.
+  --recurring-detail-reference: string # The ID that uniquely identifies the recurring detail reference. If it is not provided, the whole recurring contract of the `shopperReference` will be disabled, which includes all recurring details.
+  shopper_reference: string # The ID that uniquely identifies the shopper. This `shopperReference` must be the same as the `shopperReference` used in the initial payment.
 ]: any -> record<response: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/disable")
-  let body = {contract: $contract, merchantAccount: $merchantAccount, recurringDetailReference: $recurringDetailReference, shopperReference: $shopperReference} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"contract": $contract, "merchantAccount": $merchant_account, "recurringDetailReference": $recurring_detail_reference, "shopperReference": $shopper_reference} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Disable an existing permit.
 #
 # POST /disablePermit
 # operationId: post-disablePermit
-export def "disable-permit post-disablePermit" [
+export def "disable-permit create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -161,19 +175,20 @@ export def "disable-permit post-disablePermit" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  merchantAccount: string # The merchant account identifier, with which you want to process the transaction.
+  merchant_account: string # The merchant account identifier, with which you want to process the transaction.
   --body-token: string # The permit token to disable.
 ]: any -> record<pspReference: string, status: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/disablePermit")
-  let body = {merchantAccount: $merchantAccount, token: $body_token} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"merchantAccount": $merchant_account, "token": $body_token} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Get stored payment details
@@ -181,7 +196,7 @@ export def "disable-permit post-disablePermit" [
 # POST /listRecurringDetails
 # operationId: post-listRecurringDetails
 # --recurring shape: {contract?: "ONECLICK"|"RECURRING"|"PAYOUT", recurringDetailName?: string, recurringExpiry?: string, recurringFrequency?: string, tokenService?: "VISATOKENSERVICE"|"MCTOKENSERVICE"}
-export def "list-recurring-details post-listRecurringDetails" [
+export def "list-recurring-details create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -189,20 +204,21 @@ export def "list-recurring-details post-listRecurringDetails" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  merchantAccount: string # The merchant account identifier you want to process the (transaction) request with.
+  merchant_account: string # The merchant account identifier you want to process the (transaction) request with.
   --recurring: record # shape: {contract?: "ONECLICK"|"RECURRING"|"PAYOUT", recurringDetailName?: string, recurringExpiry?: string, recurringFrequency?: string, tokenService?: "VISATOKENSERVICE"|"MCTOKENSERVICE"}
-  shopperReference: string # The reference you use to uniquely identify the shopper (e.g. user ID or account ID).
+  shopper_reference: string # The reference you use to uniquely identify the shopper (e.g. user ID or account ID).
 ]: any -> record<creationDate: string, details: table<RecurringDetail: record>, lastKnownShopperEmail: string, shopperReference: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/listRecurringDetails")
-  let body = {merchantAccount: $merchantAccount, recurring: $recurring, shopperReference: $shopperReference} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"merchantAccount": $merchant_account, "recurring": $recurring, "shopperReference": $shopper_reference} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Ask issuer to notify the shopper
@@ -210,7 +226,7 @@ export def "list-recurring-details post-listRecurringDetails" [
 # POST /notifyShopper
 # operationId: post-notifyShopper
 # --amount shape: {currency: string, value: int}
-export def "notify-shopper post-notifyShopper" [
+export def "notify-shopper create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -218,26 +234,27 @@ export def "notify-shopper post-notifyShopper" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   amount: record # shape: {currency: string, value: int}
-  --billingDate: string # Date on which the subscription amount will be debited from the shopper. In YYYY-MM-DD format
-  --billingSequenceNumber: string # Sequence of the debit. Depends on Frequency and Billing Attempts Rule.
-  --displayedReference: string # Reference of Pre-debit notification that is displayed to the shopper. Optional field. Maps to reference if missing
-  merchantAccount: string # The merchant account identifier with which you want to process the transaction.
-  --recurringDetailReference: string # This is the `recurringDetailReference` returned in the response when you created the token.
+  --billing-date: string # Date on which the subscription amount will be debited from the shopper. In YYYY-MM-DD format
+  --billing-sequence-number: string # Sequence of the debit. Depends on Frequency and Billing Attempts Rule.
+  --displayed-reference: string # Reference of Pre-debit notification that is displayed to the shopper. Optional field. Maps to reference if missing
+  merchant_account: string # The merchant account identifier with which you want to process the transaction.
+  --recurring-detail-reference: string # This is the `recurringDetailReference` returned in the response when you created the token.
   reference: string # Pre-debit notification reference sent by the merchant. This is a mandatory field
-  shopperReference: string # The ID that uniquely identifies the shopper.  This `shopperReference` must be the same as the `shopperReference` used in the initial payment.
-  --storedPaymentMethodId: string # This is the `recurringDetailReference` returned in the response when you created the token.
+  shopper_reference: string # The ID that uniquely identifies the shopper. This `shopperReference` must be the same as the `shopperReference` used in the initial payment.
+  --stored-payment-method-id: string # This is the `recurringDetailReference` returned in the response when you created the token.
 ]: any -> record<displayedReference: string, message: string, pspReference: string, reference: string, resultCode: string, shopperNotificationReference: string, storedPaymentMethodId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/notifyShopper")
-  let body = {amount: $amount, billingDate: $billingDate, billingSequenceNumber: $billingSequenceNumber, displayedReference: $displayedReference, merchantAccount: $merchantAccount, recurringDetailReference: $recurringDetailReference, reference: $reference, shopperReference: $shopperReference, storedPaymentMethodId: $storedPaymentMethodId} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"amount": $amount, "billingDate": $billing_date, "billingSequenceNumber": $billing_sequence_number, "displayedReference": $displayed_reference, "merchantAccount": $merchant_account, "recurringDetailReference": $recurring_detail_reference, "reference": $reference, "shopperReference": $shopper_reference, "storedPaymentMethodId": $stored_payment_method_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Schedule running the Account Updater
@@ -245,7 +262,7 @@ export def "notify-shopper post-notifyShopper" [
 # POST /scheduleAccountUpdater
 # operationId: post-scheduleAccountUpdater
 # --card shape: {cvc?: string, expiryMonth?: string, expiryYear?: string, holderName?: string, issueNumber?: string, number?: string, startMonth?: string, startYear?: string}
-export def "schedule-account-updater post-scheduleAccountUpdater" [
+export def "schedule-account-updater create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -253,21 +270,22 @@ export def "schedule-account-updater post-scheduleAccountUpdater" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --additionalData: record # This field contains additional data, which may be required for a particular request.
+  --additional-data: record # This field contains additional data, which may be required for a particular request.
   --card: record # shape: {cvc?: string, expiryMonth?: string, expiryYear?: string, holderName?: string, issueNumber?: string, number?: string, startMonth?: string, startYear?: string}
-  merchantAccount: string # Account of the merchant.
+  merchant_account: string # Account of the merchant.
   reference: string # A reference that merchants can apply for the call.
-  --selectedRecurringDetailReference: string # The selected detail recurring reference.  Optional if `card` is provided.
-  --shopperReference: string # The reference of the shopper that owns the recurring contract.  Optional if `card` is provided.
+  --selected-recurring-detail-reference: string # The selected detail recurring reference. Optional if `card` is provided.
+  --shopper-reference: string # The reference of the shopper that owns the recurring contract. Optional if `card` is provided.
 ]: any -> record<pspReference: string, result: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/scheduleAccountUpdater")
-  let body = {additionalData: $additionalData, card: $card, merchantAccount: $merchantAccount, reference: $reference, selectedRecurringDetailReference: $selectedRecurringDetailReference, shopperReference: $shopperReference} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"additionalData": $additional_data, "card": $card, "merchantAccount": $merchant_account, "reference": $reference, "selectedRecurringDetailReference": $selected_recurring_detail_reference, "shopperReference": $shopper_reference} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }

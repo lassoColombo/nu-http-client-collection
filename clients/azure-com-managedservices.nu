@@ -18,21 +18,32 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 }
 
 # Serialize a single query parameter based on collection style
+# Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
+# ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = ($name | url encode)
+  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
-  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
-    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
-    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
+    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
+    _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
+}
+
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Build URL from base, path, and optional query string
@@ -44,7 +55,7 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
@@ -53,13 +64,13 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
     "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "put" => { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "patch" => { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
   if ($method in ["head" "options"]) { return $resp }
-  if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
+  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
 def base-url-completer [] { ["https://management.azure.com"] }
@@ -68,8 +79,8 @@ def auth-scheme-completer [] { ["bearer"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-managed-services-operations List" } } | get name | first)
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-managed-services-operations list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -93,7 +104,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.ManagedServices/operations
 # operationId: Operations_List
-export def "providers-microsoft-managed-services-operations List" [
+export def "providers-microsoft-managed-services-operations list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -101,6 +112,7 @@ export def "providers-microsoft-managed-services-operations List" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to use for this operation.
 ]: nothing -> record<value: table<display: record, name: string>> {
@@ -110,14 +122,14 @@ export def "providers-microsoft-managed-services-operations List" [
   let full_url = (build-url $base "/providers/Microsoft.ManagedServices/operations" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Gets a list of the registration assignments.
 #
 # GET /{scope}/providers/Microsoft.ManagedServices/registrationAssignments
 # operationId: RegistrationAssignments_List
-export def "providers-microsoft-managed-services-registration-assignments List" [
+export def "providers-microsoft-managed-services-registration-assignments list" [
   scope: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -126,26 +138,27 @@ export def "providers-microsoft-managed-services-registration-assignments List" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --expandRegistrationDefinition: oneof<nothing, bool> # Tells whether to return registration definition details also along with registration assignment details.
+  --expand-registration-definition: oneof<nothing, bool> # Tells whether to return registration definition details also along with registration assignment details.
   --api-version: string # The API version to use for this operation.
 ]: nothing -> record<nextLink: string, value: table<id: string, name: string, properties: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$expandRegistrationDefinition" $expandRegistrationDefinition "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($scope)/providers/Microsoft.ManagedServices/registrationAssignments" $qp)
+  let qp = [(serialize-qp "$expandRegistrationDefinition" $expand_registration_definition "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({scope: (encode-path-segment $scope)} | format pattern "/{scope}/providers/Microsoft.ManagedServices/registrationAssignments") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Deletes the specified registration assignment.
 #
 # DELETE /{scope}/providers/Microsoft.ManagedServices/registrationAssignments/{registrationAssignmentId}
 # operationId: RegistrationAssignments_Delete
-export def "providers-microsoft-managed-services-registration-assignments Delete" [
+export def "providers-microsoft-managed-services-registration-assignments delete" [
   scope: string
-  registrationAssignmentId: string
+  registration_assignment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -153,25 +166,26 @@ export def "providers-microsoft-managed-services-registration-assignments Delete
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to use for this operation.
 ]: nothing -> record<error: record<code: string, message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($scope)/providers/Microsoft.ManagedServices/registrationAssignments/($registrationAssignmentId)" $qp)
+  let full_url = (build-url $base ({scope: (encode-path-segment $scope), registration_assignment_id: (encode-path-segment $registration_assignment_id)} | format pattern "/{scope}/providers/Microsoft.ManagedServices/registrationAssignments/{registration_assignment_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Gets the details of specified registration assignment.
 #
 # GET /{scope}/providers/Microsoft.ManagedServices/registrationAssignments/{registrationAssignmentId}
 # operationId: RegistrationAssignments_Get
-export def "providers-microsoft-managed-services-registration-assignments Get" [
+export def "providers-microsoft-managed-services-registration-assignments get" [
   scope: string
-  registrationAssignmentId: string
+  registration_assignment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -179,17 +193,18 @@ export def "providers-microsoft-managed-services-registration-assignments Get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --expandRegistrationDefinition: oneof<nothing, bool> # Tells whether to return registration definition details also along with registration assignment details.
+  --expand-registration-definition: oneof<nothing, bool> # Tells whether to return registration definition details also along with registration assignment details.
   --api-version: string # The API version to use for this operation.
 ]: nothing -> record<id: string, name: string, properties: record<provisioningState: string, registrationDefinition: record<id: string, name: string, plan: record, properties: record, type: string>, registrationDefinitionId: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$expandRegistrationDefinition" $expandRegistrationDefinition "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($scope)/providers/Microsoft.ManagedServices/registrationAssignments/($registrationAssignmentId)" $qp)
+  let qp = [(serialize-qp "$expandRegistrationDefinition" $expand_registration_definition "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({scope: (encode-path-segment $scope), registration_assignment_id: (encode-path-segment $registration_assignment_id)} | format pattern "/{scope}/providers/Microsoft.ManagedServices/registrationAssignments/{registration_assignment_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Creates or updates a registration assignment.
@@ -197,9 +212,9 @@ export def "providers-microsoft-managed-services-registration-assignments Get" [
 # PUT /{scope}/providers/Microsoft.ManagedServices/registrationAssignments/{registrationAssignmentId}
 # operationId: RegistrationAssignments_CreateOrUpdate
 # --properties shape: {registrationDefinitionId: string}
-export def "providers-microsoft-managed-services-registration-assignments CreateOrUpdate" [
+export def "providers-microsoft-managed-services-registration-assignments create-or-update" [
   scope: string
-  registrationAssignmentId: string
+  registration_assignment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -207,6 +222,7 @@ export def "providers-microsoft-managed-services-registration-assignments Create
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to use for this operation.
   --properties: record # Properties of a registration assignment. — shape: {registrationDefinitionId: string}
@@ -215,19 +231,19 @@ export def "providers-microsoft-managed-services-registration-assignments Create
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($scope)/providers/Microsoft.ManagedServices/registrationAssignments/($registrationAssignmentId)" $qp)
-  let body = {properties: $properties} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({scope: (encode-path-segment $scope), registration_assignment_id: (encode-path-segment $registration_assignment_id)} | format pattern "/{scope}/providers/Microsoft.ManagedServices/registrationAssignments/{registration_assignment_id}") $qp)
+  let req_body = {"properties": $properties} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Gets a list of the registration definitions.
 #
 # GET /{scope}/providers/Microsoft.ManagedServices/registrationDefinitions
 # operationId: RegistrationDefinitions_List
-export def "providers-microsoft-managed-services-registration-definitions List" [
+export def "providers-microsoft-managed-services-registration-definitions list" [
   scope: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -236,25 +252,26 @@ export def "providers-microsoft-managed-services-registration-definitions List" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to use for this operation.
 ]: nothing -> record<nextLink: string, value: table<id: string, name: string, plan: record, properties: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($scope)/providers/Microsoft.ManagedServices/registrationDefinitions" $qp)
+  let full_url = (build-url $base ({scope: (encode-path-segment $scope)} | format pattern "/{scope}/providers/Microsoft.ManagedServices/registrationDefinitions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Deletes the registration definition.
 #
 # DELETE /{scope}/providers/Microsoft.ManagedServices/registrationDefinitions/{registrationDefinitionId}
 # operationId: RegistrationDefinitions_Delete
-export def "providers-microsoft-managed-services-registration-definitions Delete" [
-  registrationDefinitionId: string
+export def "providers-microsoft-managed-services-registration-definitions delete" [
   scope: string
+  registration_definition_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -262,25 +279,26 @@ export def "providers-microsoft-managed-services-registration-definitions Delete
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to use for this operation.
 ]: nothing -> record<error: record<code: string, message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($scope)/providers/Microsoft.ManagedServices/registrationDefinitions/($registrationDefinitionId)" $qp)
+  let full_url = (build-url $base ({scope: (encode-path-segment $scope), registration_definition_id: (encode-path-segment $registration_definition_id)} | format pattern "/{scope}/providers/Microsoft.ManagedServices/registrationDefinitions/{registration_definition_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Gets the registration definition details.
 #
 # GET /{scope}/providers/Microsoft.ManagedServices/registrationDefinitions/{registrationDefinitionId}
 # operationId: RegistrationDefinitions_Get
-export def "providers-microsoft-managed-services-registration-definitions Get" [
+export def "providers-microsoft-managed-services-registration-definitions get" [
   scope: string
-  registrationDefinitionId: string
+  registration_definition_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -288,16 +306,17 @@ export def "providers-microsoft-managed-services-registration-definitions Get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to use for this operation.
 ]: nothing -> record<id: string, name: string, plan: record<name: string, product: string, publisher: string, version: string>, properties: record<authorizations: list<record>, description: string, managedByTenantId: string, managedByTenantName: string, provisioningState: string, registrationDefinitionName: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($scope)/providers/Microsoft.ManagedServices/registrationDefinitions/($registrationDefinitionId)" $qp)
+  let full_url = (build-url $base ({scope: (encode-path-segment $scope), registration_definition_id: (encode-path-segment $registration_definition_id)} | format pattern "/{scope}/providers/Microsoft.ManagedServices/registrationDefinitions/{registration_definition_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Creates or updates a registration definition.
@@ -306,9 +325,9 @@ export def "providers-microsoft-managed-services-registration-definitions Get" [
 # operationId: RegistrationDefinitions_CreateOrUpdate
 # --plan shape: {name: string, product: string, publisher: string, version: string}
 # --properties shape: {authorizations: list, description?: string, managedByTenantId: string, registrationDefinitionName?: string}
-export def "providers-microsoft-managed-services-registration-definitions CreateOrUpdate" [
-  registrationDefinitionId: string
+export def "providers-microsoft-managed-services-registration-definitions create-or-update" [
   scope: string
+  registration_definition_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -316,6 +335,7 @@ export def "providers-microsoft-managed-services-registration-definitions Create
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to use for this operation.
   --plan: record # Plan details for the managed services. — shape: {name: string, product: string, publisher: string, version: string}
@@ -325,10 +345,10 @@ export def "providers-microsoft-managed-services-registration-definitions Create
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($scope)/providers/Microsoft.ManagedServices/registrationDefinitions/($registrationDefinitionId)" $qp)
-  let body = {plan: $plan, properties: $properties} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({scope: (encode-path-segment $scope), registration_definition_id: (encode-path-segment $registration_definition_id)} | format pattern "/{scope}/providers/Microsoft.ManagedServices/registrationDefinitions/{registration_definition_id}") $qp)
+  let req_body = {"plan": $plan, "properties": $properties} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }

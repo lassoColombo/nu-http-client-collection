@@ -19,21 +19,32 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 }
 
 # Serialize a single query parameter based on collection style
+# Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
+# ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = ($name | url encode)
+  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
-  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
-    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
-    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
+    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
+    _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
+}
+
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Build URL from base, path, and optional query string
@@ -45,7 +56,7 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
@@ -54,13 +65,13 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
     "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "put" => { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "patch" => { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
   if ($method in ["head" "options"]) { return $resp }
-  if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
+  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
 def base-url-completer [] { ["https://apisetu.gov.in/edistricthp/v3"] }
@@ -71,8 +82,8 @@ def format-completer [] { ["pdf"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "aecmw-certificate aecmw" } } | get name | first)
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "aecmw-certificate create" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -98,7 +109,7 @@ export def commands []: nothing -> table {
 # operationId: aecmw
 # --certificateParameters shape: {UDF1: string}
 # --consentArtifact shape: {consent: record, signature: record}
-export def "aecmw-certificate aecmw" [
+export def "aecmw-certificate create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -106,21 +117,22 @@ export def "aecmw-certificate aecmw" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --certificateParameters: record # shape: {UDF1: string}
-  --consentArtifact: any # shape: {consent: record, signature: record}
+  --certificate-parameters: record # shape: {UDF1: string}
+  --consent-artifact: any # shape: {consent: record, signature: record}
   format: string@format-completer # The format of the certificate in response.
-  txnId: string # A unique transaction id for this request in UUID format. It is used for tracking the request. (format: uuid, e.g. f7f1469c-29b0-4325-9dfc-c567200a70f7)
+  txn_id: string # A unique transaction id for this request in UUID format. It is used for tracking the request. (format: uuid, e.g. f7f1469c-29b0-4325-9dfc-c567200a70f7)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-apisetu-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/aecmw/certificate")
-  let body = {certificateParameters: $certificateParameters, consentArtifact: $consentArtifact, format: $format, txnId: $txnId} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"certificateParameters": $certificate_parameters, "consentArtifact": $consent_artifact, "format": $format, "txnId": $txn_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/pdf"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Application for Renewal of Motor Transport Worker Registration
@@ -129,7 +141,7 @@ export def "aecmw-certificate aecmw" [
 # operationId: aemtw
 # --certificateParameters shape: {UDF1: string}
 # --consentArtifact shape: {consent: record, signature: record}
-export def "aemtw-certificate aemtw" [
+export def "aemtw-certificate create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -137,21 +149,22 @@ export def "aemtw-certificate aemtw" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --certificateParameters: record # shape: {UDF1: string}
-  --consentArtifact: any # shape: {consent: record, signature: record}
+  --certificate-parameters: record # shape: {UDF1: string}
+  --consent-artifact: any # shape: {consent: record, signature: record}
   format: string@format-completer # The format of the certificate in response.
-  txnId: string # A unique transaction id for this request in UUID format. It is used for tracking the request. (format: uuid, e.g. f7f1469c-29b0-4325-9dfc-c567200a70f7)
+  txn_id: string # A unique transaction id for this request in UUID format. It is used for tracking the request. (format: uuid, e.g. f7f1469c-29b0-4325-9dfc-c567200a70f7)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-apisetu-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/aemtw/certificate")
-  let body = {certificateParameters: $certificateParameters, consentArtifact: $consentArtifact, format: $format, txnId: $txnId} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"certificateParameters": $certificate_parameters, "consentArtifact": $consent_artifact, "format": $format, "txnId": $txn_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/pdf"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Agriculture/ Agriculturist Certificate
@@ -160,7 +173,7 @@ export def "aemtw-certificate aemtw" [
 # operationId: agcer
 # --certificateParameters shape: {UDF1: string}
 # --consentArtifact shape: {consent: record, signature: record}
-export def "agcer-certificate agcer" [
+export def "agcer-certificate create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -168,21 +181,22 @@ export def "agcer-certificate agcer" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --certificateParameters: record # shape: {UDF1: string}
-  --consentArtifact: any # shape: {consent: record, signature: record}
+  --certificate-parameters: record # shape: {UDF1: string}
+  --consent-artifact: any # shape: {consent: record, signature: record}
   format: string@format-completer # The format of the certificate in response.
-  txnId: string # A unique transaction id for this request in UUID format. It is used for tracking the request. (format: uuid, e.g. f7f1469c-29b0-4325-9dfc-c567200a70f7)
+  txn_id: string # A unique transaction id for this request in UUID format. It is used for tracking the request. (format: uuid, e.g. f7f1469c-29b0-4325-9dfc-c567200a70f7)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-apisetu-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/agcer/certificate")
-  let body = {certificateParameters: $certificateParameters, consentArtifact: $consentArtifact, format: $format, txnId: $txnId} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"certificateParameters": $certificate_parameters, "consentArtifact": $consent_artifact, "format": $format, "txnId": $txn_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/pdf"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Application for License for Inter State Migrant Workmen
@@ -191,7 +205,7 @@ export def "agcer-certificate agcer" [
 # operationId: alimw
 # --certificateParameters shape: {UDF1: string}
 # --consentArtifact shape: {consent: record, signature: record}
-export def "alimw-certificate alimw" [
+export def "alimw-certificate create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -199,21 +213,22 @@ export def "alimw-certificate alimw" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --certificateParameters: record # shape: {UDF1: string}
-  --consentArtifact: any # shape: {consent: record, signature: record}
+  --certificate-parameters: record # shape: {UDF1: string}
+  --consent-artifact: any # shape: {consent: record, signature: record}
   format: string@format-completer # The format of the certificate in response.
-  txnId: string # A unique transaction id for this request in UUID format. It is used for tracking the request. (format: uuid, e.g. f7f1469c-29b0-4325-9dfc-c567200a70f7)
+  txn_id: string # A unique transaction id for this request in UUID format. It is used for tracking the request. (format: uuid, e.g. f7f1469c-29b0-4325-9dfc-c567200a70f7)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-apisetu-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/alimw/certificate")
-  let body = {certificateParameters: $certificateParameters, consentArtifact: $consentArtifact, format: $format, txnId: $txnId} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"certificateParameters": $certificate_parameters, "consentArtifact": $consent_artifact, "format": $format, "txnId": $txn_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/pdf"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Application for Registration of Contractor Migrant Workmen license
@@ -222,7 +237,7 @@ export def "alimw-certificate alimw" [
 # operationId: arcmw
 # --certificateParameters shape: {UDF1: string}
 # --consentArtifact shape: {consent: record, signature: record}
-export def "arcmw-certificate arcmw" [
+export def "arcmw-certificate create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -230,21 +245,22 @@ export def "arcmw-certificate arcmw" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --certificateParameters: record # shape: {UDF1: string}
-  --consentArtifact: any # shape: {consent: record, signature: record}
+  --certificate-parameters: record # shape: {UDF1: string}
+  --consent-artifact: any # shape: {consent: record, signature: record}
   format: string@format-completer # The format of the certificate in response.
-  txnId: string # A unique transaction id for this request in UUID format. It is used for tracking the request. (format: uuid, e.g. f7f1469c-29b0-4325-9dfc-c567200a70f7)
+  txn_id: string # A unique transaction id for this request in UUID format. It is used for tracking the request. (format: uuid, e.g. f7f1469c-29b0-4325-9dfc-c567200a70f7)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-apisetu-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/arcmw/certificate")
-  let body = {certificateParameters: $certificateParameters, consentArtifact: $consentArtifact, format: $format, txnId: $txnId} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"certificateParameters": $certificate_parameters, "consentArtifact": $consent_artifact, "format": $format, "txnId": $txn_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/pdf"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Application for Registration of Motor Transport Worker Registration
@@ -253,7 +269,7 @@ export def "arcmw-certificate arcmw" [
 # operationId: armtw
 # --certificateParameters shape: {UDF1: string}
 # --consentArtifact shape: {consent: record, signature: record}
-export def "armtw-certificate armtw" [
+export def "armtw-certificate create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -261,21 +277,22 @@ export def "armtw-certificate armtw" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --certificateParameters: record # shape: {UDF1: string}
-  --consentArtifact: any # shape: {consent: record, signature: record}
+  --certificate-parameters: record # shape: {UDF1: string}
+  --consent-artifact: any # shape: {consent: record, signature: record}
   format: string@format-completer # The format of the certificate in response.
-  txnId: string # A unique transaction id for this request in UUID format. It is used for tracking the request. (format: uuid, e.g. f7f1469c-29b0-4325-9dfc-c567200a70f7)
+  txn_id: string # A unique transaction id for this request in UUID format. It is used for tracking the request. (format: uuid, e.g. f7f1469c-29b0-4325-9dfc-c567200a70f7)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-apisetu-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/armtw/certificate")
-  let body = {certificateParameters: $certificateParameters, consentArtifact: $consentArtifact, format: $format, txnId: $txnId} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"certificateParameters": $certificate_parameters, "consentArtifact": $consent_artifact, "format": $format, "txnId": $txn_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/pdf"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Backward Area Certificate
@@ -284,7 +301,7 @@ export def "armtw-certificate armtw" [
 # operationId: bacer
 # --certificateParameters shape: {UDF1: string}
 # --consentArtifact shape: {consent: record, signature: record}
-export def "bacer-certificate bacer" [
+export def "bacer-certificate create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -292,21 +309,22 @@ export def "bacer-certificate bacer" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --certificateParameters: record # shape: {UDF1: string}
-  --consentArtifact: any # shape: {consent: record, signature: record}
+  --certificate-parameters: record # shape: {UDF1: string}
+  --consent-artifact: any # shape: {consent: record, signature: record}
   format: string@format-completer # The format of the certificate in response.
-  txnId: string # A unique transaction id for this request in UUID format. It is used for tracking the request. (format: uuid, e.g. f7f1469c-29b0-4325-9dfc-c567200a70f7)
+  txn_id: string # A unique transaction id for this request in UUID format. It is used for tracking the request. (format: uuid, e.g. f7f1469c-29b0-4325-9dfc-c567200a70f7)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-apisetu-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/bacer/certificate")
-  let body = {certificateParameters: $certificateParameters, consentArtifact: $consentArtifact, format: $format, txnId: $txnId} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"certificateParameters": $certificate_parameters, "consentArtifact": $consent_artifact, "format": $format, "txnId": $txn_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/pdf"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Bonafide Certificate
@@ -315,7 +333,7 @@ export def "bacer-certificate bacer" [
 # operationId: bhcer
 # --certificateParameters shape: {UDF1: string}
 # --consentArtifact shape: {consent: record, signature: record}
-export def "bhcer-certificate bhcer" [
+export def "bhcer-certificate create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -323,21 +341,22 @@ export def "bhcer-certificate bhcer" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --certificateParameters: record # shape: {UDF1: string}
-  --consentArtifact: any # shape: {consent: record, signature: record}
+  --certificate-parameters: record # shape: {UDF1: string}
+  --consent-artifact: any # shape: {consent: record, signature: record}
   format: string@format-completer # The format of the certificate in response.
-  txnId: string # A unique transaction id for this request in UUID format. It is used for tracking the request. (format: uuid, e.g. f7f1469c-29b0-4325-9dfc-c567200a70f7)
+  txn_id: string # A unique transaction id for this request in UUID format. It is used for tracking the request. (format: uuid, e.g. f7f1469c-29b0-4325-9dfc-c567200a70f7)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-apisetu-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/bhcer/certificate")
-  let body = {certificateParameters: $certificateParameters, consentArtifact: $consentArtifact, format: $format, txnId: $txnId} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"certificateParameters": $certificate_parameters, "consentArtifact": $consent_artifact, "format": $format, "txnId": $txn_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/pdf"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # BPL Card
@@ -346,7 +365,7 @@ export def "bhcer-certificate bhcer" [
 # operationId: bpcrd
 # --certificateParameters shape: {UDF1: string}
 # --consentArtifact shape: {consent: record, signature: record}
-export def "bpcrd-certificate bpcrd" [
+export def "bpcrd-certificate create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -354,21 +373,22 @@ export def "bpcrd-certificate bpcrd" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --certificateParameters: record # shape: {UDF1: string}
-  --consentArtifact: any # shape: {consent: record, signature: record}
+  --certificate-parameters: record # shape: {UDF1: string}
+  --consent-artifact: any # shape: {consent: record, signature: record}
   format: string@format-completer # The format of the certificate in response.
-  txnId: string # A unique transaction id for this request in UUID format. It is used for tracking the request. (format: uuid, e.g. f7f1469c-29b0-4325-9dfc-c567200a70f7)
+  txn_id: string # A unique transaction id for this request in UUID format. It is used for tracking the request. (format: uuid, e.g. f7f1469c-29b0-4325-9dfc-c567200a70f7)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-apisetu-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/bpcrd/certificate")
-  let body = {certificateParameters: $certificateParameters, consentArtifact: $consentArtifact, format: $format, txnId: $txnId} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"certificateParameters": $certificate_parameters, "consentArtifact": $consent_artifact, "format": $format, "txnId": $txn_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/pdf"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Birth Certificate
@@ -377,7 +397,7 @@ export def "bpcrd-certificate bpcrd" [
 # operationId: btcer
 # --certificateParameters shape: {UDF1: string}
 # --consentArtifact shape: {consent: record, signature: record}
-export def "btcer-certificate btcer" [
+export def "btcer-certificate create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -385,21 +405,22 @@ export def "btcer-certificate btcer" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --certificateParameters: record # shape: {UDF1: string}
-  --consentArtifact: any # shape: {consent: record, signature: record}
+  --certificate-parameters: record # shape: {UDF1: string}
+  --consent-artifact: any # shape: {consent: record, signature: record}
   format: string@format-completer # The format of the certificate in response.
-  txnId: string # A unique transaction id for this request in UUID format. It is used for tracking the request. (format: uuid, e.g. f7f1469c-29b0-4325-9dfc-c567200a70f7)
+  txn_id: string # A unique transaction id for this request in UUID format. It is used for tracking the request. (format: uuid, e.g. f7f1469c-29b0-4325-9dfc-c567200a70f7)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-apisetu-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/btcer/certificate")
-  let body = {certificateParameters: $certificateParameters, consentArtifact: $consentArtifact, format: $format, txnId: $txnId} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"certificateParameters": $certificate_parameters, "consentArtifact": $consent_artifact, "format": $format, "txnId": $txn_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/pdf"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Renewal Certificate of Contract Labour License
@@ -408,7 +429,7 @@ export def "btcer-certificate btcer" [
 # operationId: cecer
 # --certificateParameters shape: {UDF1: string}
 # --consentArtifact shape: {consent: record, signature: record}
-export def "cecer-certificate cecer" [
+export def "cecer-certificate create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -416,21 +437,22 @@ export def "cecer-certificate cecer" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --certificateParameters: record # shape: {UDF1: string}
-  --consentArtifact: any # shape: {consent: record, signature: record}
+  --certificate-parameters: record # shape: {UDF1: string}
+  --consent-artifact: any # shape: {consent: record, signature: record}
   format: string@format-completer # The format of the certificate in response.
-  txnId: string # A unique transaction id for this request in UUID format. It is used for tracking the request. (format: uuid, e.g. f7f1469c-29b0-4325-9dfc-c567200a70f7)
+  txn_id: string # A unique transaction id for this request in UUID format. It is used for tracking the request. (format: uuid, e.g. f7f1469c-29b0-4325-9dfc-c567200a70f7)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-apisetu-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/cecer/certificate")
-  let body = {certificateParameters: $certificateParameters, consentArtifact: $consentArtifact, format: $format, txnId: $txnId} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"certificateParameters": $certificate_parameters, "consentArtifact": $consent_artifact, "format": $format, "txnId": $txn_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/pdf"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Character Certificate
@@ -439,7 +461,7 @@ export def "cecer-certificate cecer" [
 # operationId: chcer
 # --certificateParameters shape: {UDF1: string}
 # --consentArtifact shape: {consent: record, signature: record}
-export def "chcer-certificate chcer" [
+export def "chcer-certificate create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -447,21 +469,22 @@ export def "chcer-certificate chcer" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --certificateParameters: record # shape: {UDF1: string}
-  --consentArtifact: any # shape: {consent: record, signature: record}
+  --certificate-parameters: record # shape: {UDF1: string}
+  --consent-artifact: any # shape: {consent: record, signature: record}
   format: string@format-completer # The format of the certificate in response.
-  txnId: string # A unique transaction id for this request in UUID format. It is used for tracking the request. (format: uuid, e.g. f7f1469c-29b0-4325-9dfc-c567200a70f7)
+  txn_id: string # A unique transaction id for this request in UUID format. It is used for tracking the request. (format: uuid, e.g. f7f1469c-29b0-4325-9dfc-c567200a70f7)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-apisetu-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/chcer/certificate")
-  let body = {certificateParameters: $certificateParameters, consentArtifact: $consentArtifact, format: $format, txnId: $txnId} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"certificateParameters": $certificate_parameters, "consentArtifact": $consent_artifact, "format": $format, "txnId": $txn_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/pdf"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Registration Certificate for Contract Labour License
@@ -470,7 +493,7 @@ export def "chcer-certificate chcer" [
 # operationId: clcer
 # --certificateParameters shape: {UDF1: string}
 # --consentArtifact shape: {consent: record, signature: record}
-export def "clcer-certificate clcer" [
+export def "clcer-certificate create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -478,21 +501,22 @@ export def "clcer-certificate clcer" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --certificateParameters: record # shape: {UDF1: string}
-  --consentArtifact: any # shape: {consent: record, signature: record}
+  --certificate-parameters: record # shape: {UDF1: string}
+  --consent-artifact: any # shape: {consent: record, signature: record}
   format: string@format-completer # The format of the certificate in response.
-  txnId: string # A unique transaction id for this request in UUID format. It is used for tracking the request. (format: uuid, e.g. f7f1469c-29b0-4325-9dfc-c567200a70f7)
+  txn_id: string # A unique transaction id for this request in UUID format. It is used for tracking the request. (format: uuid, e.g. f7f1469c-29b0-4325-9dfc-c567200a70f7)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-apisetu-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/clcer/certificate")
-  let body = {certificateParameters: $certificateParameters, consentArtifact: $consentArtifact, format: $format, txnId: $txnId} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"certificateParameters": $certificate_parameters, "consentArtifact": $consent_artifact, "format": $format, "txnId": $txn_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/pdf"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Copy of Pariwar Register
@@ -501,7 +525,7 @@ export def "clcer-certificate clcer" [
 # operationId: coprg
 # --certificateParameters shape: {UDF1: string}
 # --consentArtifact shape: {consent: record, signature: record}
-export def "coprg-certificate coprg" [
+export def "coprg-certificate create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -509,21 +533,22 @@ export def "coprg-certificate coprg" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --certificateParameters: record # shape: {UDF1: string}
-  --consentArtifact: any # shape: {consent: record, signature: record}
+  --certificate-parameters: record # shape: {UDF1: string}
+  --consent-artifact: any # shape: {consent: record, signature: record}
   format: string@format-completer # The format of the certificate in response.
-  txnId: string # A unique transaction id for this request in UUID format. It is used for tracking the request. (format: uuid, e.g. f7f1469c-29b0-4325-9dfc-c567200a70f7)
+  txn_id: string # A unique transaction id for this request in UUID format. It is used for tracking the request. (format: uuid, e.g. f7f1469c-29b0-4325-9dfc-c567200a70f7)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-apisetu-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/coprg/certificate")
-  let body = {certificateParameters: $certificateParameters, consentArtifact: $consentArtifact, format: $format, txnId: $txnId} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"certificateParameters": $certificate_parameters, "consentArtifact": $consent_artifact, "format": $format, "txnId": $txn_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/pdf"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Dogra Class Certificate
@@ -532,7 +557,7 @@ export def "coprg-certificate coprg" [
 # operationId: dccer
 # --certificateParameters shape: {UDF1: string}
 # --consentArtifact shape: {consent: record, signature: record}
-export def "dccer-certificate dccer" [
+export def "dccer-certificate create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -540,21 +565,22 @@ export def "dccer-certificate dccer" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --certificateParameters: record # shape: {UDF1: string}
-  --consentArtifact: any # shape: {consent: record, signature: record}
+  --certificate-parameters: record # shape: {UDF1: string}
+  --consent-artifact: any # shape: {consent: record, signature: record}
   format: string@format-completer # The format of the certificate in response.
-  txnId: string # A unique transaction id for this request in UUID format. It is used for tracking the request. (format: uuid, e.g. f7f1469c-29b0-4325-9dfc-c567200a70f7)
+  txn_id: string # A unique transaction id for this request in UUID format. It is used for tracking the request. (format: uuid, e.g. f7f1469c-29b0-4325-9dfc-c567200a70f7)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-apisetu-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/dccer/certificate")
-  let body = {certificateParameters: $certificateParameters, consentArtifact: $consentArtifact, format: $format, txnId: $txnId} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"certificateParameters": $certificate_parameters, "consentArtifact": $consent_artifact, "format": $format, "txnId": $txn_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/pdf"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Domicile Certificate
@@ -563,7 +589,7 @@ export def "dccer-certificate dccer" [
 # operationId: dmcer
 # --certificateParameters shape: {UDF1: string}
 # --consentArtifact shape: {consent: record, signature: record}
-export def "dmcer-certificate dmcer" [
+export def "dmcer-certificate create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -571,21 +597,22 @@ export def "dmcer-certificate dmcer" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --certificateParameters: record # shape: {UDF1: string}
-  --consentArtifact: any # shape: {consent: record, signature: record}
+  --certificate-parameters: record # shape: {UDF1: string}
+  --consent-artifact: any # shape: {consent: record, signature: record}
   format: string@format-completer # The format of the certificate in response.
-  txnId: string # A unique transaction id for this request in UUID format. It is used for tracking the request. (format: uuid, e.g. f7f1469c-29b0-4325-9dfc-c567200a70f7)
+  txn_id: string # A unique transaction id for this request in UUID format. It is used for tracking the request. (format: uuid, e.g. f7f1469c-29b0-4325-9dfc-c567200a70f7)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-apisetu-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/dmcer/certificate")
-  let body = {certificateParameters: $certificateParameters, consentArtifact: $consentArtifact, format: $format, txnId: $txnId} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"certificateParameters": $certificate_parameters, "consentArtifact": $consent_artifact, "format": $format, "txnId": $txn_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/pdf"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Disabled Person Identity Card/ Certificate
@@ -594,7 +621,7 @@ export def "dmcer-certificate dmcer" [
 # operationId: dpicr
 # --certificateParameters shape: {UDF1: string}
 # --consentArtifact shape: {consent: record, signature: record}
-export def "dpicr-certificate dpicr" [
+export def "dpicr-certificate create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -602,21 +629,22 @@ export def "dpicr-certificate dpicr" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --certificateParameters: record # shape: {UDF1: string}
-  --consentArtifact: any # shape: {consent: record, signature: record}
+  --certificate-parameters: record # shape: {UDF1: string}
+  --consent-artifact: any # shape: {consent: record, signature: record}
   format: string@format-completer # The format of the certificate in response.
-  txnId: string # A unique transaction id for this request in UUID format. It is used for tracking the request. (format: uuid, e.g. f7f1469c-29b0-4325-9dfc-c567200a70f7)
+  txn_id: string # A unique transaction id for this request in UUID format. It is used for tracking the request. (format: uuid, e.g. f7f1469c-29b0-4325-9dfc-c567200a70f7)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-apisetu-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/dpicr/certificate")
-  let body = {certificateParameters: $certificateParameters, consentArtifact: $consentArtifact, format: $format, txnId: $txnId} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"certificateParameters": $certificate_parameters, "consentArtifact": $consent_artifact, "format": $format, "txnId": $txn_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/pdf"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Death Certificate
@@ -625,7 +653,7 @@ export def "dpicr-certificate dpicr" [
 # operationId: dtcer
 # --certificateParameters shape: {UDF1: string}
 # --consentArtifact shape: {consent: record, signature: record}
-export def "dtcer-certificate dtcer" [
+export def "dtcer-certificate create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -633,21 +661,22 @@ export def "dtcer-certificate dtcer" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --certificateParameters: record # shape: {UDF1: string}
-  --consentArtifact: any # shape: {consent: record, signature: record}
+  --certificate-parameters: record # shape: {UDF1: string}
+  --consent-artifact: any # shape: {consent: record, signature: record}
   format: string@format-completer # The format of the certificate in response.
-  txnId: string # A unique transaction id for this request in UUID format. It is used for tracking the request. (format: uuid, e.g. f7f1469c-29b0-4325-9dfc-c567200a70f7)
+  txn_id: string # A unique transaction id for this request in UUID format. It is used for tracking the request. (format: uuid, e.g. f7f1469c-29b0-4325-9dfc-c567200a70f7)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-apisetu-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/dtcer/certificate")
-  let body = {certificateParameters: $certificateParameters, consentArtifact: $consentArtifact, format: $format, txnId: $txnId} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"certificateParameters": $certificate_parameters, "consentArtifact": $consent_artifact, "format": $format, "txnId": $txn_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/pdf"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Registration Certificate of Establishment Employing Contract Labour
@@ -656,7 +685,7 @@ export def "dtcer-certificate dtcer" [
 # operationId: ercer
 # --certificateParameters shape: {UDF1: string}
 # --consentArtifact shape: {consent: record, signature: record}
-export def "ercer-certificate ercer" [
+export def "ercer-certificate create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -664,21 +693,22 @@ export def "ercer-certificate ercer" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --certificateParameters: record # shape: {UDF1: string}
-  --consentArtifact: any # shape: {consent: record, signature: record}
+  --certificate-parameters: record # shape: {UDF1: string}
+  --consent-artifact: any # shape: {consent: record, signature: record}
   format: string@format-completer # The format of the certificate in response.
-  txnId: string # A unique transaction id for this request in UUID format. It is used for tracking the request. (format: uuid, e.g. f7f1469c-29b0-4325-9dfc-c567200a70f7)
+  txn_id: string # A unique transaction id for this request in UUID format. It is used for tracking the request. (format: uuid, e.g. f7f1469c-29b0-4325-9dfc-c567200a70f7)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-apisetu-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/ercer/certificate")
-  let body = {certificateParameters: $certificateParameters, consentArtifact: $consentArtifact, format: $format, txnId: $txnId} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"certificateParameters": $certificate_parameters, "consentArtifact": $consent_artifact, "format": $format, "txnId": $txn_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/pdf"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Freedom Fighter Certificate
@@ -687,7 +717,7 @@ export def "ercer-certificate ercer" [
 # operationId: ffcer
 # --certificateParameters shape: {UDF1: string}
 # --consentArtifact shape: {consent: record, signature: record}
-export def "ffcer-certificate ffcer" [
+export def "ffcer-certificate create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -695,21 +725,22 @@ export def "ffcer-certificate ffcer" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --certificateParameters: record # shape: {UDF1: string}
-  --consentArtifact: any # shape: {consent: record, signature: record}
+  --certificate-parameters: record # shape: {UDF1: string}
+  --consent-artifact: any # shape: {consent: record, signature: record}
   format: string@format-completer # The format of the certificate in response.
-  txnId: string # A unique transaction id for this request in UUID format. It is used for tracking the request. (format: uuid, e.g. f7f1469c-29b0-4325-9dfc-c567200a70f7)
+  txn_id: string # A unique transaction id for this request in UUID format. It is used for tracking the request. (format: uuid, e.g. f7f1469c-29b0-4325-9dfc-c567200a70f7)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-apisetu-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/ffcer/certificate")
-  let body = {certificateParameters: $certificateParameters, consentArtifact: $consentArtifact, format: $format, txnId: $txnId} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"certificateParameters": $certificate_parameters, "consentArtifact": $consent_artifact, "format": $format, "txnId": $txn_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/pdf"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Indigent (Needy Person) Certificate
@@ -718,7 +749,7 @@ export def "ffcer-certificate ffcer" [
 # operationId: igcer
 # --certificateParameters shape: {UDF1: string}
 # --consentArtifact shape: {consent: record, signature: record}
-export def "igcer-certificate igcer" [
+export def "igcer-certificate create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -726,21 +757,22 @@ export def "igcer-certificate igcer" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --certificateParameters: record # shape: {UDF1: string}
-  --consentArtifact: any # shape: {consent: record, signature: record}
+  --certificate-parameters: record # shape: {UDF1: string}
+  --consent-artifact: any # shape: {consent: record, signature: record}
   format: string@format-completer # The format of the certificate in response.
-  txnId: string # A unique transaction id for this request in UUID format. It is used for tracking the request. (format: uuid, e.g. f7f1469c-29b0-4325-9dfc-c567200a70f7)
+  txn_id: string # A unique transaction id for this request in UUID format. It is used for tracking the request. (format: uuid, e.g. f7f1469c-29b0-4325-9dfc-c567200a70f7)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-apisetu-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/igcer/certificate")
-  let body = {certificateParameters: $certificateParameters, consentArtifact: $consentArtifact, format: $format, txnId: $txnId} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"certificateParameters": $certificate_parameters, "consentArtifact": $consent_artifact, "format": $format, "txnId": $txn_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/pdf"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Income Certificate
@@ -749,7 +781,7 @@ export def "igcer-certificate igcer" [
 # operationId: incer
 # --certificateParameters shape: {UDF1: string}
 # --consentArtifact shape: {consent: record, signature: record}
-export def "incer-certificate incer" [
+export def "incer-certificate create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -757,21 +789,22 @@ export def "incer-certificate incer" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --certificateParameters: record # shape: {UDF1: string}
-  --consentArtifact: any # shape: {consent: record, signature: record}
+  --certificate-parameters: record # shape: {UDF1: string}
+  --consent-artifact: any # shape: {consent: record, signature: record}
   format: string@format-completer # The format of the certificate in response.
-  txnId: string # A unique transaction id for this request in UUID format. It is used for tracking the request. (format: uuid, e.g. f7f1469c-29b0-4325-9dfc-c567200a70f7)
+  txn_id: string # A unique transaction id for this request in UUID format. It is used for tracking the request. (format: uuid, e.g. f7f1469c-29b0-4325-9dfc-c567200a70f7)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-apisetu-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/incer/certificate")
-  let body = {certificateParameters: $certificateParameters, consentArtifact: $consentArtifact, format: $format, txnId: $txnId} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"certificateParameters": $certificate_parameters, "consentArtifact": $consent_artifact, "format": $format, "txnId": $txn_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/pdf"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Legal Heir Certificate
@@ -780,7 +813,7 @@ export def "incer-certificate incer" [
 # operationId: lhcer
 # --certificateParameters shape: {UDF1: string}
 # --consentArtifact shape: {consent: record, signature: record}
-export def "lhcer-certificate lhcer" [
+export def "lhcer-certificate create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -788,21 +821,22 @@ export def "lhcer-certificate lhcer" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --certificateParameters: record # shape: {UDF1: string}
-  --consentArtifact: any # shape: {consent: record, signature: record}
+  --certificate-parameters: record # shape: {UDF1: string}
+  --consent-artifact: any # shape: {consent: record, signature: record}
   format: string@format-completer # The format of the certificate in response.
-  txnId: string # A unique transaction id for this request in UUID format. It is used for tracking the request. (format: uuid, e.g. f7f1469c-29b0-4325-9dfc-c567200a70f7)
+  txn_id: string # A unique transaction id for this request in UUID format. It is used for tracking the request. (format: uuid, e.g. f7f1469c-29b0-4325-9dfc-c567200a70f7)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-apisetu-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/lhcer/certificate")
-  let body = {certificateParameters: $certificateParameters, consentArtifact: $consentArtifact, format: $format, txnId: $txnId} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"certificateParameters": $certificate_parameters, "consentArtifact": $consent_artifact, "format": $format, "txnId": $txn_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/pdf"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Minority Certificate
@@ -811,7 +845,7 @@ export def "lhcer-certificate lhcer" [
 # operationId: mncer
 # --certificateParameters shape: {UDF1: string}
 # --consentArtifact shape: {consent: record, signature: record}
-export def "mncer-certificate mncer" [
+export def "mncer-certificate create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -819,21 +853,22 @@ export def "mncer-certificate mncer" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --certificateParameters: record # shape: {UDF1: string}
-  --consentArtifact: any # shape: {consent: record, signature: record}
+  --certificate-parameters: record # shape: {UDF1: string}
+  --consent-artifact: any # shape: {consent: record, signature: record}
   format: string@format-completer # The format of the certificate in response.
-  txnId: string # A unique transaction id for this request in UUID format. It is used for tracking the request. (format: uuid, e.g. f7f1469c-29b0-4325-9dfc-c567200a70f7)
+  txn_id: string # A unique transaction id for this request in UUID format. It is used for tracking the request. (format: uuid, e.g. f7f1469c-29b0-4325-9dfc-c567200a70f7)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-apisetu-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/mncer/certificate")
-  let body = {certificateParameters: $certificateParameters, consentArtifact: $consentArtifact, format: $format, txnId: $txnId} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"certificateParameters": $certificate_parameters, "consentArtifact": $consent_artifact, "format": $format, "txnId": $txn_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/pdf"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # MNREGA Job Card
@@ -842,7 +877,7 @@ export def "mncer-certificate mncer" [
 # operationId: mnrga
 # --certificateParameters shape: {UDF1: string}
 # --consentArtifact shape: {consent: record, signature: record}
-export def "mnrga-certificate mnrga" [
+export def "mnrga-certificate create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -850,21 +885,22 @@ export def "mnrga-certificate mnrga" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --certificateParameters: record # shape: {UDF1: string}
-  --consentArtifact: any # shape: {consent: record, signature: record}
+  --certificate-parameters: record # shape: {UDF1: string}
+  --consent-artifact: any # shape: {consent: record, signature: record}
   format: string@format-completer # The format of the certificate in response.
-  txnId: string # A unique transaction id for this request in UUID format. It is used for tracking the request. (format: uuid, e.g. f7f1469c-29b0-4325-9dfc-c567200a70f7)
+  txn_id: string # A unique transaction id for this request in UUID format. It is used for tracking the request. (format: uuid, e.g. f7f1469c-29b0-4325-9dfc-c567200a70f7)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-apisetu-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/mnrga/certificate")
-  let body = {certificateParameters: $certificateParameters, consentArtifact: $consentArtifact, format: $format, txnId: $txnId} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"certificateParameters": $certificate_parameters, "consentArtifact": $consent_artifact, "format": $format, "txnId": $txn_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/pdf"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # OBC Certificate
@@ -873,7 +909,7 @@ export def "mnrga-certificate mnrga" [
 # operationId: obcer
 # --certificateParameters shape: {UDF1: string}
 # --consentArtifact shape: {consent: record, signature: record}
-export def "obcer-certificate obcer" [
+export def "obcer-certificate create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -881,21 +917,22 @@ export def "obcer-certificate obcer" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --certificateParameters: record # shape: {UDF1: string}
-  --consentArtifact: any # shape: {consent: record, signature: record}
+  --certificate-parameters: record # shape: {UDF1: string}
+  --consent-artifact: any # shape: {consent: record, signature: record}
   format: string@format-completer # The format of the certificate in response.
-  txnId: string # A unique transaction id for this request in UUID format. It is used for tracking the request. (format: uuid, e.g. f7f1469c-29b0-4325-9dfc-c567200a70f7)
+  txn_id: string # A unique transaction id for this request in UUID format. It is used for tracking the request. (format: uuid, e.g. f7f1469c-29b0-4325-9dfc-c567200a70f7)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-apisetu-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/obcer/certificate")
-  let body = {certificateParameters: $certificateParameters, consentArtifact: $consentArtifact, format: $format, txnId: $txnId} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"certificateParameters": $certificate_parameters, "consentArtifact": $consent_artifact, "format": $format, "txnId": $txn_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/pdf"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Rural Area Certificate
@@ -904,7 +941,7 @@ export def "obcer-certificate obcer" [
 # operationId: racer
 # --certificateParameters shape: {UDF1: string}
 # --consentArtifact shape: {consent: record, signature: record}
-export def "racer-certificate racer" [
+export def "racer-certificate create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -912,21 +949,22 @@ export def "racer-certificate racer" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --certificateParameters: record # shape: {UDF1: string}
-  --consentArtifact: any # shape: {consent: record, signature: record}
+  --certificate-parameters: record # shape: {UDF1: string}
+  --consent-artifact: any # shape: {consent: record, signature: record}
   format: string@format-completer # The format of the certificate in response.
-  txnId: string # A unique transaction id for this request in UUID format. It is used for tracking the request. (format: uuid, e.g. f7f1469c-29b0-4325-9dfc-c567200a70f7)
+  txn_id: string # A unique transaction id for this request in UUID format. It is used for tracking the request. (format: uuid, e.g. f7f1469c-29b0-4325-9dfc-c567200a70f7)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-apisetu-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/racer/certificate")
-  let body = {certificateParameters: $certificateParameters, consentArtifact: $consentArtifact, format: $format, txnId: $txnId} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"certificateParameters": $certificate_parameters, "consentArtifact": $consent_artifact, "format": $format, "txnId": $txn_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/pdf"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Marriage Certificate
@@ -935,7 +973,7 @@ export def "racer-certificate racer" [
 # operationId: rmcer
 # --certificateParameters shape: {UDF1: string}
 # --consentArtifact shape: {consent: record, signature: record}
-export def "rmcer-certificate rmcer" [
+export def "rmcer-certificate create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -943,21 +981,22 @@ export def "rmcer-certificate rmcer" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --certificateParameters: record # shape: {UDF1: string}
-  --consentArtifact: any # shape: {consent: record, signature: record}
+  --certificate-parameters: record # shape: {UDF1: string}
+  --consent-artifact: any # shape: {consent: record, signature: record}
   format: string@format-completer # The format of the certificate in response.
-  txnId: string # A unique transaction id for this request in UUID format. It is used for tracking the request. (format: uuid, e.g. f7f1469c-29b0-4325-9dfc-c567200a70f7)
+  txn_id: string # A unique transaction id for this request in UUID format. It is used for tracking the request. (format: uuid, e.g. f7f1469c-29b0-4325-9dfc-c567200a70f7)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-apisetu-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rmcer/certificate")
-  let body = {certificateParameters: $certificateParameters, consentArtifact: $consentArtifact, format: $format, txnId: $txnId} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"certificateParameters": $certificate_parameters, "consentArtifact": $consent_artifact, "format": $format, "txnId": $txn_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/pdf"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Renewal Certificate of Shops And Commercial Establishment
@@ -966,7 +1005,7 @@ export def "rmcer-certificate rmcer" [
 # operationId: secer
 # --certificateParameters shape: {UDF1: string}
 # --consentArtifact shape: {consent: record, signature: record}
-export def "secer-certificate secer" [
+export def "secer-certificate create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -974,30 +1013,31 @@ export def "secer-certificate secer" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --certificateParameters: record # shape: {UDF1: string}
-  --consentArtifact: any # shape: {consent: record, signature: record}
+  --certificate-parameters: record # shape: {UDF1: string}
+  --consent-artifact: any # shape: {consent: record, signature: record}
   format: string@format-completer # The format of the certificate in response.
-  txnId: string # A unique transaction id for this request in UUID format. It is used for tracking the request. (format: uuid, e.g. f7f1469c-29b0-4325-9dfc-c567200a70f7)
+  txn_id: string # A unique transaction id for this request in UUID format. It is used for tracking the request. (format: uuid, e.g. f7f1469c-29b0-4325-9dfc-c567200a70f7)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-apisetu-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/secer/certificate")
-  let body = {certificateParameters: $certificateParameters, consentArtifact: $consentArtifact, format: $format, txnId: $txnId} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"certificateParameters": $certificate_parameters, "consentArtifact": $consent_artifact, "format": $format, "txnId": $txn_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/pdf"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
-# SC/ST  Certificate
+# SC/ST Certificate
 #
 # POST /shcer/certificate
 # operationId: shcer
 # --certificateParameters shape: {UDF1: string}
 # --consentArtifact shape: {consent: record, signature: record}
-export def "shcer-certificate shcer" [
+export def "shcer-certificate create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1005,21 +1045,22 @@ export def "shcer-certificate shcer" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --certificateParameters: record # shape: {UDF1: string}
-  --consentArtifact: any # shape: {consent: record, signature: record}
+  --certificate-parameters: record # shape: {UDF1: string}
+  --consent-artifact: any # shape: {consent: record, signature: record}
   format: string@format-completer # The format of the certificate in response.
-  txnId: string # A unique transaction id for this request in UUID format. It is used for tracking the request. (format: uuid, e.g. f7f1469c-29b0-4325-9dfc-c567200a70f7)
+  txn_id: string # A unique transaction id for this request in UUID format. It is used for tracking the request. (format: uuid, e.g. f7f1469c-29b0-4325-9dfc-c567200a70f7)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-apisetu-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/shcer/certificate")
-  let body = {certificateParameters: $certificateParameters, consentArtifact: $consentArtifact, format: $format, txnId: $txnId} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"certificateParameters": $certificate_parameters, "consentArtifact": $consent_artifact, "format": $format, "txnId": $txn_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/pdf"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Senior Citizen Identity Card/ Certificate
@@ -1028,7 +1069,7 @@ export def "shcer-certificate shcer" [
 # operationId: sicrd
 # --certificateParameters shape: {UDF1: string}
 # --consentArtifact shape: {consent: record, signature: record}
-export def "sicrd-certificate sicrd" [
+export def "sicrd-certificate create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1036,21 +1077,22 @@ export def "sicrd-certificate sicrd" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --certificateParameters: record # shape: {UDF1: string}
-  --consentArtifact: any # shape: {consent: record, signature: record}
+  --certificate-parameters: record # shape: {UDF1: string}
+  --consent-artifact: any # shape: {consent: record, signature: record}
   format: string@format-completer # The format of the certificate in response.
-  txnId: string # A unique transaction id for this request in UUID format. It is used for tracking the request. (format: uuid, e.g. f7f1469c-29b0-4325-9dfc-c567200a70f7)
+  txn_id: string # A unique transaction id for this request in UUID format. It is used for tracking the request. (format: uuid, e.g. f7f1469c-29b0-4325-9dfc-c567200a70f7)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-apisetu-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sicrd/certificate")
-  let body = {certificateParameters: $certificateParameters, consentArtifact: $consentArtifact, format: $format, txnId: $txnId} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"certificateParameters": $certificate_parameters, "consentArtifact": $consent_artifact, "format": $format, "txnId": $txn_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/pdf"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Registration Certificate of Shops And Commercial Establishment
@@ -1059,7 +1101,7 @@ export def "sicrd-certificate sicrd" [
 # operationId: srcer
 # --certificateParameters shape: {UDF1: string}
 # --consentArtifact shape: {consent: record, signature: record}
-export def "srcer-certificate srcer" [
+export def "srcer-certificate create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1067,19 +1109,20 @@ export def "srcer-certificate srcer" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --certificateParameters: record # shape: {UDF1: string}
-  --consentArtifact: any # shape: {consent: record, signature: record}
+  --certificate-parameters: record # shape: {UDF1: string}
+  --consent-artifact: any # shape: {consent: record, signature: record}
   format: string@format-completer # The format of the certificate in response.
-  txnId: string # A unique transaction id for this request in UUID format. It is used for tracking the request. (format: uuid, e.g. f7f1469c-29b0-4325-9dfc-c567200a70f7)
+  txn_id: string # A unique transaction id for this request in UUID format. It is used for tracking the request. (format: uuid, e.g. f7f1469c-29b0-4325-9dfc-c567200a70f7)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-apisetu-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/srcer/certificate")
-  let body = {certificateParameters: $certificateParameters, consentArtifact: $consentArtifact, format: $format, txnId: $txnId} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"certificateParameters": $certificate_parameters, "consentArtifact": $consent_artifact, "format": $format, "txnId": $txn_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/pdf"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }

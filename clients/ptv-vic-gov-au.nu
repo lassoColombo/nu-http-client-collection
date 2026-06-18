@@ -17,21 +17,32 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 }
 
 # Serialize a single query parameter based on collection style
+# Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
+# ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = ($name | url encode)
+  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
-  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
-    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
-    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
+    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
+    _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
+}
+
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Build URL from base, path, and optional query string
@@ -43,7 +54,7 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
@@ -52,13 +63,13 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
     "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "put" => { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "patch" => { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
   if ($method in ["head" "options"]) { return $resp }
-  if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
+  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
 def base-url-completer [] { ["http://timetableapi.ptv.vic.gov.au" "https://timetableapi.ptv.vic.gov.au"] }
@@ -70,8 +81,8 @@ def disruption-status-completer [] { ["current" "planned"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "departures-route-type-stop GetForStop" } } | get name | first)
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "departures-route-type-stop get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -95,7 +106,7 @@ export def commands []: nothing -> table {
 #
 # GET /v3/departures/route_type/{route_type}/stop/{stop_id}
 # operationId: Departures_GetForStop
-export def "departures-route-type-stop GetForStop" [
+export def "departures-route-type-stop get" [
   route_type: int
   stop_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -105,16 +116,17 @@ export def "departures-route-type-stop GetForStop" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --platform-numbers: list # Filter by platform number at stop
+  --platform-numbers: list<int> # Filter by platform number at stop
   --direction-id: int # Filter by identifier of direction of travel; values returned by Directions API - /v3/directions/route/{route_id} (format: int32)
   --gtfs: oneof<nothing, bool> # Indicates that stop_id parameter will accept "GTFS stop_id" data
   --date-utc: string # Filter by the date and time of the request (ISO 8601 UTC format) (default = current date and time) (format: date-time)
   --max-results: int # Maximum number of results returned (format: int32)
   --include-cancelled: oneof<nothing, bool> # Indicates if cancelled services (if they exist) are returned (default = false) - metropolitan train only
-  --look-backwards: oneof<nothing, bool> # Indicates if filtering runs (and their departures) to those that arrive at destination before date_utc (default = false). Requires max_results &gt; 0.
-  --expand: list # List of objects to be returned in full (i.e. expanded) - options include: All, Stop, Route, Run, Direction, Disruption, VehiclePosition, VehicleDescriptor or None.             Run must be expanded to receive VehiclePosition and VehicleDescriptor information.
+  --look-backwards: oneof<nothing, bool> # Indicates if filtering runs (and their departures) to those that arrive at destination before date_utc (default = false). Requires max_results > 0.
+  --expand: list<string> # List of objects to be returned in full (i.e. expanded) - options include: All, Stop, Route, Run, Direction, Disruption, VehiclePosition, VehicleDescriptor or None. Run must be expanded to receive VehiclePosition and VehicleDescriptor information.
   --include-geopath: oneof<nothing, bool> # Indicates if the route geopath should be returned
   --qp-token: string # Please ignore
   --devid: string # Your developer id
@@ -123,17 +135,17 @@ export def "departures-route-type-stop GetForStop" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "platform_numbers" $platform_numbers "multi") (serialize-qp "direction_id" $direction_id "scalar") (serialize-qp "gtfs" $gtfs "scalar") (serialize-qp "date_utc" $date_utc "scalar") (serialize-qp "max_results" $max_results "scalar") (serialize-qp "include_cancelled" $include_cancelled "scalar") (serialize-qp "look_backwards" $look_backwards "scalar") (serialize-qp "expand" $expand "multi") (serialize-qp "include_geopath" $include_geopath "scalar") (serialize-qp "token" $qp_token "scalar") (serialize-qp "devid" $devid "scalar") (serialize-qp "signature" $signature "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v3/departures/route_type/($route_type)/stop/($stop_id)" $qp)
+  let full_url = (build-url $base ({route_type: (encode-path-segment $route_type), stop_id: (encode-path-segment $stop_id)} | format pattern "/v3/departures/route_type/{route_type}/stop/{stop_id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # View departures for a specific route from a stop
 #
 # GET /v3/departures/route_type/{route_type}/stop/{stop_id}/route/{route_id}
 # operationId: Departures_GetForStopAndRoute
-export def "departures-route-type-stop-route GetForStopAndRoute" [
+export def "departures-route-type-stop-route get-for-and" [
   route_type: int
   stop_id: int
   route_id: string
@@ -144,6 +156,7 @@ export def "departures-route-type-stop-route GetForStopAndRoute" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --direction-id: int # Filter by identifier of direction of travel; values returned by Directions API - /v3/directions/route/{route_id} (format: int32)
@@ -151,8 +164,8 @@ export def "departures-route-type-stop-route GetForStopAndRoute" [
   --date-utc: string # Filter by the date and time of the request (ISO 8601 UTC format) (default = current date and time) (format: date-time)
   --max-results: int # Maximum number of results returned (format: int32)
   --include-cancelled: oneof<nothing, bool> # Indicates if cancelled services (if they exist) are returned (default = false) - metropolitan train only
-  --look-backwards: oneof<nothing, bool> # Indicates if filtering runs (and their departures) to those that arrive at destination before date_utc (default = false). Requires max_results &gt; 0.
-  --expand: list # List of objects to be returned in full (i.e. expanded) - options include: All, Stop, Route, Run, Direction, Disruption, VehiclePosition, VehicleDescriptor or None.             Run must be expanded to receive VehiclePosition and VehicleDescriptor information.
+  --look-backwards: oneof<nothing, bool> # Indicates if filtering runs (and their departures) to those that arrive at destination before date_utc (default = false). Requires max_results > 0.
+  --expand: list<string> # List of objects to be returned in full (i.e. expanded) - options include: All, Stop, Route, Run, Direction, Disruption, VehiclePosition, VehicleDescriptor or None. Run must be expanded to receive VehiclePosition and VehicleDescriptor information.
   --include-geopath: oneof<nothing, bool> # Indicates if the route geopath should be returned
   --qp-token: string # Please ignore
   --devid: string # Your developer id
@@ -161,17 +174,17 @@ export def "departures-route-type-stop-route GetForStopAndRoute" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "direction_id" $direction_id "scalar") (serialize-qp "gtfs" $gtfs "scalar") (serialize-qp "date_utc" $date_utc "scalar") (serialize-qp "max_results" $max_results "scalar") (serialize-qp "include_cancelled" $include_cancelled "scalar") (serialize-qp "look_backwards" $look_backwards "scalar") (serialize-qp "expand" $expand "multi") (serialize-qp "include_geopath" $include_geopath "scalar") (serialize-qp "token" $qp_token "scalar") (serialize-qp "devid" $devid "scalar") (serialize-qp "signature" $signature "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v3/departures/route_type/($route_type)/stop/($stop_id)/route/($route_id)" $qp)
+  let full_url = (build-url $base ({route_type: (encode-path-segment $route_type), stop_id: (encode-path-segment $stop_id), route_id: (encode-path-segment $route_id)} | format pattern "/v3/departures/route_type/{route_type}/stop/{stop_id}/route/{route_id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # View directions that a route travels in
 #
 # GET /v3/directions/route/{route_id}
 # operationId: Directions_ForRoute
-export def "directions-route ForRoute" [
+export def "directions-route get" [
   route_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -180,6 +193,7 @@ export def "directions-route ForRoute" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-token: string # Please ignore
@@ -189,17 +203,17 @@ export def "directions-route ForRoute" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "token" $qp_token "scalar") (serialize-qp "devid" $devid "scalar") (serialize-qp "signature" $signature "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v3/directions/route/($route_id)" $qp)
+  let full_url = (build-url $base ({route_id: (encode-path-segment $route_id)} | format pattern "/v3/directions/route/{route_id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # View all routes for a direction of travel
 #
 # GET /v3/directions/{direction_id}
 # operationId: Directions_ForDirection
-export def "directions ForDirection" [
+export def "directions get" [
   direction_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -208,6 +222,7 @@ export def "directions ForDirection" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-token: string # Please ignore
@@ -217,17 +232,17 @@ export def "directions ForDirection" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "token" $qp_token "scalar") (serialize-qp "devid" $devid "scalar") (serialize-qp "signature" $signature "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v3/directions/($direction_id)" $qp)
+  let full_url = (build-url $base ({direction_id: (encode-path-segment $direction_id)} | format pattern "/v3/directions/{direction_id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # View all routes of a particular type for a direction of travel
 #
 # GET /v3/directions/{direction_id}/route_type/{route_type}
 # operationId: Directions_ForDirectionAndType
-export def "directions-route-type ForDirectionAndType" [
+export def "directions-route-type get-for-and" [
   direction_id: int
   route_type: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -237,6 +252,7 @@ export def "directions-route-type ForDirectionAndType" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-token: string # Please ignore
@@ -246,17 +262,17 @@ export def "directions-route-type ForDirectionAndType" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "token" $qp_token "scalar") (serialize-qp "devid" $devid "scalar") (serialize-qp "signature" $signature "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v3/directions/($direction_id)/route_type/($route_type)" $qp)
+  let full_url = (build-url $base ({direction_id: (encode-path-segment $direction_id), route_type: (encode-path-segment $route_type)} | format pattern "/v3/directions/{direction_id}/route_type/{route_type}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # View all disruptions for all route types
 #
 # GET /v3/disruptions
 # operationId: Disruptions_GetAllDisruptions
-export def "disruptions GetAllDisruptions" [
+export def "disruptions get-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -264,10 +280,11 @@ export def "disruptions GetAllDisruptions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --route-types: list # Filter by route_type; values returned via RouteTypes API
-  --disruption-modes: list # Filter by disruption_mode; values returned via v3/disruptions/modes API
+  --route-types: list<int> # Filter by route_type; values returned via RouteTypes API
+  --disruption-modes: list<int> # Filter by disruption_mode; values returned via v3/disruptions/modes API
   --disruption-status: string@disruption-status-completer # Filter by status of disruption
   --qp-token: string # Please ignore
   --devid: string # Your developer id
@@ -279,14 +296,14 @@ export def "disruptions GetAllDisruptions" [
   let full_url = (build-url $base "/v3/disruptions" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get all disruption modes
 #
 # GET /v3/disruptions/modes
 # operationId: Disruptions_GetDisruptionModes
-export def "disruptions-modes GetDisruptionModes" [
+export def "disruptions-modes get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -294,6 +311,7 @@ export def "disruptions-modes GetDisruptionModes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-token: string # Please ignore
@@ -306,14 +324,14 @@ export def "disruptions-modes GetDisruptionModes" [
   let full_url = (build-url $base "/v3/disruptions/modes" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # View all disruptions for a particular route
 #
 # GET /v3/disruptions/route/{route_id}
 # operationId: Disruptions_GetDisruptionsByRoute
-export def "disruptions-route GetDisruptionsByRoute" [
+export def "disruptions-route get" [
   route_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -322,6 +340,7 @@ export def "disruptions-route GetDisruptionsByRoute" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --disruption-status: string@disruption-status-completer # Filter by status of disruption
@@ -332,17 +351,17 @@ export def "disruptions-route GetDisruptionsByRoute" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "disruption_status" $disruption_status "scalar") (serialize-qp "token" $qp_token "scalar") (serialize-qp "devid" $devid "scalar") (serialize-qp "signature" $signature "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v3/disruptions/route/($route_id)" $qp)
+  let full_url = (build-url $base ({route_id: (encode-path-segment $route_id)} | format pattern "/v3/disruptions/route/{route_id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # View all disruptions for a particular route and stop
 #
 # GET /v3/disruptions/route/{route_id}/stop/{stop_id}
 # operationId: Disruptions_GetDisruptionsByRouteAndStop
-export def "disruptions-route-stop GetDisruptionsByRouteAndStop" [
+export def "disruptions-route-stop get-by-and" [
   route_id: int
   stop_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -352,6 +371,7 @@ export def "disruptions-route-stop GetDisruptionsByRouteAndStop" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --disruption-status: string@disruption-status-completer # Filter by status of disruption
@@ -362,17 +382,17 @@ export def "disruptions-route-stop GetDisruptionsByRouteAndStop" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "disruption_status" $disruption_status "scalar") (serialize-qp "token" $qp_token "scalar") (serialize-qp "devid" $devid "scalar") (serialize-qp "signature" $signature "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v3/disruptions/route/($route_id)/stop/($stop_id)" $qp)
+  let full_url = (build-url $base ({route_id: (encode-path-segment $route_id), stop_id: (encode-path-segment $stop_id)} | format pattern "/v3/disruptions/route/{route_id}/stop/{stop_id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # View all disruptions for a particular stop
 #
 # GET /v3/disruptions/stop/{stop_id}
 # operationId: Disruptions_GetDisruptionsByStop
-export def "disruptions-stop GetDisruptionsByStop" [
+export def "disruptions-stop get" [
   stop_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -381,6 +401,7 @@ export def "disruptions-stop GetDisruptionsByStop" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --disruption-status: string@disruption-status-completer # Filter by status of disruption
@@ -391,17 +412,17 @@ export def "disruptions-stop GetDisruptionsByStop" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "disruption_status" $disruption_status "scalar") (serialize-qp "token" $qp_token "scalar") (serialize-qp "devid" $devid "scalar") (serialize-qp "signature" $signature "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v3/disruptions/stop/($stop_id)" $qp)
+  let full_url = (build-url $base ({stop_id: (encode-path-segment $stop_id)} | format pattern "/v3/disruptions/stop/{stop_id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # View a specific disruption
 #
 # GET /v3/disruptions/{disruption_id}
 # operationId: Disruptions_GetDisruptionById
-export def "disruptions GetDisruptionById" [
+export def "disruptions get" [
   disruption_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -410,6 +431,7 @@ export def "disruptions GetDisruptionById" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-token: string # Please ignore
@@ -419,19 +441,19 @@ export def "disruptions GetDisruptionById" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "token" $qp_token "scalar") (serialize-qp "devid" $devid "scalar") (serialize-qp "signature" $signature "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v3/disruptions/($disruption_id)" $qp)
+  let full_url = (build-url $base ({disruption_id: (encode-path-segment $disruption_id)} | format pattern "/v3/disruptions/{disruption_id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Estimate a fare by zone
 #
 # GET /v3/fare_estimate/min_zone/{minZone}/max_zone/{maxZone}
 # operationId: FareEstimate_GetFareEstimateByZone
-export def "fare-estimate-min-zone-max-zone GetFareEstimateByZone" [
-  minZone: int
-  maxZone: int
+export def "fare-estimate-min-zone-max-zone get" [
+  min_zone: int
+  max_zone: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -439,12 +461,13 @@ export def "fare-estimate-min-zone-max-zone GetFareEstimateByZone" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --journey-touch-on-utc: string # JourneyTouchOnUtc in format yyyy-M-d h:m (e.g 2016-5-31 16:53). (format: date-time)
   --journey-touch-off-utc: string # JourneyTouchOffUtc in format yyyy-M-d h:m (e.g 2016-5-31 16:53). (format: date-time)
   --is-journey-in-free-tram-zone: oneof<nothing, bool>
-  --travelled-route-types: list
+  --travelled-route-types: list<int>
   --qp-token: string # Please ignore
   --devid: string # Your developer id
   --signature: string # Authentication signature for request
@@ -452,17 +475,17 @@ export def "fare-estimate-min-zone-max-zone GetFareEstimateByZone" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "journey_touch_on_utc" $journey_touch_on_utc "scalar") (serialize-qp "journey_touch_off_utc" $journey_touch_off_utc "scalar") (serialize-qp "is_journey_in_free_tram_zone" $is_journey_in_free_tram_zone "scalar") (serialize-qp "travelled_route_types" $travelled_route_types "multi") (serialize-qp "token" $qp_token "scalar") (serialize-qp "devid" $devid "scalar") (serialize-qp "signature" $signature "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v3/fare_estimate/min_zone/($minZone)/max_zone/($maxZone)" $qp)
+  let full_url = (build-url $base ({min_zone: (encode-path-segment $min_zone), max_zone: (encode-path-segment $max_zone)} | format pattern "/v3/fare_estimate/min_zone/{min_zone}/max_zone/{max_zone}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # List all ticket outlets
 #
 # GET /v3/outlets
 # operationId: Outlets_GetAllOutlets
-export def "outlets GetAllOutlets" [
+export def "outlets get-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -470,6 +493,7 @@ export def "outlets GetAllOutlets" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --max-results: int # Maximum number of results returned (default = 30) (format: int32)
@@ -483,14 +507,14 @@ export def "outlets GetAllOutlets" [
   let full_url = (build-url $base "/v3/outlets" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # List ticket outlets near a specific location
 #
 # GET /v3/outlets/location/{latitude},{longitude}
 # operationId: Outlets_GetOutletsByGeolocation
-export def "outlets-location GetOutletsByGeolocation" [
+export def "outlets-location get-by-geolocation" [
   latitude: float
   longitude: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -500,6 +524,7 @@ export def "outlets-location GetOutletsByGeolocation" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --max-distance: float # Filter by maximum distance (in metres) from location specified via latitude and longitude parameters (default = 300) (format: double)
@@ -511,17 +536,17 @@ export def "outlets-location GetOutletsByGeolocation" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "max_distance" $max_distance "scalar") (serialize-qp "max_results" $max_results "scalar") (serialize-qp "token" $qp_token "scalar") (serialize-qp "devid" $devid "scalar") (serialize-qp "signature" $signature "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v3/outlets/location/($latitude),($longitude)" $qp)
+  let full_url = (build-url $base ({latitude: (encode-path-segment $latitude), longitude: (encode-path-segment $longitude)} | format pattern "/v3/outlets/location/{latitude},{longitude}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # View the stopping pattern for a specific trip/service run
 #
 # GET /v3/pattern/run/{run_ref}/route_type/{route_type}
 # operationId: Patterns_GetPatternByRun
-export def "pattern-run-route-type GetPatternByRun" [
+export def "pattern-run-route-type get" [
   run_ref: string
   route_type: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -531,9 +556,10 @@ export def "pattern-run-route-type GetPatternByRun" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --expand: list # List of objects to be returned in full (i.e. expanded) - options include: All, Stop, Route, Run, Direction, Disruption, VehiclePosition, VehicleDescriptor and None. Default is Disruption. Run must be expanded to receive VehiclePosition and VehicleDescriptor information.
+  --expand: list<string> # List of objects to be returned in full (i.e. expanded) - options include: All, Stop, Route, Run, Direction, Disruption, VehiclePosition, VehicleDescriptor and None. Default is Disruption. Run must be expanded to receive VehiclePosition and VehicleDescriptor information.
   --stop-id: int # Filter by stop_id; values returned by Stops API (format: int32)
   --date-utc: string # Filter by the date and time of the request (ISO 8601 UTC format) (format: date-time)
   --include-skipped-stops: oneof<nothing, bool> # Include any skipped stops in a stopping pattern. Defaults to false.
@@ -545,17 +571,17 @@ export def "pattern-run-route-type GetPatternByRun" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "multi") (serialize-qp "stop_id" $stop_id "scalar") (serialize-qp "date_utc" $date_utc "scalar") (serialize-qp "include_skipped_stops" $include_skipped_stops "scalar") (serialize-qp "include_geopath" $include_geopath "scalar") (serialize-qp "token" $qp_token "scalar") (serialize-qp "devid" $devid "scalar") (serialize-qp "signature" $signature "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v3/pattern/run/($run_ref)/route_type/($route_type)" $qp)
+  let full_url = (build-url $base ({run_ref: (encode-path-segment $run_ref), route_type: (encode-path-segment $route_type)} | format pattern "/v3/pattern/run/{run_ref}/route_type/{route_type}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # View all route types and their names
 #
 # GET /v3/route_types
 # operationId: RouteTypes_GetRouteTypes
-export def "route-types GetRouteTypes" [
+export def "route-types get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -563,6 +589,7 @@ export def "route-types GetRouteTypes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-token: string # Please ignore
@@ -575,14 +602,14 @@ export def "route-types GetRouteTypes" [
   let full_url = (build-url $base "/v3/route_types" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # View route names and numbers for all routes
 #
 # GET /v3/routes
 # operationId: Routes_OneOrMoreRoutes
-export def "routes OneOrMoreRoutes" [
+export def "routes get-one-or-more" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -590,10 +617,11 @@ export def "routes OneOrMoreRoutes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --route-types: list # Filter by route_type; values returned via RouteTypes API
-  --route-name: string # Filter by name  of route (accepts partial route name matches)
+  --route-types: list<int> # Filter by route_type; values returned via RouteTypes API
+  --route-name: string # Filter by name of route (accepts partial route name matches)
   --qp-token: string # Please ignore
   --devid: string # Your developer id
   --signature: string # Authentication signature for request
@@ -604,14 +632,14 @@ export def "routes OneOrMoreRoutes" [
   let full_url = (build-url $base "/v3/routes" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # View route name and number for specific route ID
 #
 # GET /v3/routes/{route_id}
 # operationId: Routes_RouteFromId
-export def "routes RouteFromId" [
+export def "routes get" [
   route_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -620,6 +648,7 @@ export def "routes RouteFromId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --include-geopath: oneof<nothing, bool> # Indicates kif geopath data will be returned (default = false)
@@ -631,17 +660,17 @@ export def "routes RouteFromId" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "include_geopath" $include_geopath "scalar") (serialize-qp "geopath_utc" $geopath_utc "scalar") (serialize-qp "token" $qp_token "scalar") (serialize-qp "devid" $devid "scalar") (serialize-qp "signature" $signature "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v3/routes/($route_id)" $qp)
+  let full_url = (build-url $base ({route_id: (encode-path-segment $route_id)} | format pattern "/v3/routes/{route_id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # View all trip/service runs for a specific route ID
 #
 # GET /v3/runs/route/{route_id}
 # operationId: Runs_ForRoute
-export def "runs-route ForRoute" [
+export def "runs-route get" [
   route_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -650,9 +679,10 @@ export def "runs-route ForRoute" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --expand: list # List of objects to be returned in full (i.e. expanded) - options include: All, VehiclePosition, VehicleDescriptor, or None. Default is None.
+  --expand: list<string> # List of objects to be returned in full (i.e. expanded) - options include: All, VehiclePosition, VehicleDescriptor, or None. Default is None.
   --date-utc: string # Date of the request. (optional - defaults to now) (format: date-time)
   --qp-token: string # Please ignore
   --devid: string # Your developer id
@@ -661,17 +691,17 @@ export def "runs-route ForRoute" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "multi") (serialize-qp "date_utc" $date_utc "scalar") (serialize-qp "token" $qp_token "scalar") (serialize-qp "devid" $devid "scalar") (serialize-qp "signature" $signature "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v3/runs/route/($route_id)" $qp)
+  let full_url = (build-url $base ({route_id: (encode-path-segment $route_id)} | format pattern "/v3/runs/route/{route_id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # View all trip/service runs for a specific route ID and route type
 #
 # GET /v3/runs/route/{route_id}/route_type/{route_type}
 # operationId: Runs_ForRouteAndRouteType
-export def "runs-route-route-type ForRouteAndRouteType" [
+export def "runs-route-route-type get-for-and" [
   route_id: int
   route_type: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -681,9 +711,10 @@ export def "runs-route-route-type ForRouteAndRouteType" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --expand: list # List of objects to be returned in full (i.e. expanded) - options include: All, VehiclePosition, VehicleDescriptor, or None. Default is All.
+  --expand: list<string> # List of objects to be returned in full (i.e. expanded) - options include: All, VehiclePosition, VehicleDescriptor, or None. Default is All.
   --date-utc: string # Date of the request. (optional - defaults to now) (format: date-time)
   --qp-token: string # Please ignore
   --devid: string # Your developer id
@@ -692,17 +723,17 @@ export def "runs-route-route-type ForRouteAndRouteType" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "multi") (serialize-qp "date_utc" $date_utc "scalar") (serialize-qp "token" $qp_token "scalar") (serialize-qp "devid" $devid "scalar") (serialize-qp "signature" $signature "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v3/runs/route/($route_id)/route_type/($route_type)" $qp)
+  let full_url = (build-url $base ({route_id: (encode-path-segment $route_id), route_type: (encode-path-segment $route_type)} | format pattern "/v3/runs/route/{route_id}/route_type/{route_type}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # View all trip/service runs for a specific run_ref
 #
 # GET /v3/runs/{run_ref}
 # operationId: Runs_ForRun
-export def "runs ForRun" [
+export def "runs get" [
   run_ref: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -711,9 +742,10 @@ export def "runs ForRun" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --expand: list # List of objects to be returned in full (i.e. expanded) - options include: All, VehiclePosition, VehicleDescriptor, or None. Default is None.
+  --expand: list<string> # List of objects to be returned in full (i.e. expanded) - options include: All, VehiclePosition, VehicleDescriptor, or None. Default is None.
   --date-utc: string # Date of the request. (optional - defaults to now) (format: date-time)
   --include-geopath: oneof<nothing, bool> # Indicates if geopath data will be returned (default = false)
   --qp-token: string # Please ignore
@@ -723,17 +755,17 @@ export def "runs ForRun" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "multi") (serialize-qp "date_utc" $date_utc "scalar") (serialize-qp "include_geopath" $include_geopath "scalar") (serialize-qp "token" $qp_token "scalar") (serialize-qp "devid" $devid "scalar") (serialize-qp "signature" $signature "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v3/runs/($run_ref)" $qp)
+  let full_url = (build-url $base ({run_ref: (encode-path-segment $run_ref)} | format pattern "/v3/runs/{run_ref}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # View the trip/service run for a specific run_ref and route type
 #
 # GET /v3/runs/{run_ref}/route_type/{route_type}
 # operationId: Runs_ForRunAndRouteType
-export def "runs-route-type ForRunAndRouteType" [
+export def "runs-route-type get-for-and" [
   run_ref: string
   route_type: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -743,9 +775,10 @@ export def "runs-route-type ForRunAndRouteType" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --expand: list # List of objects to be returned in full (i.e. expanded) - options include: All, VehiclePosition, VehicleDescriptor, or None. Default is None.
+  --expand: list<string> # List of objects to be returned in full (i.e. expanded) - options include: All, VehiclePosition, VehicleDescriptor, or None. Default is None.
   --date-utc: string # Date of the request. (optional - defaults to now) (format: date-time)
   --include-geopath: oneof<nothing, bool> # Indicates if geopath data will be returned (default = false)
   --qp-token: string # Please ignore
@@ -755,17 +788,17 @@ export def "runs-route-type ForRunAndRouteType" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "multi") (serialize-qp "date_utc" $date_utc "scalar") (serialize-qp "include_geopath" $include_geopath "scalar") (serialize-qp "token" $qp_token "scalar") (serialize-qp "devid" $devid "scalar") (serialize-qp "signature" $signature "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v3/runs/($run_ref)/route_type/($route_type)" $qp)
+  let full_url = (build-url $base ({run_ref: (encode-path-segment $run_ref), route_type: (encode-path-segment $route_type)} | format pattern "/v3/runs/{run_ref}/route_type/{route_type}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # View stops, routes and myki ticket outlets that match the search term
 #
 # GET /v3/search/{search_term}
 # operationId: Search_Search
-export def "search Search" [
+export def "search list" [
   search_term: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -774,9 +807,10 @@ export def "search Search" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --route-types: list # Filter by route_type; values returned via RouteTypes API (note: stops and routes are ordered by route_types specified)
+  --route-types: list<int> # Filter by route_type; values returned via RouteTypes API (note: stops and routes are ordered by route_types specified)
   --latitude: float # Filter by geographic coordinate of latitude (format: float)
   --longitude: float # Filter by geographic coordinate of longitude (format: float)
   --max-distance: float # Filter by maximum distance (in metres) from location specified via latitude and longitude parameters (format: float)
@@ -792,17 +826,17 @@ export def "search Search" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "route_types" $route_types "multi") (serialize-qp "latitude" $latitude "scalar") (serialize-qp "longitude" $longitude "scalar") (serialize-qp "max_distance" $max_distance "scalar") (serialize-qp "include_addresses" $include_addresses "scalar") (serialize-qp "include_outlets" $include_outlets "scalar") (serialize-qp "match_stop_by_suburb" $match_stop_by_suburb "scalar") (serialize-qp "match_route_by_suburb" $match_route_by_suburb "scalar") (serialize-qp "match_stop_by_gtfs_stop_id" $match_stop_by_gtfs_stop_id "scalar") (serialize-qp "token" $qp_token "scalar") (serialize-qp "devid" $devid "scalar") (serialize-qp "signature" $signature "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v3/search/($search_term)" $qp)
+  let full_url = (build-url $base ({search_term: (encode-path-segment $search_term)} | format pattern "/v3/search/{search_term}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # View all stops near a specific location
 #
 # GET /v3/stops/location/{latitude},{longitude}
 # operationId: Stops_StopsByGeolocation
-export def "stops-location StopsByGeolocation" [
+export def "stops-location get-by-geolocation" [
   latitude: float
   longitude: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -812,9 +846,10 @@ export def "stops-location StopsByGeolocation" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --route-types: list # Filter by route_type; values returned via RouteTypes API
+  --route-types: list<int> # Filter by route_type; values returned via RouteTypes API
   --max-results: int # Maximum number of results returned (default = 30) (format: int32)
   --max-distance: float # Filter by maximum distance (in metres) from location specified via latitude and longitude parameters (default = 300) (format: double)
   --stop-disruptions: oneof<nothing, bool> # Indicates if stop disruption information will be returned (default = false)
@@ -825,17 +860,17 @@ export def "stops-location StopsByGeolocation" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "route_types" $route_types "multi") (serialize-qp "max_results" $max_results "scalar") (serialize-qp "max_distance" $max_distance "scalar") (serialize-qp "stop_disruptions" $stop_disruptions "scalar") (serialize-qp "token" $qp_token "scalar") (serialize-qp "devid" $devid "scalar") (serialize-qp "signature" $signature "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v3/stops/location/($latitude),($longitude)" $qp)
+  let full_url = (build-url $base ({latitude: (encode-path-segment $latitude), longitude: (encode-path-segment $longitude)} | format pattern "/v3/stops/location/{latitude},{longitude}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # View all stops on a specific route
 #
 # GET /v3/stops/route/{route_id}/route_type/{route_type}
 # operationId: Stops_StopsForRoute
-export def "stops-route-route-type StopsForRoute" [
+export def "stops-route-route-type get" [
   route_id: int
   route_type: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -845,6 +880,7 @@ export def "stops-route-route-type StopsForRoute" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --direction-id: int # An optional direction; values returned by Directions API. When this is set, stop sequence information is returned in the response. (format: int32)
@@ -858,17 +894,17 @@ export def "stops-route-route-type StopsForRoute" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "direction_id" $direction_id "scalar") (serialize-qp "stop_disruptions" $stop_disruptions "scalar") (serialize-qp "include_geopath" $include_geopath "scalar") (serialize-qp "geopath_utc" $geopath_utc "scalar") (serialize-qp "token" $qp_token "scalar") (serialize-qp "devid" $devid "scalar") (serialize-qp "signature" $signature "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v3/stops/route/($route_id)/route_type/($route_type)" $qp)
+  let full_url = (build-url $base ({route_id: (encode-path-segment $route_id), route_type: (encode-path-segment $route_type)} | format pattern "/v3/stops/route/{route_id}/route_type/{route_type}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # View facilities at a specific stop (Metro and V/Line stations only)
 #
 # GET /v3/stops/{stop_id}/route_type/{route_type}
 # operationId: Stops_StopDetails
-export def "stops-route-type StopDetails" [
+export def "stops-route-type stop-details" [
   stop_id: int
   route_type: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -878,6 +914,7 @@ export def "stops-route-type StopDetails" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --stop-location: oneof<nothing, bool> # Indicates if stop location information will be returned (default = false)
@@ -895,8 +932,8 @@ export def "stops-route-type StopDetails" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "stop_location" $stop_location "scalar") (serialize-qp "stop_amenities" $stop_amenities "scalar") (serialize-qp "stop_accessibility" $stop_accessibility "scalar") (serialize-qp "stop_contact" $stop_contact "scalar") (serialize-qp "stop_ticket" $stop_ticket "scalar") (serialize-qp "gtfs" $gtfs "scalar") (serialize-qp "stop_staffing" $stop_staffing "scalar") (serialize-qp "stop_disruptions" $stop_disruptions "scalar") (serialize-qp "token" $qp_token "scalar") (serialize-qp "devid" $devid "scalar") (serialize-qp "signature" $signature "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v3/stops/($stop_id)/route_type/($route_type)" $qp)
+  let full_url = (build-url $base ({stop_id: (encode-path-segment $stop_id), route_type: (encode-path-segment $route_type)} | format pattern "/v3/stops/{stop_id}/route_type/{route_type}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }

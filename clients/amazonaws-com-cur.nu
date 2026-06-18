@@ -18,21 +18,32 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 }
 
 # Serialize a single query parameter based on collection style
+# Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
+# ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = ($name | url encode)
+  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
-  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
-    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
-    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
+    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
+    _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
+}
+
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Build URL from base, path, and optional query string
@@ -44,7 +55,7 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
@@ -53,28 +64,28 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
     "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "put" => { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "patch" => { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
   if ($method in ["head" "options"]) { return $resp }
-  if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
+  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
 def base-url-completer [] { ["http://cur.us-east-1.amazonaws.com" "http://cur.us-east-2.amazonaws.com" "http://cur.us-west-1.amazonaws.com" "http://cur.us-west-2.amazonaws.com" "http://cur.us-gov-west-1.amazonaws.com" "http://cur.us-gov-east-1.amazonaws.com" "http://cur.ca-central-1.amazonaws.com" "http://cur.eu-north-1.amazonaws.com" "http://cur.eu-west-1.amazonaws.com" "http://cur.eu-west-2.amazonaws.com" "http://cur.eu-west-3.amazonaws.com" "http://cur.eu-central-1.amazonaws.com" "http://cur.eu-south-1.amazonaws.com" "http://cur.af-south-1.amazonaws.com" "http://cur.ap-northeast-1.amazonaws.com" "http://cur.ap-northeast-2.amazonaws.com" "http://cur.ap-northeast-3.amazonaws.com" "http://cur.ap-southeast-1.amazonaws.com" "http://cur.ap-southeast-2.amazonaws.com" "http://cur.ap-east-1.amazonaws.com" "http://cur.ap-south-1.amazonaws.com" "http://cur.sa-east-1.amazonaws.com" "http://cur.me-south-1.amazonaws.com" "https://cur.us-east-1.amazonaws.com" "https://cur.us-east-2.amazonaws.com" "https://cur.us-west-1.amazonaws.com" "https://cur.us-west-2.amazonaws.com" "https://cur.us-gov-west-1.amazonaws.com" "https://cur.us-gov-east-1.amazonaws.com" "https://cur.ca-central-1.amazonaws.com" "https://cur.eu-north-1.amazonaws.com" "https://cur.eu-west-1.amazonaws.com" "https://cur.eu-west-2.amazonaws.com" "https://cur.eu-west-3.amazonaws.com" "https://cur.eu-central-1.amazonaws.com" "https://cur.eu-south-1.amazonaws.com" "https://cur.af-south-1.amazonaws.com" "https://cur.ap-northeast-1.amazonaws.com" "https://cur.ap-northeast-2.amazonaws.com" "https://cur.ap-northeast-3.amazonaws.com" "https://cur.ap-southeast-1.amazonaws.com" "https://cur.ap-southeast-2.amazonaws.com" "https://cur.ap-east-1.amazonaws.com" "https://cur.ap-south-1.amazonaws.com" "https://cur.sa-east-1.amazonaws.com" "https://cur.me-south-1.amazonaws.com" "http://cur.cn-north-1.amazonaws.com.cn" "http://cur.cn-northwest-1.amazonaws.com.cn" "https://cur.cn-north-1.amazonaws.com.cn" "https://cur.cn-northwest-1.amazonaws.com.cn"] }
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
-def X-Amz-Target-completer [] { ["AWSOrigamiServiceGatewayService.DeleteReportDefinition"] }
-def X-Amz-Target-completer-1 [] { ["AWSOrigamiServiceGatewayService.DescribeReportDefinitions"] }
-def X-Amz-Target-completer-2 [] { ["AWSOrigamiServiceGatewayService.ModifyReportDefinition"] }
-def X-Amz-Target-completer-3 [] { ["AWSOrigamiServiceGatewayService.PutReportDefinition"] }
+def x-amz-target-completer [] { ["AWSOrigamiServiceGatewayService.DeleteReportDefinition"] }
+def x-amz-target-completer-1 [] { ["AWSOrigamiServiceGatewayService.DescribeReportDefinitions"] }
+def x-amz-target-completer-2 [] { ["AWSOrigamiServiceGatewayService.ModifyReportDefinition"] }
+def x-amz-target-completer-3 [] { ["AWSOrigamiServiceGatewayService.PutReportDefinition"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "x-amz-target-aws-origami-service-gateway-service-delete-report-definition DeleteReportDefinition" } } | get name | first)
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "x-amz-target-aws-origami-service-gateway-service-delete-report-definition delete" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -98,7 +109,7 @@ export def commands []: nothing -> table {
 #
 # POST /#X-Amz-Target=AWSOrigamiServiceGatewayService.DeleteReportDefinition
 # operationId: DeleteReportDefinition
-export def "x-amz-target-aws-origami-service-gateway-service-delete-report-definition DeleteReportDefinition" [
+export def "x-amz-target-aws-origami-service-gateway-service-delete-report-definition delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -106,35 +117,36 @@ export def "x-amz-target-aws-origami-service-gateway-service-delete-report-defin
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer
-  --ReportName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer
+  --report-name: any
 ]: any -> record<ResponseMessage: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSOrigamiServiceGatewayService.DeleteReportDefinition")
-  let body = {ReportName: $ReportName} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"ReportName": $report_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Lists the AWS Cost and Usage reports available to this account.
 #
 # POST /#X-Amz-Target=AWSOrigamiServiceGatewayService.DescribeReportDefinitions
 # operationId: DescribeReportDefinitions
-export def "x-amz-target-aws-origami-service-gateway-service-describe-report-definitions DescribeReportDefinitions" [
+export def "x-amz-target-aws-origami-service-gateway-service-describe-report-definitions get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -142,40 +154,41 @@ export def "x-amz-target-aws-origami-service-gateway-service-describe-report-def
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-1
-  --MaxResults: int # The maximum number of results that AWS returns for the operation.
-  --NextToken: string # A generic string.
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-1
+  --max-results: int # The maximum number of results that AWS returns for the operation.
+  --next-token: string # A generic string.
 ]: any -> record<ReportDefinitions: record, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AWSOrigamiServiceGatewayService.DescribeReportDefinitions" $qp)
-  let body = {MaxResults: $MaxResults, NextToken: $NextToken} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"MaxResults": $max_results, "NextToken": $next_token} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Allows you to programatically update your report preferences.
 #
 # POST /#X-Amz-Target=AWSOrigamiServiceGatewayService.ModifyReportDefinition
 # operationId: ModifyReportDefinition
-# --ReportDefinition shape: {ReportName: string, TimeUnit: "HOURLY"|"DAILY"|"MONTHLY", Format: "textORcsv"|"Parquet", Compression: "ZIP"|"GZIP"|"Parquet", AdditionalSchemaElements: any, S3Bucket: string, S3Prefix: string, S3Region: "af-south-1"|"ap-east-1"|"ap-south-1"|"ap-southeast-1"|"ap-southeast-2"|"ap-southeast-3"|"ap-northeast-1"|"ap-northeast-2"|"ap-northeast-3"|"ca-central-1"|"eu-central-1"|"eu-west-1"|"eu-west-2"|"eu-west-3"|"eu-north-1"|"eu-south-1"|"eu-south-2"|"me-central-1"|"me-south-1"|"sa-east-1"|"us-east-1"|"us-east-2"|"us-west-1"|"us-west-2"|"cn-north-1"|"cn-northwest-1", AdditionalArtifacts?: any, RefreshClosedReports?: any, ReportVersioning?: any, BillingViewArn?: any}
-export def "x-amz-target-aws-origami-service-gateway-service-modify-report-definition ModifyReportDefinition" [
+# --ReportDefinition shape: {ReportName: string, TimeUnit: "HOURLY"|"DAILY"|"MONTHLY", Format: "textORcsv"|"Parquet", Compression: "ZIP"|"GZIP"|"Parquet", AdditionalSchemaElements: any, S3Bucket: string, S3Prefix: string, ... (5 more fields)}
+export def "x-amz-target-aws-origami-service-gateway-service-modify-report-definition create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -183,36 +196,37 @@ export def "x-amz-target-aws-origami-service-gateway-service-modify-report-defin
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-2
-  ReportName: string # The name of the report that you want to create. The name must be unique, is case sensitive, and can't include spaces. 
-  ReportDefinition: record # The definition of AWS Cost and Usage Report. You can specify the report name, time unit, report format, compression format, S3 bucket, additional artifacts, and schema elements in the definition.  — shape: {ReportName: string, TimeUnit: "HOURLY"|"DAILY"|"MONTHLY", Format: "textORcsv"|"Parquet", Compression: "ZIP"|"GZIP"|"Parquet", AdditionalSchemaElements: any, S3Bucket: string, S3Prefix: string, S3Region: "af-south-1"|"ap-east-1"|"ap-south-1"|"ap-southeast-1"|"ap-southeast-2"|"ap-southeast-3"|"ap-northeast-1"|"ap-northeast-2"|"ap-northeast-3"|"ca-central-1"|"eu-central-1"|"eu-west-1"|"eu-west-2"|"eu-west-3"|"eu-north-1"|"eu-south-1"|"eu-south-2"|"me-central-1"|"me-south-1"|"sa-east-1"|"us-east-1"|"us-east-2"|"us-west-1"|"us-west-2"|"cn-north-1"|"cn-northwest-1", AdditionalArtifacts?: any, RefreshClosedReports?: any, ReportVersioning?: any, BillingViewArn?: any}
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-2
+  report_name: string # The name of the report that you want to create. The name must be unique, is case sensitive, and can't include spaces.
+  report_definition: record # The definition of AWS Cost and Usage Report. You can specify the report name, time unit, report format, compression format, S3 bucket, additional artifacts, and schema elements in the definition. — shape: {ReportName: string, TimeUnit: "HOURLY"|"DAILY"|"MONTHLY", Format: "textORcsv"|"Parquet", Compression: "ZIP"|"GZIP"|"Parquet", AdditionalSchemaElements: any, S3Bucket: string, S3Prefix: string, ... (5 more fields)}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSOrigamiServiceGatewayService.ModifyReportDefinition")
-  let body = {ReportName: $ReportName, ReportDefinition: $ReportDefinition} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"ReportName": $report_name, "ReportDefinition": $report_definition} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Creates a new report using the description that you provide.
 #
 # POST /#X-Amz-Target=AWSOrigamiServiceGatewayService.PutReportDefinition
 # operationId: PutReportDefinition
-export def "x-amz-target-aws-origami-service-gateway-service-put-report-definition PutReportDefinition" [
+export def "x-amz-target-aws-origami-service-gateway-service-put-report-definition update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -220,26 +234,27 @@ export def "x-amz-target-aws-origami-service-gateway-service-put-report-definiti
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-3
-  ReportDefinition: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-3
+  report_definition: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSOrigamiServiceGatewayService.PutReportDefinition")
-  let body = {ReportDefinition: $ReportDefinition} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"ReportDefinition": $report_definition} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }

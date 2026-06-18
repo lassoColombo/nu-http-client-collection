@@ -18,21 +18,32 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 }
 
 # Serialize a single query parameter based on collection style
+# Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
+# ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = ($name | url encode)
+  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
-  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
-    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
-    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
+    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
+    _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
+}
+
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Build URL from base, path, and optional query string
@@ -44,7 +55,7 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
@@ -53,13 +64,13 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
     "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "put" => { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "patch" => { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
   if ($method in ["head" "options"]) { return $resp }
-  if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
+  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
 def base-url-completer [] { ["https://azure.local"] }
@@ -71,8 +82,8 @@ def fields-completer [] { ["*"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "templeton-hive SubmitHiveJob" } } | get name | first)
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "templeton-hive submit-job-job" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -96,7 +107,7 @@ export def commands []: nothing -> table {
 #
 # POST /templeton/v1/hive
 # operationId: Job_SubmitHiveJob
-export def "templeton-hive SubmitHiveJob" [
+export def "templeton-hive submit-job-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -104,26 +115,28 @@ export def "templeton-hive SubmitHiveJob" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --username: string # The user name used for running job.
+  --user-name: string # The user name used for running job.
   --body: record
 ]: any -> record<id: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "user.name" $username "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "user.name" $user_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/templeton/v1/hive" $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Gets the list of jobs from the specified HDInsight cluster.
 #
 # GET /templeton/v1/jobs
 # operationId: Job_List
-export def "templeton-jobs List" [
+export def "templeton-jobs list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -131,26 +144,27 @@ export def "templeton-jobs List" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --username: string # The user name used for running job.
+  --user-name: string # The user name used for running job.
   --showall: string@showall-completer # If showall is set to 'true', the request will return all jobs the user has permission to view, not only the jobs belonging to the user.
   --fields: string@fields-completer # If fields set to '*', the request will return full details of the job. Currently the value can only be '*'.
 ]: nothing -> table<detail: record<callback: record, completed: string, exitValue: int, id: string, msg: record, parentId: string, percentComplete: string, profile: record, status: record, user: string, userargs: record>, id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "user.name" $username "scalar") (serialize-qp "showall" $showall "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "user.name" $user_name "scalar") (serialize-qp "showall" $showall "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/templeton/v1/jobs" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Initiates cancel on given running job in the specified HDInsight.
 #
 # DELETE /templeton/v1/jobs/{jobId}
 # operationId: Job_Kill
-export def "templeton-jobs Kill" [
-  jobId: string
+export def "templeton-jobs kill" [
+  job_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -158,24 +172,25 @@ export def "templeton-jobs Kill" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --username: string # The user name used for running job.
+  --user-name: string # The user name used for running job.
 ]: nothing -> record<callback: record, completed: string, exitValue: int, id: string, msg: record, parentId: string, percentComplete: string, profile: record<jobFile: string, jobID: record<id: int, jtIdentifier: string>, jobId: string, jobName: string, queueName: string, url: string, user: string>, status: record<cleanupProgress: float, failureInfo: string, finishTime: int, historyFile: string, jobACLs: any, jobComplete: bool, jobFile: string, jobID: record<id: int, jtIdentifier: string>, jobId: string, jobName: string, jobPriority: string, mapProgress: float, neededMem: int, numReservedSlots: int, numUsedSlots: int, priority: string, queue: string, reduceProgress: float, reservedMem: int, retired: bool, runState: int, schedulingInfo: string, setupProgress: float, startTime: int, state: string, trackingUrl: string, uber: bool, usedMem: int, username: string>, user: string, userargs: record<arg: list<string>, callback: record, define: list<string>, enablelog: string, execute: string, file: record, files: record, jar: string, statusdir: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "user.name" $username "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/templeton/v1/jobs/($jobId)" $qp)
+  let qp = [(serialize-qp "user.name" $user_name "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({job_id: (encode-path-segment $job_id)} | format pattern "/templeton/v1/jobs/{job_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Gets job details from the specified HDInsight cluster.
 #
 # GET /templeton/v1/jobs/{jobId}
 # operationId: Job_Get
-export def "templeton-jobs Get" [
-  jobId: string
+export def "templeton-jobs get" [
+  job_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -183,24 +198,25 @@ export def "templeton-jobs Get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --username: string # The user name used for running job.
+  --user-name: string # The user name used for running job.
   --fields: string@fields-completer # If fields set to '*', the request will return full details of the job. Currently the value can only be '*'.
 ]: nothing -> record<callback: record, completed: string, exitValue: int, id: string, msg: record, parentId: string, percentComplete: string, profile: record<jobFile: string, jobID: record<id: int, jtIdentifier: string>, jobId: string, jobName: string, queueName: string, url: string, user: string>, status: record<cleanupProgress: float, failureInfo: string, finishTime: int, historyFile: string, jobACLs: any, jobComplete: bool, jobFile: string, jobID: record<id: int, jtIdentifier: string>, jobId: string, jobName: string, jobPriority: string, mapProgress: float, neededMem: int, numReservedSlots: int, numUsedSlots: int, priority: string, queue: string, reduceProgress: float, reservedMem: int, retired: bool, runState: int, schedulingInfo: string, setupProgress: float, startTime: int, state: string, trackingUrl: string, uber: bool, usedMem: int, username: string>, user: string, userargs: record<arg: list<string>, callback: record, define: list<string>, enablelog: string, execute: string, file: record, files: record, jar: string, statusdir: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "user.name" $username "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/templeton/v1/jobs/($jobId)" $qp)
+  let qp = [(serialize-qp "user.name" $user_name "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({job_id: (encode-path-segment $job_id)} | format pattern "/templeton/v1/jobs/{job_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Gets numrecords Of Jobs after jobid from the specified HDInsight cluster.
 #
 # GET /templeton/v1/jobs?op=LISTAFTERID
 # operationId: Job_ListAfterJobId
-export def "templeton-jobs-op-listafterid ListAfterJobId" [
+export def "templeton-jobs-op-listafterid list-job-after-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -208,8 +224,9 @@ export def "templeton-jobs-op-listafterid ListAfterJobId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --username: string # The user name used for running job.
+  --user-name: string # The user name used for running job.
   --jobid: string # JobId from where to list jobs.
   --numrecords: int # Number of jobs to fetch. (format: int32)
   --showall: string@showall-completer # If showall is set to 'true', the request will return all jobs the user has permission to view, not only the jobs belonging to the user.
@@ -217,18 +234,18 @@ export def "templeton-jobs-op-listafterid ListAfterJobId" [
 ]: nothing -> table<detail: record<callback: record, completed: string, exitValue: int, id: string, msg: record, parentId: string, percentComplete: string, profile: record, status: record, user: string, userargs: record>, id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "user.name" $username "scalar") (serialize-qp "jobid" $jobid "scalar") (serialize-qp "numrecords" $numrecords "scalar") (serialize-qp "showall" $showall "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "user.name" $user_name "scalar") (serialize-qp "jobid" $jobid "scalar") (serialize-qp "numrecords" $numrecords "scalar") (serialize-qp "showall" $showall "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/templeton/v1/jobs?op=LISTAFTERID" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Submits a MapReduce job to an HDInsight cluster.
 #
 # POST /templeton/v1/mapreduce/jar
 # operationId: Job_SubmitMapReduceJob
-export def "templeton-mapreduce-jar SubmitMapReduceJob" [
+export def "templeton-mapreduce-jar submit-job-map-reduce-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -236,26 +253,28 @@ export def "templeton-mapreduce-jar SubmitMapReduceJob" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --username: string # The user name used for running job.
+  --user-name: string # The user name used for running job.
   --body: record
 ]: any -> record<id: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "user.name" $username "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "user.name" $user_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/templeton/v1/mapreduce/jar" $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Submits a MapReduce streaming job to an HDInsight cluster.
 #
 # POST /templeton/v1/mapreduce/streaming
 # operationId: Job_SubmitMapReduceStreamingJob
-export def "templeton-mapreduce-streaming SubmitMapReduceStreamingJob" [
+export def "templeton-mapreduce-streaming submit-job-map-reduce-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -263,26 +282,28 @@ export def "templeton-mapreduce-streaming SubmitMapReduceStreamingJob" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --username: string # The user name used for running job.
+  --user-name: string # The user name used for running job.
   --body: record
 ]: any -> record<id: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "user.name" $username "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "user.name" $user_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/templeton/v1/mapreduce/streaming" $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Submits a Pig job to an HDInsight cluster.
 #
 # POST /templeton/v1/pig
 # operationId: Job_SubmitPigJob
-export def "templeton-pig SubmitPigJob" [
+export def "templeton-pig submit-job-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -290,26 +311,28 @@ export def "templeton-pig SubmitPigJob" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --username: string # The user name used for running job.
+  --user-name: string # The user name used for running job.
   --body: record
 ]: any -> record<id: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "user.name" $username "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "user.name" $user_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/templeton/v1/pig" $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Submits a Sqoop job to an HDInsight cluster.
 #
 # POST /templeton/v1/sqoop
 # operationId: Job_SubmitSqoopJob
-export def "templeton-sqoop SubmitSqoopJob" [
+export def "templeton-sqoop submit-job-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -317,27 +340,29 @@ export def "templeton-sqoop SubmitSqoopJob" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --username: string # The user name used for running job.
+  --user-name: string # The user name used for running job.
   --body: record
 ]: any -> record<id: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "user.name" $username "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "user.name" $user_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/templeton/v1/sqoop" $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Gets application state from the specified HDInsight cluster.
 #
 # GET /ws/v1/cluster/apps/{appId}/state
 # operationId: Job_GetAppState
-export def "ws-cluster-apps-state GetAppState" [
-  appId: string
+export def "ws-cluster-apps-state get-job" [
+  app_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -345,12 +370,13 @@ export def "ws-cluster-apps-state GetAppState" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<state: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/ws/v1/cluster/apps/($appId)/state")
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/ws/v1/cluster/apps/{app_id}/state"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }

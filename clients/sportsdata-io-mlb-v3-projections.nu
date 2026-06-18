@@ -12,28 +12,39 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {headers: {}, query: ""} }
   match $scheme {
     "ocp-apim-subscription-key" => { {headers: {Ocp-Apim-Subscription-Key: $token_val}, query: ""} }
-    "query-key" => { {headers: {}, query: $"key=($token_val)"} }
+    "query-key" => { {headers: {}, query: $"(encode-path-segment "key")=(encode-path-segment $token_val)"} }
     "none" => { {headers: {}, query: ""} }
     _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
   }
 }
 
 # Serialize a single query parameter based on collection style
+# Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
+# ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = ($name | url encode)
+  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
-  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
-    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
-    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
+    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
+    _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
+}
+
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Build URL from base, path, and optional query string
@@ -45,7 +56,7 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
@@ -54,13 +65,13 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
     "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "put" => { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "patch" => { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
   if ($method in ["head" "options"]) { return $resp }
-  if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
+  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
 def base-url-completer [] { ["http://azure-api.sportsdata.io/v3/mlb/projections" "https://azure-api.sportsdata.io/v3/mlb/projections"] }
@@ -69,8 +80,8 @@ def auth-scheme-completer [] { ["ocp-apim-subscription-key" "query-key"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "depth-charts DepthCharts" } } | get name | first)
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "depth-charts get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -94,7 +105,7 @@ export def commands []: nothing -> table {
 #
 # GET /{format}/DepthCharts
 # operationId: DepthCharts
-export def "depth-charts DepthCharts" [
+export def "depth-charts get" [
   format: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -103,21 +114,22 @@ export def "depth-charts DepthCharts" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<DepthCharts: list<record>, TeamID: int> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($format)/DepthCharts")
+  let full_url = (build-url $base ({format: (encode-path-segment $format)} | format pattern "/{format}/DepthCharts"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # DFS Slates by Date
 #
 # GET /{format}/DfsSlatesByDate/{date}
 # operationId: DfsSlatesByDate
-export def "dfs-slates-by-date DfsSlatesByDate" [
+export def "dfs-slates-by-date get" [
   format: string
   date: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -127,21 +139,22 @@ export def "dfs-slates-by-date DfsSlatesByDate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<DfsSlateGames: list<record>, DfsSlatePlayers: list<record>, IsMultiDaySlate: bool, NumberOfGames: int, Operator: string, OperatorDay: string, OperatorGameType: string, OperatorName: string, OperatorSlateID: int, OperatorStartTime: string, RemovedByOperator: bool, SalaryCap: int, SlateID: int, SlateRosterSlots: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($format)/DfsSlatesByDate/($date)")
+  let full_url = (build-url $base ({format: (encode-path-segment $format), date: (encode-path-segment $date)} | format pattern "/{format}/DfsSlatesByDate/{date}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Injured Players
 #
 # GET /{format}/InjuredPlayers
 # operationId: InjuredPlayers
-export def "injured-players InjuredPlayers" [
+export def "injured-players get" [
   format: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -150,21 +163,22 @@ export def "injured-players InjuredPlayers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<BatHand: string, BirthCity: string, BirthCountry: string, BirthDate: string, BirthState: string, College: string, DraftKingsName: string, DraftKingsPlayerID: int, Experience: string, FanDuelName: string, FanDuelPlayerID: int, FantasyAlarmPlayerID: int, FantasyDraftName: string, FantasyDraftPlayerID: int, FirstName: string, GlobalTeamID: int, Height: int, HighSchool: string, InjuryBodyPart: string, InjuryNotes: string, InjuryStartDate: string, InjuryStatus: string, Jersey: int, LastName: string, MLBAMID: int, PhotoUrl: string, PlayerID: int, Position: string, PositionCategory: string, ProDebut: string, RotoWirePlayerID: int, RotoworldPlayerID: int, Salary: int, SportRadarPlayerID: string, SportsDataID: string, SportsDirectPlayerID: int, StatsPlayerID: int, Status: string, Team: string, TeamID: int, ThrowHand: string, UpcomingGameID: int, UsaTodayHeadshotNoBackgroundUpdated: string, UsaTodayHeadshotNoBackgroundUrl: string, UsaTodayHeadshotUpdated: string, UsaTodayHeadshotUrl: string, UsaTodayPlayerID: int, Weight: int, XmlTeamPlayerID: int, YahooName: string, YahooPlayerID: int> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($format)/InjuredPlayers")
+  let full_url = (build-url $base ({format: (encode-path-segment $format)} | format pattern "/{format}/InjuredPlayers"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Projected Player Game Stats by Date (w/ Injuries, DFS Salaries)
 #
 # GET /{format}/PlayerGameProjectionStatsByDate/{date}
 # operationId: ProjectedPlayerGameStatsByDateWInjuriesDfsSalaries
-export def "player-game-projection-stats-by-date ProjectedPlayerGameStatsByDateWInjuriesDfsSalaries" [
+export def "player-game-projection-stats-by-date stats-projected-w-injuries-dfs-salaries" [
   format: string
   date: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -174,21 +188,22 @@ export def "player-game-projection-stats-by-date ProjectedPlayerGameStatsByDateW
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<AtBats: float, BallsInPlay: float, BattingAverage: float, BattingAverageOnBallsInPlay: float, BattingOrder: int, BattingOrderConfirmed: bool, CaughtStealing: float, DateTime: string, Day: string, DoublePlays: float, Doubles: float, DraftKingsPosition: string, DraftKingsSalary: int, EarnedRunAverage: float, Errors: float, FanDuelPosition: string, FanDuelSalary: int, FantasyDataSalary: int, FantasyDraftPosition: string, FantasyDraftSalary: int, FantasyPoints: float, FantasyPointsBatting: float, FantasyPointsDraftKings: float, FantasyPointsFanDuel: float, FantasyPointsFantasyDraft: float, FantasyPointsPitching: float, FantasyPointsYahoo: float, FieldingIndependentPitching: float, FlyOuts: float, GameID: int, Games: int, GlobalGameID: int, GlobalOpponentID: int, GlobalTeamID: int, GrandSlams: float, GroundIntoDoublePlay: float, GroundOuts: float, HitByPitch: float, Hits: float, HomeOrAway: string, HomeRuns: float, InjuryBodyPart: string, InjuryNotes: string, InjuryStartDate: string, InjuryStatus: string, InningsPitchedDecimal: float, InningsPitchedFull: float, InningsPitchedOuts: float, IntentionalWalks: float, IsGameOver: bool, IsolatedPower: float, LeftOnBase: float, LineOuts: float, Losses: float, Name: string, OnBasePercentage: float, OnBasePlusSlugging: float, Opponent: string, OpponentID: int, OpponentPositionRank: int, OpponentRank: int, Outs: float, PitchesSeen: float, PitchesThrown: float, PitchesThrownStrikes: float, PitchingBallsInPlay: float, PitchingBattingAverageAgainst: float, PitchingBattingAverageOnBallsInPlay: float, PitchingBlownSaves: float, PitchingCatchersInterference: float, PitchingCompleteGames: float, PitchingDoublePlays: float, PitchingDoubles: float, PitchingEarnedRuns: float, PitchingFlyOuts: float, PitchingGrandSlams: float, PitchingGroundIntoDoublePlay: float, PitchingGroundOuts: float, PitchingHitByPitch: float, PitchingHits: float, PitchingHolds: float, PitchingHomeRuns: float, PitchingInningStarted: int, PitchingIntentionalWalks: float, PitchingLineOuts: float, PitchingNoHitters: float, PitchingOnBasePercentage: float, PitchingOnBasePlusSlugging: float, PitchingPerfectGames: float, PitchingPlateAppearances: float, PitchingPopOuts: float, PitchingQualityStarts: float, PitchingReachedOnError: float, PitchingRuns: float, PitchingSacrificeFlies: float, PitchingSacrifices: float, PitchingShutOuts: float, PitchingSingles: float, PitchingSluggingPercentage: float, PitchingStrikeouts: float, PitchingStrikeoutsPerNineInnings: float, PitchingTotalBases: float, PitchingTriples: float, PitchingWalks: float, PitchingWalksPerNineInnings: float, PitchingWeightedOnBasePercentage: float, PlateAppearances: float, PlayerID: int, PopOuts: float, Position: string, PositionCategory: string, ReachedOnError: float, Runs: float, RunsBattedIn: float, SacrificeFlies: float, Sacrifices: float, Saves: float, Season: int, SeasonType: int, Singles: float, SluggingPercentage: float, Started: int, StatID: int, StolenBases: float, Strikeouts: float, SubstituteBattingOrder: int, SubstituteBattingOrderSequence: int, Team: string, TeamID: int, TotalBases: float, TotalOutsPitched: float, Triples: float, Updated: string, Walks: float, WalksHitsPerInningsPitched: float, WeightedOnBasePercentage: float, Wins: float, YahooPosition: string, YahooSalary: int> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($format)/PlayerGameProjectionStatsByDate/($date)")
+  let full_url = (build-url $base ({format: (encode-path-segment $format), date: (encode-path-segment $date)} | format pattern "/{format}/PlayerGameProjectionStatsByDate/{date}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Projected Player Game Stats by Player (w/ Injuries, DFS Salaries)
 #
 # GET /{format}/PlayerGameProjectionStatsByPlayer/{date}/{playerid}
 # operationId: ProjectedPlayerGameStatsByPlayerWInjuriesDfsSalaries
-export def "player-game-projection-stats-by-player ProjectedPlayerGameStatsByPlayerWInjuriesDfsSalaries" [
+export def "player-game-projection-stats-by-player stats-projected-w-injuries-dfs-salaries" [
   format: string
   date: string
   playerid: string
@@ -199,21 +214,22 @@ export def "player-game-projection-stats-by-player ProjectedPlayerGameStatsByPla
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<AtBats: float, BallsInPlay: float, BattingAverage: float, BattingAverageOnBallsInPlay: float, BattingOrder: int, BattingOrderConfirmed: bool, CaughtStealing: float, DateTime: string, Day: string, DoublePlays: float, Doubles: float, DraftKingsPosition: string, DraftKingsSalary: int, EarnedRunAverage: float, Errors: float, FanDuelPosition: string, FanDuelSalary: int, FantasyDataSalary: int, FantasyDraftPosition: string, FantasyDraftSalary: int, FantasyPoints: float, FantasyPointsBatting: float, FantasyPointsDraftKings: float, FantasyPointsFanDuel: float, FantasyPointsFantasyDraft: float, FantasyPointsPitching: float, FantasyPointsYahoo: float, FieldingIndependentPitching: float, FlyOuts: float, GameID: int, Games: int, GlobalGameID: int, GlobalOpponentID: int, GlobalTeamID: int, GrandSlams: float, GroundIntoDoublePlay: float, GroundOuts: float, HitByPitch: float, Hits: float, HomeOrAway: string, HomeRuns: float, InjuryBodyPart: string, InjuryNotes: string, InjuryStartDate: string, InjuryStatus: string, InningsPitchedDecimal: float, InningsPitchedFull: float, InningsPitchedOuts: float, IntentionalWalks: float, IsGameOver: bool, IsolatedPower: float, LeftOnBase: float, LineOuts: float, Losses: float, Name: string, OnBasePercentage: float, OnBasePlusSlugging: float, Opponent: string, OpponentID: int, OpponentPositionRank: int, OpponentRank: int, Outs: float, PitchesSeen: float, PitchesThrown: float, PitchesThrownStrikes: float, PitchingBallsInPlay: float, PitchingBattingAverageAgainst: float, PitchingBattingAverageOnBallsInPlay: float, PitchingBlownSaves: float, PitchingCatchersInterference: float, PitchingCompleteGames: float, PitchingDoublePlays: float, PitchingDoubles: float, PitchingEarnedRuns: float, PitchingFlyOuts: float, PitchingGrandSlams: float, PitchingGroundIntoDoublePlay: float, PitchingGroundOuts: float, PitchingHitByPitch: float, PitchingHits: float, PitchingHolds: float, PitchingHomeRuns: float, PitchingInningStarted: int, PitchingIntentionalWalks: float, PitchingLineOuts: float, PitchingNoHitters: float, PitchingOnBasePercentage: float, PitchingOnBasePlusSlugging: float, PitchingPerfectGames: float, PitchingPlateAppearances: float, PitchingPopOuts: float, PitchingQualityStarts: float, PitchingReachedOnError: float, PitchingRuns: float, PitchingSacrificeFlies: float, PitchingSacrifices: float, PitchingShutOuts: float, PitchingSingles: float, PitchingSluggingPercentage: float, PitchingStrikeouts: float, PitchingStrikeoutsPerNineInnings: float, PitchingTotalBases: float, PitchingTriples: float, PitchingWalks: float, PitchingWalksPerNineInnings: float, PitchingWeightedOnBasePercentage: float, PlateAppearances: float, PlayerID: int, PopOuts: float, Position: string, PositionCategory: string, ReachedOnError: float, Runs: float, RunsBattedIn: float, SacrificeFlies: float, Sacrifices: float, Saves: float, Season: int, SeasonType: int, Singles: float, SluggingPercentage: float, Started: int, StatID: int, StolenBases: float, Strikeouts: float, SubstituteBattingOrder: int, SubstituteBattingOrderSequence: int, Team: string, TeamID: int, TotalBases: float, TotalOutsPitched: float, Triples: float, Updated: string, Walks: float, WalksHitsPerInningsPitched: float, WeightedOnBasePercentage: float, Wins: float, YahooPosition: string, YahooSalary: int> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($format)/PlayerGameProjectionStatsByPlayer/($date)/($playerid)")
+  let full_url = (build-url $base ({format: (encode-path-segment $format), date: (encode-path-segment $date), playerid: (encode-path-segment $playerid)} | format pattern "/{format}/PlayerGameProjectionStatsByPlayer/{date}/{playerid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Projected Player Season Stats (with ADP)
 #
 # GET /{format}/PlayerSeasonProjectionStats/{season}
 # operationId: ProjectedPlayerSeasonStatsWithAdp
-export def "player-season-projection-stats ProjectedPlayerSeasonStatsWithAdp" [
+export def "player-season-projection-stats stats-projected-with-adp" [
   format: string
   season: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -223,21 +239,22 @@ export def "player-season-projection-stats ProjectedPlayerSeasonStatsWithAdp" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<AtBats: float, AuctionValue: int, AverageDraftPosition: float, BallsInPlay: float, BattingAverage: float, BattingAverageOnBallsInPlay: float, BattingOrder: int, BattingOrderConfirmed: bool, CaughtStealing: float, DoublePlays: float, Doubles: float, EarnedRunAverage: float, Errors: float, FantasyPoints: float, FantasyPointsBatting: float, FantasyPointsDraftKings: float, FantasyPointsFanDuel: float, FantasyPointsFantasyDraft: float, FantasyPointsPitching: float, FantasyPointsYahoo: float, FieldingIndependentPitching: float, FlyOuts: float, Games: int, GlobalTeamID: int, GrandSlams: float, GroundIntoDoublePlay: float, GroundOuts: float, HitByPitch: float, Hits: float, HomeRuns: float, InningsPitchedDecimal: float, InningsPitchedFull: float, InningsPitchedOuts: float, IntentionalWalks: float, IsolatedPower: float, LeftOnBase: float, LineOuts: float, Losses: float, Name: string, OnBasePercentage: float, OnBasePlusSlugging: float, Outs: float, PitchesSeen: float, PitchesThrown: float, PitchesThrownStrikes: float, PitchingBallsInPlay: float, PitchingBattingAverageAgainst: float, PitchingBattingAverageOnBallsInPlay: float, PitchingBlownSaves: float, PitchingCatchersInterference: float, PitchingCompleteGames: float, PitchingDoublePlays: float, PitchingDoubles: float, PitchingEarnedRuns: float, PitchingFlyOuts: float, PitchingGrandSlams: float, PitchingGroundIntoDoublePlay: float, PitchingGroundOuts: float, PitchingHitByPitch: float, PitchingHits: float, PitchingHolds: float, PitchingHomeRuns: float, PitchingInningStarted: int, PitchingIntentionalWalks: float, PitchingLineOuts: float, PitchingNoHitters: float, PitchingOnBasePercentage: float, PitchingOnBasePlusSlugging: float, PitchingPerfectGames: float, PitchingPlateAppearances: float, PitchingPopOuts: float, PitchingQualityStarts: float, PitchingReachedOnError: float, PitchingRuns: float, PitchingSacrificeFlies: float, PitchingSacrifices: float, PitchingShutOuts: float, PitchingSingles: float, PitchingSluggingPercentage: float, PitchingStrikeouts: float, PitchingStrikeoutsPerNineInnings: float, PitchingTotalBases: float, PitchingTriples: float, PitchingWalks: float, PitchingWalksPerNineInnings: float, PitchingWeightedOnBasePercentage: float, PlateAppearances: float, PlayerID: int, PopOuts: float, Position: string, PositionCategory: string, ReachedOnError: float, Runs: float, RunsBattedIn: float, SacrificeFlies: float, Sacrifices: float, Saves: float, Season: int, SeasonType: int, Singles: float, SluggingPercentage: float, Started: int, StatID: int, StolenBases: float, Strikeouts: float, SubstituteBattingOrder: int, SubstituteBattingOrderSequence: int, Team: string, TeamID: int, TotalBases: float, TotalOutsPitched: float, Triples: float, Updated: string, Walks: float, WalksHitsPerInningsPitched: float, WeightedOnBasePercentage: float, Wins: float> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($format)/PlayerSeasonProjectionStats/($season)")
+  let full_url = (build-url $base ({format: (encode-path-segment $format), season: (encode-path-segment $season)} | format pattern "/{format}/PlayerSeasonProjectionStats/{season}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Starting Lineups by Date
 #
 # GET /{format}/StartingLineupsByDate/{date}
 # operationId: StartingLineupsByDate
-export def "starting-lineups-by-date StartingLineupsByDate" [
+export def "starting-lineups-by-date get" [
   format: string
   date: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -247,12 +264,13 @@ export def "starting-lineups-by-date StartingLineupsByDate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<AwayBattingLineup: list<record>, AwayStartingPitcher: record<BattingOrder: int, Confirmed: bool, FirstName: string, LastName: string, PlayerID: int, Position: string, Starting: bool, Team: string, TeamID: int>, AwayTeam: string, AwayTeamID: int, DateTime: string, Day: string, GameID: int, HomeBattingLineup: list<record>, HomeStartingPitcher: record<BattingOrder: int, Confirmed: bool, FirstName: string, LastName: string, PlayerID: int, Position: string, Starting: bool, Team: string, TeamID: int>, HomeTeam: string, HomeTeamID: int, Season: int, SeasonType: int, Status: string> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($format)/StartingLineupsByDate/($date)")
+  let full_url = (build-url $base ({format: (encode-path-segment $format), date: (encode-path-segment $date)} | format pattern "/{format}/StartingLineupsByDate/{date}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }

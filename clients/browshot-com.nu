@@ -11,28 +11,39 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {headers: {}, query: ""} }
   match $scheme {
-    "query-key" => { {headers: {}, query: $"key=($token_val)"} }
+    "query-key" => { {headers: {}, query: $"(encode-path-segment "key")=(encode-path-segment $token_val)"} }
     "none" => { {headers: {}, query: ""} }
     _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
   }
 }
 
 # Serialize a single query parameter based on collection style
+# Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
+# ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = ($name | url encode)
+  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
-  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
-    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
-    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
+    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
+    _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
+}
+
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Build URL from base, path, and optional query string
@@ -44,7 +55,7 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
@@ -53,13 +64,41 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
     "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "put" => { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "patch" => { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
   if ($method in ["head" "options"]) { return $resp }
-  if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
+  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
+}
+
+# Build a `multipart/form-data` envelope per RFC 7578. `file_fields` lists
+# the field names whose value should be read from disk as bytes; every
+# other field is sent as a text part (records/lists JSON-stringified).
+# Returns {content_type, body} ready to pass to `do-request`.
+# When `$dry_run` is true, file fields are NOT read from disk — they emit
+# an empty-bytes placeholder so callers can inspect the request shape
+# without the file existing on disk (issue 11.B).
+def build-multipart-body [parts: record, file_fields: list<string>, dry_run: bool = false]: nothing -> record {
+  let boundary = $"----nu-(random chars --length 24)"
+  let crlf = "\r\n"
+  let chunks = ($parts | items {|name, val|
+    if $val == null { null } else if $name in $file_fields {
+      let filename = ($val | into string | path basename)
+      let bytes = if $dry_run { (0x[] | into binary) } else { (open --raw $val | into binary | collect) }
+      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"; filename=\"($filename)\"($crlf)Content-Type: application/octet-stream($crlf)($crlf)" | into binary)
+      $head ++ $bytes ++ ($crlf | into binary)
+    } else {
+      let dt = ($val | describe)
+      let s = if (($dt | str starts-with "record") or ($dt | str starts-with "list") or ($dt | str starts-with "table")) { ($val | to json --raw) } else { ($val | into string) }
+      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"($crlf)($crlf)" | into binary)
+      $head ++ ($"($s)($crlf)" | into binary)
+    }
+  } | compact)
+  let trailer = ($"--($boundary)--($crlf)" | into binary)
+  let body = ($chunks | reduce --fold (0x[] | into binary) {|chunk, acc| $acc ++ $chunk }) ++ $trailer
+  {content_type: $"multipart/form-data; boundary=($boundary)", body: $body}
 }
 
 def base-url-completer [] { ["https://api.browshot.com/api/v1"] }
@@ -76,8 +115,8 @@ def accept-completer [] { ["image/jpeg" "image/png"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "account-info GetAccountInfo" } } | get name | first)
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "account-info get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -101,7 +140,7 @@ export def commands []: nothing -> table {
 #
 # GET /account/info
 # operationId: GetAccountInfo
-export def "account-info GetAccountInfo" [
+export def "account-info get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -109,6 +148,7 @@ export def "account-info GetAccountInfo" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --details: int # level of information returned (default: 1)
 ]: nothing -> record<balance: int, browsers: table<flash: int, id: int, javascript: int, mobile: int, name: string>, free_screenshots_left: int, hosting_browshot: int, instances: table<browser: record, country: string, height: int, id: int, load: float, screenshot_cost: int, type: string, width: int>, private_instances: int, screenshots: table<cookie: string, cost: int, delay: int, details: int, error: string, final_url: string, flash_delay: int, height: int, id: int, instance_id: int, post_data: string, priority: int, referer: string, scale: float, screenshot_url: any, script: string, shared_url: string, size: string, status: string, url: string, width: int>> {
@@ -118,14 +158,14 @@ export def "account-info GetAccountInfo" [
   let full_url = (build-url $base "/account/info" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Requests thousands of screenshtos at once
 #
 # POST /batch/ceate
 # operationId: CreateBatch
-export def "batch-ceate CreateBatch" [
+export def "batch-ceate create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -133,6 +173,7 @@ export def "batch-ceate CreateBatch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --hosting: string@hosting-completer # hosting option - s3 or browshot
   --hosting-height: int # maximum height of the thumbnail to host
@@ -167,19 +208,20 @@ export def "batch-ceate CreateBatch" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "hosting" $hosting "scalar") (serialize-qp "hosting_height" $hosting_height "scalar") (serialize-qp "hosting_width" $hosting_width "scalar") (serialize-qp "hosting_scale" $hosting_scale "scalar") (serialize-qp "hosting_bucket" $hosting_bucket "scalar") (serialize-qp "hosting_file" $hosting_file "scalar") (serialize-qp "hosting_headers" $hosting_headers "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/batch/ceate" $qp)
-  let body = {instance_id: $instance_id, file: $file, size: $size, name: $name, width: $width, height: $height, delay: $delay, flash_delay: $flash_delay, screen_width: $screen_width, screen_height: $screen_height, priority: $priority, referer: $referer, post_data: $post_data, cookie: $cookie, script: $script, details: $details, html: $html, max_wait: $max_wait, headers: $headers, format: $format} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"instance_id": $instance_id, "file": $file, "size": $size, "name": $name, "width": $width, "height": $height, "delay": $delay, "flash_delay": $flash_delay, "screen_width": $screen_width, "screen_height": $screen_height, "priority": $priority, "referer": $referer, "post_data": $post_data, "cookie": $cookie, "script": $script, "details": $details, "html": $html, "max_wait": $max_wait, "headers": $headers, "format": $format} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let body = if ($file | is-not-empty) { $body | upsert file (open -r $file) } else { $body }
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
+  let mp = (build-multipart-body $req_body ["file"] $dry_run)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
 }
 
 # Get the batch status
 #
 # GET /batch/info
 # operationId: GetBatchInfo
-export def "batch-info GetBatchInfo" [
+export def "batch-info get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -187,6 +229,7 @@ export def "batch-info GetBatchInfo" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --id: int # batch ID
 ]: nothing -> record<count: int, failed: int, finished: int, id: int, processed: int, started: int, status: string, urls: list<string>> {
@@ -196,14 +239,14 @@ export def "batch-info GetBatchInfo" [
   let full_url = (build-url $base "/batch/info" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get information about a browser
 #
 # GET /browser/info
 # operationId: GetBrowserInfo
-export def "browser-info GetBrowserInfo" [
+export def "browser-info get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -211,6 +254,7 @@ export def "browser-info GetBrowserInfo" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --id: int # browser ID
 ]: nothing -> record<flash: int, id: int, javascript: int, mobile: int, name: string> {
@@ -220,14 +264,14 @@ export def "browser-info GetBrowserInfo" [
   let full_url = (build-url $base "/browser/info" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get all browsers
 #
 # GET /browser/list
 # operationId: GetBrowsersInfo
-export def "browser-list GetBrowsersInfo" [
+export def "browser-list get-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -235,6 +279,7 @@ export def "browser-list GetBrowsersInfo" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<default: int> {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
@@ -242,14 +287,14 @@ export def "browser-list GetBrowsersInfo" [
   let full_url = (build-url $base "/browser/list")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get information about an instance
 #
 # GET /instance/info
 # operationId: GetInstanceInfo
-export def "instance-info GetInstanceInfo" [
+export def "instance-info get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -257,6 +302,7 @@ export def "instance-info GetInstanceInfo" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --id: int # instance ID
 ]: nothing -> record<browser: record<flash: int, id: int, javascript: int, mobile: int, name: string>, country: string, height: int, id: int, load: float, screenshot_cost: int, type: string, width: int> {
@@ -266,14 +312,14 @@ export def "instance-info GetInstanceInfo" [
   let full_url = (build-url $base "/instance/info" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get all instances
 #
 # GET /instance/list
 # operationId: GetInstancesInfo
-export def "instance-list GetInstancesInfo" [
+export def "instance-list get-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -281,6 +327,7 @@ export def "instance-list GetInstancesInfo" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<free: table<browser: record, country: string, height: int, id: int, load: float, screenshot_cost: int, type: string, width: int>, private: table<browser: record, country: string, height: int, id: int, load: float, screenshot_cost: int, type: string, width: int>, shared: table<browser: record, country: string, height: int, id: int, load: float, screenshot_cost: int, type: string, width: int>> {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
@@ -288,14 +335,14 @@ export def "instance-list GetInstancesInfo" [
   let full_url = (build-url $base "/instance/list")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Request a screenshot
 #
 # GET /screenshot/create
 # operationId: CreateScreenshot
-export def "screenshot-create CreateScreenshot" [
+export def "screenshot-create create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -303,8 +350,9 @@ export def "screenshot-create CreateScreenshot" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-url: string # URL of the page to get a screenshot for
+  --url: string # URL of the page to get a screenshot for
   --instance-id: int # instance ID to use
   --size: string@size-completer # screenshot size - "screen" (default) or "page" (default: screen)
   --cache: int # use a previous screenshot (same URL, same instance) if it was done within <cache_value> seconds. The default value is 24hours. Specify cache=0 if you want a new screenshot. (default: 86400)
@@ -333,18 +381,18 @@ export def "screenshot-create CreateScreenshot" [
 ]: nothing -> record<cookie: string, cost: int, delay: int, details: int, error: string, final_url: string, flash_delay: int, height: int, id: int, instance_id: int, post_data: string, priority: int, referer: string, scale: float, screenshot_url: any, script: string, shared_url: string, size: string, status: string, url: string, width: int> {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "url" $qp_url "scalar") (serialize-qp "instance_id" $instance_id "scalar") (serialize-qp "size" $size "scalar") (serialize-qp "cache" $cache "scalar") (serialize-qp "delay" $delay "scalar") (serialize-qp "flash_delay" $flash_delay "scalar") (serialize-qp "screen_width" $screen_width "scalar") (serialize-qp "screen_height" $screen_height "scalar") (serialize-qp "priority" $priority "scalar") (serialize-qp "referer" $referer "scalar") (serialize-qp "post_data" $post_data "scalar") (serialize-qp "cookie" $cookie "scalar") (serialize-qp "script" $script "scalar") (serialize-qp "details" $details "scalar") (serialize-qp "html" $html "scalar") (serialize-qp "max_wait" $max_wait "scalar") (serialize-qp "headers" $headers "scalar") (serialize-qp "shots" $shots "scalar") (serialize-qp "shot_interval" $shot_interval "scalar") (serialize-qp "hosting" $hosting "scalar") (serialize-qp "hosting_height" $hosting_height "scalar") (serialize-qp "hosting_width" $hosting_width "scalar") (serialize-qp "hosting_scale" $hosting_scale "scalar") (serialize-qp "hosting_bucket" $hosting_bucket "scalar") (serialize-qp "hosting_file" $hosting_file "scalar") (serialize-qp "hosting_headers" $hosting_headers "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "url" $url "scalar") (serialize-qp "instance_id" $instance_id "scalar") (serialize-qp "size" $size "scalar") (serialize-qp "cache" $cache "scalar") (serialize-qp "delay" $delay "scalar") (serialize-qp "flash_delay" $flash_delay "scalar") (serialize-qp "screen_width" $screen_width "scalar") (serialize-qp "screen_height" $screen_height "scalar") (serialize-qp "priority" $priority "scalar") (serialize-qp "referer" $referer "scalar") (serialize-qp "post_data" $post_data "scalar") (serialize-qp "cookie" $cookie "scalar") (serialize-qp "script" $script "scalar") (serialize-qp "details" $details "scalar") (serialize-qp "html" $html "scalar") (serialize-qp "max_wait" $max_wait "scalar") (serialize-qp "headers" $headers "scalar") (serialize-qp "shots" $shots "scalar") (serialize-qp "shot_interval" $shot_interval "scalar") (serialize-qp "hosting" $hosting "scalar") (serialize-qp "hosting_height" $hosting_height "scalar") (serialize-qp "hosting_width" $hosting_width "scalar") (serialize-qp "hosting_scale" $hosting_scale "scalar") (serialize-qp "hosting_bucket" $hosting_bucket "scalar") (serialize-qp "hosting_file" $hosting_file "scalar") (serialize-qp "hosting_headers" $hosting_headers "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/screenshot/create" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Delete screenshot data
 #
 # GET /screenshot/delete
 # operationId: DeleteScreenshot
-export def "screenshot-delete DeleteScreenshot" [
+export def "screenshot-delete delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -352,9 +400,10 @@ export def "screenshot-delete DeleteScreenshot" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --id: int # screenshot ID
-  --data: string # data to remove. You can specify multiple of them (separated by a ,): *image* (image files), *url* (url requested), *metadata* (time added, time finished, post data, cookie and referer used for the screenshot), *all* (all data and files)  (default: image)
+  --data: string # data to remove. You can specify multiple of them (separated by a ,): *image* (image files), *url* (url requested), *metadata* (time added, time finished, post data, cookie and referer used for the screenshot), *all* (all data and files) (default: image)
 ]: nothing -> table<id: int, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -362,14 +411,14 @@ export def "screenshot-delete DeleteScreenshot" [
   let full_url = (build-url $base "/screenshot/delete" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Host thumbnails on your own S3 account or on Browshot.
 #
 # GET /screenshot/host
 # operationId: HostScreenshot
-export def "screenshot-host HostScreenshot" [
+export def "screenshot-host get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -377,6 +426,7 @@ export def "screenshot-host HostScreenshot" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --id: int # screenshot ID
   --hosting: string@hosting-completer-1 # hosting option: s3 or browshot
@@ -393,14 +443,14 @@ export def "screenshot-host HostScreenshot" [
   let full_url = (build-url $base "/screenshot/host" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get the HTML code
 #
 # GET /screenshot/html
 # operationId: GetHTML
-export def "screenshot-html GetHTML" [
+export def "screenshot-html get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -408,6 +458,7 @@ export def "screenshot-html GetHTML" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --id: int # screenshot ID
 ]: nothing -> any {
@@ -417,14 +468,14 @@ export def "screenshot-html GetHTML" [
   let full_url = (build-url $base "/screenshot/html" $qp)
   let accept_val = "text/html"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Query screenshot status
 #
 # GET /screenshot/info
 # operationId: GetScreenshotInfo
-export def "screenshot-info GetScreenshotInfo" [
+export def "screenshot-info get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -432,6 +483,7 @@ export def "screenshot-info GetScreenshotInfo" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --id: int # screenshot ID received from /api/v1/screenshot/create
   --details: int # level of details about the screenshot and the page (default: 2)
@@ -442,14 +494,14 @@ export def "screenshot-info GetScreenshotInfo" [
   let full_url = (build-url $base "/screenshot/info" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get information about screenshots
 #
 # GET /screenshot/list
 # operationId: GetMultipleScreenshotsInfo
-export def "screenshot-list GetMultipleScreenshotsInfo" [
+export def "screenshot-list get-multiple-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -457,6 +509,7 @@ export def "screenshot-list GetMultipleScreenshotsInfo" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # maximum number of screenshots' information to return (default: 100)
   --status: string@status-completer # get list of screenshot in a given status (error, finished, in_process)
@@ -467,14 +520,14 @@ export def "screenshot-list GetMultipleScreenshotsInfo" [
   let full_url = (build-url $base "/screenshot/list" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Request multiple screenshots
 #
 # GET /screenshot/multiple
 # operationId: CreateMultipleScreenshots
-export def "screenshot-multiple CreateMultipleScreenshots" [
+export def "screenshot-multiple create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -482,8 +535,9 @@ export def "screenshot-multiple CreateMultipleScreenshots" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-url: string # URL of the page to get a screenshot for. You can specify multiple url parameters (up to 10).
+  --url: string # URL of the page to get a screenshot for. You can specify multiple url parameters (up to 10).
   --instance-id: int # instance ID to use. You can specify multiple instance_id parameters (up to 10).
   --size: string@size-completer # screenshot size - "screen" (default) or "page" (default: screen)
   --cache: int # use a previous screenshot (same URL, same instance) if it was done within <cache_value> seconds. The default value is 24hours. Specify cache=0 if you want a new screenshot. (default: 86400)
@@ -510,18 +564,18 @@ export def "screenshot-multiple CreateMultipleScreenshots" [
 ]: nothing -> record<default: float> {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "url" $qp_url "scalar") (serialize-qp "instance_id" $instance_id "scalar") (serialize-qp "size" $size "scalar") (serialize-qp "cache" $cache "scalar") (serialize-qp "delay" $delay "scalar") (serialize-qp "flash_delay" $flash_delay "scalar") (serialize-qp "screen_width" $screen_width "scalar") (serialize-qp "screen_height" $screen_height "scalar") (serialize-qp "priority" $priority "scalar") (serialize-qp "referer" $referer "scalar") (serialize-qp "post_data" $post_data "scalar") (serialize-qp "cookie" $cookie "scalar") (serialize-qp "script" $script "scalar") (serialize-qp "details" $details "scalar") (serialize-qp "html" $html "scalar") (serialize-qp "max_wait" $max_wait "scalar") (serialize-qp "headers" $headers "scalar") (serialize-qp "hosting" $hosting "scalar") (serialize-qp "hosting_height" $hosting_height "scalar") (serialize-qp "hosting_width" $hosting_width "scalar") (serialize-qp "hosting_scale" $hosting_scale "scalar") (serialize-qp "hosting_bucket" $hosting_bucket "scalar") (serialize-qp "hosting_file" $hosting_file "scalar") (serialize-qp "hosting_headers" $hosting_headers "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "url" $url "scalar") (serialize-qp "instance_id" $instance_id "scalar") (serialize-qp "size" $size "scalar") (serialize-qp "cache" $cache "scalar") (serialize-qp "delay" $delay "scalar") (serialize-qp "flash_delay" $flash_delay "scalar") (serialize-qp "screen_width" $screen_width "scalar") (serialize-qp "screen_height" $screen_height "scalar") (serialize-qp "priority" $priority "scalar") (serialize-qp "referer" $referer "scalar") (serialize-qp "post_data" $post_data "scalar") (serialize-qp "cookie" $cookie "scalar") (serialize-qp "script" $script "scalar") (serialize-qp "details" $details "scalar") (serialize-qp "html" $html "scalar") (serialize-qp "max_wait" $max_wait "scalar") (serialize-qp "headers" $headers "scalar") (serialize-qp "hosting" $hosting "scalar") (serialize-qp "hosting_height" $hosting_height "scalar") (serialize-qp "hosting_width" $hosting_width "scalar") (serialize-qp "hosting_scale" $hosting_scale "scalar") (serialize-qp "hosting_bucket" $hosting_bucket "scalar") (serialize-qp "hosting_file" $hosting_file "scalar") (serialize-qp "hosting_headers" $hosting_headers "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/screenshot/multiple" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Search for screenshots
 #
 # GET /screenshot/search
 # operationId: SearchScreenshot
-export def "screenshot-search SearchScreenshot" [
+export def "screenshot-search list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -529,25 +583,26 @@ export def "screenshot-search SearchScreenshot" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-url: string # look for a string matching the URL requested
+  --url: string # look for a string matching the URL requested
   --limit: int # maximum number of screenshots' information to return (default: 50)
   --status: string@status-completer # get list of screenshot in a given status (error, finished, in_process)
 ]: nothing -> table<default: float> {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "url" $qp_url "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "status" $status "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "url" $url "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "status" $status "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/screenshot/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Share a screenshot
 #
 # GET /screenshot/share
 # operationId: ShareScreenshot
-export def "screenshot-share ShareScreenshot" [
+export def "screenshot-share get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -555,6 +610,7 @@ export def "screenshot-share ShareScreenshot" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --id: int # screenshot ID
   --note: string # note to add on the sharing page
@@ -565,14 +621,14 @@ export def "screenshot-share ShareScreenshot" [
   let full_url = (build-url $base "/screenshot/share" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Retrieve a thumbnail image
 #
 # GET /screenshot/thumbnail
 # operationId: GetThumbnail
-export def "screenshot-thumbnail GetThumbnail" [
+export def "screenshot-thumbnail get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -580,6 +636,7 @@ export def "screenshot-thumbnail GetThumbnail" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --id: int # screenshot ID
@@ -587,7 +644,7 @@ export def "screenshot-thumbnail GetThumbnail" [
   --height: int # height of the thumbnail
   --scale: float # scale of the thumbnail (format: double, default: 1)
   --zoom: int # zoom 1 to 100 percent (default: 100)
-  --ratio: string@ratio-completer # Use fit to keep the original page ration, and fill to get a thumbnail for the exact width and height.  specified. If you provide both width and height, you need to specify the ratio: fit to keep the original width/height ratio (the thumbnail might be smaller than the specified width and height), or fill to crop the image if necessary. (default: fit)
+  --ratio: string@ratio-completer # Use fit to keep the original page ration, and fill to get a thumbnail for the exact width and height. specified. If you provide both width and height, you need to specify the ratio: fit to keep the original width/height ratio (the thumbnail might be smaller than the specified width and height), or fill to crop the image if necessary. (default: fit)
   --left: int # left edge of the area to be cropped (default: 0)
   --right: int # right edge of the area to be cropped (default: 0)
   --top: int # top edge of the area to be cropped (default: 0)
@@ -602,5 +659,5 @@ export def "screenshot-thumbnail GetThumbnail" [
   let full_url = (build-url $base "/screenshot/thumbnail" $qp)
   let accept_val = ($accept | default "image/png")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }

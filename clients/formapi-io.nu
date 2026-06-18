@@ -12,27 +12,39 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {headers: {}, query: ""} }
   match $scheme {
     "basic" => { {headers: {Authorization: $"Basic ($token_val)"}, query: ""} }
+    "basic-credentials" => { {headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: ""} }
     "none" => { {headers: {}, query: ""} }
     _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
   }
 }
 
 # Serialize a single query parameter based on collection style
+# Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
+# ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = ($name | url encode)
+  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
-  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
-    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
-    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
+    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
+    _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
+}
+
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Build URL from base, path, and optional query string
@@ -44,7 +56,7 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
@@ -53,17 +65,45 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
     "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "put" => { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "patch" => { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
   if ($method in ["head" "options"]) { return $resp }
-  if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
+  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
+}
+
+# Build a `multipart/form-data` envelope per RFC 7578. `file_fields` lists
+# the field names whose value should be read from disk as bytes; every
+# other field is sent as a text part (records/lists JSON-stringified).
+# Returns {content_type, body} ready to pass to `do-request`.
+# When `$dry_run` is true, file fields are NOT read from disk — they emit
+# an empty-bytes placeholder so callers can inspect the request shape
+# without the file existing on disk (issue 11.B).
+def build-multipart-body [parts: record, file_fields: list<string>, dry_run: bool = false]: nothing -> record {
+  let boundary = $"----nu-(random chars --length 24)"
+  let crlf = "\r\n"
+  let chunks = ($parts | items {|name, val|
+    if $val == null { null } else if $name in $file_fields {
+      let filename = ($val | into string | path basename)
+      let bytes = if $dry_run { (0x[] | into binary) } else { (open --raw $val | into binary | collect) }
+      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"; filename=\"($filename)\"($crlf)Content-Type: application/octet-stream($crlf)($crlf)" | into binary)
+      $head ++ $bytes ++ ($crlf | into binary)
+    } else {
+      let dt = ($val | describe)
+      let s = if (($dt | str starts-with "record") or ($dt | str starts-with "list") or ($dt | str starts-with "table")) { ($val | to json --raw) } else { ($val | into string) }
+      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"($crlf)($crlf)" | into binary)
+      $head ++ ($"($s)($crlf)" | into binary)
+    }
+  } | compact)
+  let trailer = ($"--($boundary)--($crlf)" | into binary)
+  let body = ($chunks | reduce --fold (0x[] | into binary) {|chunk, acc| $acc ++ $chunk }) ++ $trailer
+  {content_type: $"multipart/form-data; boundary=($boundary)", body: $body}
 }
 
 def base-url-completer [] { ["https://api.docspring.com/api/v1"] }
-def auth-scheme-completer [] { ["basic"] }
+def auth-scheme-completer [] { ["basic" "basic-credentials"] }
 
 # Completers for enum parameters
 def auth-second-factor-type-completer [] { ["fingerprint" "mobile_push" "none" "phone_number" "security_key" "totp"] }
@@ -71,8 +111,8 @@ def auth-type-completer [] { ["email_link" "ldap" "none" "oauth" "password" "pho
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "authentication testAuthentication" } } | get name | first)
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "authentication test" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -96,7 +136,7 @@ export def commands []: nothing -> table {
 #
 # GET /authentication
 # operationId: testAuthentication
-export def "authentication testAuthentication" [
+export def "authentication test" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -104,6 +144,7 @@ export def "authentication testAuthentication" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<status: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -111,14 +152,14 @@ export def "authentication testAuthentication" [
   let full_url = (build-url $base "/authentication")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get a list of all combined submissions
 #
 # GET /combined_submissions
 # operationId: listCombinedSubmissions
-export def "combined-submissions listCombinedSubmissions" [
+export def "combined-submissions list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -126,6 +167,7 @@ export def "combined-submissions listCombinedSubmissions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Default: 1 (e.g. 2)
   --per-page: int # Default: 50 (e.g. 1)
@@ -136,14 +178,14 @@ export def "combined-submissions listCombinedSubmissions" [
   let full_url = (build-url $base "/combined_submissions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Merge generated PDFs together
 #
 # POST /combined_submissions
 # operationId: combineSubmissions
-export def "combined-submissions combineSubmissions" [
+export def "combined-submissions create-combine" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -151,29 +193,30 @@ export def "combined-submissions combineSubmissions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --expires-in: int
   --metadata: record
   --password: string
-  submission_ids: list
+  submission_ids: list<string>
   --test: oneof<nothing, bool>
 ]: any -> record<combined_submission: record<actions: list<record>, download_url: string, error_message: string, expired: bool, expires_at: string, expires_in: int, id: string, metadata: record, password: string, pdf_hash: string, source_pdfs: list<any>, state: string, submission_ids: list<string>>, errors: list<string>, status: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/combined_submissions")
-  let body = {expires_in: $expires_in, metadata: $metadata, password: $password, submission_ids: $submission_ids, test: $test} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"expires_in": $expires_in, "metadata": $metadata, "password": $password, "submission_ids": $submission_ids, "test": $test} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Expire a combined submission
 #
 # DELETE /combined_submissions/{combined_submission_id}
 # operationId: expireCombinedSubmission
-export def "combined-submissions expireCombinedSubmission" [
+export def "combined-submissions delete-expire" [
   combined_submission_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -182,14 +225,15 @@ export def "combined-submissions expireCombinedSubmission" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<actions: table<action_category: string, action_type: string, id: string, integration_id: string, result_data: record, state: string>, download_url: string, error_message: string, expired: bool, expires_at: string, expires_in: int, id: string, metadata: record, password: string, pdf_hash: string, source_pdfs: list<any>, state: string, submission_ids: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/combined_submissions/($combined_submission_id)")
+  let full_url = (build-url $base ({combined_submission_id: (encode-path-segment $combined_submission_id)} | format pattern "/combined_submissions/{combined_submission_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Check the status of a combined submission (merged PDFs)
@@ -205,21 +249,22 @@ export def "combined-submissions get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<actions: table<action_category: string, action_type: string, id: string, integration_id: string, result_data: record, state: string>, download_url: string, error_message: string, expired: bool, expires_at: string, expires_in: int, id: string, metadata: record, password: string, pdf_hash: string, source_pdfs: list<any>, state: string, submission_ids: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/combined_submissions/($combined_submission_id)")
+  let full_url = (build-url $base ({combined_submission_id: (encode-path-segment $combined_submission_id)} | format pattern "/combined_submissions/{combined_submission_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Merge submission PDFs, template PDFs, or custom files
 #
 # POST /combined_submissions?v=2
 # operationId: combinePdfs
-export def "combined-submissions-v2 combinePdfs" [
+export def "combined-submissions-v2 create-combine-pdfs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -227,6 +272,7 @@ export def "combined-submissions-v2 combinePdfs" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --delete-custom-files: oneof<nothing, bool>
   --expires-in: int
@@ -239,18 +285,18 @@ export def "combined-submissions-v2 combinePdfs" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/combined_submissions?v=2")
-  let body = {delete_custom_files: $delete_custom_files, expires_in: $expires_in, metadata: $metadata, password: $password, source_pdfs: $source_pdfs, test: $test} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"delete_custom_files": $delete_custom_files, "expires_in": $expires_in, "metadata": $metadata, "password": $password, "source_pdfs": $source_pdfs, "test": $test} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Create a new custom file from a cached presign upload
 #
 # POST /custom_files
 # operationId: createCustomFileFromUpload
-export def "custom-files createCustomFileFromUpload" [
+export def "custom-files create-from-upload" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -258,6 +304,7 @@ export def "custom-files createCustomFileFromUpload" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   cache_id: string
 ]: any -> record<custom_file: record<id: string, url: string>, errors: list<string>, status: string> {
@@ -265,11 +312,11 @@ export def "custom-files createCustomFileFromUpload" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/custom_files")
-  let body = {cache_id: $cache_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"cache_id": $cache_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Look up a submission data request
@@ -285,21 +332,22 @@ export def "data-requests get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<auth_phone_number_hash: string, auth_provider: string, auth_second_factor_type: string, auth_session_id_hash: string, auth_session_started_at: string, auth_type: string, auth_user_id_hash: string, auth_username_hash: string, completed_at: string, email: string, fields: list<string>, id: string, ip_address: string, metadata: record, name: string, order: int, sort_order: int, state: string, submission_id: string, user_agent: string, viewed_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/data_requests/($data_request_id)")
+  let full_url = (build-url $base ({data_request_id: (encode-path-segment $data_request_id)} | format pattern "/data_requests/{data_request_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Update a submission data request
 #
 # PUT /data_requests/{data_request_id}
 # operationId: updateDataRequest
-export def "data-requests updateDataRequest" [
+export def "data-requests update" [
   data_request_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -308,6 +356,7 @@ export def "data-requests updateDataRequest" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --auth-phone-number-hash: string # nullable
   --auth-provider: string # nullable
@@ -318,7 +367,7 @@ export def "data-requests updateDataRequest" [
   --auth-user-id-hash: string # nullable
   --auth-username-hash: string # nullable
   --email: string # nullable
-  --fields: list
+  --fields: list<string>
   --metadata: record
   --name: string # nullable
   --order: int
@@ -326,19 +375,19 @@ export def "data-requests updateDataRequest" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/data_requests/($data_request_id)")
-  let body = {auth_phone_number_hash: $auth_phone_number_hash, auth_provider: $auth_provider, auth_second_factor_type: $auth_second_factor_type, auth_session_id_hash: $auth_session_id_hash, auth_session_started_at: $auth_session_started_at, auth_type: $auth_type, auth_user_id_hash: $auth_user_id_hash, auth_username_hash: $auth_username_hash, email: $email, fields: $fields, metadata: $metadata, name: $name, order: $order} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({data_request_id: (encode-path-segment $data_request_id)} | format pattern "/data_requests/{data_request_id}"))
+  let req_body = {"auth_phone_number_hash": $auth_phone_number_hash, "auth_provider": $auth_provider, "auth_second_factor_type": $auth_second_factor_type, "auth_session_id_hash": $auth_session_id_hash, "auth_session_started_at": $auth_session_started_at, "auth_type": $auth_type, "auth_user_id_hash": $auth_user_id_hash, "auth_username_hash": $auth_username_hash, "email": $email, "fields": $fields, "metadata": $metadata, "name": $name, "order": $order} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Creates a new data request token for form authentication
 #
 # POST /data_requests/{data_request_id}/tokens
 # operationId: createDataRequestToken
-export def "data-requests-tokens createDataRequestToken" [
+export def "data-requests-tokens create" [
   data_request_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -347,21 +396,22 @@ export def "data-requests-tokens createDataRequestToken" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<errors: list<string>, status: string, token: record<data_request_url: string, expires_at: string, id: string, secret: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/data_requests/($data_request_id)/tokens")
+  let full_url = (build-url $base ({data_request_id: (encode-path-segment $data_request_id)} | format pattern "/data_requests/{data_request_id}/tokens"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get a list of all folders
 #
 # GET /folders/
 # operationId: listFolders
-export def "folders listFolders" [
+export def "folders list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -369,6 +419,7 @@ export def "folders listFolders" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --parent-folder-id: string # Filter By Folder Id (e.g. fld_000000000000000002)
 ]: nothing -> table<id: string, name: string, parent_folder_id: string, path: string> {
@@ -378,7 +429,7 @@ export def "folders listFolders" [
   let full_url = (build-url $base "/folders/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Create a folder
@@ -386,7 +437,7 @@ export def "folders listFolders" [
 # POST /folders/
 # operationId: createFolder
 # --folder shape: {name: string, parent_folder_id?: string}
-export def "folders createFolder" [
+export def "folders create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -394,6 +445,7 @@ export def "folders createFolder" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   folder: record # shape: {name: string, parent_folder_id?: string}
 ]: any -> record<id: string, name: string, parent_folder_id: string, path: string> {
@@ -401,11 +453,11 @@ export def "folders createFolder" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/folders/")
-  let body = {folder: $folder} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"folder": $folder} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Delete a folder
@@ -421,21 +473,22 @@ export def "folders delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, name: string, parent_folder_id: string, path: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/folders/($folder_id)")
+  let full_url = (build-url $base ({folder_id: (encode-path-segment $folder_id)} | format pattern "/folders/{folder_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Move a folder
 #
 # POST /folders/{folder_id}/move
 # operationId: moveFolderToFolder
-export def "folders-move moveFolderToFolder" [
+export def "folders-move move" [
   folder_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -444,25 +497,26 @@ export def "folders-move moveFolderToFolder" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --parent-folder-id: string
 ]: any -> record<id: string, name: string, parent_folder_id: string, path: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/folders/($folder_id)/move")
-  let body = {parent_folder_id: $parent_folder_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({folder_id: (encode-path-segment $folder_id)} | format pattern "/folders/{folder_id}/move"))
+  let req_body = {"parent_folder_id": $parent_folder_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Rename a folder
 #
 # POST /folders/{folder_id}/rename
 # operationId: renameFolder
-export def "folders-rename renameFolder" [
+export def "folders-rename rename" [
   folder_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -471,25 +525,26 @@ export def "folders-rename renameFolder" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   name: string
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/folders/($folder_id)/rename")
-  let body = {name: $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({folder_id: (encode-path-segment $folder_id)} | format pattern "/folders/{folder_id}/rename"))
+  let req_body = {"name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # List all submissions
 #
 # GET /submissions
 # operationId: listSubmissions
-export def "submissions listSubmissions" [
+export def "submissions list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -497,6 +552,7 @@ export def "submissions listSubmissions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --cursor: string # e.g. sub_list_000012
   --limit: float # e.g. 3
@@ -511,7 +567,7 @@ export def "submissions listSubmissions" [
   let full_url = (build-url $base "/submissions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Generates multiple PDFs
@@ -519,7 +575,7 @@ export def "submissions listSubmissions" [
 # POST /submissions/batches
 # operationId: batchGeneratePdfs
 # --submissions item shape: {css?: string, data: record, html?: string, metadata?: record, template_id: string, test?: bool}
-export def "submissions-batches batchGeneratePdfs" [
+export def "submissions-batches generate-batch-pdfs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -527,6 +583,7 @@ export def "submissions-batches batchGeneratePdfs" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --metadata: record
   submissions: list # item shape: {css?: string, data: record, html?: string, metadata?: record, template_id: string, test?: bool}
@@ -537,11 +594,11 @@ export def "submissions-batches batchGeneratePdfs" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/submissions/batches")
-  let body = {metadata: $metadata, submissions: $submissions, template_id: $template_id, test: $test} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"metadata": $metadata, "submissions": $submissions, "template_id": $template_id, "test": $test} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Check the status of a submission batch job
@@ -557,23 +614,24 @@ export def "submissions-batches get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --include-submissions: oneof<nothing, bool> # e.g. true
 ]: nothing -> record<completion_percentage: int, error_count: int, id: string, metadata: record, pending_count: int, processed_at: string, state: string, submissions: table<actions: list, batch_id: string, data: record, data_requests: list, download_url: string, editable: bool, expired: bool, expires_at: string, id: string, metadata: record, pdf_hash: string, permanent_download_url: string, processed_at: string, referrer: string, source: string, state: string, template_id: string, test: bool, truncated_text: record>, total_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "include_submissions" $include_submissions "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/submissions/batches/($submission_batch_id)" $qp)
+  let full_url = (build-url $base ({submission_batch_id: (encode-path-segment $submission_batch_id)} | format pattern "/submissions/batches/{submission_batch_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Expire a PDF submission
 #
 # DELETE /submissions/{submission_id}
 # operationId: expireSubmission
-export def "submissions expireSubmission" [
+export def "submissions delete-expire" [
   submission_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -582,14 +640,15 @@ export def "submissions expireSubmission" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<actions: table<action_category: string, action_type: string, id: string, integration_id: string, result_data: record, state: string>, batch_id: string, data: record, data_requests: table<auth_phone_number_hash: string, auth_provider: string, auth_second_factor_type: string, auth_session_id_hash: string, auth_session_started_at: string, auth_type: string, auth_user_id_hash: string, auth_username_hash: string, completed_at: string, email: string, fields: list, id: string, ip_address: string, metadata: record, name: string, order: int, sort_order: int, state: string, submission_id: string, user_agent: string, viewed_at: string>, download_url: string, editable: bool, expired: bool, expires_at: string, id: string, metadata: record, pdf_hash: string, permanent_download_url: string, processed_at: string, referrer: string, source: string, state: string, template_id: string, test: bool, truncated_text: record> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/submissions/($submission_id)")
+  let full_url = (build-url $base ({submission_id: (encode-path-segment $submission_id)} | format pattern "/submissions/{submission_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Check the status of a PDF
@@ -605,23 +664,24 @@ export def "submissions get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --include-data: oneof<nothing, bool> # e.g. true
 ]: nothing -> record<actions: table<action_category: string, action_type: string, id: string, integration_id: string, result_data: record, state: string>, batch_id: string, data: record, data_requests: table<auth_phone_number_hash: string, auth_provider: string, auth_second_factor_type: string, auth_session_id_hash: string, auth_session_started_at: string, auth_type: string, auth_user_id_hash: string, auth_username_hash: string, completed_at: string, email: string, fields: list, id: string, ip_address: string, metadata: record, name: string, order: int, sort_order: int, state: string, submission_id: string, user_agent: string, viewed_at: string>, download_url: string, editable: bool, expired: bool, expires_at: string, id: string, metadata: record, pdf_hash: string, permanent_download_url: string, processed_at: string, referrer: string, source: string, state: string, template_id: string, test: bool, truncated_text: record> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "include_data" $include_data "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/submissions/($submission_id)" $qp)
+  let full_url = (build-url $base ({submission_id: (encode-path-segment $submission_id)} | format pattern "/submissions/{submission_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get a list of all templates
 #
 # GET /templates
 # operationId: listTemplates
-export def "templates listTemplates" [
+export def "templates list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -629,6 +689,7 @@ export def "templates listTemplates" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --query: string # Search By Name (e.g. 2)
   --parent-folder-id: string # Filter By Folder Id (e.g. fld_000000000000000001)
@@ -641,14 +702,14 @@ export def "templates listTemplates" [
   let full_url = (build-url $base "/templates" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Create a new PDF template with a form POST file upload
 #
 # POST /templates
 # operationId: createPDFTemplate
-export def "templates createPDFTemplate" [
+export def "templates create-pdf" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -656,27 +717,30 @@ export def "templates createPDFTemplate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  templatedocument: string # format: binary, e.g. <Uploaded File>
-  templatename: string # e.g. Test Template
-  --templateparent-folder-id: string # e.g. fld_000000000000000001
+  template_document: string # format: binary, e.g. <Uploaded File>
+  template_name: string # e.g. Test Template
+  --template-parent-folder-id: string # e.g. fld_000000000000000001
 ]: any -> record<allow_additional_properties: bool, description: string, editable_submissions: bool, expiration_interval: string, expire_after: float, expire_submissions: bool, id: string, locked: bool, name: string, parent_folder_id: string, path: string, public_submissions: bool, public_web_form: bool, redirect_url: string, slack_webhook_url: string, template_type: string, webhook_url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/templates")
-  let body = {template[document]: $templatedocument, template[name]: $templatename, template[parent_folder_id]: $templateparent_folder_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"template[document]": $template_document, "template[name]": $template_name, "template[parent_folder_id]": $template_parent_folder_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
+  let mp = (build-multipart-body $req_body ["template[document]"] $dry_run)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
 }
 
 # Check the status of an uploaded template
 #
 # GET /templates/{template_id}
 # operationId: getTemplate
-export def "templates get-by-template_id" [
+export def "templates get" [
   template_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -685,14 +749,15 @@ export def "templates get-by-template_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<allow_additional_properties: bool, description: string, document_url: string, editable_submissions: bool, expiration_interval: string, expire_after: float, expire_submissions: bool, id: string, locked: bool, name: string, page_dimensions: list<list<float>>, parent_folder_id: string, path: string, permanent_document_url: string, public_submissions: bool, public_web_form: bool, redirect_url: string, slack_webhook_url: string, template_type: string, webhook_url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/templates/($template_id)")
+  let full_url = (build-url $base ({template_id: (encode-path-segment $template_id)} | format pattern "/templates/{template_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Update a Template
@@ -700,7 +765,7 @@ export def "templates get-by-template_id" [
 # PUT /templates/{template_id}
 # operationId: updateTemplate
 # --template shape: {allow_additional_properties?: bool, description?: string, editable_submissions?: bool, expiration_interval?: "minutes"|"hours"|"days", expire_after?: float, expire_submissions?: bool, footer_html?: string, header_html?: string, html?: string, name?: string, public_submissions?: bool, public_web_form?: bool, redirect_url?: string, scss?: string, slack_webhook_url?: string, webhook_url?: string}
-export def "templates updateTemplate" [
+export def "templates update" [
   template_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -709,26 +774,27 @@ export def "templates updateTemplate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   template: record # shape: {allow_additional_properties?: bool, description?: string, editable_submissions?: bool, expiration_interval?: "minutes"|"hours"|"days", expire_after?: float, expire_submissions?: bool, footer_html?: string, header_html?: string, html?: string, name?: string, public_submissions?: bool, public_web_form?: bool, redirect_url?: string, scss?: string, slack_webhook_url?: string, webhook_url?: string}
 ]: any -> record<errors: list<string>, status: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/templates/($template_id)")
-  let body = {template: $template} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({template_id: (encode-path-segment $template_id)} | format pattern "/templates/{template_id}"))
+  let req_body = {"template": $template} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Add new fields to a Template
 #
 # PUT /templates/{template_id}/add_fields
 # operationId: addFieldsToTemplate
-# --fields item shape: {alignment?: "left"|"center"|"right", autoCalculateMaxLength?: bool, backgroundColor?: string, backgroundColorFieldName?: string, backgroundColorFieldRequired?: bool, barcodeSymbology?: string, bold?: bool, characterSpacing?: float, checkCharacter?: "&#10003;"|"&#10004;"|"&#10006;"|"&#10007;"|"&#10008;", checkColor?: string, checkColorFieldName?: string, checkColorFieldRequired?: bool, color?: string, colorFieldName?: string, colorFieldRequired?: bool, comb?: bool, combNumberOfCells?: float, combValueOffset?: float, combinedFieldFormat?: string, combinedFieldNames?: string, combinedFieldSeparator?: string, combinedFieldType?: string, condition?: string, currency?: bool, dateTimeFormat?: string, decimalPlaces?: float, default?: string, description?: string, displayType?: "text"|"check"|"qrcode"|"barcode"|"image"|"shape", exclusiveMaximum?: bool, exclusiveMinimum?: bool, falseText?: string, fontSize?: float, height?: float, hidden?: bool, id?: float, imageGravity?: "NorthWest"|"North"|"NorthEast"|"West"|"Center"|"East"|"SouthWest"|"South"|"SouthEast", imageScaleType?: "fit"|"fill"|"stretch", includeTime?: bool, integer?: bool, invertBooleanCondition?: bool, maxLength?: float, maximum?: float, metadata?: string, minLength?: float, minimum?: float, multiline?: bool, multilineLines?: float, name: string, numberConditionRangeExclusiveMax?: bool, numberConditionRangeExclusiveMin?: bool, numberConditionRangeMax?: float, numberConditionRangeMin?: float, numberConditionType?: "equals"|"range"|"gte"|"gt"|"lte"|"lt", opacity?: float, optionList?: string, overflow?: "shrink_to_fit"|"truncate", page: float, placeholder?: string, qrcodeColor?: string, qrcodeColorFieldName?: string, qrcodeColorFieldRequired?: bool, required?: bool, rotation?: float, shapeBorderColor?: string, shapeBorderColorFieldName?: string, shapeBorderColorFieldRequired?: bool, shapeBorderWidth?: float, shapeFillColor?: string, shapeFillColorFieldName?: string, shapeFillColorFieldRequired?: bool, shapeType?: "square"|"rectangle"|"circle"|"ellipse", signatureAllowDraw?: bool, signatureAllowType?: bool, static?: bool, strikethrough?: bool, stringConditionType?: "equals"|"contains"|"starts_with"|"ends_with"|"regex", title?: string, trueText?: string, type?: "string"|"number"|"boolean"|"date"|"address"|"country"|"email"|"url"|"image"|"signature"|"barcode"|"combined", typeface?: string, uppercase?: bool, vAlignment?: "bottom"|"center"|"top", width?: float, x?: float, y?: float}
-export def "templates-add-fields addFieldsToTemplate" [
+# --fields item shape: {alignment?: "left"|"center"|"right", autoCalculateMaxLength?: bool, backgroundColor?: string, backgroundColorFieldName?: string, backgroundColorFieldRequired?: bool, barcodeSymbology?: string, bold?: bool, characterSpacing?: float, checkCharacter?: "&#10003;"|"&#10004;"|"&#10006;"|"&#10007;"|"&#10008;", checkColor?: string, checkColorFieldName?: string, checkColorFieldRequired?: bool, color?: string, colorFieldName?: string, colorFieldRequired?: bool, comb?: bool, combNumberOfCells?: float, ... (69 more fields)}
+export def "templates-add-fields create" [
   template_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -737,25 +803,26 @@ export def "templates-add-fields addFieldsToTemplate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  fields: list # item shape: {alignment?: "left"|"center"|"right", autoCalculateMaxLength?: bool, backgroundColor?: string, backgroundColorFieldName?: string, backgroundColorFieldRequired?: bool, barcodeSymbology?: string, bold?: bool, characterSpacing?: float, checkCharacter?: "&#10003;"|"&#10004;"|"&#10006;"|"&#10007;"|"&#10008;", checkColor?: string, checkColorFieldName?: string, checkColorFieldRequired?: bool, color?: string, colorFieldName?: string, colorFieldRequired?: bool, comb?: bool, combNumberOfCells?: float, combValueOffset?: float, combinedFieldFormat?: string, combinedFieldNames?: string, combinedFieldSeparator?: string, combinedFieldType?: string, condition?: string, currency?: bool, dateTimeFormat?: string, decimalPlaces?: float, default?: string, description?: string, displayType?: "text"|"check"|"qrcode"|"barcode"|"image"|"shape", exclusiveMaximum?: bool, exclusiveMinimum?: bool, falseText?: string, fontSize?: float, height?: float, hidden?: bool, id?: float, imageGravity?: "NorthWest"|"North"|"NorthEast"|"West"|"Center"|"East"|"SouthWest"|"South"|"SouthEast", imageScaleType?: "fit"|"fill"|"stretch", includeTime?: bool, integer?: bool, invertBooleanCondition?: bool, maxLength?: float, maximum?: float, metadata?: string, minLength?: float, minimum?: float, multiline?: bool, multilineLines?: float, name: string, numberConditionRangeExclusiveMax?: bool, numberConditionRangeExclusiveMin?: bool, numberConditionRangeMax?: float, numberConditionRangeMin?: float, numberConditionType?: "equals"|"range"|"gte"|"gt"|"lte"|"lt", opacity?: float, optionList?: string, overflow?: "shrink_to_fit"|"truncate", page: float, placeholder?: string, qrcodeColor?: string, qrcodeColorFieldName?: string, qrcodeColorFieldRequired?: bool, required?: bool, rotation?: float, shapeBorderColor?: string, shapeBorderColorFieldName?: string, shapeBorderColorFieldRequired?: bool, shapeBorderWidth?: float, shapeFillColor?: string, shapeFillColorFieldName?: string, shapeFillColorFieldRequired?: bool, shapeType?: "square"|"rectangle"|"circle"|"ellipse", signatureAllowDraw?: bool, signatureAllowType?: bool, static?: bool, strikethrough?: bool, stringConditionType?: "equals"|"contains"|"starts_with"|"ends_with"|"regex", title?: string, trueText?: string, type?: "string"|"number"|"boolean"|"date"|"address"|"country"|"email"|"url"|"image"|"signature"|"barcode"|"combined", typeface?: string, uppercase?: bool, vAlignment?: "bottom"|"center"|"top", width?: float, x?: float, y?: float}
+  fields: list # item shape: {alignment?: "left"|"center"|"right", autoCalculateMaxLength?: bool, backgroundColor?: string, backgroundColorFieldName?: string, backgroundColorFieldRequired?: bool, barcodeSymbology?: string, bold?: bool, characterSpacing?: float, checkCharacter?: "&#10003;"|"&#10004;"|"&#10006;"|"&#10007;"|"&#10008;", checkColor?: string, checkColorFieldName?: string, checkColorFieldRequired?: bool, color?: string, colorFieldName?: string, colorFieldRequired?: bool, comb?: bool, combNumberOfCells?: float, ... (69 more fields)}
 ]: any -> record<errors: list<string>, new_field_ids: list<int>, status: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/templates/($template_id)/add_fields")
-  let body = {fields: $fields} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({template_id: (encode-path-segment $template_id)} | format pattern "/templates/{template_id}/add_fields"))
+  let req_body = {"fields": $fields} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Copy a Template
 #
 # POST /templates/{template_id}/copy
 # operationId: copyTemplate
-export def "templates-copy copyTemplate" [
+export def "templates-copy copy" [
   template_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -764,6 +831,7 @@ export def "templates-copy copyTemplate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --name: string
   parent_folder_id: string
@@ -771,19 +839,19 @@ export def "templates-copy copyTemplate" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/templates/($template_id)/copy")
-  let body = {name: $name, parent_folder_id: $parent_folder_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({template_id: (encode-path-segment $template_id)} | format pattern "/templates/{template_id}/copy"))
+  let req_body = {"name": $name, "parent_folder_id": $parent_folder_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Move Template to folder
 #
 # POST /templates/{template_id}/move
 # operationId: moveTemplateToFolder
-export def "templates-move moveTemplateToFolder" [
+export def "templates-move move-to-folder" [
   template_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -792,18 +860,19 @@ export def "templates-move moveTemplateToFolder" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   parent_folder_id: string
 ]: any -> record<allow_additional_properties: bool, description: string, document_url: string, editable_submissions: bool, expiration_interval: string, expire_after: float, expire_submissions: bool, id: string, locked: bool, name: string, page_dimensions: list<list<float>>, parent_folder_id: string, path: string, permanent_document_url: string, public_submissions: bool, public_web_form: bool, redirect_url: string, slack_webhook_url: string, template_type: string, webhook_url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/templates/($template_id)/move")
-  let body = {parent_folder_id: $parent_folder_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({template_id: (encode-path-segment $template_id)} | format pattern "/templates/{template_id}/move"))
+  let req_body = {"parent_folder_id": $parent_folder_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Fetch the JSON schema for a template
@@ -819,14 +888,15 @@ export def "templates-schema get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<_schema: string, additionalProperties: bool, definitions: record, description: string, id: string, properties: record, required: list<any>, title: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/templates/($template_id)/schema")
+  let full_url = (build-url $base ({template_id: (encode-path-segment $template_id)} | format pattern "/templates/{template_id}/schema"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # List all submissions for a given template
@@ -841,6 +911,7 @@ export def "templates-submissions get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --cursor: string
   --limit: float
@@ -852,18 +923,18 @@ export def "templates-submissions get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "created_after" $created_after "scalar") (serialize-qp "created_before" $created_before "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "include_data" $include_data "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/templates/($template_id)/submissions" $qp)
+  let full_url = (build-url $base ({template_id: (encode-path-segment $template_id)} | format pattern "/templates/{template_id}/submissions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Generates a new PDF
 #
 # POST /templates/{template_id}/submissions
 # operationId: generatePDF
-# --data_requests item shape: {auth_phone_number_hash?: string, auth_provider?: string, auth_second_factor_type?: "none"|"phone_number"|"totp"|"mobile_push"|"security_key"|"fingerprint", auth_session_id_hash?: string, auth_session_started_at?: string, auth_type: "none"|"password"|"oauth"|"email_link"|"phone_number"|"ldap"|"saml", auth_user_id_hash?: string, auth_username_hash?: string, email: string, fields?: list, metadata?: record, name?: string, order?: int}
-export def "templates-submissions generatePDF" [
+# --data_requests item shape: {auth_phone_number_hash?: string, auth_provider?: string, auth_second_factor_type?: "none"|"phone_number"|"totp"|"mobile_push"|"security_key"|"fingerprint", auth_session_id_hash?: string, auth_session_started_at?: string, auth_type: "none"|"password"|"oauth"|"email_link"|"phone_number"|"ldap"|"saml", auth_user_id_hash?: string, auth_username_hash?: string, email: string, fields?: list<string>, metadata?: record, name?: string, order?: int}
+export def "templates-submissions generate-pdf" [
   template_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -872,10 +943,11 @@ export def "templates-submissions generatePDF" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --css: string
   data: record
-  --data-requests: list # item shape: {auth_phone_number_hash?: string, auth_provider?: string, auth_second_factor_type?: "none"|"phone_number"|"totp"|"mobile_push"|"security_key"|"fingerprint", auth_session_id_hash?: string, auth_session_started_at?: string, auth_type: "none"|"password"|"oauth"|"email_link"|"phone_number"|"ldap"|"saml", auth_user_id_hash?: string, auth_username_hash?: string, email: string, fields?: list, metadata?: record, name?: string, order?: int}
+  --data-requests: list # item shape: {auth_phone_number_hash?: string, auth_provider?: string, auth_second_factor_type?: "none"|"phone_number"|"totp"|"mobile_push"|"security_key"|"fingerprint", auth_session_id_hash?: string, auth_session_started_at?: string, auth_type: "none"|"password"|"oauth"|"email_link"|"phone_number"|"ldap"|"saml", auth_user_id_hash?: string, auth_username_hash?: string, email: string, fields?: list<string>, metadata?: record, name?: string, order?: int}
   --expires-in: int
   --field-overrides: record
   --html: string
@@ -886,20 +958,20 @@ export def "templates-submissions generatePDF" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/templates/($template_id)/submissions")
-  let body = {css: $css, data: $data, data_requests: $data_requests, expires_in: $expires_in, field_overrides: $field_overrides, html: $html, metadata: $metadata, password: $password, test: $test} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({template_id: (encode-path-segment $template_id)} | format pattern "/templates/{template_id}/submissions"))
+  let req_body = {"css": $css, "data": $data, "data_requests": $data_requests, "expires_in": $expires_in, "field_overrides": $field_overrides, "html": $html, "metadata": $metadata, "password": $password, "test": $test} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Generates multiple PDFs
 #
 # POST /templates/{template_id}/submissions/batch
 # operationId: batchGeneratePdfV1
-# --data_requests item shape: {auth_phone_number_hash?: string, auth_provider?: string, auth_second_factor_type?: "none"|"phone_number"|"totp"|"mobile_push"|"security_key"|"fingerprint", auth_session_id_hash?: string, auth_session_started_at?: string, auth_type: "none"|"password"|"oauth"|"email_link"|"phone_number"|"ldap"|"saml", auth_user_id_hash?: string, auth_username_hash?: string, email: string, fields?: list, metadata?: record, name?: string, order?: int}
-export def "templates-submissions-batch batchGeneratePdfV1" [
+# --data_requests item shape: {auth_phone_number_hash?: string, auth_provider?: string, auth_second_factor_type?: "none"|"phone_number"|"totp"|"mobile_push"|"security_key"|"fingerprint", auth_session_id_hash?: string, auth_session_started_at?: string, auth_type: "none"|"password"|"oauth"|"email_link"|"phone_number"|"ldap"|"saml", auth_user_id_hash?: string, auth_username_hash?: string, email: string, fields?: list<string>, metadata?: record, name?: string, order?: int}
+export def "templates-submissions-batch generate-pdf" [
   template_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -908,10 +980,11 @@ export def "templates-submissions-batch batchGeneratePdfV1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --css: string
   data: record
-  --data-requests: list # item shape: {auth_phone_number_hash?: string, auth_provider?: string, auth_second_factor_type?: "none"|"phone_number"|"totp"|"mobile_push"|"security_key"|"fingerprint", auth_session_id_hash?: string, auth_session_started_at?: string, auth_type: "none"|"password"|"oauth"|"email_link"|"phone_number"|"ldap"|"saml", auth_user_id_hash?: string, auth_username_hash?: string, email: string, fields?: list, metadata?: record, name?: string, order?: int}
+  --data-requests: list # item shape: {auth_phone_number_hash?: string, auth_provider?: string, auth_second_factor_type?: "none"|"phone_number"|"totp"|"mobile_push"|"security_key"|"fingerprint", auth_session_id_hash?: string, auth_session_started_at?: string, auth_type: "none"|"password"|"oauth"|"email_link"|"phone_number"|"ldap"|"saml", auth_user_id_hash?: string, auth_username_hash?: string, email: string, fields?: list<string>, metadata?: record, name?: string, order?: int}
   --html: string
   --metadata: record
   --test: oneof<nothing, bool>
@@ -919,19 +992,19 @@ export def "templates-submissions-batch batchGeneratePdfV1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/templates/($template_id)/submissions/batch")
-  let body = {css: $css, data: $data, data_requests: $data_requests, html: $html, metadata: $metadata, test: $test} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({template_id: (encode-path-segment $template_id)} | format pattern "/templates/{template_id}/submissions/batch"))
+  let req_body = {"css": $css, "data": $data, "data_requests": $data_requests, "html": $html, "metadata": $metadata, "test": $test} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Fetch the full template attributes
 #
 # GET /templates/{template_id}?full=true
 # operationId: getFullTemplate
-export def "templates get-by-template_id-1" [
+export def "templates get-full" [
   template_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -940,14 +1013,15 @@ export def "templates get-by-template_id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<allow_additional_properties: bool, defaults: record<color: string, fontSize: float, typeface: string>, demo: bool, description: string, document_filename: string, document_md5: string, document_parse_error: bool, document_processed: bool, document_state: string, document_url: string, editable_submissions: bool, embed_domains: list<string>, encrypt_pdfs: bool, encrypt_pdfs_password: string, expiration_interval: string, expire_after: float, expire_submissions: bool, field_order: list<list<float>>, fields: record, first_template: bool, footer_html: string, header_html: string, html: string, id: string, locked: bool, name: string, page_count: float, page_dimensions: list<list<float>>, parent_folder_id: string, path: string, permanent_document_url: string, public_submissions: bool, public_web_form: bool, redirect_url: string, scss: string, shared_field_data: record, slack_webhook_url: string, template_type: string, webhook_url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/templates/($template_id)?full=true")
+  let full_url = (build-url $base ({template_id: (encode-path-segment $template_id)} | format pattern "/templates/{template_id}?full=true"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Create a new PDF template from a cached presign upload
@@ -955,7 +1029,7 @@ export def "templates get-by-template_id-1" [
 # POST /templates?desc=cached_upload
 # operationId: createPDFTemplateFromUpload
 # --template shape: {allow_additional_properties?: bool, description?: string, document?: record, editable_submissions?: bool, expiration_interval?: "minutes"|"hours"|"days", expire_after?: float, expire_submissions?: bool, footer_html?: string, header_html?: string, html?: string, name: string, public_submissions?: bool, public_web_form?: bool, redirect_url?: string, scss?: string, slack_webhook_url?: string, template_type?: "pdf"|"html", webhook_url?: string}
-export def "templates-desccached-upload createPDFTemplateFromUpload" [
+export def "templates-desccached-upload create-pdf-template" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -963,6 +1037,7 @@ export def "templates-desccached-upload createPDFTemplateFromUpload" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   template: record # shape: {allow_additional_properties?: bool, description?: string, document?: record, editable_submissions?: bool, expiration_interval?: "minutes"|"hours"|"days", expire_after?: float, expire_submissions?: bool, footer_html?: string, header_html?: string, html?: string, name: string, public_submissions?: bool, public_web_form?: bool, redirect_url?: string, scss?: string, slack_webhook_url?: string, template_type?: "pdf"|"html", webhook_url?: string}
 ]: any -> record<allow_additional_properties: bool, description: string, editable_submissions: bool, expiration_interval: string, expire_after: float, expire_submissions: bool, id: string, locked: bool, name: string, parent_folder_id: string, path: string, public_submissions: bool, public_web_form: bool, redirect_url: string, slack_webhook_url: string, template_type: string, webhook_url: string> {
@@ -970,11 +1045,11 @@ export def "templates-desccached-upload createPDFTemplateFromUpload" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/templates?desc=cached_upload")
-  let body = {template: $template} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"template": $template} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Create a new HTML template
@@ -982,7 +1057,7 @@ export def "templates-desccached-upload createPDFTemplateFromUpload" [
 # POST /templates?desc=html
 # operationId: createHTMLTemplate
 # --template shape: {allow_additional_properties?: bool, description?: string, editable_submissions?: bool, expiration_interval?: "minutes"|"hours"|"days", expire_after?: float, expire_submissions?: bool, footer_html?: string, header_html?: string, html?: string, name: string, public_submissions?: bool, public_web_form?: bool, redirect_url?: string, scss?: string, slack_webhook_url?: string, template_type?: "pdf"|"html", webhook_url?: string}
-export def "templates-deschtml createHTMLTemplate" [
+export def "templates-deschtml create-html-template" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -990,6 +1065,7 @@ export def "templates-deschtml createHTMLTemplate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   template: record # shape: {allow_additional_properties?: bool, description?: string, editable_submissions?: bool, expiration_interval?: "minutes"|"hours"|"days", expire_after?: float, expire_submissions?: bool, footer_html?: string, header_html?: string, html?: string, name: string, public_submissions?: bool, public_web_form?: bool, redirect_url?: string, scss?: string, slack_webhook_url?: string, template_type?: "pdf"|"html", webhook_url?: string}
 ]: any -> record<allow_additional_properties: bool, description: string, editable_submissions: bool, expiration_interval: string, expire_after: float, expire_submissions: bool, id: string, locked: bool, name: string, parent_folder_id: string, path: string, public_submissions: bool, public_web_form: bool, redirect_url: string, slack_webhook_url: string, template_type: string, webhook_url: string> {
@@ -997,18 +1073,18 @@ export def "templates-deschtml createHTMLTemplate" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/templates?desc=html")
-  let body = {template: $template} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"template": $template} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Get a presigned URL so that you can upload a file to our AWS S3 bucket
 #
 # GET /uploads/presign
 # operationId: getPresignUrl
-export def "uploads-presign get" [
+export def "uploads-presign get-url" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1016,6 +1092,7 @@ export def "uploads-presign get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<fields: record<key: string, policy: string, x_amz_algorithm: string, x_amz_credential: string, x_amz_date: string, x_amz_signature: string>, headers: record, method: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -1023,5 +1100,5 @@ export def "uploads-presign get" [
   let full_url = (build-url $base "/uploads/presign")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }

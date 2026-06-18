@@ -12,27 +12,39 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {headers: {}, query: ""} }
   match $scheme {
     "basic" => { {headers: {Authorization: $"Basic ($token_val)"}, query: ""} }
+    "basic-credentials" => { {headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: ""} }
     "none" => { {headers: {}, query: ""} }
     _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
   }
 }
 
 # Serialize a single query parameter based on collection style
+# Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
+# ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = ($name | url encode)
+  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
-  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
-    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
-    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
+    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
+    _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
+}
+
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Build URL from base, path, and optional query string
@@ -44,7 +56,7 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
@@ -53,17 +65,45 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
     "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "put" => { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "patch" => { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
   if ($method in ["head" "options"]) { return $resp }
-  if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
+  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
+}
+
+# Build a `multipart/form-data` envelope per RFC 7578. `file_fields` lists
+# the field names whose value should be read from disk as bytes; every
+# other field is sent as a text part (records/lists JSON-stringified).
+# Returns {content_type, body} ready to pass to `do-request`.
+# When `$dry_run` is true, file fields are NOT read from disk — they emit
+# an empty-bytes placeholder so callers can inspect the request shape
+# without the file existing on disk (issue 11.B).
+def build-multipart-body [parts: record, file_fields: list<string>, dry_run: bool = false]: nothing -> record {
+  let boundary = $"----nu-(random chars --length 24)"
+  let crlf = "\r\n"
+  let chunks = ($parts | items {|name, val|
+    if $val == null { null } else if $name in $file_fields {
+      let filename = ($val | into string | path basename)
+      let bytes = if $dry_run { (0x[] | into binary) } else { (open --raw $val | into binary | collect) }
+      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"; filename=\"($filename)\"($crlf)Content-Type: application/octet-stream($crlf)($crlf)" | into binary)
+      $head ++ $bytes ++ ($crlf | into binary)
+    } else {
+      let dt = ($val | describe)
+      let s = if (($dt | str starts-with "record") or ($dt | str starts-with "list") or ($dt | str starts-with "table")) { ($val | to json --raw) } else { ($val | into string) }
+      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"($crlf)($crlf)" | into binary)
+      $head ++ ($"($s)($crlf)" | into binary)
+    }
+  } | compact)
+  let trailer = ($"--($boundary)--($crlf)" | into binary)
+  let body = ($chunks | reduce --fold (0x[] | into binary) {|chunk, acc| $acc ++ $chunk }) ++ $trailer
+  {content_type: $"multipart/form-data; boundary=($boundary)", body: $body}
 }
 
 def base-url-completer [] { ["https://marketcheck-prod.apigee.net/v2"] }
-def auth-scheme-completer [] { ["basic"] }
+def auth-scheme-completer [] { ["basic" "basic-credentials"] }
 
 # Completers for enum parameters
 def car-type-completer [] { ["certified" "new" "used"] }
@@ -100,7 +140,7 @@ def field-completer-4 [] { ["body_subtype" "body_type" "drivetrain" "engine" "en
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "car-dealer-inventory-active get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -132,6 +172,7 @@ export def "car-dealer-inventory-active get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # The API Authentication Key. Mandatory with all API calls.
   --append-api-key: oneof<nothing, bool> # Flag on whether to include api_key in response API urls (if any) (default: true)
@@ -164,10 +205,10 @@ export def "car-dealer-inventory-active get" [
   --body-subtype: string # Body subtype to filter the listings on. Valid filter values are those that our Search facets API returns for unique body subtypes. You can pass in multiple body subtype values comma separated (format: string)
   --vehicle-type: string # To filter listing on their vehicle type
   --vins: string # Comma separated list of 17 digit vins to search the matching cars for. Only 10 VINs allowed per request. If the request contains more than 10 VINs the first 10 VINs will be considered. Could be used as a More Like This or Similar Vehicles search for the given VINs. Ths vins parameter is an alternative to taxonomy_vins or ymmt parameters available with the search API. vins and taxonomy_vins parameters could be used to filter our cars with the exact build represented by the vins or taxonomy_vins whereas ymmt is a top level filter that does not filter cars by the build attributes like doors, drivetrain, cylinders, body type, body subtype, vehicle type etc
-  --taxonomy-vins: string # Comma separated list of 10 letters excert from the 17 letter VIN. The 10 letters to be picked up from the 17 letter VIN are - first 8 letters and the 10th and 11th letter. E.g. For a VIN - 1FTFW1EF3EKE57182 the taxonomy vin would be - 1FTFW1EFEK  A taxonomy VIN identified a build of a car and could be used to filter our cars of a particular build. This is an alternative to the vin or ymmt parameters to the search API.
+  --taxonomy-vins: string # Comma separated list of 10 letters excert from the 17 letter VIN. The 10 letters to be picked up from the 17 letter VIN are - first 8 letters and the 10th and 11th letter. E.g. For a VIN - 1FTFW1EF3EKE57182 the taxonomy vin would be - 1FTFW1EFEK A taxonomy VIN identified a build of a car and could be used to filter our cars of a particular build. This is an alternative to the vin or ymmt parameters to the search API.
   --mm: string # Make-Model concatenated string. To help passing the results of auto-complete API on mm field, use this parameter and pass in the selected value as is
   --ymm: string # Year-Make-Model concatenated string. To help passing the results of auto-complete API on ymm field, use this parameter and pass in the selected value as is
-  --ymmt: string # Comma separated list of Year, Make, Model, Trim combinations. Each combination needs to have the year,make,model, trim values separated by a pipe '|' character in the form year|make|model|trim. e.g. 2010|Audi|A5,2014|Nissan|Sentra|S 6MT,|Honda|City|   You could just provide strings of the form - 'year|make||' or 'year|make|model' or '|make|model|' combinations. Individual year / make / model filters provied with the API calls will take precedence over the Year, Make, Model, Trim combinations. The Make, Model, Trim values must be valid values as per the Marketcheck Vin Decoder. If you are using a separate vin decoder then look at using the 'vins' or 'taxonomy_vins' parameter to the search api instead the year|make|model|trim combinations.
+  --ymmt: string # Comma separated list of Year, Make, Model, Trim combinations. Each combination needs to have the year,make,model, trim values separated by a pipe '|' character in the form year|make|model|trim. e.g. 2010|Audi|A5,2014|Nissan|Sentra|S 6MT,|Honda|City| You could just provide strings of the form - 'year|make||' or 'year|make|model' or '|make|model|' combinations. Individual year / make / model filters provied with the API calls will take precedence over the Year, Make, Model, Trim combinations. The Make, Model, Trim values must be valid values as per the Marketcheck Vin Decoder. If you are using a separate vin decoder then look at using the 'vins' or 'taxonomy_vins' parameter to the search api instead the year|make|model|trim combinations.
   --qp-match: string # Comma separated list of Year, Make, Model, Trim fields. For example - year,make,model,trim fields for which user wants to do an exact match
   --cylinders: string # To filter listing on their cylinders
   --transmission: string # To filter listing on their transmission
@@ -239,14 +280,14 @@ export def "car-dealer-inventory-active get" [
   let full_url = (build-url $base "/car/dealer/inventory/active" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Recall info by vin
 #
 # GET /car/recall/{vin}
 # operationId: getRecallHistory
-export def "car-recall get" [
+export def "car-recall get-history" [
   vin: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -255,6 +296,7 @@ export def "car-recall get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # The API Authentication Key. Mandatory with all API calls.
   --page: float # Page number to fetch the results for the given criteria. Default is 1. (format: number)
@@ -262,10 +304,10 @@ export def "car-recall get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/car/recall/($vin)" $qp)
+  let full_url = (build-url $base ({vin: (encode-path-segment $vin)} | format pattern "/car/recall/{vin}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # get client filters
@@ -280,6 +322,7 @@ export def "client-configure-get get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # The API Authentication Key. Mandatory with all API calls.
   --country: string@country-completer-1 # To filter listing on Country in which they are listed
@@ -290,14 +333,14 @@ export def "client-configure-get get" [
   let full_url = (build-url $base "/client/configure/get" $qp)
   let accept_val = "text/csv"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # set client filters
 #
 # POST /client/configure/set
 # operationId: set
-export def "client-configure-set set" [
+export def "client-configure-set update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -305,6 +348,7 @@ export def "client-configure-set set" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # The API Authentication Key. Mandatory with all API calls.
   --country: string@country-completer-1 # To filter listing on Country in which they are listed
@@ -315,18 +359,20 @@ export def "client-configure-set set" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "country" $country "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/client/configure/set" $qp)
-  let body = {csvfile: $csvfile} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"csvfile": $csvfile} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
+  let mp = (build-multipart-body $req_body ["csvfile"] $dry_run)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
 }
 
 # CRM check of a particular vin
 #
 # GET /crm_check/car/{vin}
 # operationId: crmCheck
-export def "crm-check-car crmCheck" [
+export def "crm-check-car check" [
   vin: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -335,6 +381,7 @@ export def "crm-check-car crmCheck" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # The API Authentication Key. Mandatory with all API calls.
   --sale-date: string # sale date to check whether after this listing has appeared or not. Must be 8 character long, with YYYYMMDD format (format: string)
@@ -342,10 +389,10 @@ export def "crm-check-car crmCheck" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "sale_date" $sale_date "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/crm_check/car/($vin)" $qp)
+  let full_url = (build-url $base ({vin: (encode-path-segment $vin)} | format pattern "/crm_check/car/{vin}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Dealer by id
@@ -360,6 +407,7 @@ export def "dealer-car-uk get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # The API Authentication Key. Mandatory with all API calls.
   --provider: oneof<nothing, bool> # boolean param to include site providers name in response (default: false)
@@ -367,10 +415,10 @@ export def "dealer-car-uk get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "provider" $provider "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/dealer/car/uk/($id)" $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dealer/car/uk/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Dealer by id
@@ -386,6 +434,7 @@ export def "dealer-car get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # The API Authentication Key. Mandatory with all API calls.
   --provider: oneof<nothing, bool> # boolean param to include site providers name in response (default: false)
@@ -393,10 +442,10 @@ export def "dealer-car get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "provider" $provider "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/dealer/car/($id)" $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dealer/car/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Dealer by id
@@ -411,6 +460,7 @@ export def "dealer-heavy-equipment get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # The API Authentication Key. Mandatory with all API calls.
   --provider: oneof<nothing, bool> # boolean param to include site providers name in response (default: false)
@@ -418,10 +468,10 @@ export def "dealer-heavy-equipment get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "provider" $provider "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/dealer/heavy-equipment/($id)" $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dealer/heavy-equipment/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Dealer by id
@@ -436,6 +486,7 @@ export def "dealer-motorcycle get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # The API Authentication Key. Mandatory with all API calls.
   --provider: oneof<nothing, bool> # boolean param to include site providers name in response (default: false)
@@ -443,10 +494,10 @@ export def "dealer-motorcycle get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "provider" $provider "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/dealer/motorcycle/($id)" $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dealer/motorcycle/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Dealer by id
@@ -461,6 +512,7 @@ export def "dealer-rv get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # The API Authentication Key. Mandatory with all API calls.
   --provider: oneof<nothing, bool> # boolean param to include site providers name in response (default: false)
@@ -468,17 +520,17 @@ export def "dealer-rv get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "provider" $provider "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/dealer/rv/($id)" $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dealer/rv/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Find car dealers around
 #
 # GET /dealers/car
 # operationId: dealerSearch
-export def "dealers-car dealerSearch" [
+export def "dealers-car list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -486,6 +538,7 @@ export def "dealers-car dealerSearch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # The API Authentication Key. Mandatory with all API calls.
   --latitude: float # Latitude component of location (format: double)
@@ -512,7 +565,7 @@ export def "dealers-car dealerSearch" [
   let full_url = (build-url $base "/dealers/car" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Find car dealers around
@@ -526,6 +579,7 @@ export def "dealers-car-uk get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # The API Authentication Key. Mandatory with all API calls.
   --latitude: float # Latitude component of location (format: double)
@@ -552,7 +606,7 @@ export def "dealers-car-uk get" [
   let full_url = (build-url $base "/dealers/car/uk" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Find car dealers around
@@ -566,6 +620,7 @@ export def "dealers-heavy-equipment get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # The API Authentication Key. Mandatory with all API calls.
   --latitude: float # Latitude component of location (format: double)
@@ -592,7 +647,7 @@ export def "dealers-heavy-equipment get" [
   let full_url = (build-url $base "/dealers/heavy-equipment" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Find car dealers around
@@ -606,6 +661,7 @@ export def "dealers-motorcycle get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # The API Authentication Key. Mandatory with all API calls.
   --latitude: float # Latitude component of location (format: double)
@@ -632,7 +688,7 @@ export def "dealers-motorcycle get" [
   let full_url = (build-url $base "/dealers/motorcycle" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Find car dealers around
@@ -646,6 +702,7 @@ export def "dealers-rv get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # The API Authentication Key. Mandatory with all API calls.
   --latitude: float # Latitude component of location (format: double)
@@ -672,14 +729,14 @@ export def "dealers-rv get" [
   let full_url = (build-url $base "/dealers/rv" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # EPI VIN Decoder
 #
 # GET /decode/car/epi/{vin}/specs
 # operationId: decodeViaEPI
-export def "decode-car-epi-specs decodeViaEPI" [
+export def "decode-car-epi-specs get-via" [
   vin: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -688,23 +745,24 @@ export def "decode-car-epi-specs decodeViaEPI" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # The API Authentication Key. Mandatory with all API calls.
 ]: nothing -> record<antibrake_sys: string, body_subtype: string, body_type: string, city_miles: string, city_mpg: int, cylinders: int, doors: int, drivetrain: string, engine: string, engine_aspiration: string, engine_block: string, engine_measure: string, engine_size: float, fuel_type: string, highway_miles: string, highway_mpg: int, made_in: string, make: string, model: string, opt_seating: string, overall_height: string, overall_length: string, overall_width: string, powertrain_type: string, short_trim: string, std_seating: string, steering_type: string, tank_size: string, transmission: string, trim: string, trim_r: string, vehicle_type: string, year: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api_key" $api_key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/decode/car/epi/($vin)/specs" $qp)
+  let full_url = (build-url $base ({vin: (encode-path-segment $vin)} | format pattern "/decode/car/epi/{vin}/specs") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # NeoVIN Decoder
 #
 # GET /decode/car/neovin/{vin}/specs
 # operationId: decodeViaNeoVIN
-export def "decode-car-neovin-specs decodeViaNeoVIN" [
+export def "decode-car-neovin-specs get-via-neo" [
   vin: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -713,6 +771,7 @@ export def "decode-car-neovin-specs decodeViaNeoVIN" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # The API Authentication Key. Mandatory with all API calls.
   --include-generic: oneof<nothing, bool> # Boolean variable to indicate wheather to include generic data as well in response (default: false)
@@ -721,17 +780,17 @@ export def "decode-car-neovin-specs decodeViaNeoVIN" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "include_generic" $include_generic "scalar") (serialize-qp "force_decode" $force_decode "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/decode/car/neovin/($vin)/specs" $qp)
+  let full_url = (build-url $base ({vin: (encode-path-segment $vin)} | format pattern "/decode/car/neovin/{vin}/specs") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # VIN Decoder
 #
 # GET /decode/car/{vin}/specs
 # operationId: decode
-export def "decode-car-specs decode" [
+export def "decode-car-specs get" [
   vin: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -740,16 +799,17 @@ export def "decode-car-specs decode" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # The API Authentication Key. Mandatory with all API calls.
 ]: nothing -> record<antibrake_sys: string, body_subtype: string, body_type: string, city_miles: string, city_mpg: int, cylinders: int, doors: int, drivetrain: string, engine: string, engine_aspiration: string, engine_block: string, engine_measure: string, engine_size: float, fuel_type: string, highway_miles: string, highway_mpg: int, made_in: string, make: string, model: string, opt_seating: string, overall_height: string, overall_length: string, overall_width: string, powertrain_type: string, short_trim: string, std_seating: string, steering_type: string, tank_size: string, transmission: string, trim: string, trim_r: string, vehicle_type: string, year: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api_key" $api_key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/decode/car/($vin)/specs" $qp)
+  let full_url = (build-url $base ({vin: (encode-path-segment $vin)} | format pattern "/decode/car/{vin}/specs") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get a cars online listing history
@@ -764,6 +824,7 @@ export def "history-car-uk get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # The API Authentication Key. Mandatory with all API calls.
   --page: float # Page number to fetch the results for the given criteria. Default is 1. (format: number)
@@ -773,10 +834,10 @@ export def "history-car-uk get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "include_duplicates" $include_duplicates "scalar") (serialize-qp "sort_order" $sort_order "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/history/car/uk/($vrm)" $qp)
+  let full_url = (build-url $base ({vrm: (encode-path-segment $vrm)} | format pattern "/history/car/uk/{vrm}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get a cars online listing history
@@ -792,6 +853,7 @@ export def "history-car get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # The API Authentication Key. Mandatory with all API calls.
   --fields: string # List of fields to fetch, in case the default fields list in the response is to be trimmed down (format: string)
@@ -802,19 +864,19 @@ export def "history-car get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "include_duplicates" $include_duplicates "scalar") (serialize-qp "sort_order" $sort_order "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/history/car/($vin)" $qp)
+  let full_url = (build-url $base ({vin: (encode-path-segment $vin)} | format pattern "/history/car/{vin}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Fetch cached image
 #
 # GET /image/cache/car/{listingID}/{imageID}
 # operationId: getCachedImage
-export def "image-cache-car get" [
-  listingID: string
-  imageID: string
+export def "image-cache-car get-cached" [
+  listing_id: string
+  image_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -822,16 +884,17 @@ export def "image-cache-car get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # The API Authentication Key. Mandatory with all API calls.
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api_key" $api_key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/image/cache/car/($listingID)/($imageID)" $qp)
+  let full_url = (build-url $base ({listing_id: (encode-path-segment $listing_id), image_id: (encode-path-segment $image_id)} | format pattern "/image/cache/car/{listing_id}/{image_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Listing by id
@@ -846,6 +909,7 @@ export def "listing-car-auction get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # The API Authentication Key. Mandatory with all API calls.
   --append-api-key: oneof<nothing, bool> # Flag on whether to include api_key in response API urls (if any) (default: true)
@@ -854,10 +918,10 @@ export def "listing-car-auction get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "append_api_key" $append_api_key "scalar") (serialize-qp "include_relevant_links" $include_relevant_links "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/listing/car/auction/($id)" $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/listing/car/auction/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Long text Listings attributes for Listing with the given id
@@ -872,16 +936,17 @@ export def "listing-car-auction-extra get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # The API Authentication Key. Mandatory with all API calls.
 ]: nothing -> record<dealer_added_f: list<string>, electronics_f: list<string>, exterior_f: list<string>, features: list<string>, id: string, interior_f: list<string>, options: list<string>, safety_f: list<string>, seller_cmts: string, standard_f: list<string>, technical_f: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api_key" $api_key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/listing/car/auction/($id)/extra" $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/listing/car/auction/{id}/extra") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Listing media by id
@@ -896,6 +961,7 @@ export def "listing-car-auction-media get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # The API Authentication Key. Mandatory with all API calls.
   --append-api-key: oneof<nothing, bool> # Flag on whether to include api_key in response API urls (if any) (default: true)
@@ -903,10 +969,10 @@ export def "listing-car-auction-media get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "append_api_key" $append_api_key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/listing/car/auction/($id)/media" $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/listing/car/auction/{id}/media") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Listing by id
@@ -921,6 +987,7 @@ export def "listing-car-fsbo get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # The API Authentication Key. Mandatory with all API calls.
   --append-api-key: oneof<nothing, bool> # Flag on whether to include api_key in response API urls (if any) (default: true)
@@ -929,10 +996,10 @@ export def "listing-car-fsbo get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "append_api_key" $append_api_key "scalar") (serialize-qp "include_relevant_links" $include_relevant_links "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/listing/car/fsbo/($id)" $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/listing/car/fsbo/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Long text Listings attributes for Listing with the given id
@@ -947,16 +1014,17 @@ export def "listing-car-fsbo-extra get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # The API Authentication Key. Mandatory with all API calls.
 ]: nothing -> record<dealer_added_f: list<string>, electronics_f: list<string>, exterior_f: list<string>, features: list<string>, id: string, interior_f: list<string>, options: list<string>, safety_f: list<string>, seller_cmts: string, standard_f: list<string>, technical_f: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api_key" $api_key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/listing/car/fsbo/($id)/extra" $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/listing/car/fsbo/{id}/extra") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Listing media by id
@@ -971,6 +1039,7 @@ export def "listing-car-fsbo-media get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # The API Authentication Key. Mandatory with all API calls.
   --append-api-key: oneof<nothing, bool> # Flag on whether to include api_key in response API urls (if any) (default: true)
@@ -978,10 +1047,10 @@ export def "listing-car-fsbo-media get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "append_api_key" $append_api_key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/listing/car/fsbo/($id)/media" $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/listing/car/fsbo/{id}/media") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Listing by id
@@ -996,6 +1065,7 @@ export def "listing-car-uk get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # The API Authentication Key. Mandatory with all API calls.
   --append-api-key: oneof<nothing, bool> # Flag on whether to include api_key in response API urls (if any) (default: true)
@@ -1003,10 +1073,10 @@ export def "listing-car-uk get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "append_api_key" $append_api_key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/listing/car/uk/($id)" $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/listing/car/uk/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Long text Listings attributes for Listing with the given id
@@ -1021,16 +1091,17 @@ export def "listing-car-uk-extra get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # The API Authentication Key. Mandatory with all API calls.
 ]: nothing -> record<dealer_added_f: list<string>, electronics_f: list<string>, exterior_f: list<string>, features: list<string>, id: string, interior_f: list<string>, options: list<string>, safety_f: list<string>, seller_cmts: string, standard_f: list<string>, technical_f: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api_key" $api_key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/listing/car/uk/($id)/extra" $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/listing/car/uk/{id}/extra") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Listing media by id
@@ -1045,6 +1116,7 @@ export def "listing-car-uk-media get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # The API Authentication Key. Mandatory with all API calls.
   --append-api-key: oneof<nothing, bool> # Flag on whether to include api_key in response API urls (if any) (default: true)
@@ -1052,10 +1124,10 @@ export def "listing-car-uk-media get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "append_api_key" $append_api_key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/listing/car/uk/($id)/media" $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/listing/car/uk/{id}/media") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Listing by id
@@ -1071,6 +1143,7 @@ export def "listing-car get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # The API Authentication Key. Mandatory with all API calls.
   --append-api-key: oneof<nothing, bool> # Flag on whether to include api_key in response API urls (if any) (default: true)
@@ -1079,10 +1152,10 @@ export def "listing-car get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "append_api_key" $append_api_key "scalar") (serialize-qp "include_relevant_links" $include_relevant_links "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/listing/car/($id)" $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/listing/car/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Long text Listings attributes for Listing with the given id
@@ -1097,16 +1170,17 @@ export def "listing-car-extra get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # The API Authentication Key. Mandatory with all API calls.
 ]: nothing -> record<dealer_added_f: list<string>, electronics_f: list<string>, exterior_f: list<string>, features: list<string>, id: string, interior_f: list<string>, options: list<string>, safety_f: list<string>, seller_cmts: string, standard_f: list<string>, technical_f: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api_key" $api_key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/listing/car/($id)/extra" $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/listing/car/{id}/extra") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Listing media by id
@@ -1121,6 +1195,7 @@ export def "listing-car-media get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # The API Authentication Key. Mandatory with all API calls.
   --append-api-key: oneof<nothing, bool> # Flag on whether to include api_key in response API urls (if any) (default: true)
@@ -1128,10 +1203,10 @@ export def "listing-car-media get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "append_api_key" $append_api_key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/listing/car/($id)/media" $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/listing/car/{id}/media") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Heavy equipment listing by id
@@ -1146,16 +1221,17 @@ export def "listing-heavy-equipment get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # The API Authentication Key. Mandatory with all API calls.
 ]: nothing -> record<build: record<area: string, class: string, engine: string, fuel_type: string, gvwr: string, length: string, made_in: string, make: string, model: string, sleeps: string, slideouts: string, transmission: string, year: int>, dealer: record<city: string, country: string, county: string, dealer_type: string, dealership_group_name: string, id: int, latitude: string, longitude: string, msa_code: string, name: string, phone: string, seller_email: string, state: string, street: string, website: string, zip: string>, dp_url: string, exterior_color: string, extra: record<dealer_added_f: list<string>, electronics_f: list<string>, exterior_f: list<string>, features: list<string>, interior_f: list<string>, options: list<string>, safety_f: list<string>, seller_comments: string, standard_f: list<string>, technical_f: list<string>>, first_seen_at: int, first_seen_at_date: string, heading: string, id: string, interior_color: string, inventory_type: string, last_seen_at: int, last_seen_at_date: string, media: record<photo_links: list<string>, photo_links_cached: list<string>>, miles: int, msrp: int, price: int, scraped_at: float, scraped_at_date: string, seller_type: string, source: string, stock_no: string, vin: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api_key" $api_key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/listing/heavy-equipment/($id)" $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/listing/heavy-equipment/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Long text Heavy equipment Listings attributes for Listing with the given id
@@ -1170,16 +1246,17 @@ export def "listing-heavy-equipment-extra get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # The API Authentication Key. Mandatory with all API calls.
 ]: nothing -> record<dealer_added_f: list<string>, electronics_f: list<string>, exterior_f: list<string>, features: list<string>, id: string, interior_f: list<string>, options: list<string>, safety_f: list<string>, seller_cmts: string, standard_f: list<string>, technical_f: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api_key" $api_key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/listing/heavy-equipment/($id)/extra" $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/listing/heavy-equipment/{id}/extra") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Listing media by id
@@ -1194,16 +1271,17 @@ export def "listing-heavy-equipment-media get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # The API Authentication Key. Mandatory with all API calls.
 ]: nothing -> record<id: string, photo_links: list<string>, photo_url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api_key" $api_key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/listing/heavy-equipment/($id)/media" $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/listing/heavy-equipment/{id}/media") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Motorcycle listing by id
@@ -1218,16 +1296,17 @@ export def "listing-motorcycle get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # The API Authentication Key. Mandatory with all API calls.
 ]: nothing -> record<build: record<body_type: string, cylinders: int, drivetrain: string, dry_weight: string, engine: string, fuel_type: string, made_in: string, make: string, model: string, transmission: string, trim: string, vehicle_type: string, year: int>, color: string, dealer: record<city: string, country: string, county: string, dealer_type: string, dealership_group_name: string, id: int, latitude: string, longitude: string, msa_code: string, name: string, phone: string, seller_email: string, state: string, street: string, website: string, zip: string>, dp_url: string, extra: record<dealer_added_f: list<string>, electronics_f: list<string>, exterior_f: list<string>, features: list<string>, interior_f: list<string>, options: list<string>, safety_f: list<string>, seller_comments: string, standard_f: list<string>, technical_f: list<string>>, first_seen_at: int, first_seen_at_date: string, heading: string, id: string, inventory_type: string, last_seen_at: int, last_seen_at_date: string, media: record<photo_links: list<string>, photo_links_cached: list<string>>, miles: int, msrp: int, price: int, scraped_at: float, scraped_at_date: string, seller_type: string, source: string, stock_no: string, vin: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api_key" $api_key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/listing/motorcycle/($id)" $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/listing/motorcycle/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Long text Motorcycle Listings attributes for Listing with the given id
@@ -1242,16 +1321,17 @@ export def "listing-motorcycle-extra get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # The API Authentication Key. Mandatory with all API calls.
 ]: nothing -> record<dealer_added_f: list<string>, electronics_f: list<string>, exterior_f: list<string>, features: list<string>, id: string, interior_f: list<string>, options: list<string>, safety_f: list<string>, seller_cmts: string, standard_f: list<string>, technical_f: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api_key" $api_key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/listing/motorcycle/($id)/extra" $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/listing/motorcycle/{id}/extra") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Motorcycle listing media by id
@@ -1266,16 +1346,17 @@ export def "listing-motorcycle-media get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # The API Authentication Key. Mandatory with all API calls.
 ]: nothing -> record<id: string, photo_links: list<string>, photo_url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api_key" $api_key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/listing/motorcycle/($id)/media" $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/listing/motorcycle/{id}/media") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # RV listing by id
@@ -1290,16 +1371,17 @@ export def "listing-rv-uk get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # The API Authentication Key. Mandatory with all API calls.
 ]: nothing -> record<build: record<area: string, class: string, engine: string, fuel_type: string, gvwr: string, length: string, made_in: string, make: string, model: string, sleeps: string, slideouts: string, transmission: string, year: int>, dealer: record<city: string, country: string, county: string, dealer_type: string, dealership_group_name: string, id: int, latitude: string, longitude: string, msa_code: string, name: string, phone: string, seller_email: string, state: string, street: string, website: string, zip: string>, dp_url: string, exterior_color: string, extra: record<dealer_added_f: list<string>, electronics_f: list<string>, exterior_f: list<string>, features: list<string>, interior_f: list<string>, options: list<string>, safety_f: list<string>, seller_comments: string, standard_f: list<string>, technical_f: list<string>>, first_seen_at: int, first_seen_at_date: string, heading: string, id: string, interior_color: string, inventory_type: string, last_seen_at: int, last_seen_at_date: string, media: record<photo_links: list<string>, photo_links_cached: list<string>>, miles: int, msrp: int, price: int, scraped_at: float, scraped_at_date: string, seller_type: string, source: string, stock_no: string, vin: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api_key" $api_key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/listing/rv/uk/($id)" $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/listing/rv/uk/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Long text RV Listings attributes for Listing with the given id
@@ -1314,16 +1396,17 @@ export def "listing-rv-uk-extra get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # The API Authentication Key. Mandatory with all API calls.
 ]: nothing -> record<dealer_added_f: list<string>, electronics_f: list<string>, exterior_f: list<string>, features: list<string>, id: string, interior_f: list<string>, options: list<string>, safety_f: list<string>, seller_cmts: string, standard_f: list<string>, technical_f: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api_key" $api_key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/listing/rv/uk/($id)/extra" $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/listing/rv/uk/{id}/extra") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Listing media by id
@@ -1338,16 +1421,17 @@ export def "listing-rv-uk-media get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # The API Authentication Key. Mandatory with all API calls.
 ]: nothing -> record<id: string, photo_links: list<string>, photo_url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api_key" $api_key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/listing/rv/uk/($id)/media" $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/listing/rv/uk/{id}/media") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # RV listing by id
@@ -1362,16 +1446,17 @@ export def "listing-rv get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # The API Authentication Key. Mandatory with all API calls.
 ]: nothing -> record<build: record<area: string, class: string, engine: string, fuel_type: string, gvwr: string, length: string, made_in: string, make: string, model: string, sleeps: string, slideouts: string, transmission: string, year: int>, dealer: record<city: string, country: string, county: string, dealer_type: string, dealership_group_name: string, id: int, latitude: string, longitude: string, msa_code: string, name: string, phone: string, seller_email: string, state: string, street: string, website: string, zip: string>, dp_url: string, exterior_color: string, extra: record<dealer_added_f: list<string>, electronics_f: list<string>, exterior_f: list<string>, features: list<string>, interior_f: list<string>, options: list<string>, safety_f: list<string>, seller_comments: string, standard_f: list<string>, technical_f: list<string>>, first_seen_at: int, first_seen_at_date: string, heading: string, id: string, interior_color: string, inventory_type: string, last_seen_at: int, last_seen_at_date: string, media: record<photo_links: list<string>, photo_links_cached: list<string>>, miles: int, msrp: int, price: int, scraped_at: float, scraped_at_date: string, seller_type: string, source: string, stock_no: string, vin: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api_key" $api_key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/listing/rv/($id)" $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/listing/rv/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Long text RV Listings attributes for Listing with the given id
@@ -1386,16 +1471,17 @@ export def "listing-rv-extra get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # The API Authentication Key. Mandatory with all API calls.
 ]: nothing -> record<dealer_added_f: list<string>, electronics_f: list<string>, exterior_f: list<string>, features: list<string>, id: string, interior_f: list<string>, options: list<string>, safety_f: list<string>, seller_cmts: string, standard_f: list<string>, technical_f: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api_key" $api_key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/listing/rv/($id)/extra" $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/listing/rv/{id}/extra") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Listing media by id
@@ -1410,16 +1496,17 @@ export def "listing-rv-media get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # The API Authentication Key. Mandatory with all API calls.
 ]: nothing -> record<id: string, photo_links: list<string>, photo_url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api_key" $api_key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/listing/rv/($id)/media" $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/listing/rv/{id}/media") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Market Days Supply
@@ -1434,6 +1521,7 @@ export def "mds-car get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # The API Authentication Key. Mandatory with all API calls.
   --vin: string # VIN to decode (format: string)
@@ -1448,7 +1536,7 @@ export def "mds-car get" [
   --country: string@country-completer-3 # To filter listing on Country in which they are listed (default: US)
   --state: string # To filter listing on State in which they are listed
   --city: string # To filter listing on City in which they are listed
-  --ymmt: string # Comma separated list of Year, Make, Model, Trim combinations. Each combination needs to have the year,make,model, trim values separated by a pipe '|' character in the form year|make|model|trim. e.g. 2010|Audi|A5,2014|Nissan|Sentra|S 6MT,|Honda|City|   You could just provide strings of the form - 'year|make||' or 'year|make|model' or '|make|model|' combinations. Individual year / make / model filters provied with the API calls will take precedence over the Year, Make, Model, Trim combinations. The Make, Model, Trim values must be valid values as per the Marketcheck Vin Decoder. If you are using a separate vin decoder then look at using the 'vins' or 'taxonomy_vins' parameter to the search api instead the year|make|model|trim combinations.
+  --ymmt: string # Comma separated list of Year, Make, Model, Trim combinations. Each combination needs to have the year,make,model, trim values separated by a pipe '|' character in the form year|make|model|trim. e.g. 2010|Audi|A5,2014|Nissan|Sentra|S 6MT,|Honda|City| You could just provide strings of the form - 'year|make||' or 'year|make|model' or '|make|model|' combinations. Individual year / make / model filters provied with the API calls will take precedence over the Year, Make, Model, Trim combinations. The Make, Model, Trim values must be valid values as per the Marketcheck Vin Decoder. If you are using a separate vin decoder then look at using the 'vins' or 'taxonomy_vins' parameter to the search api instead the year|make|model|trim combinations.
   --car-type: string@car-type-completer # Car type. Allowed values are - new / used / certified
   --lease-term: string # Search listings with exact lease term, or inside a range with min and max seperated by a dash like lease_term=30-60
   --lease-down-payment: string # Search listings with exact down payment in lease offers, or inside a range with min and max seperated by a dash like lease_down_payment=30-60
@@ -1500,7 +1588,7 @@ export def "mds-car get" [
   let full_url = (build-url $base "/mds/car" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get make model wise top 50 popular cars on national, state, city level
@@ -1515,6 +1603,7 @@ export def "popular-cars get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # The API Authentication Key. Mandatory with all API calls.
   --state: string # State level sales count (format: string)
@@ -1528,14 +1617,14 @@ export def "popular-cars get" [
   let full_url = (build-url $base "/popular/cars" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Predict car price based on it's specifications
 #
 # GET /predict/car/price
 # operationId: predictCarPrice
-export def "predict-car-price predictCarPrice" [
+export def "predict-car-price get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1543,6 +1632,7 @@ export def "predict-car-price predictCarPrice" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # The API Authentication Key. Mandatory with all API calls.
   --vin: string # Predict price for a VIN
@@ -1576,14 +1666,14 @@ export def "predict-car-price predictCarPrice" [
   let full_url = (build-url $base "/predict/car/price" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Predict fare value of car for UK based on YMMT & miles
 #
 # GET /predict/car/uk/fmv
 # operationId: fareValue
-export def "predict-car-uk-fmv fareValue" [
+export def "predict-car-uk-fmv get-fare-value" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1591,6 +1681,7 @@ export def "predict-car-uk-fmv fareValue" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # The API Authentication Key. Mandatory with all API calls.
   --vrm: string # Predict price for a VRM
@@ -1608,14 +1699,14 @@ export def "predict-car-uk-fmv fareValue" [
   let full_url = (build-url $base "/predict/car/uk/fmv" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Predict car price for UK based on it's specifications
 #
 # GET /predict/car/uk/price
 # operationId: predictUkCarPrice
-export def "predict-car-uk-price predictUkCarPrice" [
+export def "predict-car-uk-price get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1623,6 +1714,7 @@ export def "predict-car-uk-price predictUkCarPrice" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # The API Authentication Key. Mandatory with all API calls.
   --vrm: string # Predict price for a VRM
@@ -1651,14 +1743,14 @@ export def "predict-car-uk-price predictUkCarPrice" [
   let full_url = (build-url $base "/predict/car/uk/price" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get sales count by make, model, year, trim or taxonomy vin
 #
 # GET /sales/car
 # operationId: getSalesCount
-export def "sales-car get" [
+export def "sales-car get-count" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1666,6 +1758,7 @@ export def "sales-car get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # The API Authentication Key. Mandatory with all API calls.
   --car-type: string@car-type-completer-1 # Inventory type for which sales count is to be searched, default is used (format: string, default: used)
@@ -1685,7 +1778,7 @@ export def "sales-car get" [
   let full_url = (build-url $base "/sales/car" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Gets active car listings for the given search criteria
@@ -1699,6 +1792,7 @@ export def "search-car-active get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # The API Authentication Key. Mandatory with all API calls.
   --append-api-key: oneof<nothing, bool> # Flag on whether to include api_key in response API urls (if any) (default: true)
@@ -1729,10 +1823,10 @@ export def "search-car-active get" [
   --body-subtype: string # Body subtype to filter the listings on. Valid filter values are those that our Search facets API returns for unique body subtypes. You can pass in multiple body subtype values comma separated (format: string)
   --vehicle-type: string # To filter listing on their vehicle type
   --vins: string # Comma separated list of 17 digit vins to search the matching cars for. Only 10 VINs allowed per request. If the request contains more than 10 VINs the first 10 VINs will be considered. Could be used as a More Like This or Similar Vehicles search for the given VINs. Ths vins parameter is an alternative to taxonomy_vins or ymmt parameters available with the search API. vins and taxonomy_vins parameters could be used to filter our cars with the exact build represented by the vins or taxonomy_vins whereas ymmt is a top level filter that does not filter cars by the build attributes like doors, drivetrain, cylinders, body type, body subtype, vehicle type etc
-  --taxonomy-vins: string # Comma separated list of 10 letters excert from the 17 letter VIN. The 10 letters to be picked up from the 17 letter VIN are - first 8 letters and the 10th and 11th letter. E.g. For a VIN - 1FTFW1EF3EKE57182 the taxonomy vin would be - 1FTFW1EFEK  A taxonomy VIN identified a build of a car and could be used to filter our cars of a particular build. This is an alternative to the vin or ymmt parameters to the search API.
+  --taxonomy-vins: string # Comma separated list of 10 letters excert from the 17 letter VIN. The 10 letters to be picked up from the 17 letter VIN are - first 8 letters and the 10th and 11th letter. E.g. For a VIN - 1FTFW1EF3EKE57182 the taxonomy vin would be - 1FTFW1EFEK A taxonomy VIN identified a build of a car and could be used to filter our cars of a particular build. This is an alternative to the vin or ymmt parameters to the search API.
   --mm: string # Make-Model concatenated string. To help passing the results of auto-complete API on mm field, use this parameter and pass in the selected value as is
   --ymm: string # Year-Make-Model concatenated string. To help passing the results of auto-complete API on ymm field, use this parameter and pass in the selected value as is
-  --ymmt: string # Comma separated list of Year, Make, Model, Trim combinations. Each combination needs to have the year,make,model, trim values separated by a pipe '|' character in the form year|make|model|trim. e.g. 2010|Audi|A5,2014|Nissan|Sentra|S 6MT,|Honda|City|   You could just provide strings of the form - 'year|make||' or 'year|make|model' or '|make|model|' combinations. Individual year / make / model filters provied with the API calls will take precedence over the Year, Make, Model, Trim combinations. The Make, Model, Trim values must be valid values as per the Marketcheck Vin Decoder. If you are using a separate vin decoder then look at using the 'vins' or 'taxonomy_vins' parameter to the search api instead the year|make|model|trim combinations.
+  --ymmt: string # Comma separated list of Year, Make, Model, Trim combinations. Each combination needs to have the year,make,model, trim values separated by a pipe '|' character in the form year|make|model|trim. e.g. 2010|Audi|A5,2014|Nissan|Sentra|S 6MT,|Honda|City| You could just provide strings of the form - 'year|make||' or 'year|make|model' or '|make|model|' combinations. Individual year / make / model filters provied with the API calls will take precedence over the Year, Make, Model, Trim combinations. The Make, Model, Trim values must be valid values as per the Marketcheck Vin Decoder. If you are using a separate vin decoder then look at using the 'vins' or 'taxonomy_vins' parameter to the search api instead the year|make|model|trim combinations.
   --qp-match: string # Comma separated list of Year, Make, Model, Trim fields. For example - year,make,model,trim fields for which user wants to do an exact match
   --cylinders: string # To filter listing on their cylinders
   --transmission: string # To filter listing on their transmission
@@ -1810,14 +1904,14 @@ export def "search-car-active get" [
   let full_url = (build-url $base "/search/car/active" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Compute relative rank for car listings.
 #
 # POST /search/car/active/rank
 # operationId: searchAndRankCar
-export def "search-car-active-rank searchAndRankCar" [
+export def "search-car-active-rank list-and" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1825,6 +1919,7 @@ export def "search-car-active-rank searchAndRankCar" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # The API Authentication Key. Mandatory with all API calls.
   --append-api-key: oneof<nothing, bool> # Flag on whether to include api_key in response API urls (if any) (default: true)
@@ -1854,8 +1949,8 @@ export def "search-car-active-rank searchAndRankCar" [
   --body-subtype: string # Body subtype to filter the listings on. Valid filter values are those that our Search facets API returns for unique body subtypes. You can pass in multiple body subtype values comma separated (format: string)
   --vehicle-type: string # To filter listing on their vehicle type
   --vins: string # Comma separated list of 17 digit vins to search the matching cars for. Only 10 VINs allowed per request. If the request contains more than 10 VINs the first 10 VINs will be considered. Could be used as a More Like This or Similar Vehicles search for the given VINs. Ths vins parameter is an alternative to taxonomy_vins or ymmt parameters available with the search API. vins and taxonomy_vins parameters could be used to filter our cars with the exact build represented by the vins or taxonomy_vins whereas ymmt is a top level filter that does not filter cars by the build attributes like doors, drivetrain, cylinders, body type, body subtype, vehicle type etc
-  --taxonomy-vins: string # Comma separated list of 10 letters excert from the 17 letter VIN. The 10 letters to be picked up from the 17 letter VIN are - first 8 letters and the 10th and 11th letter. E.g. For a VIN - 1FTFW1EF3EKE57182 the taxonomy vin would be - 1FTFW1EFEK  A taxonomy VIN identified a build of a car and could be used to filter our cars of a particular build. This is an alternative to the vin or ymmt parameters to the search API.
-  --ymmt: string # Comma separated list of Year, Make, Model, Trim combinations. Each combination needs to have the year,make,model, trim values separated by a pipe '|' character in the form year|make|model|trim. e.g. 2010|Audi|A5,2014|Nissan|Sentra|S 6MT,|Honda|City|   You could just provide strings of the form - 'year|make||' or 'year|make|model' or '|make|model|' combinations. Individual year / make / model filters provied with the API calls will take precedence over the Year, Make, Model, Trim combinations. The Make, Model, Trim values must be valid values as per the Marketcheck Vin Decoder. If you are using a separate vin decoder then look at using the 'vins' or 'taxonomy_vins' parameter to the search api instead the year|make|model|trim combinations.
+  --taxonomy-vins: string # Comma separated list of 10 letters excert from the 17 letter VIN. The 10 letters to be picked up from the 17 letter VIN are - first 8 letters and the 10th and 11th letter. E.g. For a VIN - 1FTFW1EF3EKE57182 the taxonomy vin would be - 1FTFW1EFEK A taxonomy VIN identified a build of a car and could be used to filter our cars of a particular build. This is an alternative to the vin or ymmt parameters to the search API.
+  --ymmt: string # Comma separated list of Year, Make, Model, Trim combinations. Each combination needs to have the year,make,model, trim values separated by a pipe '|' character in the form year|make|model|trim. e.g. 2010|Audi|A5,2014|Nissan|Sentra|S 6MT,|Honda|City| You could just provide strings of the form - 'year|make||' or 'year|make|model' or '|make|model|' combinations. Individual year / make / model filters provied with the API calls will take precedence over the Year, Make, Model, Trim combinations. The Make, Model, Trim values must be valid values as per the Marketcheck Vin Decoder. If you are using a separate vin decoder then look at using the 'vins' or 'taxonomy_vins' parameter to the search api instead the year|make|model|trim combinations.
   --qp-match: string # Comma separated list of Year, Make, Model, Trim fields. For example - year,make,model,trim fields for which user wants to do an exact match
   --cylinders: string # To filter listing on their cylinders
   --transmission: string # To filter listing on their transmission
@@ -1912,7 +2007,7 @@ export def "search-car-active-rank searchAndRankCar" [
   --first-seen-at-mc-days: string # First seen at MC days range to filter listings with the first seen at MC in the range given. Range to be given in the format - min-max e.g. 25-12 (format: string)
   --inventory-type: string@inventory-type-completer # To filter listing on their condition. Either used or new
   --page: float # Page number to fetch the results for the given criteria. Default is 1. (format: number)
-  --listing-ids: list
+  --listing-ids: list<string>
   --ranking-criteria: record
 ]: any -> record<num_ranked: int, ranked_listings: table<ranked_listing: record>> {
   let input = $in
@@ -1920,18 +2015,18 @@ export def "search-car-active-rank searchAndRankCar" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "append_api_key" $append_api_key "scalar") (serialize-qp "latitude" $latitude "scalar") (serialize-qp "longitude" $longitude "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "zip" $zip "scalar") (serialize-qp "include_lease" $include_lease "scalar") (serialize-qp "include_finance" $include_finance "scalar") (serialize-qp "lease_term" $lease_term "scalar") (serialize-qp "lease_down_payment" $lease_down_payment "scalar") (serialize-qp "lease_emp" $lease_emp "scalar") (serialize-qp "finance_loan_term" $finance_loan_term "scalar") (serialize-qp "finance_loan_apr" $finance_loan_apr "scalar") (serialize-qp "finance_emp" $finance_emp "scalar") (serialize-qp "finance_down_payment" $finance_down_payment "scalar") (serialize-qp "finance_down_payment_per" $finance_down_payment_per "scalar") (serialize-qp "car_type" $car_type "scalar") (serialize-qp "carfax_1_owner" $carfax_1_owner "scalar") (serialize-qp "carfax_clean_title" $carfax_clean_title "scalar") (serialize-qp "year" $year "scalar") (serialize-qp "make" $make "scalar") (serialize-qp "model" $model "scalar") (serialize-qp "trim" $trim "scalar") (serialize-qp "vin" $vin "scalar") (serialize-qp "body_type" $body_type "scalar") (serialize-qp "body_subtype" $body_subtype "scalar") (serialize-qp "vehicle_type" $vehicle_type "scalar") (serialize-qp "vins" $vins "scalar") (serialize-qp "taxonomy_vins" $taxonomy_vins "scalar") (serialize-qp "ymmt" $ymmt "scalar") (serialize-qp "match" $qp_match "scalar") (serialize-qp "cylinders" $cylinders "scalar") (serialize-qp "transmission" $transmission "scalar") (serialize-qp "doors" $doors "scalar") (serialize-qp "drivetrain" $drivetrain "scalar") (serialize-qp "exterior_color" $exterior_color "scalar") (serialize-qp "interior_color" $interior_color "scalar") (serialize-qp "base_exterior_color" $base_exterior_color "scalar") (serialize-qp "base_interior_color" $base_interior_color "scalar") (serialize-qp "engine" $engine "scalar") (serialize-qp "engine_size" $engine_size "scalar") (serialize-qp "engine_aspiration" $engine_aspiration "scalar") (serialize-qp "engine_block" $engine_block "scalar") (serialize-qp "highway_mpg_range" $highway_mpg_range "scalar") (serialize-qp "city_mpg_range" $city_mpg_range "scalar") (serialize-qp "miles_range" $miles_range "scalar") (serialize-qp "price_range" $price_range "scalar") (serialize-qp "msrp_range" $msrp_range "scalar") (serialize-qp "dom_range" $dom_range "scalar") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "sort_order" $sort_order "scalar") (serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "include_non_vin_listings" $include_non_vin_listings "scalar") (serialize-qp "msa_code" $msa_code "scalar") (serialize-qp "facets" $facets "scalar") (serialize-qp "range_facets" $range_facets "scalar") (serialize-qp "facet_sort" $facet_sort "scalar") (serialize-qp "stats" $stats "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "plot" $plot "scalar") (serialize-qp "nodedup" $nodedup "scalar") (serialize-qp "dedup" $dedup "scalar") (serialize-qp "owned" $owned "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "city" $city "scalar") (serialize-qp "trim_o" $trim_o "scalar") (serialize-qp "trim_r" $trim_r "scalar") (serialize-qp "dom_active_range" $dom_active_range "scalar") (serialize-qp "dom_180_range" $dom_180_range "scalar") (serialize-qp "exclude_certified" $exclude_certified "scalar") (serialize-qp "fuel_type" $fuel_type "scalar") (serialize-qp "dealer_type" $dealer_type "scalar") (serialize-qp "photo_links" $photo_links "scalar") (serialize-qp "photo_links_cached" $photo_links_cached "scalar") (serialize-qp "stock_no" $stock_no "scalar") (serialize-qp "last_seen_range" $last_seen_range "scalar") (serialize-qp "first_seen_range" $first_seen_range "scalar") (serialize-qp "first_seen_at_source_range" $first_seen_at_source_range "scalar") (serialize-qp "first_seen_at_mc_range" $first_seen_at_mc_range "scalar") (serialize-qp "last_seen_days" $last_seen_days "scalar") (serialize-qp "first_seen_days" $first_seen_days "scalar") (serialize-qp "first_seen_at_source_days" $first_seen_at_source_days "scalar") (serialize-qp "first_seen_at_mc_days" $first_seen_at_mc_days "scalar") (serialize-qp "inventory_type" $inventory_type "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/search/car/active/rank" $qp)
-  let body = {listing_ids: $listing_ids, ranking_criteria: $ranking_criteria} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"listing_ids": $listing_ids, "ranking_criteria": $ranking_criteria} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Compute relative rank for car listings.
 #
 # POST /search/car/active/rank/listings
 # operationId: rankCar
-export def "search-car-active-rank-listings rankCar" [
+export def "search-car-active-rank-listings create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1939,10 +2034,11 @@ export def "search-car-active-rank-listings rankCar" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # The API Authentication Key. Mandatory with all API calls.
   --append-api-key: oneof<nothing, bool> # Flag on whether to include api_key in response API urls (if any) (default: true)
-  --listing-ids: list
+  --listing-ids: list<string>
   --ranking-criteria: record
 ]: any -> record<num_ranked: int, ranked_listings: table<ranked_listing: record>> {
   let input = $in
@@ -1950,11 +2046,11 @@ export def "search-car-active-rank-listings rankCar" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "append_api_key" $append_api_key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/search/car/active/rank/listings" $qp)
-  let body = {listing_ids: $listing_ids, ranking_criteria: $ranking_criteria} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"listing_ids": $listing_ids, "ranking_criteria": $ranking_criteria} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Gets active auction car listings for the given search criteria
@@ -1968,6 +2064,7 @@ export def "search-car-auction-active get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # The API Authentication Key. Mandatory with all API calls.
   --append-api-key: oneof<nothing, bool> # Flag on whether to include api_key in response API urls (if any) (default: true)
@@ -1998,10 +2095,10 @@ export def "search-car-auction-active get" [
   --body-subtype: string # Body subtype to filter the listings on. Valid filter values are those that our Search facets API returns for unique body subtypes. You can pass in multiple body subtype values comma separated (format: string)
   --vehicle-type: string # To filter listing on their vehicle type
   --vins: string # Comma separated list of 17 digit vins to search the matching cars for. Only 10 VINs allowed per request. If the request contains more than 10 VINs the first 10 VINs will be considered. Could be used as a More Like This or Similar Vehicles search for the given VINs. Ths vins parameter is an alternative to taxonomy_vins or ymmt parameters available with the search API. vins and taxonomy_vins parameters could be used to filter our cars with the exact build represented by the vins or taxonomy_vins whereas ymmt is a top level filter that does not filter cars by the build attributes like doors, drivetrain, cylinders, body type, body subtype, vehicle type etc
-  --taxonomy-vins: string # Comma separated list of 10 letters excert from the 17 letter VIN. The 10 letters to be picked up from the 17 letter VIN are - first 8 letters and the 10th and 11th letter. E.g. For a VIN - 1FTFW1EF3EKE57182 the taxonomy vin would be - 1FTFW1EFEK  A taxonomy VIN identified a build of a car and could be used to filter our cars of a particular build. This is an alternative to the vin or ymmt parameters to the search API.
+  --taxonomy-vins: string # Comma separated list of 10 letters excert from the 17 letter VIN. The 10 letters to be picked up from the 17 letter VIN are - first 8 letters and the 10th and 11th letter. E.g. For a VIN - 1FTFW1EF3EKE57182 the taxonomy vin would be - 1FTFW1EFEK A taxonomy VIN identified a build of a car and could be used to filter our cars of a particular build. This is an alternative to the vin or ymmt parameters to the search API.
   --mm: string # Make-Model concatenated string. To help passing the results of auto-complete API on mm field, use this parameter and pass in the selected value as is
   --ymm: string # Year-Make-Model concatenated string. To help passing the results of auto-complete API on ymm field, use this parameter and pass in the selected value as is
-  --ymmt: string # Comma separated list of Year, Make, Model, Trim combinations. Each combination needs to have the year,make,model, trim values separated by a pipe '|' character in the form year|make|model|trim. e.g. 2010|Audi|A5,2014|Nissan|Sentra|S 6MT,|Honda|City|   You could just provide strings of the form - 'year|make||' or 'year|make|model' or '|make|model|' combinations. Individual year / make / model filters provied with the API calls will take precedence over the Year, Make, Model, Trim combinations. The Make, Model, Trim values must be valid values as per the Marketcheck Vin Decoder. If you are using a separate vin decoder then look at using the 'vins' or 'taxonomy_vins' parameter to the search api instead the year|make|model|trim combinations.
+  --ymmt: string # Comma separated list of Year, Make, Model, Trim combinations. Each combination needs to have the year,make,model, trim values separated by a pipe '|' character in the form year|make|model|trim. e.g. 2010|Audi|A5,2014|Nissan|Sentra|S 6MT,|Honda|City| You could just provide strings of the form - 'year|make||' or 'year|make|model' or '|make|model|' combinations. Individual year / make / model filters provied with the API calls will take precedence over the Year, Make, Model, Trim combinations. The Make, Model, Trim values must be valid values as per the Marketcheck Vin Decoder. If you are using a separate vin decoder then look at using the 'vins' or 'taxonomy_vins' parameter to the search api instead the year|make|model|trim combinations.
   --qp-match: string # Comma separated list of Year, Make, Model, Trim fields. For example - year,make,model,trim fields for which user wants to do an exact match
   --cylinders: string # To filter listing on their cylinders
   --transmission: string # To filter listing on their transmission
@@ -2075,14 +2172,14 @@ export def "search-car-auction-active get" [
   let full_url = (build-url $base "/search/car/auction/active" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # API for auto-completion of inputs
 #
 # GET /search/car/auto-complete
 # operationId: autoComplete
-export def "search-car-auto-complete autoComplete" [
+export def "search-car-auto-complete complete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2090,6 +2187,7 @@ export def "search-car-auto-complete autoComplete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # The API Authentication Key. Mandatory with all API calls.
   --field: string@field-completer # Field name for which you want auto-completion (format: string)
@@ -2134,7 +2232,7 @@ export def "search-car-auto-complete autoComplete" [
   let full_url = (build-url $base "/search/car/auto-complete" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Gets active private party car listings for the given search criteria
@@ -2148,6 +2246,7 @@ export def "search-car-fsbo-active get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # The API Authentication Key. Mandatory with all API calls.
   --append-api-key: oneof<nothing, bool> # Flag on whether to include api_key in response API urls (if any) (default: true)
@@ -2178,10 +2277,10 @@ export def "search-car-fsbo-active get" [
   --body-subtype: string # Body subtype to filter the listings on. Valid filter values are those that our Search facets API returns for unique body subtypes. You can pass in multiple body subtype values comma separated (format: string)
   --vehicle-type: string # To filter listing on their vehicle type
   --vins: string # Comma separated list of 17 digit vins to search the matching cars for. Only 10 VINs allowed per request. If the request contains more than 10 VINs the first 10 VINs will be considered. Could be used as a More Like This or Similar Vehicles search for the given VINs. Ths vins parameter is an alternative to taxonomy_vins or ymmt parameters available with the search API. vins and taxonomy_vins parameters could be used to filter our cars with the exact build represented by the vins or taxonomy_vins whereas ymmt is a top level filter that does not filter cars by the build attributes like doors, drivetrain, cylinders, body type, body subtype, vehicle type etc
-  --taxonomy-vins: string # Comma separated list of 10 letters excert from the 17 letter VIN. The 10 letters to be picked up from the 17 letter VIN are - first 8 letters and the 10th and 11th letter. E.g. For a VIN - 1FTFW1EF3EKE57182 the taxonomy vin would be - 1FTFW1EFEK  A taxonomy VIN identified a build of a car and could be used to filter our cars of a particular build. This is an alternative to the vin or ymmt parameters to the search API.
+  --taxonomy-vins: string # Comma separated list of 10 letters excert from the 17 letter VIN. The 10 letters to be picked up from the 17 letter VIN are - first 8 letters and the 10th and 11th letter. E.g. For a VIN - 1FTFW1EF3EKE57182 the taxonomy vin would be - 1FTFW1EFEK A taxonomy VIN identified a build of a car and could be used to filter our cars of a particular build. This is an alternative to the vin or ymmt parameters to the search API.
   --mm: string # Make-Model concatenated string. To help passing the results of auto-complete API on mm field, use this parameter and pass in the selected value as is
   --ymm: string # Year-Make-Model concatenated string. To help passing the results of auto-complete API on ymm field, use this parameter and pass in the selected value as is
-  --ymmt: string # Comma separated list of Year, Make, Model, Trim combinations. Each combination needs to have the year,make,model, trim values separated by a pipe '|' character in the form year|make|model|trim. e.g. 2010|Audi|A5,2014|Nissan|Sentra|S 6MT,|Honda|City|   You could just provide strings of the form - 'year|make||' or 'year|make|model' or '|make|model|' combinations. Individual year / make / model filters provied with the API calls will take precedence over the Year, Make, Model, Trim combinations. The Make, Model, Trim values must be valid values as per the Marketcheck Vin Decoder. If you are using a separate vin decoder then look at using the 'vins' or 'taxonomy_vins' parameter to the search api instead the year|make|model|trim combinations.
+  --ymmt: string # Comma separated list of Year, Make, Model, Trim combinations. Each combination needs to have the year,make,model, trim values separated by a pipe '|' character in the form year|make|model|trim. e.g. 2010|Audi|A5,2014|Nissan|Sentra|S 6MT,|Honda|City| You could just provide strings of the form - 'year|make||' or 'year|make|model' or '|make|model|' combinations. Individual year / make / model filters provied with the API calls will take precedence over the Year, Make, Model, Trim combinations. The Make, Model, Trim values must be valid values as per the Marketcheck Vin Decoder. If you are using a separate vin decoder then look at using the 'vins' or 'taxonomy_vins' parameter to the search api instead the year|make|model|trim combinations.
   --qp-match: string # Comma separated list of Year, Make, Model, Trim fields. For example - year,make,model,trim fields for which user wants to do an exact match
   --cylinders: string # To filter listing on their cylinders
   --transmission: string # To filter listing on their transmission
@@ -2255,14 +2354,14 @@ export def "search-car-fsbo-active get" [
   let full_url = (build-url $base "/search/car/fsbo/active" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Gets oem incentive listings for the given search criteria
 #
 # GET /search/car/incentive/oem
 # operationId: oemSearch
-export def "search-car-incentive-oem oemSearch" [
+export def "search-car-incentive-oem list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2270,6 +2369,7 @@ export def "search-car-incentive-oem oemSearch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # The API Authentication Key. Mandatory with all API calls.
   --offer-type: string@offer-type-completer # The type of the incentive
@@ -2321,7 +2421,7 @@ export def "search-car-incentive-oem oemSearch" [
   let full_url = (build-url $base "/search/car/incentive/oem" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Gets Recent car listings for the given search criteria
@@ -2335,6 +2435,7 @@ export def "search-car-recents get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # The API Authentication Key. Mandatory with all API calls.
   --append-api-key: oneof<nothing, bool> # Flag on whether to include api_key in response API urls (if any) (default: true)
@@ -2367,8 +2468,8 @@ export def "search-car-recents get" [
   --body-subtype: string # Body subtype to filter the listings on. Valid filter values are those that our Search facets API returns for unique body subtypes. You can pass in multiple body subtype values comma separated (format: string)
   --vehicle-type: string # To filter listing on their vehicle type
   --vins: string # Comma separated list of 17 digit vins to search the matching cars for. Only 10 VINs allowed per request. If the request contains more than 10 VINs the first 10 VINs will be considered. Could be used as a More Like This or Similar Vehicles search for the given VINs. Ths vins parameter is an alternative to taxonomy_vins or ymmt parameters available with the search API. vins and taxonomy_vins parameters could be used to filter our cars with the exact build represented by the vins or taxonomy_vins whereas ymmt is a top level filter that does not filter cars by the build attributes like doors, drivetrain, cylinders, body type, body subtype, vehicle type etc
-  --taxonomy-vins: string # Comma separated list of 10 letters excert from the 17 letter VIN. The 10 letters to be picked up from the 17 letter VIN are - first 8 letters and the 10th and 11th letter. E.g. For a VIN - 1FTFW1EF3EKE57182 the taxonomy vin would be - 1FTFW1EFEK  A taxonomy VIN identified a build of a car and could be used to filter our cars of a particular build. This is an alternative to the vin or ymmt parameters to the search API.
-  --ymmt: string # Comma separated list of Year, Make, Model, Trim combinations. Each combination needs to have the year,make,model, trim values separated by a pipe '|' character in the form year|make|model|trim. e.g. 2010|Audi|A5,2014|Nissan|Sentra|S 6MT,|Honda|City|   You could just provide strings of the form - 'year|make||' or 'year|make|model' or '|make|model|' combinations. Individual year / make / model filters provied with the API calls will take precedence over the Year, Make, Model, Trim combinations. The Make, Model, Trim values must be valid values as per the Marketcheck Vin Decoder. If you are using a separate vin decoder then look at using the 'vins' or 'taxonomy_vins' parameter to the search api instead the year|make|model|trim combinations.
+  --taxonomy-vins: string # Comma separated list of 10 letters excert from the 17 letter VIN. The 10 letters to be picked up from the 17 letter VIN are - first 8 letters and the 10th and 11th letter. E.g. For a VIN - 1FTFW1EF3EKE57182 the taxonomy vin would be - 1FTFW1EFEK A taxonomy VIN identified a build of a car and could be used to filter our cars of a particular build. This is an alternative to the vin or ymmt parameters to the search API.
+  --ymmt: string # Comma separated list of Year, Make, Model, Trim combinations. Each combination needs to have the year,make,model, trim values separated by a pipe '|' character in the form year|make|model|trim. e.g. 2010|Audi|A5,2014|Nissan|Sentra|S 6MT,|Honda|City| You could just provide strings of the form - 'year|make||' or 'year|make|model' or '|make|model|' combinations. Individual year / make / model filters provied with the API calls will take precedence over the Year, Make, Model, Trim combinations. The Make, Model, Trim values must be valid values as per the Marketcheck Vin Decoder. If you are using a separate vin decoder then look at using the 'vins' or 'taxonomy_vins' parameter to the search api instead the year|make|model|trim combinations.
   --qp-match: string # Comma separated list of Year, Make, Model, Trim fields. For example - year,make,model,trim fields for which user wants to do an exact match
   --cylinders: string # To filter listing on their cylinders
   --transmission: string # To filter listing on their transmission
@@ -2442,14 +2543,14 @@ export def "search-car-recents get" [
   let full_url = (build-url $base "/search/car/recents" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Gets active car listings in UK for the given search criteria
 #
 # GET /search/car/uk/active
 # operationId: search
-export def "search-car-uk-active search" [
+export def "search-car-uk-active list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2457,6 +2558,7 @@ export def "search-car-uk-active search" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # The API Authentication Key. Mandatory with all API calls.
   --latitude: float # Latitude component of location (format: double)
@@ -2473,7 +2575,7 @@ export def "search-car-uk-active search" [
   --trim: string # To filter listing on their trim
   --vin: string # To filter listing on their VIN
   --body-type: string # To filter listing on their body type
-  --ymmt: string # Comma separated list of Year, Make, Model, Trim combinations. Each combination needs to have the year,make,model, trim values separated by a pipe '|' character in the form year|make|model|trim. e.g. 2010|Audi|A5,2014|Nissan|Sentra|S 6MT,|Honda|City|   You could just provide strings of the form - 'year|make||' or 'year|make|model' or '|make|model|' combinations. Individual year / make / model filters provied with the API calls will take precedence over the Year, Make, Model, Trim combinations. The Make, Model, Trim values must be valid values as per the Marketcheck Vin Decoder. If you are using a separate vin decoder then look at using the 'vins' or 'taxonomy_vins' parameter to the search api instead the year|make|model|trim combinations.
+  --ymmt: string # Comma separated list of Year, Make, Model, Trim combinations. Each combination needs to have the year,make,model, trim values separated by a pipe '|' character in the form year|make|model|trim. e.g. 2010|Audi|A5,2014|Nissan|Sentra|S 6MT,|Honda|City| You could just provide strings of the form - 'year|make||' or 'year|make|model' or '|make|model|' combinations. Individual year / make / model filters provied with the API calls will take precedence over the Year, Make, Model, Trim combinations. The Make, Model, Trim values must be valid values as per the Marketcheck Vin Decoder. If you are using a separate vin decoder then look at using the 'vins' or 'taxonomy_vins' parameter to the search api instead the year|make|model|trim combinations.
   --transmission: string # To filter listing on their transmission
   --doors: string # Doors to filter the cars on. Valid filter values are those that our Search facets API returns for unique doors. You can pass in multiple doors values comma separated (format: string)
   --drivetrain: string # To filter listing on their drivetrain
@@ -2563,7 +2665,7 @@ export def "search-car-uk-active search" [
   let full_url = (build-url $base "/search/car/uk/active" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Gets Recent UK car listings for the given search criteria
@@ -2577,6 +2679,7 @@ export def "search-car-uk-recents get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # The API Authentication Key. Mandatory with all API calls.
   --append-api-key: oneof<nothing, bool> # Flag on whether to include api_key in response API urls (if any) (default: true)
@@ -2609,8 +2712,8 @@ export def "search-car-uk-recents get" [
   --body-subtype: string # Body subtype to filter the listings on. Valid filter values are those that our Search facets API returns for unique body subtypes. You can pass in multiple body subtype values comma separated (format: string)
   --vehicle-type: string # To filter listing on their vehicle type
   --vins: string # Comma separated list of 17 digit vins to search the matching cars for. Only 10 VINs allowed per request. If the request contains more than 10 VINs the first 10 VINs will be considered. Could be used as a More Like This or Similar Vehicles search for the given VINs. Ths vins parameter is an alternative to taxonomy_vins or ymmt parameters available with the search API. vins and taxonomy_vins parameters could be used to filter our cars with the exact build represented by the vins or taxonomy_vins whereas ymmt is a top level filter that does not filter cars by the build attributes like doors, drivetrain, cylinders, body type, body subtype, vehicle type etc
-  --taxonomy-vins: string # Comma separated list of 10 letters excert from the 17 letter VIN. The 10 letters to be picked up from the 17 letter VIN are - first 8 letters and the 10th and 11th letter. E.g. For a VIN - 1FTFW1EF3EKE57182 the taxonomy vin would be - 1FTFW1EFEK  A taxonomy VIN identified a build of a car and could be used to filter our cars of a particular build. This is an alternative to the vin or ymmt parameters to the search API.
-  --ymmt: string # Comma separated list of Year, Make, Model, Trim combinations. Each combination needs to have the year,make,model, trim values separated by a pipe '|' character in the form year|make|model|trim. e.g. 2010|Audi|A5,2014|Nissan|Sentra|S 6MT,|Honda|City|   You could just provide strings of the form - 'year|make||' or 'year|make|model' or '|make|model|' combinations. Individual year / make / model filters provied with the API calls will take precedence over the Year, Make, Model, Trim combinations. The Make, Model, Trim values must be valid values as per the Marketcheck Vin Decoder. If you are using a separate vin decoder then look at using the 'vins' or 'taxonomy_vins' parameter to the search api instead the year|make|model|trim combinations.
+  --taxonomy-vins: string # Comma separated list of 10 letters excert from the 17 letter VIN. The 10 letters to be picked up from the 17 letter VIN are - first 8 letters and the 10th and 11th letter. E.g. For a VIN - 1FTFW1EF3EKE57182 the taxonomy vin would be - 1FTFW1EFEK A taxonomy VIN identified a build of a car and could be used to filter our cars of a particular build. This is an alternative to the vin or ymmt parameters to the search API.
+  --ymmt: string # Comma separated list of Year, Make, Model, Trim combinations. Each combination needs to have the year,make,model, trim values separated by a pipe '|' character in the form year|make|model|trim. e.g. 2010|Audi|A5,2014|Nissan|Sentra|S 6MT,|Honda|City| You could just provide strings of the form - 'year|make||' or 'year|make|model' or '|make|model|' combinations. Individual year / make / model filters provied with the API calls will take precedence over the Year, Make, Model, Trim combinations. The Make, Model, Trim values must be valid values as per the Marketcheck Vin Decoder. If you are using a separate vin decoder then look at using the 'vins' or 'taxonomy_vins' parameter to the search api instead the year|make|model|trim combinations.
   --qp-match: string # Comma separated list of Year, Make, Model, Trim fields. For example - year,make,model,trim fields for which user wants to do an exact match
   --cylinders: string # To filter listing on their cylinders
   --transmission: string # To filter listing on their transmission
@@ -2692,7 +2795,7 @@ export def "search-car-uk-recents get" [
   let full_url = (build-url $base "/search/car/uk/recents" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Gets active heavy equipment listings for the given search criteria
@@ -2706,6 +2809,7 @@ export def "search-heavy-equipment-active get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # The API Authentication Key. Mandatory with all API calls.
   --price-range: string # Price range to filter listings with the price in the range given. Range to be given in the format - min-max e.g. 1000-5000 (format: string)
@@ -2758,7 +2862,7 @@ export def "search-heavy-equipment-active get" [
   let full_url = (build-url $base "/search/heavy-equipment/active" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # API for auto-completion of inputs
@@ -2772,6 +2876,7 @@ export def "search-heavy-equipment-auto-complete get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # The API Authentication Key. Mandatory with all API calls.
   --field: string@field-completer-1 # Field name for which you want auto-completion (format: string)
@@ -2804,7 +2909,7 @@ export def "search-heavy-equipment-auto-complete get" [
   let full_url = (build-url $base "/search/heavy-equipment/auto-complete" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Gets active motorcycle listings for the given search criteria
@@ -2818,6 +2923,7 @@ export def "search-motorcycle-active get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # The API Authentication Key. Mandatory with all API calls.
   --price-range: string # Price range to filter listings with the price in the range given. Range to be given in the format - min-max e.g. 1000-5000 (format: string)
@@ -2868,7 +2974,7 @@ export def "search-motorcycle-active get" [
   let full_url = (build-url $base "/search/motorcycle/active" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # API for auto-completion of inputs
@@ -2882,6 +2988,7 @@ export def "search-motorcycle-auto-complete get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # The API Authentication Key. Mandatory with all API calls.
   --field: string@field-completer-2 # Field name for which you want auto-completion (format: string)
@@ -2914,7 +3021,7 @@ export def "search-motorcycle-auto-complete get" [
   let full_url = (build-url $base "/search/motorcycle/auto-complete" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Gets active RV listings for the given search criteria
@@ -2928,6 +3035,7 @@ export def "search-rv-active get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # The API Authentication Key. Mandatory with all API calls.
   --price-range: string # Price range to filter listings with the price in the range given. Range to be given in the format - min-max e.g. 1000-5000 (format: string)
@@ -2989,7 +3097,7 @@ export def "search-rv-active get" [
   let full_url = (build-url $base "/search/rv/active" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # API for auto-completion of inputs
@@ -3003,6 +3111,7 @@ export def "search-rv-auto-complete get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # The API Authentication Key. Mandatory with all API calls.
   --field: string@field-completer-3 # Field name for which you want auto-completion (format: string)
@@ -3035,7 +3144,7 @@ export def "search-rv-auto-complete get" [
   let full_url = (build-url $base "/search/rv/auto-complete" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Gets active RV listings for the given search criteria
@@ -3049,6 +3158,7 @@ export def "search-rv-uk-active get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # The API Authentication Key. Mandatory with all API calls.
   --price-range: string # Price range to filter listings with the price in the range given. Range to be given in the format - min-max e.g. 1000-5000 (format: string)
@@ -3112,7 +3222,7 @@ export def "search-rv-uk-active get" [
   let full_url = (build-url $base "/search/rv/uk/active" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # API for auto-completion of inputs based on taxonomy
@@ -3126,6 +3236,7 @@ export def "specs-car-auto-complete get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # The API Authentication Key. Mandatory with all API calls.
   --field: string@field-completer-4 # Field name for which you want auto-completion (format: string)
@@ -3152,14 +3263,14 @@ export def "specs-car-auto-complete get" [
   let full_url = (build-url $base "/specs/car/auto-complete" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # API for getting terms from taxonomy
 #
 # GET /specs/car/terms
 # operationId: getTaxonomyTerms
-export def "specs-car-terms get" [
+export def "specs-car-terms get-taxonomy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3167,6 +3278,7 @@ export def "specs-car-terms get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # The API Authentication Key. Mandatory with all API calls.
   --field: string # Comma separated list of fields to get terms for (format: string)
@@ -3190,14 +3302,14 @@ export def "specs-car-terms get" [
   let full_url = (build-url $base "/specs/car/terms" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Price, Miles and Days on Market stats
 #
 # GET /stats/car
 # operationId: getDailyStats
-export def "stats-car get" [
+export def "stats-car get-daily" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3205,6 +3317,7 @@ export def "stats-car get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # The API Authentication Key. Mandatory with all API calls.
   --country: string@country-completer-4 # Country for which the stats are to be searched (format: string, default: us)
@@ -3222,5 +3335,5 @@ export def "stats-car get" [
   let full_url = (build-url $base "/stats/car" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }

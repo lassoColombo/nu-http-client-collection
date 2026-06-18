@@ -18,21 +18,32 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 }
 
 # Serialize a single query parameter based on collection style
+# Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
+# ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = ($name | url encode)
+  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
-  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
-    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
-    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
+    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
+    _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
+}
+
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Build URL from base, path, and optional query string
@@ -44,7 +55,7 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
@@ -53,27 +64,27 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
     "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "put" => { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "patch" => { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
   if ($method in ["head" "options"]) { return $resp }
-  if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
+  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
 def base-url-completer [] { ["https://management.azure.com"] }
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
-def aggregationInterval-completer [] { ["Daily" "Monthly" "Weekly"] }
-def aggregationInterval-completer-1 [] { ["Daily" "Hourly"] }
-def timeseriesType-completer [] { ["LatencyP50" "LatencyP75" "LatencyP95" "MeasurementCounts"] }
+def aggregation-interval-completer [] { ["Daily" "Monthly" "Weekly"] }
+def aggregation-interval-completer-1 [] { ["Daily" "Hourly"] }
+def timeseries-type-completer [] { ["LatencyP50" "LatencyP75" "LatencyP95" "MeasurementCounts"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-providers-microsoft-network-network-experiment-profiles List" } } | get name | first)
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-providers-microsoft-network-network-experiment-profiles list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -97,8 +108,8 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Network/NetworkExperimentProfiles
 # operationId: NetworkExperimentProfiles_List
-export def "subscriptions-providers-microsoft-network-network-experiment-profiles List" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-network-network-experiment-profiles list" [
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -106,25 +117,26 @@ export def "subscriptions-providers-microsoft-network-network-experiment-profile
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version.
 ]: nothing -> record<nextLink: string, value: table<etag: string, name: string, properties: record, id: string, location: string, tags: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Network/NetworkExperimentProfiles" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Network/NetworkExperimentProfiles") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Gets a list of Network Experiment Profiles within a resource group under a subscription
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/NetworkExperimentProfiles
 # operationId: NetworkExperimentProfiles_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-network-network-experiment-profiles ListByResourceGroup" [
-  subscriptionId: string
-  resourceGroupName: string
+export def "subscriptions-resource-groups-providers-microsoft-network-network-experiment-profiles list" [
+  subscription_id: string
+  resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -132,26 +144,27 @@ export def "subscriptions-resource-groups-providers-microsoft-network-network-ex
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version.
 ]: nothing -> record<nextLink: string, value: table<etag: string, name: string, properties: record, id: string, location: string, tags: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/NetworkExperimentProfiles" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/NetworkExperimentProfiles") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Deletes an NetworkExperiment Profile by ProfileName
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/NetworkExperimentProfiles/{profileName}
 # operationId: NetworkExperimentProfiles_Delete
-export def "subscriptions-resource-groups-providers-microsoft-network-network-experiment-profiles Delete" [
-  subscriptionId: string
-  resourceGroupName: string
-  profileName: string
+export def "subscriptions-resource-groups-providers-microsoft-network-network-experiment-profiles delete" [
+  subscription_id: string
+  resource_group_name: string
+  profile_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -159,26 +172,27 @@ export def "subscriptions-resource-groups-providers-microsoft-network-network-ex
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version.
 ]: nothing -> record<code: string, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/NetworkExperimentProfiles/($profileName)" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), profile_name: (encode-path-segment $profile_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/NetworkExperimentProfiles/{profile_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Gets an NetworkExperiment Profile by ProfileName
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/NetworkExperimentProfiles/{profileName}
 # operationId: NetworkExperimentProfiles_Get
-export def "subscriptions-resource-groups-providers-microsoft-network-network-experiment-profiles Get" [
-  subscriptionId: string
-  resourceGroupName: string
-  profileName: string
+export def "subscriptions-resource-groups-providers-microsoft-network-network-experiment-profiles get" [
+  subscription_id: string
+  resource_group_name: string
+  profile_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -186,16 +200,17 @@ export def "subscriptions-resource-groups-providers-microsoft-network-network-ex
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version.
 ]: nothing -> record<etag: string, name: string, properties: record<enabledState: string, resourceState: string>, id: string, location: string, tags: record, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/NetworkExperimentProfiles/($profileName)" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), profile_name: (encode-path-segment $profile_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/NetworkExperimentProfiles/{profile_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Updates an NetworkExperimentProfiles by NetworkExperimentProfile name
@@ -203,10 +218,10 @@ export def "subscriptions-resource-groups-providers-microsoft-network-network-ex
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/NetworkExperimentProfiles/{profileName}
 # operationId: NetworkExperimentProfiles_Update
 # --properties shape: {enabledState?: "Enabled"|"Disabled"}
-export def "subscriptions-resource-groups-providers-microsoft-network-network-experiment-profiles Update" [
-  subscriptionId: string
-  resourceGroupName: string
-  profileName: string
+export def "subscriptions-resource-groups-providers-microsoft-network-network-experiment-profiles update" [
+  subscription_id: string
+  resource_group_name: string
+  profile_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -214,6 +229,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-network-ex
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version.
   --properties: record # Defines the properties of an experiment — shape: {enabledState?: "Enabled"|"Disabled"}
@@ -223,12 +239,12 @@ export def "subscriptions-resource-groups-providers-microsoft-network-network-ex
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/NetworkExperimentProfiles/($profileName)" $qp)
-  let body = {properties: $properties, tags: $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), profile_name: (encode-path-segment $profile_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/NetworkExperimentProfiles/{profile_name}") $qp)
+  let req_body = {"properties": $properties, "tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Creates an NetworkExperiment Profile
@@ -236,10 +252,10 @@ export def "subscriptions-resource-groups-providers-microsoft-network-network-ex
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/NetworkExperimentProfiles/{profileName}
 # operationId: NetworkExperimentProfiles_CreateOrUpdate
 # --properties shape: {enabledState?: "Enabled"|"Disabled"}
-export def "subscriptions-resource-groups-providers-microsoft-network-network-experiment-profiles CreateOrUpdate" [
-  profileName: string
-  subscriptionId: string
-  resourceGroupName: string
+export def "subscriptions-resource-groups-providers-microsoft-network-network-experiment-profiles create-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  profile_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -247,6 +263,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-network-ex
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version.
   --etag: string # Gets a unique read-only string that changes whenever the resource is updated.
@@ -258,22 +275,22 @@ export def "subscriptions-resource-groups-providers-microsoft-network-network-ex
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/NetworkExperimentProfiles/($profileName)" $qp)
-  let body = {etag: $etag, properties: $properties, location: $location, tags: $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), profile_name: (encode-path-segment $profile_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/NetworkExperimentProfiles/{profile_name}") $qp)
+  let req_body = {"etag": $etag, "properties": $properties, "location": $location, "tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Gets a list of Experiments
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/NetworkExperimentProfiles/{profileName}/Experiments
 # operationId: Experiments_ListByProfile
-export def "subscriptions-resource-groups-providers-microsoft-network-network-experiment-profiles-experiments ListByProfile" [
-  subscriptionId: string
-  resourceGroupName: string
-  profileName: string
+export def "subscriptions-resource-groups-providers-microsoft-network-network-experiment-profiles-experiments list" [
+  subscription_id: string
+  resource_group_name: string
+  profile_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -281,27 +298,28 @@ export def "subscriptions-resource-groups-providers-microsoft-network-network-ex
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version.
 ]: nothing -> record<nextLink: string, value: table<name: string, properties: record, id: string, location: string, tags: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/NetworkExperimentProfiles/($profileName)/Experiments" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), profile_name: (encode-path-segment $profile_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/NetworkExperimentProfiles/{profile_name}/Experiments") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Deletes an Experiment
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/NetworkExperimentProfiles/{profileName}/Experiments/{experimentName}
 # operationId: Experiments_Delete
-export def "subscriptions-resource-groups-providers-microsoft-network-network-experiment-profiles-experiments Delete" [
-  subscriptionId: string
-  resourceGroupName: string
-  profileName: string
-  experimentName: string
+export def "subscriptions-resource-groups-providers-microsoft-network-network-experiment-profiles-experiments delete" [
+  subscription_id: string
+  resource_group_name: string
+  profile_name: string
+  experiment_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -309,27 +327,28 @@ export def "subscriptions-resource-groups-providers-microsoft-network-network-ex
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version.
 ]: nothing -> record<code: string, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/NetworkExperimentProfiles/($profileName)/Experiments/($experimentName)" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), profile_name: (encode-path-segment $profile_name), experiment_name: (encode-path-segment $experiment_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/NetworkExperimentProfiles/{profile_name}/Experiments/{experiment_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Gets an Experiment by ExperimentName
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/NetworkExperimentProfiles/{profileName}/Experiments/{experimentName}
 # operationId: Experiments_Get
-export def "subscriptions-resource-groups-providers-microsoft-network-network-experiment-profiles-experiments Get" [
-  subscriptionId: string
-  resourceGroupName: string
-  profileName: string
-  experimentName: string
+export def "subscriptions-resource-groups-providers-microsoft-network-network-experiment-profiles-experiments get" [
+  subscription_id: string
+  resource_group_name: string
+  profile_name: string
+  experiment_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -337,16 +356,17 @@ export def "subscriptions-resource-groups-providers-microsoft-network-network-ex
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version.
 ]: nothing -> record<name: string, properties: record<description: string, enabledState: string, endpointA: record<endpoint: string, name: string>, endpointB: record<endpoint: string, name: string>, resourceState: string, scriptFileUri: string, status: string>, id: string, location: string, tags: record, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/NetworkExperimentProfiles/($profileName)/Experiments/($experimentName)" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), profile_name: (encode-path-segment $profile_name), experiment_name: (encode-path-segment $experiment_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/NetworkExperimentProfiles/{profile_name}/Experiments/{experiment_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Updates an Experiment by Experiment id
@@ -354,11 +374,11 @@ export def "subscriptions-resource-groups-providers-microsoft-network-network-ex
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/NetworkExperimentProfiles/{profileName}/Experiments/{experimentName}
 # operationId: Experiments_Update
 # --properties shape: {description?: string, enabledState?: "Enabled"|"Disabled"}
-export def "subscriptions-resource-groups-providers-microsoft-network-network-experiment-profiles-experiments Update" [
-  subscriptionId: string
-  resourceGroupName: string
-  profileName: string
-  experimentName: string
+export def "subscriptions-resource-groups-providers-microsoft-network-network-experiment-profiles-experiments update" [
+  subscription_id: string
+  resource_group_name: string
+  profile_name: string
+  experiment_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -366,6 +386,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-network-ex
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version.
   --properties: record # Defines the properties of an experiment — shape: {description?: string, enabledState?: "Enabled"|"Disabled"}
@@ -375,12 +396,12 @@ export def "subscriptions-resource-groups-providers-microsoft-network-network-ex
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/NetworkExperimentProfiles/($profileName)/Experiments/($experimentName)" $qp)
-  let body = {properties: $properties, tags: $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), profile_name: (encode-path-segment $profile_name), experiment_name: (encode-path-segment $experiment_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/NetworkExperimentProfiles/{profile_name}/Experiments/{experiment_name}") $qp)
+  let req_body = {"properties": $properties, "tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Creates or updates an Experiment
@@ -388,11 +409,11 @@ export def "subscriptions-resource-groups-providers-microsoft-network-network-ex
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/NetworkExperimentProfiles/{profileName}/Experiments/{experimentName}
 # operationId: Experiments_CreateOrUpdate
 # --properties shape: {description?: string, enabledState?: "Enabled"|"Disabled", endpointA?: record, endpointB?: record}
-export def "subscriptions-resource-groups-providers-microsoft-network-network-experiment-profiles-experiments CreateOrUpdate" [
-  subscriptionId: string
-  resourceGroupName: string
-  profileName: string
-  experimentName: string
+export def "subscriptions-resource-groups-providers-microsoft-network-network-experiment-profiles-experiments create-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  profile_name: string
+  experiment_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -400,6 +421,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-network-ex
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version.
   --properties: record # Defines the properties of an experiment — shape: {description?: string, enabledState?: "Enabled"|"Disabled", endpointA?: record, endpointB?: record}
@@ -410,23 +432,23 @@ export def "subscriptions-resource-groups-providers-microsoft-network-network-ex
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/NetworkExperimentProfiles/($profileName)/Experiments/($experimentName)" $qp)
-  let body = {properties: $properties, location: $location, tags: $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), profile_name: (encode-path-segment $profile_name), experiment_name: (encode-path-segment $experiment_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/NetworkExperimentProfiles/{profile_name}/Experiments/{experiment_name}") $qp)
+  let req_body = {"properties": $properties, "location": $location, "tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Gets a Latency Scorecard for a given Experiment
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/NetworkExperimentProfiles/{profileName}/Experiments/{experimentName}/LatencyScorecard
 # operationId: Reports_GetLatencyScorecards
-export def "subscriptions-resource-groups-providers-microsoft-network-network-experiment-profiles-experiments-latency-scorecard GetLatencyScorecards" [
-  subscriptionId: string
-  resourceGroupName: string
-  profileName: string
-  experimentName: string
+export def "subscriptions-resource-groups-providers-microsoft-network-network-experiment-profiles-experiments-latency-scorecard get-reports" [
+  subscription_id: string
+  resource_group_name: string
+  profile_name: string
+  experiment_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -434,30 +456,31 @@ export def "subscriptions-resource-groups-providers-microsoft-network-network-ex
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version.
-  --endDateTimeUTC: string # The end DateTime of the Latency Scorecard in UTC
+  --end-date-time-utc: string # The end DateTime of the Latency Scorecard in UTC
   --country: string # The country associated with the Latency Scorecard. Values are country ISO codes as specified here- https://www.iso.org/iso-3166-country-codes.html
-  --aggregationInterval: string@aggregationInterval-completer # The aggregation interval of the Latency Scorecard
+  --aggregation-interval: string@aggregation-interval-completer # The aggregation interval of the Latency Scorecard
 ]: nothing -> record<properties: record<country: string, description: string, endDateTimeUTC: string, endpointA: string, endpointB: string, id: string, latencyMetrics: list<record>, name: string, startDateTimeUTC: string>, id: string, location: string, name: string, tags: record, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "endDateTimeUTC" $endDateTimeUTC "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "aggregationInterval" $aggregationInterval "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/NetworkExperimentProfiles/($profileName)/Experiments/($experimentName)/LatencyScorecard" $qp)
+  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "endDateTimeUTC" $end_date_time_utc "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "aggregationInterval" $aggregation_interval "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), profile_name: (encode-path-segment $profile_name), experiment_name: (encode-path-segment $experiment_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/NetworkExperimentProfiles/{profile_name}/Experiments/{experiment_name}/LatencyScorecard") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Gets a Timeseries for a given Experiment
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/NetworkExperimentProfiles/{profileName}/Experiments/{experimentName}/Timeseries
 # operationId: Reports_GetTimeseries
-export def "subscriptions-resource-groups-providers-microsoft-network-network-experiment-profiles-experiments-timeseries GetTimeseries" [
-  subscriptionId: string
-  resourceGroupName: string
-  profileName: string
-  experimentName: string
+export def "subscriptions-resource-groups-providers-microsoft-network-network-experiment-profiles-experiments-timeseries get-reports" [
+  subscription_id: string
+  resource_group_name: string
+  profile_name: string
+  experiment_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -465,32 +488,33 @@ export def "subscriptions-resource-groups-providers-microsoft-network-network-ex
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version.
-  --startDateTimeUTC: string # The start DateTime of the Timeseries in UTC (format: date-time)
-  --endDateTimeUTC: string # The end DateTime of the Timeseries in UTC (format: date-time)
-  --aggregationInterval: string@aggregationInterval-completer-1 # The aggregation interval of the Timeseries
-  --timeseriesType: string@timeseriesType-completer # The type of Timeseries
+  --start-date-time-utc: string # The start DateTime of the Timeseries in UTC (format: date-time)
+  --end-date-time-utc: string # The end DateTime of the Timeseries in UTC (format: date-time)
+  --aggregation-interval: string@aggregation-interval-completer-1 # The aggregation interval of the Timeseries
+  --timeseries-type: string@timeseries-type-completer # The type of Timeseries
   --endpoint: string # The specific endpoint
   --country: string # The country associated with the Timeseries. Values are country ISO codes as specified here- https://www.iso.org/iso-3166-country-codes.html
 ]: nothing -> record<properties: record<aggregationInterval: string, country: string, endDateTimeUTC: string, endpoint: string, startDateTimeUTC: string, timeseriesData: list<record>, timeseriesType: string>, id: string, location: string, name: string, tags: record, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "startDateTimeUTC" $startDateTimeUTC "scalar") (serialize-qp "endDateTimeUTC" $endDateTimeUTC "scalar") (serialize-qp "aggregationInterval" $aggregationInterval "scalar") (serialize-qp "timeseriesType" $timeseriesType "scalar") (serialize-qp "endpoint" $endpoint "scalar") (serialize-qp "country" $country "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/NetworkExperimentProfiles/($profileName)/Experiments/($experimentName)/Timeseries" $qp)
+  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "startDateTimeUTC" $start_date_time_utc "scalar") (serialize-qp "endDateTimeUTC" $end_date_time_utc "scalar") (serialize-qp "aggregationInterval" $aggregation_interval "scalar") (serialize-qp "timeseriesType" $timeseries_type "scalar") (serialize-qp "endpoint" $endpoint "scalar") (serialize-qp "country" $country "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), profile_name: (encode-path-segment $profile_name), experiment_name: (encode-path-segment $experiment_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/NetworkExperimentProfiles/{profile_name}/Experiments/{experiment_name}/Timeseries") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Gets a list of Preconfigured Endpoints
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/NetworkExperimentProfiles/{profileName}/PreconfiguredEndpoints
 # operationId: PreconfiguredEndpoints_List
-export def "subscriptions-resource-groups-providers-microsoft-network-network-experiment-profiles-preconfigured-endpoints List" [
-  subscriptionId: string
-  resourceGroupName: string
-  profileName: string
+export def "subscriptions-resource-groups-providers-microsoft-network-network-experiment-profiles-preconfigured-endpoints list" [
+  subscription_id: string
+  resource_group_name: string
+  profile_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -498,14 +522,15 @@ export def "subscriptions-resource-groups-providers-microsoft-network-network-ex
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version.
 ]: nothing -> record<nextLink: string, value: table<name: string, properties: record, id: string, location: string, tags: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/NetworkExperimentProfiles/($profileName)/PreconfiguredEndpoints" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), profile_name: (encode-path-segment $profile_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/NetworkExperimentProfiles/{profile_name}/PreconfiguredEndpoints") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }

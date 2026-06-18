@@ -18,21 +18,32 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 }
 
 # Serialize a single query parameter based on collection style
+# Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
+# ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = ($name | url encode)
+  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
-  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
-    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
-    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
+    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
+    _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
+}
+
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Build URL from base, path, and optional query string
@@ -44,7 +55,7 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
@@ -53,29 +64,29 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
     "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "put" => { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "patch" => { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
   if ($method in ["head" "options"]) { return $resp }
-  if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
+  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
 def base-url-completer [] { ["http://medialive.us-east-1.amazonaws.com" "http://medialive.us-east-2.amazonaws.com" "http://medialive.us-west-1.amazonaws.com" "http://medialive.us-west-2.amazonaws.com" "http://medialive.us-gov-west-1.amazonaws.com" "http://medialive.us-gov-east-1.amazonaws.com" "http://medialive.ca-central-1.amazonaws.com" "http://medialive.eu-north-1.amazonaws.com" "http://medialive.eu-west-1.amazonaws.com" "http://medialive.eu-west-2.amazonaws.com" "http://medialive.eu-west-3.amazonaws.com" "http://medialive.eu-central-1.amazonaws.com" "http://medialive.eu-south-1.amazonaws.com" "http://medialive.af-south-1.amazonaws.com" "http://medialive.ap-northeast-1.amazonaws.com" "http://medialive.ap-northeast-2.amazonaws.com" "http://medialive.ap-northeast-3.amazonaws.com" "http://medialive.ap-southeast-1.amazonaws.com" "http://medialive.ap-southeast-2.amazonaws.com" "http://medialive.ap-east-1.amazonaws.com" "http://medialive.ap-south-1.amazonaws.com" "http://medialive.sa-east-1.amazonaws.com" "http://medialive.me-south-1.amazonaws.com" "https://medialive.us-east-1.amazonaws.com" "https://medialive.us-east-2.amazonaws.com" "https://medialive.us-west-1.amazonaws.com" "https://medialive.us-west-2.amazonaws.com" "https://medialive.us-gov-west-1.amazonaws.com" "https://medialive.us-gov-east-1.amazonaws.com" "https://medialive.ca-central-1.amazonaws.com" "https://medialive.eu-north-1.amazonaws.com" "https://medialive.eu-west-1.amazonaws.com" "https://medialive.eu-west-2.amazonaws.com" "https://medialive.eu-west-3.amazonaws.com" "https://medialive.eu-central-1.amazonaws.com" "https://medialive.eu-south-1.amazonaws.com" "https://medialive.af-south-1.amazonaws.com" "https://medialive.ap-northeast-1.amazonaws.com" "https://medialive.ap-northeast-2.amazonaws.com" "https://medialive.ap-northeast-3.amazonaws.com" "https://medialive.ap-southeast-1.amazonaws.com" "https://medialive.ap-southeast-2.amazonaws.com" "https://medialive.ap-east-1.amazonaws.com" "https://medialive.ap-south-1.amazonaws.com" "https://medialive.sa-east-1.amazonaws.com" "https://medialive.me-south-1.amazonaws.com" "http://medialive.cn-north-1.amazonaws.com.cn" "http://medialive.cn-northwest-1.amazonaws.com.cn" "https://medialive.cn-north-1.amazonaws.com.cn" "https://medialive.cn-northwest-1.amazonaws.com.cn"] }
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
-def channelClass-completer [] { ["SINGLE_PIPELINE" "STANDARD"] }
-def logLevel-completer [] { ["DEBUG" "DISABLED" "ERROR" "INFO" "WARNING"] }
+def channel-class-completer [] { ["SINGLE_PIPELINE" "STANDARD"] }
+def log-level-completer [] { ["DEBUG" "DISABLED" "ERROR" "INFO" "WARNING"] }
 def type-completer [] { ["AWS_CDI" "INPUT_DEVICE" "MEDIACONNECT" "MP4_FILE" "RTMP_PULL" "RTMP_PUSH" "RTP_PUSH" "TS_FILE" "UDP_PUSH" "URL_PULL"] }
 def accept-completer [] { ["image/jpeg"] }
 def force-completer [] { ["NO" "YES"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "prod-input-devices-accept AcceptInputDeviceTransfer" } } | get name | first)
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "prod-input-devices-accept create-transfer" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -99,8 +110,8 @@ export def commands []: nothing -> table {
 #
 # POST /prod/inputDevices/{inputDeviceId}/accept
 # operationId: AcceptInputDeviceTransfer
-export def "prod-input-devices-accept AcceptInputDeviceTransfer" [
-  inputDeviceId: string
+export def "prod-input-devices-accept create-transfer" [
+  input_device_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -108,30 +119,31 @@ export def "prod-input-devices-accept AcceptInputDeviceTransfer" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/prod/inputDevices/($inputDeviceId)/accept")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({input_device_id: (encode-path-segment $input_device_id)} | format pattern "/prod/inputDevices/{input_device_id}/accept"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Starts delete of resources.
 #
 # POST /prod/batch/delete
 # operationId: BatchDelete
-export def "prod-batch-delete BatchDelete" [
+export def "prod-batch-delete delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -139,37 +151,38 @@ export def "prod-batch-delete BatchDelete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --channelIds: list # Placeholder documentation for __listOf__string
-  --inputIds: list # Placeholder documentation for __listOf__string
-  --inputSecurityGroupIds: list # Placeholder documentation for __listOf__string
-  --multiplexIds: list # Placeholder documentation for __listOf__string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --channel-ids: list<string> # Placeholder documentation for __listOf__string
+  --input-ids: list<string> # Placeholder documentation for __listOf__string
+  --input-security-group-ids: list<string> # Placeholder documentation for __listOf__string
+  --multiplex-ids: list<string> # Placeholder documentation for __listOf__string
 ]: any -> record<Failed: record, Successful: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/prod/batch/delete")
-  let body = {channelIds: $channelIds, inputIds: $inputIds, inputSecurityGroupIds: $inputSecurityGroupIds, multiplexIds: $multiplexIds} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"channelIds": $channel_ids, "inputIds": $input_ids, "inputSecurityGroupIds": $input_security_group_ids, "multiplexIds": $multiplex_ids} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Starts existing resources
 #
 # POST /prod/batch/start
 # operationId: BatchStart
-export def "prod-batch-start BatchStart" [
+export def "prod-batch-start start" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -177,35 +190,36 @@ export def "prod-batch-start BatchStart" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --channelIds: list # Placeholder documentation for __listOf__string
-  --multiplexIds: list # Placeholder documentation for __listOf__string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --channel-ids: list<string> # Placeholder documentation for __listOf__string
+  --multiplex-ids: list<string> # Placeholder documentation for __listOf__string
 ]: any -> record<Failed: record, Successful: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/prod/batch/start")
-  let body = {channelIds: $channelIds, multiplexIds: $multiplexIds} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"channelIds": $channel_ids, "multiplexIds": $multiplex_ids} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Stops running resources
 #
 # POST /prod/batch/stop
 # operationId: BatchStop
-export def "prod-batch-stop BatchStop" [
+export def "prod-batch-stop stop" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -213,28 +227,29 @@ export def "prod-batch-stop BatchStop" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --channelIds: list # Placeholder documentation for __listOf__string
-  --multiplexIds: list # Placeholder documentation for __listOf__string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --channel-ids: list<string> # Placeholder documentation for __listOf__string
+  --multiplex-ids: list<string> # Placeholder documentation for __listOf__string
 ]: any -> record<Failed: record, Successful: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/prod/batch/stop")
-  let body = {channelIds: $channelIds, multiplexIds: $multiplexIds} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"channelIds": $channel_ids, "multiplexIds": $multiplex_ids} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Update a channel schedule
@@ -243,8 +258,8 @@ export def "prod-batch-stop BatchStop" [
 # operationId: BatchUpdateSchedule
 # --creates shape: {ScheduleActions?: any}
 # --deletes shape: {ActionNames?: any}
-export def "prod-channels-schedule BatchUpdateSchedule" [
-  channelId: string
+export def "prod-channels-schedule update-batch" [
+  channel_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -252,36 +267,37 @@ export def "prod-channels-schedule BatchUpdateSchedule" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
   --creates: record # A list of schedule actions to create (in a request) or that have been created (in a response). — shape: {ScheduleActions?: any}
   --deletes: record # A list of schedule actions to delete. — shape: {ActionNames?: any}
 ]: any -> record<Creates: record<ScheduleActions: record>, Deletes: record<ScheduleActions: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/prod/channels/($channelId)/schedule")
-  let body = {creates: $creates, deletes: $deletes} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({channel_id: (encode-path-segment $channel_id)} | format pattern "/prod/channels/{channel_id}/schedule"))
+  let req_body = {"creates": $creates, "deletes": $deletes} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Delete all schedule actions on a channel.
 #
 # DELETE /prod/channels/{channelId}/schedule
 # operationId: DeleteSchedule
-export def "prod-channels-schedule DeleteSchedule" [
-  channelId: string
+export def "prod-channels-schedule delete" [
+  channel_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -289,31 +305,32 @@ export def "prod-channels-schedule DeleteSchedule" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/prod/channels/($channelId)/schedule")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({channel_id: (encode-path-segment $channel_id)} | format pattern "/prod/channels/{channel_id}/schedule"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get a channel schedule
 #
 # GET /prod/channels/{channelId}/schedule
 # operationId: DescribeSchedule
-export def "prod-channels-schedule DescribeSchedule" [
-  channelId: string
+export def "prod-channels-schedule get" [
+  channel_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -321,36 +338,37 @@ export def "prod-channels-schedule DescribeSchedule" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --maxResults: int
-  --nextToken: string
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --max-results: int
+  --next-token: string
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<NextToken: record, ScheduleActions: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "nextToken" $nextToken "scalar") (serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/prod/channels/($channelId)/schedule" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({channel_id: (encode-path-segment $channel_id)} | format pattern "/prod/channels/{channel_id}/schedule") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Cancel an input device transfer that you have requested.
 #
 # POST /prod/inputDevices/{inputDeviceId}/cancel
 # operationId: CancelInputDeviceTransfer
-export def "prod-input-devices-cancel CancelInputDeviceTransfer" [
-  inputDeviceId: string
+export def "prod-input-devices-cancel cancel-transfer" [
+  input_device_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -358,30 +376,31 @@ export def "prod-input-devices-cancel CancelInputDeviceTransfer" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/prod/inputDevices/($inputDeviceId)/cancel")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({input_device_id: (encode-path-segment $input_device_id)} | format pattern "/prod/inputDevices/{input_device_id}/cancel"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Send a request to claim an AWS Elemental device that you have purchased from a third-party vendor. After the request succeeds, you will own the device.
 #
 # POST /prod/claimDevice
 # operationId: ClaimDevice
-export def "prod-claim-device ClaimDevice" [
+export def "prod-claim-device create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -389,27 +408,28 @@ export def "prod-claim-device ClaimDevice" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
   --id: string # Placeholder documentation for __string
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/prod/claimDevice")
-  let body = {id: $id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"id": $id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Creates a new channel
@@ -423,7 +443,7 @@ export def "prod-claim-device ClaimDevice" [
 # --inputSpecification shape: {Codec?: any, MaximumBitrate?: any, Resolution?: any}
 # --maintenance shape: {MaintenanceDay?: any, MaintenanceStartTime?: any}
 # --vpc shape: {PublicAddressAllocationIds?: any, SecurityGroupIds?: any, SubnetIds?: any}
-export def "prod-channels CreateChannel" [
+export def "prod-channels create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -431,26 +451,27 @@ export def "prod-channels CreateChannel" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --cdiInputSpecification: record # Placeholder documentation for CdiInputSpecification — shape: {Resolution?: any}
-  --channelClass: string@channelClass-completer # A standard channel has two encoding pipelines and a single pipeline channel only has one.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --cdi-input-specification: record # Placeholder documentation for CdiInputSpecification — shape: {Resolution?: any}
+  --channel-class: string@channel-class-completer # A standard channel has two encoding pipelines and a single pipeline channel only has one.
   --destinations: list # Placeholder documentation for __listOfOutputDestination — item shape: {Id?: any, MediaPackageSettings?: any, MultiplexSettings?: any, Settings?: any}
-  --encoderSettings: record # Encoder Settings — shape: {AudioDescriptions?: any, AvailBlanking?: any, AvailConfiguration?: any, BlackoutSlate?: any, CaptionDescriptions?: any, FeatureActivations?: any, GlobalConfiguration?: any, MotionGraphicsConfiguration?: any, NielsenConfiguration?: any, OutputGroups?: any, TimecodeConfig?: any, VideoDescriptions?: any}
-  --inputAttachments: list # Placeholder documentation for __listOfInputAttachment — item shape: {AutomaticInputFailoverSettings?: any, InputAttachmentName?: any, InputId?: any, InputSettings?: any}
-  --inputSpecification: record # Placeholder documentation for InputSpecification — shape: {Codec?: any, MaximumBitrate?: any, Resolution?: any}
-  --logLevel: string@logLevel-completer # The log level the user wants for their channel.
+  --encoder-settings: record # Encoder Settings — shape: {AudioDescriptions?: any, AvailBlanking?: any, AvailConfiguration?: any, BlackoutSlate?: any, CaptionDescriptions?: any, FeatureActivations?: any, GlobalConfiguration?: any, MotionGraphicsConfiguration?: any, NielsenConfiguration?: any, OutputGroups?: any, TimecodeConfig?: any, VideoDescriptions?: any}
+  --input-attachments: list # Placeholder documentation for __listOfInputAttachment — item shape: {AutomaticInputFailoverSettings?: any, InputAttachmentName?: any, InputId?: any, InputSettings?: any}
+  --input-specification: record # Placeholder documentation for InputSpecification — shape: {Codec?: any, MaximumBitrate?: any, Resolution?: any}
+  --log-level: string@log-level-completer # The log level the user wants for their channel.
   --maintenance: record # Placeholder documentation for MaintenanceCreateSettings — shape: {MaintenanceDay?: any, MaintenanceStartTime?: any}
   --name: string # Placeholder documentation for __string
-  --requestId: string # Placeholder documentation for __string
+  --request-id: string # Placeholder documentation for __string
   --reserved: string # Placeholder documentation for __string
-  --roleArn: string # Placeholder documentation for __string
+  --role-arn: string # Placeholder documentation for __string
   --tags: record # Placeholder documentation for Tags
   --vpc: record # The properties for a private VPC Output When this property is specified, the output egress addresses will be created in a user specified VPC — shape: {PublicAddressAllocationIds?: any, SecurityGroupIds?: any, SubnetIds?: any}
 ]: any -> record<Channel: record<Arn: record, CdiInputSpecification: record<Resolution: record>, ChannelClass: record, Destinations: record, EgressEndpoints: record, EncoderSettings: record<AudioDescriptions: record, AvailBlanking: record, AvailConfiguration: record, BlackoutSlate: record, CaptionDescriptions: record, FeatureActivations: record, GlobalConfiguration: record, MotionGraphicsConfiguration: record, NielsenConfiguration: record, OutputGroups: record, TimecodeConfig: record, VideoDescriptions: record>, Id: record, InputAttachments: record, InputSpecification: record<Codec: record, MaximumBitrate: record, Resolution: record>, LogLevel: record, Maintenance: record<MaintenanceDay: record, MaintenanceDeadline: record, MaintenanceScheduledDate: record, MaintenanceStartTime: record>, Name: record, PipelineDetails: record, PipelinesRunningCount: record, RoleArn: record, State: record, Tags: record, Vpc: record<AvailabilityZones: record, NetworkInterfaceIds: record, SecurityGroupIds: record, SubnetIds: record>>> {
@@ -458,20 +479,20 @@ export def "prod-channels CreateChannel" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/prod/channels")
-  let body = {cdiInputSpecification: $cdiInputSpecification, channelClass: $channelClass, destinations: $destinations, encoderSettings: $encoderSettings, inputAttachments: $inputAttachments, inputSpecification: $inputSpecification, logLevel: $logLevel, maintenance: $maintenance, name: $name, requestId: $requestId, reserved: $reserved, roleArn: $roleArn, tags: $tags, vpc: $vpc} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"cdiInputSpecification": $cdi_input_specification, "channelClass": $channel_class, "destinations": $destinations, "encoderSettings": $encoder_settings, "inputAttachments": $input_attachments, "inputSpecification": $input_specification, "logLevel": $log_level, "maintenance": $maintenance, "name": $name, "requestId": $request_id, "reserved": $reserved, "roleArn": $role_arn, "tags": $tags, "vpc": $vpc} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Produces list of channels that have been created
 #
 # GET /prod/channels
 # operationId: ListChannels
-export def "prod-channels ListChannels" [
+export def "prod-channels list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -479,28 +500,29 @@ export def "prod-channels ListChannels" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --maxResults: int
-  --nextToken: string
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --max-results: int
+  --next-token: string
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<Channels: record, NextToken: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "nextToken" $nextToken "scalar") (serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/prod/channels" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Create an input
@@ -512,7 +534,7 @@ export def "prod-channels ListChannels" [
 # --mediaConnectFlows item shape: {FlowArn?: any}
 # --sources item shape: {PasswordParam?: any, Url?: any, Username?: any}
 # --vpc shape: {SecurityGroupIds?: any, SubnetIds?: any}
-export def "prod-inputs CreateInput" [
+export def "prod-inputs create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -520,21 +542,22 @@ export def "prod-inputs CreateInput" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
   --destinations: list # Placeholder documentation for __listOfInputDestinationRequest — item shape: {StreamName?: any}
-  --inputDevices: list # Placeholder documentation for __listOfInputDeviceSettings — item shape: {Id?: any}
-  --inputSecurityGroups: list # Placeholder documentation for __listOf__string
-  --mediaConnectFlows: list # Placeholder documentation for __listOfMediaConnectFlowRequest — item shape: {FlowArn?: any}
+  --input-devices: list # Placeholder documentation for __listOfInputDeviceSettings — item shape: {Id?: any}
+  --input-security-groups: list<string> # Placeholder documentation for __listOf__string
+  --media-connect-flows: list # Placeholder documentation for __listOfMediaConnectFlowRequest — item shape: {FlowArn?: any}
   --name: string # Placeholder documentation for __string
-  --requestId: string # Placeholder documentation for __string
-  --roleArn: string # Placeholder documentation for __string
+  --request-id: string # Placeholder documentation for __string
+  --role-arn: string # Placeholder documentation for __string
   --sources: list # Placeholder documentation for __listOfInputSourceRequest — item shape: {PasswordParam?: any, Url?: any, Username?: any}
   --tags: record # Placeholder documentation for Tags
   --type: string@type-completer # The different types of inputs that AWS Elemental MediaLive supports.
@@ -544,20 +567,20 @@ export def "prod-inputs CreateInput" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/prod/inputs")
-  let body = {destinations: $destinations, inputDevices: $inputDevices, inputSecurityGroups: $inputSecurityGroups, mediaConnectFlows: $mediaConnectFlows, name: $name, requestId: $requestId, roleArn: $roleArn, sources: $sources, tags: $tags, type: $type, vpc: $vpc} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"destinations": $destinations, "inputDevices": $input_devices, "inputSecurityGroups": $input_security_groups, "mediaConnectFlows": $media_connect_flows, "name": $name, "requestId": $request_id, "roleArn": $role_arn, "sources": $sources, "tags": $tags, "type": $type, "vpc": $vpc} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Produces list of inputs that have been created
 #
 # GET /prod/inputs
 # operationId: ListInputs
-export def "prod-inputs ListInputs" [
+export def "prod-inputs list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -565,28 +588,29 @@ export def "prod-inputs ListInputs" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --maxResults: int
-  --nextToken: string
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --max-results: int
+  --next-token: string
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<Inputs: record, NextToken: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "nextToken" $nextToken "scalar") (serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/prod/inputs" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Creates a Input Security Group
@@ -594,7 +618,7 @@ export def "prod-inputs ListInputs" [
 # POST /prod/inputSecurityGroups
 # operationId: CreateInputSecurityGroup
 # --whitelistRules item shape: {Cidr?: any}
-export def "prod-input-security-groups CreateInputSecurityGroup" [
+export def "prod-input-security-groups create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -602,35 +626,36 @@ export def "prod-input-security-groups CreateInputSecurityGroup" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
   --tags: record # Placeholder documentation for Tags
-  --whitelistRules: list # Placeholder documentation for __listOfInputWhitelistRuleCidr — item shape: {Cidr?: any}
+  --whitelist-rules: list # Placeholder documentation for __listOfInputWhitelistRuleCidr — item shape: {Cidr?: any}
 ]: any -> record<SecurityGroup: record<Arn: record, Id: record, Inputs: record, State: record, Tags: record, WhitelistRules: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/prod/inputSecurityGroups")
-  let body = {tags: $tags, whitelistRules: $whitelistRules} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"tags": $tags, "whitelistRules": $whitelist_rules} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Produces a list of Input Security Groups for an account
 #
 # GET /prod/inputSecurityGroups
 # operationId: ListInputSecurityGroups
-export def "prod-input-security-groups ListInputSecurityGroups" [
+export def "prod-input-security-groups list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -638,28 +663,29 @@ export def "prod-input-security-groups ListInputSecurityGroups" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --maxResults: int
-  --nextToken: string
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --max-results: int
+  --next-token: string
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<InputSecurityGroups: record, NextToken: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "nextToken" $nextToken "scalar") (serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/prod/inputSecurityGroups" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Create a new multiplex.
@@ -667,7 +693,7 @@ export def "prod-input-security-groups ListInputSecurityGroups" [
 # POST /prod/multiplexes
 # operationId: CreateMultiplex
 # --multiplexSettings shape: {MaximumVideoBufferDelayMilliseconds?: any, TransportStreamBitrate?: any, TransportStreamId?: any, TransportStreamReservedBitrate?: any}
-export def "prod-multiplexes CreateMultiplex" [
+export def "prod-multiplexes create-multiplex" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -675,38 +701,39 @@ export def "prod-multiplexes CreateMultiplex" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  availabilityZones: list # Placeholder documentation for __listOf__string
-  multiplexSettings: record # Contains configuration for a Multiplex event — shape: {MaximumVideoBufferDelayMilliseconds?: any, TransportStreamBitrate?: any, TransportStreamId?: any, TransportStreamReservedBitrate?: any}
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  availability_zones: list<string> # Placeholder documentation for __listOf__string
+  multiplex_settings: record # Contains configuration for a Multiplex event — shape: {MaximumVideoBufferDelayMilliseconds?: any, TransportStreamBitrate?: any, TransportStreamId?: any, TransportStreamReservedBitrate?: any}
   name: string # Placeholder documentation for __string
-  requestId: string # Placeholder documentation for __string
+  request_id: string # Placeholder documentation for __string
   --tags: record # Placeholder documentation for Tags
 ]: any -> record<Multiplex: record<Arn: record, AvailabilityZones: record, Destinations: record, Id: record, MultiplexSettings: record<MaximumVideoBufferDelayMilliseconds: record, TransportStreamBitrate: record, TransportStreamId: record, TransportStreamReservedBitrate: record>, Name: record, PipelinesRunningCount: record, ProgramCount: record, State: record, Tags: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/prod/multiplexes")
-  let body = {availabilityZones: $availabilityZones, multiplexSettings: $multiplexSettings, name: $name, requestId: $requestId, tags: $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"availabilityZones": $availability_zones, "multiplexSettings": $multiplex_settings, "name": $name, "requestId": $request_id, "tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Retrieve a list of the existing multiplexes.
 #
 # GET /prod/multiplexes
 # operationId: ListMultiplexes
-export def "prod-multiplexes ListMultiplexes" [
+export def "prod-multiplexes list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -714,28 +741,29 @@ export def "prod-multiplexes ListMultiplexes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --maxResults: int # The maximum number of items to return.
-  --nextToken: string # The token to retrieve the next page of results.
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --max-results: int # The maximum number of items to return.
+  --next-token: string # The token to retrieve the next page of results.
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<Multiplexes: record, NextToken: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "nextToken" $nextToken "scalar") (serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/prod/multiplexes" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Create a new program in the multiplex.
@@ -743,8 +771,8 @@ export def "prod-multiplexes ListMultiplexes" [
 # POST /prod/multiplexes/{multiplexId}/programs
 # operationId: CreateMultiplexProgram
 # --multiplexProgramSettings shape: {PreferredChannelPipeline?: any, ProgramNumber?: any, ServiceDescriptor?: any, VideoSettings?: any}
-export def "prod-multiplexes-programs CreateMultiplexProgram" [
-  multiplexId: string
+export def "prod-multiplexes-programs create-multiplex" [
+  multiplex_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -752,37 +780,38 @@ export def "prod-multiplexes-programs CreateMultiplexProgram" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  multiplexProgramSettings: record # Multiplex Program settings configuration. — shape: {PreferredChannelPipeline?: any, ProgramNumber?: any, ServiceDescriptor?: any, VideoSettings?: any}
-  programName: string # Placeholder documentation for __string
-  requestId: string # Placeholder documentation for __string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  multiplex_program_settings: record # Multiplex Program settings configuration. — shape: {PreferredChannelPipeline?: any, ProgramNumber?: any, ServiceDescriptor?: any, VideoSettings?: any}
+  program_name: string # Placeholder documentation for __string
+  request_id: string # Placeholder documentation for __string
 ]: any -> record<MultiplexProgram: record<ChannelId: record, MultiplexProgramSettings: record<PreferredChannelPipeline: record, ProgramNumber: record, ServiceDescriptor: record, VideoSettings: record>, PacketIdentifiersMap: record<AudioPids: record, DvbSubPids: record, DvbTeletextPid: record, EtvPlatformPid: record, EtvSignalPid: record, KlvDataPids: record, PcrPid: record, PmtPid: record, PrivateMetadataPid: record, Scte27Pids: record, Scte35Pid: record, TimedMetadataPid: record, VideoPid: record>, PipelineDetails: record, ProgramName: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/prod/multiplexes/($multiplexId)/programs")
-  let body = {multiplexProgramSettings: $multiplexProgramSettings, programName: $programName, requestId: $requestId} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({multiplex_id: (encode-path-segment $multiplex_id)} | format pattern "/prod/multiplexes/{multiplex_id}/programs"))
+  let req_body = {"multiplexProgramSettings": $multiplex_program_settings, "programName": $program_name, "requestId": $request_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # List the programs that currently exist for a specific multiplex.
 #
 # GET /prod/multiplexes/{multiplexId}/programs
 # operationId: ListMultiplexPrograms
-export def "prod-multiplexes-programs ListMultiplexPrograms" [
-  multiplexId: string
+export def "prod-multiplexes-programs list-multiplex" [
+  multiplex_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -790,36 +819,37 @@ export def "prod-multiplexes-programs ListMultiplexPrograms" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --maxResults: int # The maximum number of items to return.
-  --nextToken: string # The token to retrieve the next page of results.
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --max-results: int # The maximum number of items to return.
+  --next-token: string # The token to retrieve the next page of results.
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<MultiplexPrograms: record, NextToken: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "nextToken" $nextToken "scalar") (serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/prod/multiplexes/($multiplexId)/programs" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({multiplex_id: (encode-path-segment $multiplex_id)} | format pattern "/prod/multiplexes/{multiplex_id}/programs") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Create a partner input
 #
 # POST /prod/inputs/{inputId}/partners
 # operationId: CreatePartnerInput
-export def "prod-inputs-partners CreatePartnerInput" [
-  inputId: string
+export def "prod-inputs-partners create" [
+  input_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -827,35 +857,36 @@ export def "prod-inputs-partners CreatePartnerInput" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --requestId: string # Placeholder documentation for __string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --request-id: string # Placeholder documentation for __string
   --tags: record # Placeholder documentation for Tags
 ]: any -> record<Input: record<Arn: record, AttachedChannels: record, Destinations: record, Id: record, InputClass: record, InputDevices: record, InputPartnerIds: record, InputSourceType: record, MediaConnectFlows: record, Name: record, RoleArn: record, SecurityGroups: record, Sources: record, State: record, Tags: record, Type: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/prod/inputs/($inputId)/partners")
-  let body = {requestId: $requestId, tags: $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({input_id: (encode-path-segment $input_id)} | format pattern "/prod/inputs/{input_id}/partners"))
+  let req_body = {"requestId": $request_id, "tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Create tags for a resource
 #
 # POST /prod/tags/{resource-arn}
 # operationId: CreateTags
-export def "prod-tags CreateTags" [
+export def "prod-tags create" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -864,34 +895,35 @@ export def "prod-tags CreateTags" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
   --tags: record # Placeholder documentation for Tags
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/prod/tags/($resource_arn)")
-  let body = {tags: $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({resource_arn: (encode-path-segment $resource_arn)} | format pattern "/prod/tags/{resource_arn}"))
+  let req_body = {"tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Produces list of tags that have been created for a resource
 #
 # GET /prod/tags/{resource-arn}
 # operationId: ListTagsForResource
-export def "prod-tags ListTagsForResource" [
+export def "prod-tags list" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -900,31 +932,32 @@ export def "prod-tags ListTagsForResource" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<Tags: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/prod/tags/($resource_arn)")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({resource_arn: (encode-path-segment $resource_arn)} | format pattern "/prod/tags/{resource_arn}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Starts deletion of channel. The associated outputs are also deleted.
 #
 # DELETE /prod/channels/{channelId}
 # operationId: DeleteChannel
-export def "prod-channels DeleteChannel" [
-  channelId: string
+export def "prod-channels delete" [
+  channel_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -932,31 +965,32 @@ export def "prod-channels DeleteChannel" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<Arn: record, CdiInputSpecification: record<Resolution: record>, ChannelClass: record, Destinations: record, EgressEndpoints: record, EncoderSettings: record<AudioDescriptions: record, AvailBlanking: record<AvailBlankingImage: record, State: record>, AvailConfiguration: record<AvailSettings: record>, BlackoutSlate: record<BlackoutSlateImage: record, NetworkEndBlackout: record, NetworkEndBlackoutImage: record, NetworkId: record, State: record>, CaptionDescriptions: record, FeatureActivations: record<InputPrepareScheduleActions: record>, GlobalConfiguration: record<InitialAudioGain: record, InputEndAction: record, InputLossBehavior: record, OutputLockingMode: record, OutputTimingSource: record, SupportLowFramerateInputs: record>, MotionGraphicsConfiguration: record<MotionGraphicsInsertion: record, MotionGraphicsSettings: record>, NielsenConfiguration: record<DistributorId: record, NielsenPcmToId3Tagging: record>, OutputGroups: record, TimecodeConfig: record<Source: record, SyncThreshold: record>, VideoDescriptions: record>, Id: record, InputAttachments: record, InputSpecification: record<Codec: record, MaximumBitrate: record, Resolution: record>, LogLevel: record, Maintenance: record<MaintenanceDay: record, MaintenanceDeadline: record, MaintenanceScheduledDate: record, MaintenanceStartTime: record>, Name: record, PipelineDetails: record, PipelinesRunningCount: record, RoleArn: record, State: record, Tags: record, Vpc: record<AvailabilityZones: record, NetworkInterfaceIds: record, SecurityGroupIds: record, SubnetIds: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/prod/channels/($channelId)")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({channel_id: (encode-path-segment $channel_id)} | format pattern "/prod/channels/{channel_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Gets details about a channel
 #
 # GET /prod/channels/{channelId}
 # operationId: DescribeChannel
-export def "prod-channels DescribeChannel" [
-  channelId: string
+export def "prod-channels get" [
+  channel_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -964,23 +998,24 @@ export def "prod-channels DescribeChannel" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<Arn: record, CdiInputSpecification: record<Resolution: record>, ChannelClass: record, Destinations: record, EgressEndpoints: record, EncoderSettings: record<AudioDescriptions: record, AvailBlanking: record<AvailBlankingImage: record, State: record>, AvailConfiguration: record<AvailSettings: record>, BlackoutSlate: record<BlackoutSlateImage: record, NetworkEndBlackout: record, NetworkEndBlackoutImage: record, NetworkId: record, State: record>, CaptionDescriptions: record, FeatureActivations: record<InputPrepareScheduleActions: record>, GlobalConfiguration: record<InitialAudioGain: record, InputEndAction: record, InputLossBehavior: record, OutputLockingMode: record, OutputTimingSource: record, SupportLowFramerateInputs: record>, MotionGraphicsConfiguration: record<MotionGraphicsInsertion: record, MotionGraphicsSettings: record>, NielsenConfiguration: record<DistributorId: record, NielsenPcmToId3Tagging: record>, OutputGroups: record, TimecodeConfig: record<Source: record, SyncThreshold: record>, VideoDescriptions: record>, Id: record, InputAttachments: record, InputSpecification: record<Codec: record, MaximumBitrate: record, Resolution: record>, LogLevel: record, Maintenance: record<MaintenanceDay: record, MaintenanceDeadline: record, MaintenanceScheduledDate: record, MaintenanceStartTime: record>, Name: record, PipelineDetails: record, PipelinesRunningCount: record, RoleArn: record, State: record, Tags: record, Vpc: record<AvailabilityZones: record, NetworkInterfaceIds: record, SecurityGroupIds: record, SubnetIds: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/prod/channels/($channelId)")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({channel_id: (encode-path-segment $channel_id)} | format pattern "/prod/channels/{channel_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Updates a channel.
@@ -993,8 +1028,8 @@ export def "prod-channels DescribeChannel" [
 # --inputAttachments item shape: {AutomaticInputFailoverSettings?: any, InputAttachmentName?: any, InputId?: any, InputSettings?: any}
 # --inputSpecification shape: {Codec?: any, MaximumBitrate?: any, Resolution?: any}
 # --maintenance shape: {MaintenanceDay?: any, MaintenanceScheduledDate?: any, MaintenanceStartTime?: any}
-export def "prod-channels UpdateChannel" [
-  channelId: string
+export def "prod-channels update" [
+  channel_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1002,43 +1037,44 @@ export def "prod-channels UpdateChannel" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --cdiInputSpecification: record # Placeholder documentation for CdiInputSpecification — shape: {Resolution?: any}
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --cdi-input-specification: record # Placeholder documentation for CdiInputSpecification — shape: {Resolution?: any}
   --destinations: list # Placeholder documentation for __listOfOutputDestination — item shape: {Id?: any, MediaPackageSettings?: any, MultiplexSettings?: any, Settings?: any}
-  --encoderSettings: record # Encoder Settings — shape: {AudioDescriptions?: any, AvailBlanking?: any, AvailConfiguration?: any, BlackoutSlate?: any, CaptionDescriptions?: any, FeatureActivations?: any, GlobalConfiguration?: any, MotionGraphicsConfiguration?: any, NielsenConfiguration?: any, OutputGroups?: any, TimecodeConfig?: any, VideoDescriptions?: any}
-  --inputAttachments: list # Placeholder documentation for __listOfInputAttachment — item shape: {AutomaticInputFailoverSettings?: any, InputAttachmentName?: any, InputId?: any, InputSettings?: any}
-  --inputSpecification: record # Placeholder documentation for InputSpecification — shape: {Codec?: any, MaximumBitrate?: any, Resolution?: any}
-  --logLevel: string@logLevel-completer # The log level the user wants for their channel.
+  --encoder-settings: record # Encoder Settings — shape: {AudioDescriptions?: any, AvailBlanking?: any, AvailConfiguration?: any, BlackoutSlate?: any, CaptionDescriptions?: any, FeatureActivations?: any, GlobalConfiguration?: any, MotionGraphicsConfiguration?: any, NielsenConfiguration?: any, OutputGroups?: any, TimecodeConfig?: any, VideoDescriptions?: any}
+  --input-attachments: list # Placeholder documentation for __listOfInputAttachment — item shape: {AutomaticInputFailoverSettings?: any, InputAttachmentName?: any, InputId?: any, InputSettings?: any}
+  --input-specification: record # Placeholder documentation for InputSpecification — shape: {Codec?: any, MaximumBitrate?: any, Resolution?: any}
+  --log-level: string@log-level-completer # The log level the user wants for their channel.
   --maintenance: record # Placeholder documentation for MaintenanceUpdateSettings — shape: {MaintenanceDay?: any, MaintenanceScheduledDate?: any, MaintenanceStartTime?: any}
   --name: string # Placeholder documentation for __string
-  --roleArn: string # Placeholder documentation for __string
+  --role-arn: string # Placeholder documentation for __string
 ]: any -> record<Channel: record<Arn: record, CdiInputSpecification: record<Resolution: record>, ChannelClass: record, Destinations: record, EgressEndpoints: record, EncoderSettings: record<AudioDescriptions: record, AvailBlanking: record, AvailConfiguration: record, BlackoutSlate: record, CaptionDescriptions: record, FeatureActivations: record, GlobalConfiguration: record, MotionGraphicsConfiguration: record, NielsenConfiguration: record, OutputGroups: record, TimecodeConfig: record, VideoDescriptions: record>, Id: record, InputAttachments: record, InputSpecification: record<Codec: record, MaximumBitrate: record, Resolution: record>, LogLevel: record, Maintenance: record<MaintenanceDay: record, MaintenanceDeadline: record, MaintenanceScheduledDate: record, MaintenanceStartTime: record>, Name: record, PipelineDetails: record, PipelinesRunningCount: record, RoleArn: record, State: record, Tags: record, Vpc: record<AvailabilityZones: record, NetworkInterfaceIds: record, SecurityGroupIds: record, SubnetIds: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/prod/channels/($channelId)")
-  let body = {cdiInputSpecification: $cdiInputSpecification, destinations: $destinations, encoderSettings: $encoderSettings, inputAttachments: $inputAttachments, inputSpecification: $inputSpecification, logLevel: $logLevel, maintenance: $maintenance, name: $name, roleArn: $roleArn} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({channel_id: (encode-path-segment $channel_id)} | format pattern "/prod/channels/{channel_id}"))
+  let req_body = {"cdiInputSpecification": $cdi_input_specification, "destinations": $destinations, "encoderSettings": $encoder_settings, "inputAttachments": $input_attachments, "inputSpecification": $input_specification, "logLevel": $log_level, "maintenance": $maintenance, "name": $name, "roleArn": $role_arn} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Deletes the input end point
 #
 # DELETE /prod/inputs/{inputId}
 # operationId: DeleteInput
-export def "prod-inputs DeleteInput" [
-  inputId: string
+export def "prod-inputs delete" [
+  input_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1046,31 +1082,32 @@ export def "prod-inputs DeleteInput" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/prod/inputs/($inputId)")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({input_id: (encode-path-segment $input_id)} | format pattern "/prod/inputs/{input_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Produces details about an input
 #
 # GET /prod/inputs/{inputId}
 # operationId: DescribeInput
-export def "prod-inputs DescribeInput" [
-  inputId: string
+export def "prod-inputs get" [
+  input_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1078,23 +1115,24 @@ export def "prod-inputs DescribeInput" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<Arn: record, AttachedChannels: record, Destinations: record, Id: record, InputClass: record, InputDevices: record, InputPartnerIds: record, InputSourceType: record, MediaConnectFlows: record, Name: record, RoleArn: record, SecurityGroups: record, Sources: record, State: record, Tags: record, Type: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/prod/inputs/($inputId)")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({input_id: (encode-path-segment $input_id)} | format pattern "/prod/inputs/{input_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Updates an input.
@@ -1105,8 +1143,8 @@ export def "prod-inputs DescribeInput" [
 # --inputDevices item shape: {Id?: any}
 # --mediaConnectFlows item shape: {FlowArn?: any}
 # --sources item shape: {PasswordParam?: any, Url?: any, Username?: any}
-export def "prod-inputs UpdateInput" [
-  inputId: string
+export def "prod-inputs update" [
+  input_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1114,41 +1152,42 @@ export def "prod-inputs UpdateInput" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
   --destinations: list # Placeholder documentation for __listOfInputDestinationRequest — item shape: {StreamName?: any}
-  --inputDevices: list # Placeholder documentation for __listOfInputDeviceRequest — item shape: {Id?: any}
-  --inputSecurityGroups: list # Placeholder documentation for __listOf__string
-  --mediaConnectFlows: list # Placeholder documentation for __listOfMediaConnectFlowRequest — item shape: {FlowArn?: any}
+  --input-devices: list # Placeholder documentation for __listOfInputDeviceRequest — item shape: {Id?: any}
+  --input-security-groups: list<string> # Placeholder documentation for __listOf__string
+  --media-connect-flows: list # Placeholder documentation for __listOfMediaConnectFlowRequest — item shape: {FlowArn?: any}
   --name: string # Placeholder documentation for __string
-  --roleArn: string # Placeholder documentation for __string
+  --role-arn: string # Placeholder documentation for __string
   --sources: list # Placeholder documentation for __listOfInputSourceRequest — item shape: {PasswordParam?: any, Url?: any, Username?: any}
 ]: any -> record<Input: record<Arn: record, AttachedChannels: record, Destinations: record, Id: record, InputClass: record, InputDevices: record, InputPartnerIds: record, InputSourceType: record, MediaConnectFlows: record, Name: record, RoleArn: record, SecurityGroups: record, Sources: record, State: record, Tags: record, Type: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/prod/inputs/($inputId)")
-  let body = {destinations: $destinations, inputDevices: $inputDevices, inputSecurityGroups: $inputSecurityGroups, mediaConnectFlows: $mediaConnectFlows, name: $name, roleArn: $roleArn, sources: $sources} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({input_id: (encode-path-segment $input_id)} | format pattern "/prod/inputs/{input_id}"))
+  let req_body = {"destinations": $destinations, "inputDevices": $input_devices, "inputSecurityGroups": $input_security_groups, "mediaConnectFlows": $media_connect_flows, "name": $name, "roleArn": $role_arn, "sources": $sources} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Deletes an Input Security Group
 #
 # DELETE /prod/inputSecurityGroups/{inputSecurityGroupId}
 # operationId: DeleteInputSecurityGroup
-export def "prod-input-security-groups DeleteInputSecurityGroup" [
-  inputSecurityGroupId: string
+export def "prod-input-security-groups delete" [
+  input_security_group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1156,31 +1195,32 @@ export def "prod-input-security-groups DeleteInputSecurityGroup" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/prod/inputSecurityGroups/($inputSecurityGroupId)")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({input_security_group_id: (encode-path-segment $input_security_group_id)} | format pattern "/prod/inputSecurityGroups/{input_security_group_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Produces a summary of an Input Security Group
 #
 # GET /prod/inputSecurityGroups/{inputSecurityGroupId}
 # operationId: DescribeInputSecurityGroup
-export def "prod-input-security-groups DescribeInputSecurityGroup" [
-  inputSecurityGroupId: string
+export def "prod-input-security-groups get" [
+  input_security_group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1188,23 +1228,24 @@ export def "prod-input-security-groups DescribeInputSecurityGroup" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<Arn: record, Id: record, Inputs: record, State: record, Tags: record, WhitelistRules: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/prod/inputSecurityGroups/($inputSecurityGroupId)")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({input_security_group_id: (encode-path-segment $input_security_group_id)} | format pattern "/prod/inputSecurityGroups/{input_security_group_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Update an Input Security Group's Whilelists.
@@ -1212,8 +1253,8 @@ export def "prod-input-security-groups DescribeInputSecurityGroup" [
 # PUT /prod/inputSecurityGroups/{inputSecurityGroupId}
 # operationId: UpdateInputSecurityGroup
 # --whitelistRules item shape: {Cidr?: any}
-export def "prod-input-security-groups UpdateInputSecurityGroup" [
-  inputSecurityGroupId: string
+export def "prod-input-security-groups update" [
+  input_security_group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1221,36 +1262,37 @@ export def "prod-input-security-groups UpdateInputSecurityGroup" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
   --tags: record # Placeholder documentation for Tags
-  --whitelistRules: list # Placeholder documentation for __listOfInputWhitelistRuleCidr — item shape: {Cidr?: any}
+  --whitelist-rules: list # Placeholder documentation for __listOfInputWhitelistRuleCidr — item shape: {Cidr?: any}
 ]: any -> record<SecurityGroup: record<Arn: record, Id: record, Inputs: record, State: record, Tags: record, WhitelistRules: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/prod/inputSecurityGroups/($inputSecurityGroupId)")
-  let body = {tags: $tags, whitelistRules: $whitelistRules} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({input_security_group_id: (encode-path-segment $input_security_group_id)} | format pattern "/prod/inputSecurityGroups/{input_security_group_id}"))
+  let req_body = {"tags": $tags, "whitelistRules": $whitelist_rules} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Delete a multiplex. The multiplex must be idle.
 #
 # DELETE /prod/multiplexes/{multiplexId}
 # operationId: DeleteMultiplex
-export def "prod-multiplexes DeleteMultiplex" [
-  multiplexId: string
+export def "prod-multiplexes delete-multiplex" [
+  multiplex_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1258,31 +1300,32 @@ export def "prod-multiplexes DeleteMultiplex" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<Arn: record, AvailabilityZones: record, Destinations: record, Id: record, MultiplexSettings: record<MaximumVideoBufferDelayMilliseconds: record, TransportStreamBitrate: record, TransportStreamId: record, TransportStreamReservedBitrate: record>, Name: record, PipelinesRunningCount: record, ProgramCount: record, State: record, Tags: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/prod/multiplexes/($multiplexId)")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({multiplex_id: (encode-path-segment $multiplex_id)} | format pattern "/prod/multiplexes/{multiplex_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Gets details about a multiplex.
 #
 # GET /prod/multiplexes/{multiplexId}
 # operationId: DescribeMultiplex
-export def "prod-multiplexes DescribeMultiplex" [
-  multiplexId: string
+export def "prod-multiplexes get-multiplex" [
+  multiplex_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1290,23 +1333,24 @@ export def "prod-multiplexes DescribeMultiplex" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<Arn: record, AvailabilityZones: record, Destinations: record, Id: record, MultiplexSettings: record<MaximumVideoBufferDelayMilliseconds: record, TransportStreamBitrate: record, TransportStreamId: record, TransportStreamReservedBitrate: record>, Name: record, PipelinesRunningCount: record, ProgramCount: record, State: record, Tags: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/prod/multiplexes/($multiplexId)")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({multiplex_id: (encode-path-segment $multiplex_id)} | format pattern "/prod/multiplexes/{multiplex_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Updates a multiplex.
@@ -1314,8 +1358,8 @@ export def "prod-multiplexes DescribeMultiplex" [
 # PUT /prod/multiplexes/{multiplexId}
 # operationId: UpdateMultiplex
 # --multiplexSettings shape: {MaximumVideoBufferDelayMilliseconds?: any, TransportStreamBitrate?: any, TransportStreamId?: any, TransportStreamReservedBitrate?: any}
-export def "prod-multiplexes UpdateMultiplex" [
-  multiplexId: string
+export def "prod-multiplexes update-multiplex" [
+  multiplex_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1323,37 +1367,38 @@ export def "prod-multiplexes UpdateMultiplex" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --multiplexSettings: record # Contains configuration for a Multiplex event — shape: {MaximumVideoBufferDelayMilliseconds?: any, TransportStreamBitrate?: any, TransportStreamId?: any, TransportStreamReservedBitrate?: any}
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --multiplex-settings: record # Contains configuration for a Multiplex event — shape: {MaximumVideoBufferDelayMilliseconds?: any, TransportStreamBitrate?: any, TransportStreamId?: any, TransportStreamReservedBitrate?: any}
   --name: string # Placeholder documentation for __string
 ]: any -> record<Multiplex: record<Arn: record, AvailabilityZones: record, Destinations: record, Id: record, MultiplexSettings: record<MaximumVideoBufferDelayMilliseconds: record, TransportStreamBitrate: record, TransportStreamId: record, TransportStreamReservedBitrate: record>, Name: record, PipelinesRunningCount: record, ProgramCount: record, State: record, Tags: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/prod/multiplexes/($multiplexId)")
-  let body = {multiplexSettings: $multiplexSettings, name: $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({multiplex_id: (encode-path-segment $multiplex_id)} | format pattern "/prod/multiplexes/{multiplex_id}"))
+  let req_body = {"multiplexSettings": $multiplex_settings, "name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Delete a program from a multiplex.
 #
 # DELETE /prod/multiplexes/{multiplexId}/programs/{programName}
 # operationId: DeleteMultiplexProgram
-export def "prod-multiplexes-programs DeleteMultiplexProgram" [
-  multiplexId: string
-  programName: string
+export def "prod-multiplexes-programs delete-multiplex" [
+  multiplex_id: string
+  program_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1361,32 +1406,33 @@ export def "prod-multiplexes-programs DeleteMultiplexProgram" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<ChannelId: record, MultiplexProgramSettings: record<PreferredChannelPipeline: record, ProgramNumber: record, ServiceDescriptor: record<ProviderName: record, ServiceName: record>, VideoSettings: record<ConstantBitrate: record, StatmuxSettings: record>>, PacketIdentifiersMap: record<AudioPids: record, DvbSubPids: record, DvbTeletextPid: record, EtvPlatformPid: record, EtvSignalPid: record, KlvDataPids: record, PcrPid: record, PmtPid: record, PrivateMetadataPid: record, Scte27Pids: record, Scte35Pid: record, TimedMetadataPid: record, VideoPid: record>, PipelineDetails: record, ProgramName: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/prod/multiplexes/($multiplexId)/programs/($programName)")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({multiplex_id: (encode-path-segment $multiplex_id), program_name: (encode-path-segment $program_name)} | format pattern "/prod/multiplexes/{multiplex_id}/programs/{program_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get the details for a program in a multiplex.
 #
 # GET /prod/multiplexes/{multiplexId}/programs/{programName}
 # operationId: DescribeMultiplexProgram
-export def "prod-multiplexes-programs DescribeMultiplexProgram" [
-  multiplexId: string
-  programName: string
+export def "prod-multiplexes-programs get-multiplex" [
+  multiplex_id: string
+  program_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1394,23 +1440,24 @@ export def "prod-multiplexes-programs DescribeMultiplexProgram" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<ChannelId: record, MultiplexProgramSettings: record<PreferredChannelPipeline: record, ProgramNumber: record, ServiceDescriptor: record<ProviderName: record, ServiceName: record>, VideoSettings: record<ConstantBitrate: record, StatmuxSettings: record>>, PacketIdentifiersMap: record<AudioPids: record, DvbSubPids: record, DvbTeletextPid: record, EtvPlatformPid: record, EtvSignalPid: record, KlvDataPids: record, PcrPid: record, PmtPid: record, PrivateMetadataPid: record, Scte27Pids: record, Scte35Pid: record, TimedMetadataPid: record, VideoPid: record>, PipelineDetails: record, ProgramName: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/prod/multiplexes/($multiplexId)/programs/($programName)")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({multiplex_id: (encode-path-segment $multiplex_id), program_name: (encode-path-segment $program_name)} | format pattern "/prod/multiplexes/{multiplex_id}/programs/{program_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Update a program in a multiplex.
@@ -1418,9 +1465,9 @@ export def "prod-multiplexes-programs DescribeMultiplexProgram" [
 # PUT /prod/multiplexes/{multiplexId}/programs/{programName}
 # operationId: UpdateMultiplexProgram
 # --multiplexProgramSettings shape: {PreferredChannelPipeline?: any, ProgramNumber?: any, ServiceDescriptor?: any, VideoSettings?: any}
-export def "prod-multiplexes-programs UpdateMultiplexProgram" [
-  multiplexId: string
-  programName: string
+export def "prod-multiplexes-programs update-multiplex" [
+  multiplex_id: string
+  program_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1428,35 +1475,36 @@ export def "prod-multiplexes-programs UpdateMultiplexProgram" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --multiplexProgramSettings: record # Multiplex Program settings configuration. — shape: {PreferredChannelPipeline?: any, ProgramNumber?: any, ServiceDescriptor?: any, VideoSettings?: any}
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --multiplex-program-settings: record # Multiplex Program settings configuration. — shape: {PreferredChannelPipeline?: any, ProgramNumber?: any, ServiceDescriptor?: any, VideoSettings?: any}
 ]: any -> record<MultiplexProgram: record<ChannelId: record, MultiplexProgramSettings: record<PreferredChannelPipeline: record, ProgramNumber: record, ServiceDescriptor: record, VideoSettings: record>, PacketIdentifiersMap: record<AudioPids: record, DvbSubPids: record, DvbTeletextPid: record, EtvPlatformPid: record, EtvSignalPid: record, KlvDataPids: record, PcrPid: record, PmtPid: record, PrivateMetadataPid: record, Scte27Pids: record, Scte35Pid: record, TimedMetadataPid: record, VideoPid: record>, PipelineDetails: record, ProgramName: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/prod/multiplexes/($multiplexId)/programs/($programName)")
-  let body = {multiplexProgramSettings: $multiplexProgramSettings} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({multiplex_id: (encode-path-segment $multiplex_id), program_name: (encode-path-segment $program_name)} | format pattern "/prod/multiplexes/{multiplex_id}/programs/{program_name}"))
+  let req_body = {"multiplexProgramSettings": $multiplex_program_settings} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Delete an expired reservation.
 #
 # DELETE /prod/reservations/{reservationId}
 # operationId: DeleteReservation
-export def "prod-reservations DeleteReservation" [
-  reservationId: string
+export def "prod-reservations delete" [
+  reservation_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1464,31 +1512,32 @@ export def "prod-reservations DeleteReservation" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<Arn: record, Count: record, CurrencyCode: record, Duration: record, DurationUnits: record, End: record, FixedPrice: record, Name: record, OfferingDescription: record, OfferingId: record, OfferingType: record, Region: record, RenewalSettings: record<AutomaticRenewal: record, RenewalCount: record>, ReservationId: record, ResourceSpecification: record<ChannelClass: record, Codec: record, MaximumBitrate: record, MaximumFramerate: record, Resolution: record, ResourceType: record, SpecialFeature: record, VideoQuality: record>, Start: record, State: record, Tags: record, UsagePrice: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/prod/reservations/($reservationId)")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({reservation_id: (encode-path-segment $reservation_id)} | format pattern "/prod/reservations/{reservation_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get details for a reservation.
 #
 # GET /prod/reservations/{reservationId}
 # operationId: DescribeReservation
-export def "prod-reservations DescribeReservation" [
-  reservationId: string
+export def "prod-reservations get" [
+  reservation_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1496,23 +1545,24 @@ export def "prod-reservations DescribeReservation" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<Arn: record, Count: record, CurrencyCode: record, Duration: record, DurationUnits: record, End: record, FixedPrice: record, Name: record, OfferingDescription: record, OfferingId: record, OfferingType: record, Region: record, RenewalSettings: record<AutomaticRenewal: record, RenewalCount: record>, ReservationId: record, ResourceSpecification: record<ChannelClass: record, Codec: record, MaximumBitrate: record, MaximumFramerate: record, Resolution: record, ResourceType: record, SpecialFeature: record, VideoQuality: record>, Start: record, State: record, Tags: record, UsagePrice: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/prod/reservations/($reservationId)")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({reservation_id: (encode-path-segment $reservation_id)} | format pattern "/prod/reservations/{reservation_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Update reservation.
@@ -1520,8 +1570,8 @@ export def "prod-reservations DescribeReservation" [
 # PUT /prod/reservations/{reservationId}
 # operationId: UpdateReservation
 # --renewalSettings shape: {AutomaticRenewal?: any, RenewalCount?: any}
-export def "prod-reservations UpdateReservation" [
-  reservationId: string
+export def "prod-reservations update" [
+  reservation_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1529,35 +1579,36 @@ export def "prod-reservations UpdateReservation" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
   --name: string # Placeholder documentation for __string
-  --renewalSettings: record # The Renewal settings for Reservations — shape: {AutomaticRenewal?: any, RenewalCount?: any}
+  --renewal-settings: record # The Renewal settings for Reservations — shape: {AutomaticRenewal?: any, RenewalCount?: any}
 ]: any -> record<Reservation: record<Arn: record, Count: record, CurrencyCode: record, Duration: record, DurationUnits: record, End: record, FixedPrice: record, Name: record, OfferingDescription: record, OfferingId: record, OfferingType: record, Region: record, RenewalSettings: record<AutomaticRenewal: record, RenewalCount: record>, ReservationId: record, ResourceSpecification: record<ChannelClass: record, Codec: record, MaximumBitrate: record, MaximumFramerate: record, Resolution: record, ResourceType: record, SpecialFeature: record, VideoQuality: record>, Start: record, State: record, Tags: record, UsagePrice: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/prod/reservations/($reservationId)")
-  let body = {name: $name, renewalSettings: $renewalSettings} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({reservation_id: (encode-path-segment $reservation_id)} | format pattern "/prod/reservations/{reservation_id}"))
+  let req_body = {"name": $name, "renewalSettings": $renewal_settings} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Removes tags for a resource
 #
 # DELETE /prod/tags/{resource-arn}#tagKeys
 # operationId: DeleteTags
-export def "prod-tags DeleteTags" [
+export def "prod-tags delete" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1566,33 +1617,34 @@ export def "prod-tags DeleteTags" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --tagKeys: list # An array of tag keys to delete
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --tag-keys: list # An array of tag keys to delete
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "tagKeys" $tagKeys "multi")] | flatten | str join "&"
-  let full_url = (build-url $base $"/prod/tags/($resource_arn)#tagKeys" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let qp = [(serialize-qp "tagKeys" $tag_keys "multi")] | flatten | str join "&"
+  let full_url = (build-url $base ({resource_arn: (encode-path-segment $resource_arn)} | format pattern "/prod/tags/{resource_arn}#tagKeys") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Gets the details for the input device
 #
 # GET /prod/inputDevices/{inputDeviceId}
 # operationId: DescribeInputDevice
-export def "prod-input-devices DescribeInputDevice" [
-  inputDeviceId: string
+export def "prod-input-devices get" [
+  input_device_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1600,23 +1652,24 @@ export def "prod-input-devices DescribeInputDevice" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<Arn: record, ConnectionState: record, DeviceSettingsSyncState: record, DeviceUpdateStatus: record, HdDeviceSettings: record<ActiveInput: record, ConfiguredInput: record, DeviceState: record, Framerate: record, Height: record, MaxBitrate: record, ScanType: record, Width: record, LatencyMs: record>, Id: record, MacAddress: record, Name: record, NetworkSettings: record<DnsAddresses: record, Gateway: record, IpAddress: record, IpScheme: record, SubnetMask: record>, SerialNumber: record, Type: record, UhdDeviceSettings: record<ActiveInput: record, ConfiguredInput: record, DeviceState: record, Framerate: record, Height: record, MaxBitrate: record, ScanType: record, Width: record, LatencyMs: record>, Tags: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/prod/inputDevices/($inputDeviceId)")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({input_device_id: (encode-path-segment $input_device_id)} | format pattern "/prod/inputDevices/{input_device_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Updates the parameters for the input device.
@@ -1625,8 +1678,8 @@ export def "prod-input-devices DescribeInputDevice" [
 # operationId: UpdateInputDevice
 # --hdDeviceSettings shape: {ConfiguredInput?: any, MaxBitrate?: any, LatencyMs?: any}
 # --uhdDeviceSettings shape: {ConfiguredInput?: any, MaxBitrate?: any, LatencyMs?: any}
-export def "prod-input-devices UpdateInputDevice" [
-  inputDeviceId: string
+export def "prod-input-devices update" [
+  input_device_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1634,37 +1687,38 @@ export def "prod-input-devices UpdateInputDevice" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --hdDeviceSettings: record # Configurable settings for the input device. — shape: {ConfiguredInput?: any, MaxBitrate?: any, LatencyMs?: any}
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --hd-device-settings: record # Configurable settings for the input device. — shape: {ConfiguredInput?: any, MaxBitrate?: any, LatencyMs?: any}
   --name: string # Placeholder documentation for __string
-  --uhdDeviceSettings: record # Configurable settings for the input device. — shape: {ConfiguredInput?: any, MaxBitrate?: any, LatencyMs?: any}
+  --uhd-device-settings: record # Configurable settings for the input device. — shape: {ConfiguredInput?: any, MaxBitrate?: any, LatencyMs?: any}
 ]: any -> record<Arn: record, ConnectionState: record, DeviceSettingsSyncState: record, DeviceUpdateStatus: record, HdDeviceSettings: record<ActiveInput: record, ConfiguredInput: record, DeviceState: record, Framerate: record, Height: record, MaxBitrate: record, ScanType: record, Width: record, LatencyMs: record>, Id: record, MacAddress: record, Name: record, NetworkSettings: record<DnsAddresses: record, Gateway: record, IpAddress: record, IpScheme: record, SubnetMask: record>, SerialNumber: record, Type: record, UhdDeviceSettings: record<ActiveInput: record, ConfiguredInput: record, DeviceState: record, Framerate: record, Height: record, MaxBitrate: record, ScanType: record, Width: record, LatencyMs: record>, Tags: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/prod/inputDevices/($inputDeviceId)")
-  let body = {hdDeviceSettings: $hdDeviceSettings, name: $name, uhdDeviceSettings: $uhdDeviceSettings} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({input_device_id: (encode-path-segment $input_device_id)} | format pattern "/prod/inputDevices/{input_device_id}"))
+  let req_body = {"hdDeviceSettings": $hd_device_settings, "name": $name, "uhdDeviceSettings": $uhd_device_settings} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Get the latest thumbnail data for the input device.
 #
 # GET /prod/inputDevices/{inputDeviceId}/thumbnailData#accept
 # operationId: DescribeInputDeviceThumbnail
-export def "prod-input-devices-thumbnail-dataaccept DescribeInputDeviceThumbnail" [
-  inputDeviceId: string
+export def "prod-input-devices-thumbnail-dataaccept get" [
+  input_device_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1672,32 +1726,33 @@ export def "prod-input-devices-thumbnail-dataaccept DescribeInputDeviceThumbnail
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
   --hdr-accept: string@accept-completer # The HTTP Accept header. Indicates the requested type for the thumbnail.
 ]: nothing -> record<Body: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/prod/inputDevices/($inputDeviceId)/thumbnailData#accept")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({input_device_id: (encode-path-segment $input_device_id)} | format pattern "/prod/inputDevices/{input_device_id}/thumbnailData#accept"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get details for an offering.
 #
 # GET /prod/offerings/{offeringId}
 # operationId: DescribeOffering
-export def "prod-offerings DescribeOffering" [
-  offeringId: string
+export def "prod-offerings get" [
+  offering_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1705,30 +1760,31 @@ export def "prod-offerings DescribeOffering" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<Arn: record, CurrencyCode: record, Duration: record, DurationUnits: record, FixedPrice: record, OfferingDescription: record, OfferingId: record, OfferingType: record, Region: record, ResourceSpecification: record<ChannelClass: record, Codec: record, MaximumBitrate: record, MaximumFramerate: record, Resolution: record, ResourceType: record, SpecialFeature: record, VideoQuality: record>, UsagePrice: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/prod/offerings/($offeringId)")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({offering_id: (encode-path-segment $offering_id)} | format pattern "/prod/offerings/{offering_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # List input devices that are currently being transferred. List input devices that you are transferring from your AWS account or input devices that another AWS account is transferring to you.
 #
 # GET /prod/inputDeviceTransfers#transferType
 # operationId: ListInputDeviceTransfers
-export def "prod-input-device-transferstransfer-type ListInputDeviceTransfers" [
+export def "prod-input-device-transferstransfer-type list-transfers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1736,36 +1792,37 @@ export def "prod-input-device-transferstransfer-type ListInputDeviceTransfers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --maxResults: int
-  --nextToken: string
-  --transferType: string
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --max-results: int
+  --next-token: string
+  --transfer-type: string
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<InputDeviceTransfers: record, NextToken: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "nextToken" $nextToken "scalar") (serialize-qp "transferType" $transferType "scalar") (serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "transferType" $transfer_type "scalar") (serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/prod/inputDeviceTransfers#transferType" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # List input devices
 #
 # GET /prod/inputDevices
 # operationId: ListInputDevices
-export def "prod-input-devices ListInputDevices" [
+export def "prod-input-devices list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1773,35 +1830,36 @@ export def "prod-input-devices ListInputDevices" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --maxResults: int
-  --nextToken: string
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --max-results: int
+  --next-token: string
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<InputDevices: record, NextToken: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "nextToken" $nextToken "scalar") (serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/prod/inputDevices" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # List offerings available for purchase.
 #
 # GET /prod/offerings
 # operationId: ListOfferings
-export def "prod-offerings ListOfferings" [
+export def "prod-offerings list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1809,45 +1867,46 @@ export def "prod-offerings ListOfferings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --channelClass: string # Filter by channel class, 'STANDARD' or 'SINGLE_PIPELINE'
-  --channelConfiguration: string # Filter to offerings that match the configuration of an existing channel, e.g. '2345678' (a channel ID)
+  --channel-class: string # Filter by channel class, 'STANDARD' or 'SINGLE_PIPELINE'
+  --channel-configuration: string # Filter to offerings that match the configuration of an existing channel, e.g. '2345678' (a channel ID)
   --codec: string # Filter by codec, 'AVC', 'HEVC', 'MPEG2', 'AUDIO', or 'LINK'
   --duration: string # Filter by offering duration, e.g. '12'
-  --maxResults: int
-  --maximumBitrate: string # Filter by bitrate, 'MAX_10_MBPS', 'MAX_20_MBPS', or 'MAX_50_MBPS'
-  --maximumFramerate: string # Filter by framerate, 'MAX_30_FPS' or 'MAX_60_FPS'
-  --nextToken: string
+  --max-results: int
+  --maximum-bitrate: string # Filter by bitrate, 'MAX_10_MBPS', 'MAX_20_MBPS', or 'MAX_50_MBPS'
+  --maximum-framerate: string # Filter by framerate, 'MAX_30_FPS' or 'MAX_60_FPS'
+  --next-token: string
   --resolution: string # Filter by resolution, 'SD', 'HD', 'FHD', or 'UHD'
-  --resourceType: string # Filter by resource type, 'INPUT', 'OUTPUT', 'MULTIPLEX', or 'CHANNEL'
-  --specialFeature: string # Filter by special feature, 'ADVANCED_AUDIO' or 'AUDIO_NORMALIZATION'
-  --videoQuality: string # Filter by video quality, 'STANDARD', 'ENHANCED', or 'PREMIUM'
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --resource-type: string # Filter by resource type, 'INPUT', 'OUTPUT', 'MULTIPLEX', or 'CHANNEL'
+  --special-feature: string # Filter by special feature, 'ADVANCED_AUDIO' or 'AUDIO_NORMALIZATION'
+  --video-quality: string # Filter by video quality, 'STANDARD', 'ENHANCED', or 'PREMIUM'
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<NextToken: record, Offerings: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "channelClass" $channelClass "scalar") (serialize-qp "channelConfiguration" $channelConfiguration "scalar") (serialize-qp "codec" $codec "scalar") (serialize-qp "duration" $duration "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "maximumBitrate" $maximumBitrate "scalar") (serialize-qp "maximumFramerate" $maximumFramerate "scalar") (serialize-qp "nextToken" $nextToken "scalar") (serialize-qp "resolution" $resolution "scalar") (serialize-qp "resourceType" $resourceType "scalar") (serialize-qp "specialFeature" $specialFeature "scalar") (serialize-qp "videoQuality" $videoQuality "scalar") (serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "channelClass" $channel_class "scalar") (serialize-qp "channelConfiguration" $channel_configuration "scalar") (serialize-qp "codec" $codec "scalar") (serialize-qp "duration" $duration "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "maximumBitrate" $maximum_bitrate "scalar") (serialize-qp "maximumFramerate" $maximum_framerate "scalar") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "resolution" $resolution "scalar") (serialize-qp "resourceType" $resource_type "scalar") (serialize-qp "specialFeature" $special_feature "scalar") (serialize-qp "videoQuality" $video_quality "scalar") (serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/prod/offerings" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # List purchased reservations.
 #
 # GET /prod/reservations
 # operationId: ListReservations
-export def "prod-reservations ListReservations" [
+export def "prod-reservations list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1855,36 +1914,37 @@ export def "prod-reservations ListReservations" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --channelClass: string # Filter by channel class, 'STANDARD' or 'SINGLE_PIPELINE'
+  --channel-class: string # Filter by channel class, 'STANDARD' or 'SINGLE_PIPELINE'
   --codec: string # Filter by codec, 'AVC', 'HEVC', 'MPEG2', 'AUDIO', or 'LINK'
-  --maxResults: int
-  --maximumBitrate: string # Filter by bitrate, 'MAX_10_MBPS', 'MAX_20_MBPS', or 'MAX_50_MBPS'
-  --maximumFramerate: string # Filter by framerate, 'MAX_30_FPS' or 'MAX_60_FPS'
-  --nextToken: string
+  --max-results: int
+  --maximum-bitrate: string # Filter by bitrate, 'MAX_10_MBPS', 'MAX_20_MBPS', or 'MAX_50_MBPS'
+  --maximum-framerate: string # Filter by framerate, 'MAX_30_FPS' or 'MAX_60_FPS'
+  --next-token: string
   --resolution: string # Filter by resolution, 'SD', 'HD', 'FHD', or 'UHD'
-  --resourceType: string # Filter by resource type, 'INPUT', 'OUTPUT', 'MULTIPLEX', or 'CHANNEL'
-  --specialFeature: string # Filter by special feature, 'ADVANCED_AUDIO' or 'AUDIO_NORMALIZATION'
-  --videoQuality: string # Filter by video quality, 'STANDARD', 'ENHANCED', or 'PREMIUM'
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --resource-type: string # Filter by resource type, 'INPUT', 'OUTPUT', 'MULTIPLEX', or 'CHANNEL'
+  --special-feature: string # Filter by special feature, 'ADVANCED_AUDIO' or 'AUDIO_NORMALIZATION'
+  --video-quality: string # Filter by video quality, 'STANDARD', 'ENHANCED', or 'PREMIUM'
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<NextToken: record, Reservations: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "channelClass" $channelClass "scalar") (serialize-qp "codec" $codec "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "maximumBitrate" $maximumBitrate "scalar") (serialize-qp "maximumFramerate" $maximumFramerate "scalar") (serialize-qp "nextToken" $nextToken "scalar") (serialize-qp "resolution" $resolution "scalar") (serialize-qp "resourceType" $resourceType "scalar") (serialize-qp "specialFeature" $specialFeature "scalar") (serialize-qp "videoQuality" $videoQuality "scalar") (serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "channelClass" $channel_class "scalar") (serialize-qp "codec" $codec "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "maximumBitrate" $maximum_bitrate "scalar") (serialize-qp "maximumFramerate" $maximum_framerate "scalar") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "resolution" $resolution "scalar") (serialize-qp "resourceType" $resource_type "scalar") (serialize-qp "specialFeature" $special_feature "scalar") (serialize-qp "videoQuality" $video_quality "scalar") (serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/prod/reservations" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Purchase an offering and create a reservation.
@@ -1892,8 +1952,8 @@ export def "prod-reservations ListReservations" [
 # POST /prod/offerings/{offeringId}/purchase
 # operationId: PurchaseOffering
 # --renewalSettings shape: {AutomaticRenewal?: any, RenewalCount?: any}
-export def "prod-offerings-purchase PurchaseOffering" [
-  offeringId: string
+export def "prod-offerings-purchase create" [
+  offering_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1901,40 +1961,41 @@ export def "prod-offerings-purchase PurchaseOffering" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
   count: int # Placeholder documentation for __integerMin1
   --name: string # Placeholder documentation for __string
-  --renewalSettings: record # The Renewal settings for Reservations — shape: {AutomaticRenewal?: any, RenewalCount?: any}
-  --requestId: string # Placeholder documentation for __string
+  --renewal-settings: record # The Renewal settings for Reservations — shape: {AutomaticRenewal?: any, RenewalCount?: any}
+  --request-id: string # Placeholder documentation for __string
   --start: string # Placeholder documentation for __string
   --tags: record # Placeholder documentation for Tags
 ]: any -> record<Reservation: record<Arn: record, Count: record, CurrencyCode: record, Duration: record, DurationUnits: record, End: record, FixedPrice: record, Name: record, OfferingDescription: record, OfferingId: record, OfferingType: record, Region: record, RenewalSettings: record<AutomaticRenewal: record, RenewalCount: record>, ReservationId: record, ResourceSpecification: record<ChannelClass: record, Codec: record, MaximumBitrate: record, MaximumFramerate: record, Resolution: record, ResourceType: record, SpecialFeature: record, VideoQuality: record>, Start: record, State: record, Tags: record, UsagePrice: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/prod/offerings/($offeringId)/purchase")
-  let body = {count: $count, name: $name, renewalSettings: $renewalSettings, requestId: $requestId, start: $start, tags: $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({offering_id: (encode-path-segment $offering_id)} | format pattern "/prod/offerings/{offering_id}/purchase"))
+  let req_body = {"count": $count, "name": $name, "renewalSettings": $renewal_settings, "requestId": $request_id, "start": $start, "tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Send a reboot command to the specified input device. The device will begin rebooting within a few seconds of sending the command. When the reboot is complete, the device’s connection status will change to connected.
 #
 # POST /prod/inputDevices/{inputDeviceId}/reboot
 # operationId: RebootInputDevice
-export def "prod-input-devices-reboot RebootInputDevice" [
-  inputDeviceId: string
+export def "prod-input-devices-reboot create" [
+  input_device_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1942,35 +2003,36 @@ export def "prod-input-devices-reboot RebootInputDevice" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
   --force: string@force-completer # Whether or not to force reboot the input device.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/prod/inputDevices/($inputDeviceId)/reboot")
-  let body = {force: $force} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({input_device_id: (encode-path-segment $input_device_id)} | format pattern "/prod/inputDevices/{input_device_id}/reboot"))
+  let req_body = {"force": $force} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Reject the transfer of the specified input device to your AWS account.
 #
 # POST /prod/inputDevices/{inputDeviceId}/reject
 # operationId: RejectInputDeviceTransfer
-export def "prod-input-devices-reject RejectInputDeviceTransfer" [
-  inputDeviceId: string
+export def "prod-input-devices-reject reject-transfer" [
+  input_device_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1978,31 +2040,32 @@ export def "prod-input-devices-reject RejectInputDeviceTransfer" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/prod/inputDevices/($inputDeviceId)/reject")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({input_device_id: (encode-path-segment $input_device_id)} | format pattern "/prod/inputDevices/{input_device_id}/reject"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Starts an existing channel
 #
 # POST /prod/channels/{channelId}/start
 # operationId: StartChannel
-export def "prod-channels-start StartChannel" [
-  channelId: string
+export def "prod-channels-start start" [
+  channel_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2010,31 +2073,32 @@ export def "prod-channels-start StartChannel" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<Arn: record, CdiInputSpecification: record<Resolution: record>, ChannelClass: record, Destinations: record, EgressEndpoints: record, EncoderSettings: record<AudioDescriptions: record, AvailBlanking: record<AvailBlankingImage: record, State: record>, AvailConfiguration: record<AvailSettings: record>, BlackoutSlate: record<BlackoutSlateImage: record, NetworkEndBlackout: record, NetworkEndBlackoutImage: record, NetworkId: record, State: record>, CaptionDescriptions: record, FeatureActivations: record<InputPrepareScheduleActions: record>, GlobalConfiguration: record<InitialAudioGain: record, InputEndAction: record, InputLossBehavior: record, OutputLockingMode: record, OutputTimingSource: record, SupportLowFramerateInputs: record>, MotionGraphicsConfiguration: record<MotionGraphicsInsertion: record, MotionGraphicsSettings: record>, NielsenConfiguration: record<DistributorId: record, NielsenPcmToId3Tagging: record>, OutputGroups: record, TimecodeConfig: record<Source: record, SyncThreshold: record>, VideoDescriptions: record>, Id: record, InputAttachments: record, InputSpecification: record<Codec: record, MaximumBitrate: record, Resolution: record>, LogLevel: record, Maintenance: record<MaintenanceDay: record, MaintenanceDeadline: record, MaintenanceScheduledDate: record, MaintenanceStartTime: record>, Name: record, PipelineDetails: record, PipelinesRunningCount: record, RoleArn: record, State: record, Tags: record, Vpc: record<AvailabilityZones: record, NetworkInterfaceIds: record, SecurityGroupIds: record, SubnetIds: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/prod/channels/($channelId)/start")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({channel_id: (encode-path-segment $channel_id)} | format pattern "/prod/channels/{channel_id}/start"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Start a maintenance window for the specified input device. Starting a maintenance window will give the device up to two hours to install software. If the device was streaming prior to the maintenance, it will resume streaming when the software is fully installed. Devices automatically install updates while they are powered on and their MediaLive channels are stopped. A maintenance window allows you to update a device without having to stop MediaLive channels that use the device. The device must remain powered on and connected to the internet for the duration of the maintenance.
 #
 # POST /prod/inputDevices/{inputDeviceId}/startInputDeviceMaintenanceWindow
 # operationId: StartInputDeviceMaintenanceWindow
-export def "prod-input-devices-start-input-device-maintenance-window StartInputDeviceMaintenanceWindow" [
-  inputDeviceId: string
+export def "prod-input-devices-start-input-device-maintenance-window start" [
+  input_device_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2042,31 +2106,32 @@ export def "prod-input-devices-start-input-device-maintenance-window StartInputD
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/prod/inputDevices/($inputDeviceId)/startInputDeviceMaintenanceWindow")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({input_device_id: (encode-path-segment $input_device_id)} | format pattern "/prod/inputDevices/{input_device_id}/startInputDeviceMaintenanceWindow"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Start (run) the multiplex. Starting the multiplex does not start the channels. You must explicitly start each channel.
 #
 # POST /prod/multiplexes/{multiplexId}/start
 # operationId: StartMultiplex
-export def "prod-multiplexes-start StartMultiplex" [
-  multiplexId: string
+export def "prod-multiplexes-start start-multiplex" [
+  multiplex_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2074,31 +2139,32 @@ export def "prod-multiplexes-start StartMultiplex" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<Arn: record, AvailabilityZones: record, Destinations: record, Id: record, MultiplexSettings: record<MaximumVideoBufferDelayMilliseconds: record, TransportStreamBitrate: record, TransportStreamId: record, TransportStreamReservedBitrate: record>, Name: record, PipelinesRunningCount: record, ProgramCount: record, State: record, Tags: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/prod/multiplexes/($multiplexId)/start")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({multiplex_id: (encode-path-segment $multiplex_id)} | format pattern "/prod/multiplexes/{multiplex_id}/start"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Stops a running channel
 #
 # POST /prod/channels/{channelId}/stop
 # operationId: StopChannel
-export def "prod-channels-stop StopChannel" [
-  channelId: string
+export def "prod-channels-stop stop" [
+  channel_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2106,31 +2172,32 @@ export def "prod-channels-stop StopChannel" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<Arn: record, CdiInputSpecification: record<Resolution: record>, ChannelClass: record, Destinations: record, EgressEndpoints: record, EncoderSettings: record<AudioDescriptions: record, AvailBlanking: record<AvailBlankingImage: record, State: record>, AvailConfiguration: record<AvailSettings: record>, BlackoutSlate: record<BlackoutSlateImage: record, NetworkEndBlackout: record, NetworkEndBlackoutImage: record, NetworkId: record, State: record>, CaptionDescriptions: record, FeatureActivations: record<InputPrepareScheduleActions: record>, GlobalConfiguration: record<InitialAudioGain: record, InputEndAction: record, InputLossBehavior: record, OutputLockingMode: record, OutputTimingSource: record, SupportLowFramerateInputs: record>, MotionGraphicsConfiguration: record<MotionGraphicsInsertion: record, MotionGraphicsSettings: record>, NielsenConfiguration: record<DistributorId: record, NielsenPcmToId3Tagging: record>, OutputGroups: record, TimecodeConfig: record<Source: record, SyncThreshold: record>, VideoDescriptions: record>, Id: record, InputAttachments: record, InputSpecification: record<Codec: record, MaximumBitrate: record, Resolution: record>, LogLevel: record, Maintenance: record<MaintenanceDay: record, MaintenanceDeadline: record, MaintenanceScheduledDate: record, MaintenanceStartTime: record>, Name: record, PipelineDetails: record, PipelinesRunningCount: record, RoleArn: record, State: record, Tags: record, Vpc: record<AvailabilityZones: record, NetworkInterfaceIds: record, SecurityGroupIds: record, SubnetIds: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/prod/channels/($channelId)/stop")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({channel_id: (encode-path-segment $channel_id)} | format pattern "/prod/channels/{channel_id}/stop"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Stops a running multiplex. If the multiplex isn't running, this action has no effect.
 #
 # POST /prod/multiplexes/{multiplexId}/stop
 # operationId: StopMultiplex
-export def "prod-multiplexes-stop StopMultiplex" [
-  multiplexId: string
+export def "prod-multiplexes-stop stop-multiplex" [
+  multiplex_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2138,31 +2205,32 @@ export def "prod-multiplexes-stop StopMultiplex" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<Arn: record, AvailabilityZones: record, Destinations: record, Id: record, MultiplexSettings: record<MaximumVideoBufferDelayMilliseconds: record, TransportStreamBitrate: record, TransportStreamId: record, TransportStreamReservedBitrate: record>, Name: record, PipelinesRunningCount: record, ProgramCount: record, State: record, Tags: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/prod/multiplexes/($multiplexId)/stop")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({multiplex_id: (encode-path-segment $multiplex_id)} | format pattern "/prod/multiplexes/{multiplex_id}/stop"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Start an input device transfer to another AWS account. After you make the request, the other account must accept or reject the transfer.
 #
 # POST /prod/inputDevices/{inputDeviceId}/transfer
 # operationId: TransferInputDevice
-export def "prod-input-devices-transfer TransferInputDevice" [
-  inputDeviceId: string
+export def "prod-input-devices-transfer create" [
+  input_device_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2170,29 +2238,30 @@ export def "prod-input-devices-transfer TransferInputDevice" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --targetCustomerId: string # Placeholder documentation for __string
-  --targetRegion: string # Placeholder documentation for __string
-  --transferMessage: string # Placeholder documentation for __string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --target-customer-id: string # Placeholder documentation for __string
+  --target-region: string # Placeholder documentation for __string
+  --transfer-message: string # Placeholder documentation for __string
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/prod/inputDevices/($inputDeviceId)/transfer")
-  let body = {targetCustomerId: $targetCustomerId, targetRegion: $targetRegion, transferMessage: $transferMessage} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({input_device_id: (encode-path-segment $input_device_id)} | format pattern "/prod/inputDevices/{input_device_id}/transfer"))
+  let req_body = {"targetCustomerId": $target_customer_id, "targetRegion": $target_region, "transferMessage": $transfer_message} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Changes the class of the channel.
@@ -2200,8 +2269,8 @@ export def "prod-input-devices-transfer TransferInputDevice" [
 # PUT /prod/channels/{channelId}/channelClass
 # operationId: UpdateChannelClass
 # --destinations item shape: {Id?: any, MediaPackageSettings?: any, MultiplexSettings?: any, Settings?: any}
-export def "prod-channels-channel-class UpdateChannelClass" [
-  channelId: string
+export def "prod-channels-channel-class update" [
+  channel_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2209,26 +2278,27 @@ export def "prod-channels-channel-class UpdateChannelClass" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  channelClass: string@channelClass-completer # A standard channel has two encoding pipelines and a single pipeline channel only has one.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  channel_class: string@channel-class-completer # A standard channel has two encoding pipelines and a single pipeline channel only has one.
   --destinations: list # Placeholder documentation for __listOfOutputDestination — item shape: {Id?: any, MediaPackageSettings?: any, MultiplexSettings?: any, Settings?: any}
 ]: any -> record<Channel: record<Arn: record, CdiInputSpecification: record<Resolution: record>, ChannelClass: record, Destinations: record, EgressEndpoints: record, EncoderSettings: record<AudioDescriptions: record, AvailBlanking: record, AvailConfiguration: record, BlackoutSlate: record, CaptionDescriptions: record, FeatureActivations: record, GlobalConfiguration: record, MotionGraphicsConfiguration: record, NielsenConfiguration: record, OutputGroups: record, TimecodeConfig: record, VideoDescriptions: record>, Id: record, InputAttachments: record, InputSpecification: record<Codec: record, MaximumBitrate: record, Resolution: record>, LogLevel: record, Maintenance: record<MaintenanceDay: record, MaintenanceDeadline: record, MaintenanceScheduledDate: record, MaintenanceStartTime: record>, Name: record, PipelineDetails: record, PipelinesRunningCount: record, RoleArn: record, State: record, Tags: record, Vpc: record<AvailabilityZones: record, NetworkInterfaceIds: record, SecurityGroupIds: record, SubnetIds: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/prod/channels/($channelId)/channelClass")
-  let body = {channelClass: $channelClass, destinations: $destinations} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({channel_id: (encode-path-segment $channel_id)} | format pattern "/prod/channels/{channel_id}/channelClass"))
+  let req_body = {"channelClass": $channel_class, "destinations": $destinations} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }

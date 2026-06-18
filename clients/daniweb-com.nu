@@ -18,21 +18,32 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 }
 
 # Serialize a single query parameter based on collection style
+# Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
+# ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = ($name | url encode)
+  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
-  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
-    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
-    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
+    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
+    _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
+}
+
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Build URL from base, path, and optional query string
@@ -44,7 +55,7 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
@@ -53,13 +64,41 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
     "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "put" => { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "patch" => { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
   if ($method in ["head" "options"]) { return $resp }
-  if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
+  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
+}
+
+# Build a `multipart/form-data` envelope per RFC 7578. `file_fields` lists
+# the field names whose value should be read from disk as bytes; every
+# other field is sent as a text part (records/lists JSON-stringified).
+# Returns {content_type, body} ready to pass to `do-request`.
+# When `$dry_run` is true, file fields are NOT read from disk — they emit
+# an empty-bytes placeholder so callers can inspect the request shape
+# without the file existing on disk (issue 11.B).
+def build-multipart-body [parts: record, file_fields: list<string>, dry_run: bool = false]: nothing -> record {
+  let boundary = $"----nu-(random chars --length 24)"
+  let crlf = "\r\n"
+  let chunks = ($parts | items {|name, val|
+    if $val == null { null } else if $name in $file_fields {
+      let filename = ($val | into string | path basename)
+      let bytes = if $dry_run { (0x[] | into binary) } else { (open --raw $val | into binary | collect) }
+      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"; filename=\"($filename)\"($crlf)Content-Type: application/octet-stream($crlf)($crlf)" | into binary)
+      $head ++ $bytes ++ ($crlf | into binary)
+    } else {
+      let dt = ($val | describe)
+      let s = if (($dt | str starts-with "record") or ($dt | str starts-with "list") or ($dt | str starts-with "table")) { ($val | to json --raw) } else { ($val | into string) }
+      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"($crlf)($crlf)" | into binary)
+      $head ++ ($"($s)($crlf)" | into binary)
+    }
+  } | compact)
+  let trailer = ($"--($boundary)--($crlf)" | into binary)
+  let body = ($chunks | reduce --fold (0x[] | into binary) {|chunk, acc| $acc ++ $chunk }) ++ $trailer
+  {content_type: $"multipart/form-data; boundary=($boundary)", body: $body}
 }
 
 def base-url-completer [] { ["https://www.daniweb.com/connect/api/v4"] }
@@ -87,7 +126,7 @@ def event-completer [] { ["conversation_message" "conversation_seen" "group_mess
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "apps list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -119,6 +158,7 @@ export def "apps list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --offset: int # format: int32, default: 0, allows empty value
   --limit: int # format: int32, default: 50, allows empty value
@@ -129,14 +169,14 @@ export def "apps list" [
   let full_url = (build-url $base "/apps" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Fetch an array of Daniapps that are currently in production mode.
 #
 # GET /apps/{ID}
 export def "apps get" [
-  ID: list
+  id: list
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -144,14 +184,15 @@ export def "apps get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: table<about: record, id: float, legal: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/apps/($ID)")
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/apps/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Fetch all Daniapp audience segments that comprise the current access token's bubble.
@@ -165,6 +206,7 @@ export def "audiences list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --offset: int # format: int32, default: 0, allows empty value
   --limit: int # format: int32, default: 50, allows empty value
@@ -175,14 +217,14 @@ export def "audiences list" [
   let full_url = (build-url $base "/audiences" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Fetch an array of Daniapp audience segments that comprise the current access token's bubble.
 #
 # GET /audiences/{ID}
 export def "audiences get" [
-  ID: list
+  id: list
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -190,21 +232,22 @@ export def "audiences get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: table<about: record, id: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/audiences/($ID)")
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/audiences/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Create a membership record for the OAuth'ed end-user based on the current audience segment/bubble combination.
 #
 # POST /audiences/{ID}/memberships
-export def "audiences-memberships post" [
-  ID: int
+export def "audiences-memberships create" [
+  id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -212,14 +255,15 @@ export def "audiences-memberships post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: record<audience: record<id: float>, member: record<business_card: record, community_persona: record, id: float, profile: record, usage: record>>, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/audiences/($ID)/memberships")
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/audiences/{id}/memberships"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Retrieve an array of names and locations, filtered by category, that begin with the query string passed in. Ideally used for search autocomplete dropdowns, as the search functionality filters against name and location. The four potential categories are: `conversations` for names of users you are in existing conversations with; `matches` for names of users you have previously skipped over; `people` for names of all other users; `locations` for locations of users. Only users and their locations who exist with the current access token's bubble are considered.
@@ -233,6 +277,7 @@ export def "autocompletes get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --query: string # allows empty value
 ]: nothing -> record<data: record<conversations: list<string>, locations: list<string>, matches: list<string>, people: list<string>>> {
@@ -242,13 +287,13 @@ export def "autocompletes get" [
   let full_url = (build-url $base "/autocompletes" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Paginated report of information about messages contributed by conversation and date. Only conversations that exist within the current access token's bubble are considered in the calculations. Optionally roll up all conversations to retrieve one record per date. Optionally specify a date formatted as YYYY-MM-DD to retrieve information just from the single date, along with additional navigational information, which is useful when generating a transcript for a single day and wanting to reference the previous and next days there were messages.
 #
 # POST /conversations/schedules
-export def "conversations-schedules post" [
+export def "conversations-schedules create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -256,6 +301,7 @@ export def "conversations-schedules post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --date: string
   --limit: int # format: int32, default: 50
@@ -267,17 +313,19 @@ export def "conversations-schedules post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/conversations/schedules")
-  let body = {date: $date, limit: $limit, offset: $offset, roll_up: $roll_up, sort: $body_sort} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"date": $date, "limit": $limit, "offset": $offset, "roll_up": $roll_up, "sort": $body_sort} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
+  let mp = (build-multipart-body $req_body [] $dry_run)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
 }
 
 # Fetch messages authored from within the current bubble that match a query string passed in as a search parameter along with their relevancy score.
 #
 # POST /conversations/searches
-export def "conversations-searches post" [
+export def "conversations-searches create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -285,6 +333,7 @@ export def "conversations-searches post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --date: string
   --gt-message-id: int # format: int32
@@ -296,11 +345,13 @@ export def "conversations-searches post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/conversations/searches")
-  let body = {date: $date, gt_message_id: $gt_message_id, limit: $limit, offset: $offset, query: $query} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"date": $date, "gt_message_id": $gt_message_id, "limit": $limit, "offset": $offset, "query": $query} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
+  let mp = (build-multipart-body $req_body [] $dry_run)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
 }
 
 # Retrieve conversations that you are participating in with users who exists within the same bubble, along with your current relationship with the conversations. The user_a / user_b properties of the conversation are populated with as much data as is available if the user is not you. If the user is you, only the id field is populated. There is a separate status endpoint to retrieve relationship information for individual conversations. Optionally filter: 'new' to only show conversations with messages you haven't yet seen; 'introductions' to only show conversations where users have introduced themselves to you but nothing more; 'unreplied' to only show conversations where you have introduced yourself to other users but nothing more; 'notifications' to show all conversations where the other user was the last person to message. Optionally only show conversations engaging within the existing access token's bubble. This report is limited to your ~500-1000 most recently active conversations you've engaged in within current the access token's bubble.
@@ -314,6 +365,7 @@ export def "conversations-statuses list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string@filter-completer # allows empty value
   --include-archived: oneof<nothing, bool> # default: false, allows empty value
@@ -327,14 +379,14 @@ export def "conversations-statuses list" [
   let full_url = (build-url $base "/conversations/statuses" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Fetch an array of conversations. You can only retrieve conversations with users who exist within the current access token's bubble.
 #
 # GET /conversations/{ID}
 export def "conversations get" [
-  ID: list
+  id: list
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -342,21 +394,22 @@ export def "conversations get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: table<first_message: record, id: float, latest_message: record, user_a: record, user_b: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/conversations/($ID)")
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/conversations/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Retrieve the last {limit} messages in the conversation, provided the conversations exist within the current access token's bubble. If a timeout is 0 or greater, the batch is sorted oldest first. Otherwise, if timeout is a negative number, the transcript is paginated and sorted newest first. Specify a timeout for long polling (which delays the server sending back results for up to n seconds or until results are available, whichever comes first), or default to 0 for immediate results. Optionally record your status as online along with sharing the latest message you've seen with the other conversation participant. Optionally specify a gt_message_id to retrieve only messages with an ID greater than that specified (such as greater than the latest message ID received in the last poll). Optionally only poll for messages authored by the other person in the conversation, and echo messages authored by you when sending, for a perceived increase in performance. Optionally only retrieve messages that were posted from within the current access token's bubble. Optionally specify a date formatted as YYYY-MM-DD to retrieve a transcript of messages from a single day. When record_seen is set to true, the new message count for the conversation is reset to zero.
 #
 # GET /conversations/{ID}/messages
 export def "conversations-messages get" [
-  ID: int
+  id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -364,6 +417,7 @@ export def "conversations-messages get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --gt-message-id: int # format: int32, allows empty value
   --exclude-self: oneof<nothing, bool> # default: false, allows empty value
@@ -377,17 +431,17 @@ export def "conversations-messages get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "gt_message_id" $gt_message_id "scalar") (serialize-qp "exclude_self" $exclude_self "scalar") (serialize-qp "date" $date "scalar") (serialize-qp "bubbled" $bubbled "scalar") (serialize-qp "record_seen" $record_seen "scalar") (serialize-qp "timeout" $timeout "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/conversations/($ID)/messages" $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/conversations/{id}/messages") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Post a message to a conversation that is with a user who exists within the current access token's bubble. Optionally specify whether emoticons should be parsed into smiley images. Optionally specify whether the message should be bubbled within the app. Additionally, optionally attach a single metadata key/value pair to the message upon submission.
 #
 # POST /conversations/{ID}/messages
-export def "conversations-messages post" [
-  ID: int
+export def "conversations-messages create" [
+  id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -395,36 +449,39 @@ export def "conversations-messages post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --bubbled: oneof<nothing, bool> # default: false
   --metadata-0-key: string
   --metadata-0-privacy: string@metadata-0-privacy-completer
-  --metadata-0-values: list
+  --metadata-0-values: list<string>
   --metadata-1-key: string
   --metadata-1-privacy: string@metadata-1-privacy-completer
-  --metadata-1-values: list
+  --metadata-1-values: list<string>
   --metadata-2-key: string
   --metadata-2-privacy: string@metadata-2-privacy-completer
-  --metadata-2-values: list
+  --metadata-2-values: list<string>
   --text-emoticons: oneof<nothing, bool> # default: false
   text_raw: string
 ]: any -> record<data: record<author: record<business_card: record, community_persona: record, id: float, profile: record, usage: record>, conversation: record<first_message: record, id: float, latest_message: any, user_a: record, user_b: record>, id: float, last_seen: record<timestamp: string, user: record>, text: record<parsed: string>, timestamp: string>, success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/conversations/($ID)/messages")
-  let body = {bubbled: $bubbled, metadata_0_key: $metadata_0_key, metadata_0_privacy: $metadata_0_privacy, metadata_0_values[]: $metadata_0_values, metadata_1_key: $metadata_1_key, metadata_1_privacy: $metadata_1_privacy, metadata_1_values[]: $metadata_1_values, metadata_2_key: $metadata_2_key, metadata_2_privacy: $metadata_2_privacy, metadata_2_values[]: $metadata_2_values, text_emoticons: $text_emoticons, text_raw: $text_raw} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/conversations/{id}/messages"))
+  let req_body = {"bubbled": $bubbled, "metadata_0_key": $metadata_0_key, "metadata_0_privacy": $metadata_0_privacy, "metadata_0_values[]": $metadata_0_values, "metadata_1_key": $metadata_1_key, "metadata_1_privacy": $metadata_1_privacy, "metadata_1_values[]": $metadata_1_values, "metadata_2_key": $metadata_2_key, "metadata_2_privacy": $metadata_2_privacy, "metadata_2_values[]": $metadata_2_values, "text_emoticons": $text_emoticons, "text_raw": $text_raw} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
+  let mp = (build-multipart-body $req_body [] $dry_run)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
 }
 
 # Paginated report of information about messages contributed by conversation and date. Only conversations that exist within the current access token's bubble are considered in the calculations. Optionally roll up all conversations to retrieve one record per date. Optionally specify a date formatted as YYYY-MM-DD to retrieve information just from the single date, along with additional navigational information, which is useful when generating a transcript for a single day and wanting to reference the previous and next days there were messages within the conversation(s).
 #
 # POST /conversations/{ID}/schedules
-export def "conversations-schedules post-by-ID" [
-  ID: list
+export def "conversations-schedules create-by-ID" [
+  id: list
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -432,6 +489,7 @@ export def "conversations-schedules post-by-ID" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --date: string
   --limit: int # format: int32, default: 50
@@ -442,19 +500,21 @@ export def "conversations-schedules post-by-ID" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/conversations/($ID)/schedules")
-  let body = {date: $date, limit: $limit, offset: $offset, roll_up: $roll_up, sort: $body_sort} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/conversations/{id}/schedules"))
+  let req_body = {"date": $date, "limit": $limit, "offset": $offset, "roll_up": $roll_up, "sort": $body_sort} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
+  let mp = (build-multipart-body $req_body [] $dry_run)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
 }
 
 # Fetch messages authored from within specified conversations that match a query string passed in as a search parameter along with their relevancy score.
 #
 # POST /conversations/{ID}/searches
-export def "conversations-searches post-by-ID" [
-  ID: list
+export def "conversations-searches create-by-ID" [
+  id: list
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -462,6 +522,7 @@ export def "conversations-searches post-by-ID" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --date: string
   --gt-message-id: int # format: int32
@@ -472,19 +533,21 @@ export def "conversations-searches post-by-ID" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/conversations/($ID)/searches")
-  let body = {date: $date, gt_message_id: $gt_message_id, limit: $limit, offset: $offset, query: $query} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/conversations/{id}/searches"))
+  let req_body = {"date": $date, "gt_message_id": $gt_message_id, "limit": $limit, "offset": $offset, "query": $query} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
+  let mp = (build-multipart-body $req_body [] $dry_run)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
 }
 
 # Status information about your current relationship with one or more conversations you participating in, provided the conversations exist within the current access token's bubble.
 #
 # GET /conversations/{ID}/statuses
 export def "conversations-statuses get" [
-  ID: list
+  id: list
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -492,21 +555,22 @@ export def "conversations-statuses get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: table<archived_status: bool, bubbled: record, conversation: record, earliest_unseen_message: record, new_message_count: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/conversations/($ID)/statuses")
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/conversations/{id}/statuses"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Archive or unarchive a conversation that is with a user who exists within the same bubble.
 #
 # PATCH /conversations/{ID}/statuses
-export def "conversations-statuses patch" [
-  ID: int
+export def "conversations-statuses update" [
+  id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -514,18 +578,21 @@ export def "conversations-statuses patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --archived-status: oneof<nothing, bool>
 ]: any -> record<data: record<archived_status: bool, conversation: record<first_message: record, id: float, latest_message: record, user_a: record, user_b: record>>, success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/conversations/($ID)/statuses")
-  let body = {archived_status: $archived_status} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/conversations/{id}/statuses"))
+  let req_body = {"archived_status": $archived_status} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
+  let mp = (build-multipart-body $req_body [] $dry_run)
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
 }
 
 # Fetch an array of all groups that were created by users existing within the current access token's bubble. The groups must be either Public or you must be a member of them. Unlisted and Private groups that you are not a member of are not listed.
@@ -539,6 +606,7 @@ export def "groups list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --offset: int # format: int32, default: 0, allows empty value
   --limit: int # format: int32, default: 50, allows empty value
@@ -549,13 +617,13 @@ export def "groups list" [
   let full_url = (build-url $base "/groups" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Create a new group for other members to join. Any user who is using an access token whose bubble you exist in can join your group provided it is not a private group. Private groups can only be joined by members who know its passphrase. Unlisted groups can be joined by anybody as long as they know the Group ID, but they are not referenced anywhere to non-members. Public groups can be joined by anybody, are discoverable, and anyone can see the public groups a user is a member of, provided the group owner exists in their access token's bubble. Groups each have their own discussions, transcripts, schedules, and ability to list and search their members.
 #
 # POST /groups
-export def "groups post" [
+export def "groups create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -563,6 +631,7 @@ export def "groups post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   description: string
   name: string
@@ -574,17 +643,19 @@ export def "groups post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/groups")
-  let body = {description: $description, name: $name, passphrase: $passphrase, privacy: $privacy, slug: $slug} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"description": $description, "name": $name, "passphrase": $passphrase, "privacy": $privacy, "slug": $slug} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
+  let mp = (build-multipart-body $req_body [] $dry_run)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
 }
 
 # Paginated listing of messages filtered by arbitrary metadata criteria. Messages must match on all key/value pairs passed in. Messages may only match on one value of an array passed in. However, messages are sorted based on how many distinct values they match on (most matches first).
 #
 # POST /groups/messages/metadata/filters
-export def "groups-messages-metadata-filters post" [
+export def "groups-messages-metadata-filters create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -592,32 +663,35 @@ export def "groups-messages-metadata-filters post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # format: int32, default: 50
   --metadata-0-key: string
-  --metadata-0-values: list
+  --metadata-0-values: list<string>
   --metadata-1-key: string
-  --metadata-1-values: list
+  --metadata-1-values: list<string>
   --metadata-2-key: string
-  --metadata-2-values: list
+  --metadata-2-values: list<string>
   --offset: int # format: int32, default: 0
 ]: any -> record<data: table<matched_metadata: record, message: record>, pagination: record<limit: float, offset: float, total_records: float>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/groups/messages/metadata/filters")
-  let body = {limit: $limit, metadata_0_key: $metadata_0_key, metadata_0_values[]: $metadata_0_values, metadata_1_key: $metadata_1_key, metadata_1_values[]: $metadata_1_values, metadata_2_key: $metadata_2_key, metadata_2_values[]: $metadata_2_values, offset: $offset} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"limit": $limit, "metadata_0_key": $metadata_0_key, "metadata_0_values[]": $metadata_0_values, "metadata_1_key": $metadata_1_key, "metadata_1_values[]": $metadata_1_values, "metadata_2_key": $metadata_2_key, "metadata_2_values[]": $metadata_2_values, "offset": $offset} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
+  let mp = (build-multipart-body $req_body [] $dry_run)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
 }
 
 # Delete an array of group messages. You must be the owner or moderator of the group.
 #
 # DELETE /groups/messages/{ID}
 export def "groups-messages delete" [
-  ID: list
+  id: list
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -625,21 +699,22 @@ export def "groups-messages delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: table<author: record, group: record, id: float, last_seen: record, moderated: record, text: record, timestamp: string>, status: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/groups/messages/($ID)")
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/groups/messages/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Fetch an array of group messages. You can only retrieve messages authored by you or by users existing within the current access token's bubble.
 #
 # GET /groups/messages/{ID}
 export def "groups-messages get-by-ID" [
-  ID: list
+  id: list
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -647,21 +722,22 @@ export def "groups-messages get-by-ID" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: table<author: record, group: record, id: float, last_seen: record, moderated: record, text: record, timestamp: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/groups/messages/($ID)")
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/groups/messages/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Retrieve all key/value pairs attached to the current message that you have access to, so long as the user who created the group exists within the current access token's bubble. This includes all public metadata, bubbled metadata that was created by an access token existing within the current bubble, user metadata that was created by you, or private metadata created by you from an access token existing within the current bubble.
 #
 # GET /groups/messages/{ID}/metadata
 export def "groups-messages-metadata get" [
-  ID: int
+  id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -669,6 +745,7 @@ export def "groups-messages-metadata get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --offset: int # format: int32, default: 0, allows empty value
   --limit: int # format: int32, default: 50, allows empty value
@@ -676,17 +753,17 @@ export def "groups-messages-metadata get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/groups/messages/($ID)/metadata" $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/groups/messages/{id}/metadata") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Attach one-to-many key/value pairs of metadata to a group message, so long as the user who authored the message exists within the current access token's bubble and you are a member of their group. A key is unique for each author/bubble combination. Attaching metadata with an existing key that was previously created by you, from within the same bubble, overwrites the key with the new value or set of values. The privacy setting allows you to specify who will have access to the metadata: Public metadata by anyone using an access token which grants them access to the user who authored the message and who is also a member of the group the message belongs to; Bubbled metadata by anyone using an access token existing within the current bubble who is also a member of the group the message belongs to; User metadata by you, so long as you are using an access token which grants you access to the user who authored the message and you remain a member of the group; Private metadata by you, so long as you are using an access token existing within the current bubble and you remain a member of the group.
 #
 # POST /groups/messages/{ID}/metadata
-export def "groups-messages-metadata post" [
-  ID: int
+export def "groups-messages-metadata create" [
+  id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -694,33 +771,36 @@ export def "groups-messages-metadata post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --metadata-0-key: string
   --metadata-0-privacy: string@metadata-0-privacy-completer
-  --metadata-0-values: list
+  --metadata-0-values: list<string>
   --metadata-1-key: string
   --metadata-1-privacy: string@metadata-1-privacy-completer
-  --metadata-1-values: list
+  --metadata-1-values: list<string>
   --metadata-2-key: string
   --metadata-2-privacy: string@metadata-2-privacy-completer
-  --metadata-2-values: list
+  --metadata-2-values: list<string>
 ]: any -> record<data: record, success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/groups/messages/($ID)/metadata")
-  let body = {metadata_0_key: $metadata_0_key, metadata_0_privacy: $metadata_0_privacy, metadata_0_values[]: $metadata_0_values, metadata_1_key: $metadata_1_key, metadata_1_privacy: $metadata_1_privacy, metadata_1_values[]: $metadata_1_values, metadata_2_key: $metadata_2_key, metadata_2_privacy: $metadata_2_privacy, metadata_2_values[]: $metadata_2_values} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/groups/messages/{id}/metadata"))
+  let req_body = {"metadata_0_key": $metadata_0_key, "metadata_0_privacy": $metadata_0_privacy, "metadata_0_values[]": $metadata_0_values, "metadata_1_key": $metadata_1_key, "metadata_1_privacy": $metadata_1_privacy, "metadata_1_values[]": $metadata_1_values, "metadata_2_key": $metadata_2_key, "metadata_2_privacy": $metadata_2_privacy, "metadata_2_values[]": $metadata_2_values} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
+  let mp = (build-multipart-body $req_body [] $dry_run)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
 }
 
 # Retrieve all key/value pairs attached to the current message that you have access to, so long as the user who created the group exists within the current access token's bubble. This includes all public metadata, bubbled metadata that was created by an access token existing within the current bubble, user metadata that was created by you, or private metadata created by you from an access token existing within the current bubble. Metadata will be grouped by key.
 #
 # GET /groups/messages/{ID}/metadata/collections
 export def "groups-messages-metadata-collections get" [
-  ID: int
+  id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -728,20 +808,21 @@ export def "groups-messages-metadata-collections get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/groups/messages/($ID)/metadata/collections")
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/groups/messages/{id}/metadata/collections"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Paginated report of information about messages contributed by group and date. Only groups you're a member of and group messages authored by users the current access token has access to are considered in the calculations. Optionally roll up all groups to retrieve one record per date. Optionally specify a date formatted as YYYY-MM-DD to retrieve information just from the single date, along with additional navigational information, which is useful when generating a transcript for a single day and wanting to reference the previous and next days there were messages.
 #
 # POST /groups/schedules
-export def "groups-schedules post" [
+export def "groups-schedules create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -749,6 +830,7 @@ export def "groups-schedules post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --date: string
   --limit: int # format: int32, default: 50
@@ -760,11 +842,13 @@ export def "groups-schedules post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/groups/schedules")
-  let body = {date: $date, limit: $limit, offset: $offset, roll_up: $roll_up, sort: $body_sort} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"date": $date, "limit": $limit, "offset": $offset, "roll_up": $roll_up, "sort": $body_sort} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
+  let mp = (build-multipart-body $req_body [] $dry_run)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
 }
 
 # Retrieve groups that were created by users within the current access token's bubble, along with your current relationship with the groups. The groups must be either Public or you must be a member of them. Unlisted and Private groups that you are not a member of are not listed. Optionally only retrieve groups that you are a member of.
@@ -778,6 +862,7 @@ export def "groups-statuses list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --existing-membership: oneof<nothing, bool> # default: false, allows empty value
   --offset: int # format: int32, default: 0, allows empty value
@@ -789,14 +874,14 @@ export def "groups-statuses list" [
   let full_url = (build-url $base "/groups/statuses" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Fetch an array of groups. You can only retrieve groups created by users existing within the current access token's bubble.
 #
 # GET /groups/{ID}
 export def "groups get" [
-  ID: list
+  id: list
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -804,21 +889,22 @@ export def "groups get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: table<first_message: record, id: float, latest_message: record, member_count: float, owner: record, properties: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/groups/($ID)")
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/groups/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Modify a group you previously created.
 #
 # PATCH /groups/{ID}
-export def "groups patch" [
-  ID: int
+export def "groups update" [
+  id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -826,6 +912,7 @@ export def "groups patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --description: string
   --name: string
@@ -836,19 +923,21 @@ export def "groups patch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/groups/($ID)")
-  let body = {description: $description, name: $name, passphrase: $passphrase, privacy: $privacy, slug: $slug} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/groups/{id}"))
+  let req_body = {"description": $description, "name": $name, "passphrase": $passphrase, "privacy": $privacy, "slug": $slug} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
+  let mp = (build-multipart-body $req_body [] $dry_run)
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
 }
 
 # Leave a group that you are a member of and that was created by a user who exists within the current access token's bubble.
 #
 # DELETE /groups/{ID}/memberships
 export def "groups-memberships delete" [
-  ID: int
+  id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -856,21 +945,22 @@ export def "groups-memberships delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/groups/($ID)/memberships")
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/groups/{id}/memberships"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Fetch an array of users who are members of specific groups that you are also a member of. You can only retrieve users existing within the current access token's bubble.
 #
 # GET /groups/{ID}/memberships
 export def "groups-memberships get" [
-  ID: list
+  id: list
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -878,6 +968,7 @@ export def "groups-memberships get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --moderators-only: oneof<nothing, bool> # default: false, allows empty value
   --offset: int # format: int32, default: 0, allows empty value
@@ -885,17 +976,17 @@ export def "groups-memberships get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "moderators_only" $moderators_only "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/groups/($ID)/memberships" $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/groups/{id}/memberships") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Promote or demote a member's privileges within a group that you created. The user must exist within the current access token's bubble and be an existing member of the group.
 #
 # PATCH /groups/{ID}/memberships
-export def "groups-memberships patch" [
-  ID: int
+export def "groups-memberships update" [
+  id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -903,6 +994,7 @@ export def "groups-memberships patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --moderator: oneof<nothing, bool> # default: false
   user_id: int # format: int32
@@ -910,19 +1002,21 @@ export def "groups-memberships patch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/groups/($ID)/memberships")
-  let body = {moderator: $moderator, user_id: $user_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/groups/{id}/memberships"))
+  let req_body = {"moderator": $moderator, "user_id": $user_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
+  let mp = (build-multipart-body $req_body [] $dry_run)
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
 }
 
 # Join a group that was created by a user who exists within the current access token's bubble, or join other users into a group that you created. If you are the group owner, you can pass in a user_id to create membership records for a user you are in a conversation with. The user must exist within the current access token's bubble. If the group is private, you must successfully pass in its passphrase in order to join. You can obtain the passphrase from the group's owner.
 #
 # POST /groups/{ID}/memberships
-export def "groups-memberships post" [
-  ID: int
+export def "groups-memberships create" [
+  id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -930,6 +1024,7 @@ export def "groups-memberships post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --passphrase: string
   --user-id: int # format: int32
@@ -937,19 +1032,21 @@ export def "groups-memberships post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/groups/($ID)/memberships")
-  let body = {passphrase: $passphrase, user_id: $user_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/groups/{id}/memberships"))
+  let req_body = {"passphrase": $passphrase, "user_id": $user_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
+  let mp = (build-multipart-body $req_body [] $dry_run)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
 }
 
 # Retrieve the last {limit} messages in the group, for messages authored by users within the current access token's bubble. If a timeout is 0 or greater, the batch is sorted oldest first. Otherwise, if timeout is a negative number, the transcript is paginated and sorted newest first. Specify a timeout for long polling (which delays the server sending back results for up to n seconds or until results are available, whichever comes first), or default to 0 for immediate results. Optionally record your status as online along with sharing the latest message you've seen with other group members. Optionally specify a gt_message_id to retrieve only messages with an ID greater than that specified (such as greater than the latest message ID received in the last poll). Optionally only poll for messages authored by other members of the group, and echo messages authored by you when sending, for a perceived increase in performance. Optionally only retrieve messages that were posted from within the current access token's bubble. Optionally specify a date formatted as YYYY-MM-DD to retrieve a transcript of messages from a single day. When record_seen is set to true, the new message count for the group is reset to zero.
 #
 # GET /groups/{ID}/messages
 export def "groups-messages get-by-ID-1" [
-  ID: int
+  id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -957,6 +1054,7 @@ export def "groups-messages get-by-ID-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --gt-message-id: int # format: int32, allows empty value
   --exclude-self: oneof<nothing, bool> # default: false, allows empty value
@@ -971,17 +1069,17 @@ export def "groups-messages get-by-ID-1" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "gt_message_id" $gt_message_id "scalar") (serialize-qp "exclude_self" $exclude_self "scalar") (serialize-qp "include_deleted" $include_deleted "scalar") (serialize-qp "date" $date "scalar") (serialize-qp "bubbled" $bubbled "scalar") (serialize-qp "record_seen" $record_seen "scalar") (serialize-qp "timeout" $timeout "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/groups/($ID)/messages" $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/groups/{id}/messages") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Post a message to a group that you are a member of and that was created by a user who exists within the current access token's bubble. Optionally specify whether emoticons should be parsed into smiley images. Additionally, optionally attach a single metadata key/value pair to the group message upon submission.
 #
 # POST /groups/{ID}/messages
-export def "groups-messages post" [
-  ID: int
+export def "groups-messages create" [
+  id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -989,35 +1087,38 @@ export def "groups-messages post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --metadata-0-key: string
   --metadata-0-privacy: string@metadata-0-privacy-completer
-  --metadata-0-values: list
+  --metadata-0-values: list<string>
   --metadata-1-key: string
   --metadata-1-privacy: string@metadata-1-privacy-completer
-  --metadata-1-values: list
+  --metadata-1-values: list<string>
   --metadata-2-key: string
   --metadata-2-privacy: string@metadata-2-privacy-completer
-  --metadata-2-values: list
+  --metadata-2-values: list<string>
   --text-emoticons: oneof<nothing, bool> # default: false
   text_raw: string
 ]: any -> record<data: table<author: record, group: record, id: float, last_seen: record, moderated: record, text: record, timestamp: string>, success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/groups/($ID)/messages")
-  let body = {metadata_0_key: $metadata_0_key, metadata_0_privacy: $metadata_0_privacy, metadata_0_values[]: $metadata_0_values, metadata_1_key: $metadata_1_key, metadata_1_privacy: $metadata_1_privacy, metadata_1_values[]: $metadata_1_values, metadata_2_key: $metadata_2_key, metadata_2_privacy: $metadata_2_privacy, metadata_2_values[]: $metadata_2_values, text_emoticons: $text_emoticons, text_raw: $text_raw} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/groups/{id}/messages"))
+  let req_body = {"metadata_0_key": $metadata_0_key, "metadata_0_privacy": $metadata_0_privacy, "metadata_0_values[]": $metadata_0_values, "metadata_1_key": $metadata_1_key, "metadata_1_privacy": $metadata_1_privacy, "metadata_1_values[]": $metadata_1_values, "metadata_2_key": $metadata_2_key, "metadata_2_privacy": $metadata_2_privacy, "metadata_2_values[]": $metadata_2_values, "text_emoticons": $text_emoticons, "text_raw": $text_raw} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
+  let mp = (build-multipart-body $req_body [] $dry_run)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
 }
 
 # Paginated report of information about group messages contributed by conversation and date. Only groups you're a member of and group messages authored by users existing within the current access token's bubble are considered in the calculations. Optionally roll up all groups to retrieve one record per date. Optionally specify a date formatted as YYYY-MM-DD to retrieve information just from the single date, along with additional navigational information, which is useful when generating a transcript for a single day and wanting to reference the previous and next days there were messages within the group discussion(s).
 #
 # POST /groups/{ID}/schedules
-export def "groups-schedules post-by-ID" [
-  ID: list
+export def "groups-schedules create-by-ID" [
+  id: list
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1025,6 +1126,7 @@ export def "groups-schedules post-by-ID" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --date: string
   --limit: int # format: int32, default: 50
@@ -1035,19 +1137,21 @@ export def "groups-schedules post-by-ID" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/groups/($ID)/schedules")
-  let body = {date: $date, limit: $limit, offset: $offset, roll_up: $roll_up, sort: $body_sort} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/groups/{id}/schedules"))
+  let req_body = {"date": $date, "limit": $limit, "offset": $offset, "roll_up": $roll_up, "sort": $body_sort} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
+  let mp = (build-multipart-body $req_body [] $dry_run)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
 }
 
 # Status information about your current relationship with one or more groups you are a member of, provided the users who created the groups exist within the current access token's bubble.
 #
 # GET /groups/{ID}/statuses
 export def "groups-statuses get" [
-  ID: list
+  id: list
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1055,14 +1159,15 @@ export def "groups-statuses get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: table<earliest_unseen_message: record, group: record, membership_status: bool, new_message_count: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/groups/($ID)/statuses")
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/groups/{id}/statuses"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # GET /industries
@@ -1074,6 +1179,7 @@ export def "industries get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1081,11 +1187,11 @@ export def "industries get" [
   let full_url = (build-url $base "/industries")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # POST /markdown
-export def "markdown post" [
+export def "markdown create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1093,6 +1199,7 @@ export def "markdown post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --text-emoticons: oneof<nothing, bool> # default: false
   text_raw: string
@@ -1101,11 +1208,13 @@ export def "markdown post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/markdown")
-  let body = {text_emoticons: $text_emoticons, text_raw: $text_raw} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"text_emoticons": $text_emoticons, "text_raw": $text_raw} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
+  let mp = (build-multipart-body $req_body [] $dry_run)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
 }
 
 # GET /markdown/emoticons
@@ -1117,6 +1226,7 @@ export def "markdown-emoticons get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: table<alt: string, emoticon: string, image: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1124,13 +1234,13 @@ export def "markdown-emoticons get" [
   let full_url = (build-url $base "/markdown/emoticons")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Paginated listing of messages filtered by arbitrary metadata criteria. Messages must match on all key/value pairs passed in. Messages may only match on one value of an array passed in. However, messages are sorted based on how many distinct values they match on (most matches first).
 #
 # POST /messages/metadata/filters
-export def "messages-metadata-filters post" [
+export def "messages-metadata-filters create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1138,32 +1248,35 @@ export def "messages-metadata-filters post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # format: int32, default: 50
   --metadata-0-key: string
-  --metadata-0-values: list
+  --metadata-0-values: list<string>
   --metadata-1-key: string
-  --metadata-1-values: list
+  --metadata-1-values: list<string>
   --metadata-2-key: string
-  --metadata-2-values: list
+  --metadata-2-values: list<string>
   --offset: int # format: int32, default: 0
 ]: any -> record<data: table<matched_metadata: record, message: record>, pagination: record<limit: float, offset: float, total_records: float>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/messages/metadata/filters")
-  let body = {limit: $limit, metadata_0_key: $metadata_0_key, metadata_0_values[]: $metadata_0_values, metadata_1_key: $metadata_1_key, metadata_1_values[]: $metadata_1_values, metadata_2_key: $metadata_2_key, metadata_2_values[]: $metadata_2_values, offset: $offset} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"limit": $limit, "metadata_0_key": $metadata_0_key, "metadata_0_values[]": $metadata_0_values, "metadata_1_key": $metadata_1_key, "metadata_1_values[]": $metadata_1_values, "metadata_2_key": $metadata_2_key, "metadata_2_values[]": $metadata_2_values, "offset": $offset} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
+  let mp = (build-multipart-body $req_body [] $dry_run)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
 }
 
 # Fetch an array of messages. You can only retrieve messages authored by you or by users who exist within the current access token's bubble.
 #
 # GET /messages/{ID}
 export def "messages get" [
-  ID: list
+  id: list
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1171,21 +1284,22 @@ export def "messages get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: table<author: record, conversation: record, id: float, last_seen: record, text: record, timestamp: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/messages/($ID)")
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/messages/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Retrieve all key/value pairs attached to the current message that you have access to, so long as the user who authored the message exists within the current access token's bubble. This includes all public metadata, bubbled metadata that was created by an access token existing within the current bubble, user metadata that was created by you, or private metadata created by you from an access token existing within the current bubble.
 #
 # GET /messages/{ID}/metadata
 export def "messages-metadata get" [
-  ID: int
+  id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1193,6 +1307,7 @@ export def "messages-metadata get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --offset: int # format: int32, default: 0, allows empty value
   --limit: int # format: int32, default: 50, allows empty value
@@ -1200,17 +1315,17 @@ export def "messages-metadata get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/messages/($ID)/metadata" $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/messages/{id}/metadata") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Attach one-to-many key/value pairs of metadata to a message, so long as the user who authored the message exists within the current access token's bubble. A key is unique for each author/bubble combination. Attaching metadata with an existing key that was previously created by you, from within the same bubble, overwrites the key with the new value or set of values. The privacy setting allows you to specify who will have access to the metadata: Public metadata by you or the other user in the message's conversation, using an access token which grants you access to the user who authored the message, if it wasn't you; Bubbled metadata by you or the other user in the message's conversation, using an access token existing within the current bubble; User metadata by you, so long as you are using an access token which grants you access to the user who authored the message, if it wasn't you; Private metadata by you, so long as you are using an access token existing within the current bubble.
 #
 # POST /messages/{ID}/metadata
-export def "messages-metadata post" [
-  ID: int
+export def "messages-metadata create" [
+  id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1218,33 +1333,36 @@ export def "messages-metadata post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --metadata-0-key: string
   --metadata-0-privacy: string@metadata-0-privacy-completer
-  --metadata-0-values: list
+  --metadata-0-values: list<string>
   --metadata-1-key: string
   --metadata-1-privacy: string@metadata-1-privacy-completer
-  --metadata-1-values: list
+  --metadata-1-values: list<string>
   --metadata-2-key: string
   --metadata-2-privacy: string@metadata-2-privacy-completer
-  --metadata-2-values: list
+  --metadata-2-values: list<string>
 ]: any -> record<data: record, success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/messages/($ID)/metadata")
-  let body = {metadata_0_key: $metadata_0_key, metadata_0_privacy: $metadata_0_privacy, metadata_0_values[]: $metadata_0_values, metadata_1_key: $metadata_1_key, metadata_1_privacy: $metadata_1_privacy, metadata_1_values[]: $metadata_1_values, metadata_2_key: $metadata_2_key, metadata_2_privacy: $metadata_2_privacy, metadata_2_values[]: $metadata_2_values} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/messages/{id}/metadata"))
+  let req_body = {"metadata_0_key": $metadata_0_key, "metadata_0_privacy": $metadata_0_privacy, "metadata_0_values[]": $metadata_0_values, "metadata_1_key": $metadata_1_key, "metadata_1_privacy": $metadata_1_privacy, "metadata_1_values[]": $metadata_1_values, "metadata_2_key": $metadata_2_key, "metadata_2_privacy": $metadata_2_privacy, "metadata_2_values[]": $metadata_2_values} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
+  let mp = (build-multipart-body $req_body [] $dry_run)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
 }
 
 # Retrieve all key/value pairs attached to the current message that you have access to, so long as the user who authored the message exists within the current access token's bubble. This includes all public metadata, bubbled metadata that was created by an access token existing within the current bubble, user metadata that was created by you, or private metadata created by you from an access token existing within the current bubble. Metadata will be grouped by key.
 #
 # GET /messages/{ID}/metadata/collections
 export def "messages-metadata-collections get" [
-  ID: int
+  id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1252,20 +1370,21 @@ export def "messages-metadata-collections get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/messages/($ID)/metadata/collections")
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/messages/{id}/metadata/collections"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Update the OAuth'ed end user's Curriculum Vitae by adding a position.
 #
 # POST /positions
-export def "positions post" [
+export def "positions create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1273,6 +1392,7 @@ export def "positions post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   category: string@category-completer
   --end-date: string
@@ -1282,24 +1402,26 @@ export def "positions post" [
   role: string
   start_date: string
   --summary: string
-  --body-url: string
+  --url: string
 ]: any -> record<data: record<app: record<about: record, id: float, legal: record>, category: string, id: float, organization: record<industry: string, name: string, size: string, ticker: string, type: string, url: string>, role: record<end_date: string, start_date: string, summary: string, title: string>, user: record<business_card: record, community_persona: record, id: float, profile: record, usage: record>>, success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/positions")
-  let body = {category: $category, end_date: $end_date, organization: $organization, organization_size: $organization_size, position: $position, role: $role, start_date: $start_date, summary: $summary, url: $body_url} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"category": $category, "end_date": $end_date, "organization": $organization, "organization_size": $organization_size, "position": $position, "role": $role, "start_date": $start_date, "summary": $summary, "url": $url} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
+  let mp = (build-multipart-body $req_body [] $dry_run)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
 }
 
 # Remove an item from the OAuth'ed end user's Curriculum Vitae.
 #
 # DELETE /positions/{ID}
 export def "positions delete" [
-  ID: int
+  id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1307,21 +1429,22 @@ export def "positions delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/positions/($ID)")
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/positions/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Update the OAuth'ed end user's Curriculum Vitae by modifying an existing position.
 #
 # PATCH /positions/{ID}
-export def "positions patch" [
-  ID: int
+export def "positions update" [
+  id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1329,6 +1452,7 @@ export def "positions patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   category: string@category-completer
   --end-date: string
@@ -1338,17 +1462,19 @@ export def "positions patch" [
   role: string
   start_date: string
   --summary: string
-  --body-url: string
+  --url: string
 ]: any -> record<data: record<app: record<about: record, id: float, legal: record>, category: string, id: float, organization: record<industry: string, name: string, size: string, ticker: string, type: string, url: string>, role: record<end_date: string, start_date: string, summary: string, title: string>, user: record<business_card: record, community_persona: record, id: float, profile: record, usage: record>>, success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/positions/($ID)")
-  let body = {category: $category, end_date: $end_date, organization: $organization, organization_size: $organization_size, position: $position, role: $role, start_date: $start_date, summary: $summary, url: $body_url} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/positions/{id}"))
+  let req_body = {"category": $category, "end_date": $end_date, "organization": $organization, "organization_size": $organization_size, "position": $position, "role": $role, "start_date": $start_date, "summary": $summary, "url": $url} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
+  let mp = (build-multipart-body $req_body [] $dry_run)
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
 }
 
 # Fetch an array of users that you've been matched with, connected with, skipped, or muted. You can only retrieve users existing within the current access token's bubble. This report may be limited to the last ~500-1000 users you've communicated with within the access token's bubble. Matches are always ordered by synergy, and the order_by parameter is ignored. You can only retrieve bubbled users when retrieving matches, and the bubbled parameter is ignored otherwise. Your 100 best algorithmic matches are based on: Complementary data submitted to Profiles, CVs, and Metadata; Complementary data acquired from third-parties; Location information; Many behavioral data points, such as how responsive users are to connections; Degrees of separation (mutual connections); etc. You may connect with 3 of these algorithmic matches per day for free. However, new members are allowed a grace period of additional daily matches. Each time you choose to meet or mute one of your algorithmic matches, a new match is introduced.
@@ -1362,6 +1488,7 @@ export def "users get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string@filter-completer-1 # default: connections, allows empty value
   --order-by: string@order-by-completer # default: id, allows empty value
@@ -1375,13 +1502,13 @@ export def "users get" [
   let full_url = (build-url $base "/users" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Invite users to into your current access token's bubble by having Dazah send out email invitations on your behalf. The invitation sends users to begin the OAuth flow for the current application (based on the settings specified in the application's profile), and therefore they will be redirected to the application upon signing up / logging in. Upon doing so, if they aren't already, they will automatically be connected with you as well. If your current access token does not escape the bubble, the invitation will specify you wish to connect within the application's name. If your current access token escapes the bubble, the invitation will specify you wish to connect within Dazah. Submit either a list of emails, or a LinkedIn or Outlook CSV file. You can retrieve your LinkedIn CSV file by exporting your LinkedIn Connections at https://www.linkedin.com/people/export-settings. You can retrieve your Outlook CSV file by using the Outlook Import and Export Wizard. This endpoint buckets the invitations into four categories: Existing invites are existing users who are already connected with you within the current bubble, and are therefore not emailed; Discovered invites are existing Dazah users who are available to be connected with within the current bubble, and are therefore not emailed. Now that they have been discovered, the users/{:ID}/meet API endpoint may be used to connect with them; Invalid invites are existing Dazah users who are unavailable to be connected with, because they have deactivated accounts, are muting you, etc., and are therefore not emailed; Emailed invites are queued to receive an invitation within approximately 1 hour. Note that if you are attempting to invite an existing Dazah user who does not currently exist within your current access token's bubble, they will fall within the Discovered bucket if your current access token escapes the bubble, but will be emailed an invitation to join the application if your current access token does not escape the bubble.
 #
 # POST /users/invites
-export def "users-invites post" [
+export def "users-invites create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1389,25 +1516,28 @@ export def "users-invites post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --csv: string # format: binary
-  --emails: list
+  --emails: list<string>
 ]: any -> record<data: record<discovered: record<users: list>, emailed: record<emails: list>, existing: record<conversations: list>, invalid: record<emails: list>>, success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/users/invites")
-  let body = {csv: $csv, emails[]: $emails} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"csv": $csv, "emails[]": $emails} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
+  let mp = (build-multipart-body $req_body ["csv"] $dry_run)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
 }
 
 # Paginated listing of users filtered by arbitrary metadata criteria. Users must match on all key/value pairs passed in. Users may only match on one value of an array passed in. However, users are sorted based on how many distinct values they match on (most matches first).
 #
 # POST /users/metadata/filters
-export def "users-metadata-filters post" [
+export def "users-metadata-filters create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1415,25 +1545,28 @@ export def "users-metadata-filters post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # format: int32, default: 50
   --metadata-0-key: string
-  --metadata-0-values: list
+  --metadata-0-values: list<string>
   --metadata-1-key: string
-  --metadata-1-values: list
+  --metadata-1-values: list<string>
   --metadata-2-key: string
-  --metadata-2-values: list
+  --metadata-2-values: list<string>
   --offset: int # format: int32, default: 0
 ]: any -> record<data: table<matched_metadata: record, user: record>, pagination: record<limit: float, offset: float, total_records: float>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/users/metadata/filters")
-  let body = {limit: $limit, metadata_0_key: $metadata_0_key, metadata_0_values[]: $metadata_0_values, metadata_1_key: $metadata_1_key, metadata_1_values[]: $metadata_1_values, metadata_2_key: $metadata_2_key, metadata_2_values[]: $metadata_2_values, offset: $offset} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"limit": $limit, "metadata_0_key": $metadata_0_key, "metadata_0_values[]": $metadata_0_values, "metadata_1_key": $metadata_1_key, "metadata_1_values[]": $metadata_1_values, "metadata_2_key": $metadata_2_key, "metadata_2_values[]": $metadata_2_values, "offset": $offset} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
+  let mp = (build-multipart-body $req_body [] $dry_run)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
 }
 
 # Fetch an array of users that are geographically close to a set of coordinates. You can only retrieve users existing within the current access token's bubble.
@@ -1447,6 +1580,7 @@ export def "users-nearby get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --latitude: float # format: float, allows empty value
   --longitude: float # format: float, allows empty value
@@ -1459,13 +1593,13 @@ export def "users-nearby get" [
   let full_url = (build-url $base "/users/nearby" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Filter and perform a weighted search against user profile fields, CV fields, and metadata by specifying a string to search on for each individual field. By default, results are filtered such that all words in the string must exist, unless you seprate the words with OR. To perform a weighted search (as opposed to filtering), specify the weight (from 0-100) the search algorithm should assign to the field. You can optionally exclude users who you are already in or not in conversations with, exclude users who you previously skipped, or exclude users who you are muting. By doing so, you can effectively customize your own matching algorithm. You can specify geo coordinates to only find users a certain distance away from a specific location, or only find users within a certain distance from the OAuth'ed end-user's last known location. If your app utilizes multiple audience segments, you can specify which audiences you would like to search. You can also limit users to just those who have been recently active. You can also choose to only receive users originating from the current access token's bubble. Only users existing within the current access token's bubble will be matched, and you can only search within a group created by a bubbled user.
 #
 # POST /users/searches
-export def "users-searches post" [
+export def "users-searches create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1473,9 +1607,10 @@ export def "users-searches post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --active-within-x-days: int # format: int32
-  --audience-ids: list
+  --audience-ids: list<int>
   --bubbled: oneof<nothing, bool> # default: false
   --exclude-connections: oneof<nothing, bool> # default: false
   --exclude-matches: oneof<nothing, bool> # default: false
@@ -1525,18 +1660,20 @@ export def "users-searches post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/users/searches")
-  let body = {active_within_x_days: $active_within_x_days, audience_ids[]: $audience_ids, bubbled: $bubbled, exclude_connections: $exclude_connections, exclude_matches: $exclude_matches, exclude_muted: $exclude_muted, exclude_skipped: $exclude_skipped, geo_latitude: $geo_latitude, geo_longitude: $geo_longitude, geo_miles_away: $geo_miles_away, group_id: $group_id, limit: $limit, location_city_query: $location_city_query, location_city_weight: $location_city_weight, location_country_query: $location_country_query, location_country_weight: $location_country_weight, location_region_query: $location_region_query, location_region_weight: $location_region_weight, metadata_0_key: $metadata_0_key, metadata_0_query: $metadata_0_query, metadata_0_weight: $metadata_0_weight, metadata_1_key: $metadata_1_key, metadata_1_query: $metadata_1_query, metadata_1_weight: $metadata_1_weight, metadata_2_key: $metadata_2_key, metadata_2_query: $metadata_2_query, metadata_2_weight: $metadata_2_weight, offset: $offset, position_organization_query: $position_organization_query, position_organization_weight: $position_organization_weight, position_role_query: $position_role_query, position_role_weight: $position_role_weight, position_summary_query: $position_summary_query, position_summary_weight: $position_summary_weight, profile_first_name_query: $profile_first_name_query, profile_first_name_weight: $profile_first_name_weight, profile_goals_query: $profile_goals_query, profile_goals_weight: $profile_goals_weight, profile_headline_query: $profile_headline_query, profile_headline_weight: $profile_headline_weight, profile_industry_query: $profile_industry_query, profile_industry_weight: $profile_industry_weight, profile_last_name_query: $profile_last_name_query, profile_last_name_weight: $profile_last_name_weight, profile_pitch_query: $profile_pitch_query, profile_pitch_weight: $profile_pitch_weight} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"active_within_x_days": $active_within_x_days, "audience_ids[]": $audience_ids, "bubbled": $bubbled, "exclude_connections": $exclude_connections, "exclude_matches": $exclude_matches, "exclude_muted": $exclude_muted, "exclude_skipped": $exclude_skipped, "geo_latitude": $geo_latitude, "geo_longitude": $geo_longitude, "geo_miles_away": $geo_miles_away, "group_id": $group_id, "limit": $limit, "location_city_query": $location_city_query, "location_city_weight": $location_city_weight, "location_country_query": $location_country_query, "location_country_weight": $location_country_weight, "location_region_query": $location_region_query, "location_region_weight": $location_region_weight, "metadata_0_key": $metadata_0_key, "metadata_0_query": $metadata_0_query, "metadata_0_weight": $metadata_0_weight, "metadata_1_key": $metadata_1_key, "metadata_1_query": $metadata_1_query, "metadata_1_weight": $metadata_1_weight, "metadata_2_key": $metadata_2_key, "metadata_2_query": $metadata_2_query, "metadata_2_weight": $metadata_2_weight, "offset": $offset, "position_organization_query": $position_organization_query, "position_organization_weight": $position_organization_weight, "position_role_query": $position_role_query, "position_role_weight": $position_role_weight, "position_summary_query": $position_summary_query, "position_summary_weight": $position_summary_weight, "profile_first_name_query": $profile_first_name_query, "profile_first_name_weight": $profile_first_name_weight, "profile_goals_query": $profile_goals_query, "profile_goals_weight": $profile_goals_weight, "profile_headline_query": $profile_headline_query, "profile_headline_weight": $profile_headline_weight, "profile_industry_query": $profile_industry_query, "profile_industry_weight": $profile_industry_weight, "profile_last_name_query": $profile_last_name_query, "profile_last_name_weight": $profile_last_name_weight, "profile_pitch_query": $profile_pitch_query, "profile_pitch_weight": $profile_pitch_weight} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
+  let mp = (build-multipart-body $req_body [] $dry_run)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
 }
 
 # Fetch an array of users. You can only retrieve users existing within the current access token's bubble.
 #
 # GET /users/{ID}
 export def "users get-by-ID" [
-  ID: list
+  id: list
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1544,21 +1681,22 @@ export def "users get-by-ID" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: table<business_card: record, community_persona: record, id: float, profile: record, usage: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($ID)")
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/users/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # You can only retrieve groups that were created by users existing within the current access token's bubble.
 #
 # GET /users/{ID}/groups
 export def "users-groups get" [
-  ID: int
+  id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1566,21 +1704,22 @@ export def "users-groups get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: table<first_message: record, id: float, latest_message: record, member_count: float, owner: record, properties: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($ID)/groups")
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/users/{id}/groups"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Paginated transcript of group messages authored by an individual user who exists within the current access token's bubble. Messages are sorted oldest to newest.
 #
 # GET /users/{ID}/groups/messages
 export def "users-groups-messages get" [
-  ID: int
+  id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1588,6 +1727,7 @@ export def "users-groups-messages get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --offset: int # format: int32, default: 0, allows empty value
   --limit: int # format: int32, default: 50, allows empty value
@@ -1595,17 +1735,17 @@ export def "users-groups-messages get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/users/($ID)/groups/messages" $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/users/{id}/groups/messages") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Initiate a conversation with a user who exists within the current access token's bubble by sending them an introductory message. If you aren't already in a conversation with them, this endpoint meets them first, and then sends the message. Note that if you aren't in an existing conversation, you still must meet the criteria to meet them, meaning the user must currently be free for you to meet. You will receive an error message unless it is currently free for you to meet the user. You can use the users/{:IDS}/synergies endpoint to first determine if the user isn't already in a conversation with you and is free for you to meet and, if they aren't, how to pay to meet them. If you don't specify a message, it defaults to your custom introductory message defined in your settings.
 #
 # POST /users/{ID}/messages
-export def "users-messages post" [
-  ID: int
+export def "users-messages create" [
+  id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1613,36 +1753,39 @@ export def "users-messages post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --bubbled: oneof<nothing, bool> # default: false
   --metadata-0-key: string
   --metadata-0-privacy: string@metadata-0-privacy-completer
-  --metadata-0-values: list
+  --metadata-0-values: list<string>
   --metadata-1-key: string
   --metadata-1-privacy: string@metadata-1-privacy-completer
-  --metadata-1-values: list
+  --metadata-1-values: list<string>
   --metadata-2-key: string
   --metadata-2-privacy: string@metadata-2-privacy-completer
-  --metadata-2-values: list
+  --metadata-2-values: list<string>
   --text-emoticons: oneof<nothing, bool> # default: false
   --text-raw: string
 ]: any -> record<data: record<author: record<business_card: record, community_persona: record, id: float, profile: record, usage: record>, conversation: record<first_message: record, id: float, latest_message: any, user_a: record, user_b: record>, id: float, last_seen: record<timestamp: string, user: record>, text: record<parsed: string>, timestamp: string>, success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($ID)/messages")
-  let body = {bubbled: $bubbled, metadata_0_key: $metadata_0_key, metadata_0_privacy: $metadata_0_privacy, metadata_0_values[]: $metadata_0_values, metadata_1_key: $metadata_1_key, metadata_1_privacy: $metadata_1_privacy, metadata_1_values[]: $metadata_1_values, metadata_2_key: $metadata_2_key, metadata_2_privacy: $metadata_2_privacy, metadata_2_values[]: $metadata_2_values, text_emoticons: $text_emoticons, text_raw: $text_raw} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/users/{id}/messages"))
+  let req_body = {"bubbled": $bubbled, "metadata_0_key": $metadata_0_key, "metadata_0_privacy": $metadata_0_privacy, "metadata_0_values[]": $metadata_0_values, "metadata_1_key": $metadata_1_key, "metadata_1_privacy": $metadata_1_privacy, "metadata_1_values[]": $metadata_1_values, "metadata_2_key": $metadata_2_key, "metadata_2_privacy": $metadata_2_privacy, "metadata_2_values[]": $metadata_2_values, "text_emoticons": $text_emoticons, "text_raw": $text_raw} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
+  let mp = (build-multipart-body $req_body [] $dry_run)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
 }
 
 # Retrieve all key/value pairs attached to the current user that you have access to, so long as the user exists within the current access token's bubble. This includes all public metadata, bubbled metadata that was created by an access token existing within the current bubble, user metadata that was created by you, or private metadata created by you from an access token existing within the current bubble. You will receive an error message unless either the current access token is bubbled, the user is an algorithmic match for you and you have not reached your quota of new introductions for the day, or you have paid to meet them. However, you can always use the /users/metadata/filters endpoint to filter across all users, including those that are unmatched, existing within the current access token's bubble based on preknown metadata key/value pairs.
 #
 # GET /users/{ID}/metadata
 export def "users-metadata get" [
-  ID: int
+  id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1650,6 +1793,7 @@ export def "users-metadata get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --offset: int # format: int32, default: 0, allows empty value
   --limit: int # format: int32, default: 50, allows empty value
@@ -1657,17 +1801,17 @@ export def "users-metadata get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/users/($ID)/metadata" $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/users/{id}/metadata") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Attach one-to-many key/value pairs of metadata to a user, so long as the user exists within the current access token's bubble. You can set one key at a time, with one or many values. A key is unique for each author/bubble combination. Attaching metadata with an existing key that was previously created by you, from within the same bubble, overwrites the key with the new value or set of values. The privacy setting allows you to specify who will have access to the metadata: Public metadata by anyone using an access token which grants them access to the user; Bubbled metadata by anyone using an access token existing within the current bubble; User metadata by you, so long as you are using an access token which grants you access to the user; Private metadata by you, so long as you are using an access token existing within the current bubble.
 #
 # POST /users/{ID}/metadata
-export def "users-metadata post" [
-  ID: int
+export def "users-metadata create" [
+  id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1675,33 +1819,36 @@ export def "users-metadata post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --metadata-0-key: string
   --metadata-0-privacy: string@metadata-0-privacy-completer
-  --metadata-0-values: list
+  --metadata-0-values: list<string>
   --metadata-1-key: string
   --metadata-1-privacy: string@metadata-1-privacy-completer
-  --metadata-1-values: list
+  --metadata-1-values: list<string>
   --metadata-2-key: string
   --metadata-2-privacy: string@metadata-2-privacy-completer
-  --metadata-2-values: list
+  --metadata-2-values: list<string>
 ]: any -> record<data: record, success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($ID)/metadata")
-  let body = {metadata_0_key: $metadata_0_key, metadata_0_privacy: $metadata_0_privacy, metadata_0_values[]: $metadata_0_values, metadata_1_key: $metadata_1_key, metadata_1_privacy: $metadata_1_privacy, metadata_1_values[]: $metadata_1_values, metadata_2_key: $metadata_2_key, metadata_2_privacy: $metadata_2_privacy, metadata_2_values[]: $metadata_2_values} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/users/{id}/metadata"))
+  let req_body = {"metadata_0_key": $metadata_0_key, "metadata_0_privacy": $metadata_0_privacy, "metadata_0_values[]": $metadata_0_values, "metadata_1_key": $metadata_1_key, "metadata_1_privacy": $metadata_1_privacy, "metadata_1_values[]": $metadata_1_values, "metadata_2_key": $metadata_2_key, "metadata_2_privacy": $metadata_2_privacy, "metadata_2_values[]": $metadata_2_values} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
+  let mp = (build-multipart-body $req_body [] $dry_run)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
 }
 
 # Retrieve all key/value pairs attached to the current user that you have access to, so long as the user exists within the current access token's bubble. This includes all public metadata, bubbled metadata that was created by an access token existing within the current bubble, user metadata that was created by you, or private metadata created by you from an access token existing within the current bubble. You will receive an error message unless either the current access token is bubbled, the user is an algorithmic match for you and you have not reached your quota of new introductions for the day, or you have paid to meet them. However, you can always use the /users/metadata/filters endpoint to filter across all users, including those that are unmatched, existing within the current access token's bubble based on preknown metadata key/value pairs. Metadata will be grouped by key.
 #
 # GET /users/{ID}/metadata/collections
 export def "users-metadata-collections get" [
-  ID: int
+  id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1709,21 +1856,22 @@ export def "users-metadata-collections get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($ID)/metadata/collections")
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/users/{id}/metadata/collections"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Retrieve the CV of a user who exists within the current access token's bubble. You will receive an error message unless either the current access token is bubbled, the user is an algorithmic match for you and you have not reached your quota of new introductions for the day, or you have paid to meet them. You can only record CV data to your own account. However, any app that you have OAuth'ed against can do so. By default, you will receive CV data that all apps have recorded for the user. Optionally, you can choose to only receive data that the current access token's bubble has recorded.
 #
 # GET /users/{ID}/positions
 export def "users-positions get" [
-  ID: int
+  id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1731,23 +1879,24 @@ export def "users-positions get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --bubbled: oneof<nothing, bool> # default: false, allows empty value
 ]: nothing -> record<data: table<app: record, category: string, id: float, organization: record, role: record, user: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "bubbled" $bubbled "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/users/($ID)/positions" $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/users/{id}/positions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Determine your match relationship with one or more users who exist within the current access token's bubble. Under some conditions, the price to meet the user will be $0. However, if this is not the case, the PayPal URL payment method will be provided along with the price to meet the user. The PayPal API can be leveraged to send payments programatically, provided the parameters passed in remain the same to ensure that the payment is correctly recorded. Once the payment has been recorded via PayPal IPN, the price to meet the user changes to $0. You can then call the users/{:ID}/meet endpoint to meet the user.
 #
 # GET /users/{ID}/synergies
 export def "users-synergies get" [
-  ID: list
+  id: list
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1755,21 +1904,22 @@ export def "users-synergies get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: table<additional: record, conversation: record, match: record, meet: record, relationship: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($ID)/synergies")
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/users/{id}/synergies"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Skip, mute or unmute a user you've been matched with. Skipped matches are only presented as algorithmic matches after all other candidates have been exhausted. You cannot be matched with or meet muted users. You can only skip, mute or unmute users existing within the same bubble.
 #
 # PATCH /users/{ID}/synergies
-export def "users-synergies patch" [
-  ID: int
+export def "users-synergies update" [
+  id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1777,6 +1927,7 @@ export def "users-synergies patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --relationship-muted: oneof<nothing, bool>
   --relationship-skipped: oneof<nothing, bool>
@@ -1784,12 +1935,14 @@ export def "users-synergies patch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($ID)/synergies")
-  let body = {relationship_muted: $relationship_muted, relationship_skipped: $relationship_skipped} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/users/{id}/synergies"))
+  let req_body = {"relationship_muted": $relationship_muted, "relationship_skipped": $relationship_skipped} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
+  let mp = (build-multipart-body $req_body [] $dry_run)
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
 }
 
 # Retrieve the currently OAuth'ed end-user, based on the access token being used, including private information and settings such as their email address.
@@ -1803,6 +1956,7 @@ export def "users get-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: record<business_card: record<company_name: string, company_size: string, headline: string, industry: string, interest_tags: list, job_position: string, summary: string, website: record>, community_persona: record<id: float, identity: record, location: record, personal: record, signature: record, stats: record>, id: float, location: record<city: string, country: float, ip_address: string, latitude: string, longitude: string, region: string>, matching: record<goals: list, interest_tags: list, location_importance: string, targeted_industry: string>, profile: record<first_name: string, introduction: string, last_name: string>, settings: record<email: string, email_verified: bool, notifications: string, timezone: float>, usage: record<available_status: bool, joined_timestamp: string, last_activity_timestamp: string, online_status: bool>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1810,13 +1964,13 @@ export def "users get-1" [
   let full_url = (build-url $base "/users/~")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Update the OAuth'ed end user's account profile. At this time, for anti-spam reasons, restrictions preclude the ability to update email address and some other settings via the API.
 #
 # PATCH /users/~
-export def "users patch" [
+export def "users update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1824,32 +1978,35 @@ export def "users patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --company: string
   --company-size: string@company-size-completer
   --first-name: string
-  --goals: list@goals-completer
+  --goals: list<string>@goals-completer
   --headline: string
   --industry: string@industry-completer
   --introduction: string
   --job-position: string@job-position-completer
   --last-name: string
   --location-importance: string@location-importance-completer
-  --match-tags: list
+  --match-tags: list<string>
   --pitch: string
-  --tags: list
+  --tags: list<string>
   --targeted-industry: string@targeted-industry-completer
-  --body-url: string
+  --url: string
 ]: any -> record<data: record<business_card: record<company_name: string, company_size: string, headline: string, industry: string, interest_tags: list, job_position: string, summary: string, website: record>, community_persona: record<id: float, identity: record, location: record, personal: record, signature: record, stats: record>, id: float, location: record<city: string, country: float, ip_address: string, latitude: string, longitude: string, region: string>, matching: record<goals: list, interest_tags: list, location_importance: string, targeted_industry: string>, profile: record<first_name: string, introduction: string, last_name: string>, settings: record<email: string, email_verified: bool, notifications: string, timezone: float>, usage: record<available_status: bool, joined_timestamp: string, last_activity_timestamp: string, online_status: bool>>, success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/users/~")
-  let body = {company: $company, company_size: $company_size, first_name: $first_name, goals[]: $goals, headline: $headline, industry: $industry, introduction: $introduction, job_position: $job_position, last_name: $last_name, location_importance: $location_importance, match_tags[]: $match_tags, pitch: $pitch, tags[]: $tags, targeted_industry: $targeted_industry, url: $body_url} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"company": $company, "company_size": $company_size, "first_name": $first_name, "goals[]": $goals, "headline": $headline, "industry": $industry, "introduction": $introduction, "job_position": $job_position, "last_name": $last_name, "location_importance": $location_importance, "match_tags[]": $match_tags, "pitch": $pitch, "tags[]": $tags, "targeted_industry": $targeted_industry, "url": $url} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
+  let mp = (build-multipart-body $req_body [] $dry_run)
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
 }
 
 # Fetch a listing of all webhooks owned by the current user/bubble combination.
@@ -1863,6 +2020,7 @@ export def "webhooks get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: table<app: record, event: record, id: float, name: string, object: record, uri: string, user: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1870,13 +2028,13 @@ export def "webhooks get" [
   let full_url = (build-url $base "/webhooks")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Register a new webhook for the current user/bubble combination. Specify an object_id to only be notified on an event related to that specific Conversation ID, Group ID, or User ID. Your access token must have access to the user being tracked, user you are in the conversation with, or user who created the group. You must be connected with a user in order to keep track of their online status. Alternatively, do not specify an object_id to be notified on all events that are related to conversations you're in, groups you're a member of, or users you are in conversations with. You may only have one webhook for each object_id/event. The webhook URI must reside on your own server. Webhooks do not expire when the access token used to create them expires. However, they will temporarily cease to function if the user who created them deauthorizes access to the application (effectively no longer existing within the bubble), unless/until the user reauthorizes the application using OAuth.
 #
 # POST /webhooks
-export def "webhooks post" [
+export def "webhooks create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1884,6 +2042,7 @@ export def "webhooks post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --bubbled: oneof<nothing, bool> # default: false
   event: string@event-completer
@@ -1895,18 +2054,20 @@ export def "webhooks post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/webhooks")
-  let body = {bubbled: $bubbled, event: $event, name: $name, object_id: $object_id, uri: $uri} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"bubbled": $bubbled, "event": $event, "name": $name, "object_id": $object_id, "uri": $uri} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
+  let mp = (build-multipart-body $req_body [] $dry_run)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
 }
 
 # Delete a webhook that was previously registered by the current user/bubble combination.
 #
 # DELETE /webhooks/{ID}
 export def "webhooks delete" [
-  ID: int
+  id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1914,12 +2075,13 @@ export def "webhooks delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/webhooks/($ID)")
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/webhooks/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }

@@ -18,21 +18,32 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 }
 
 # Serialize a single query parameter based on collection style
+# Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
+# ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = ($name | url encode)
+  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
-  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
-    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
-    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
+    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
+    _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
+}
+
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Build URL from base, path, and optional query string
@@ -44,7 +55,7 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
@@ -53,13 +64,13 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
     "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "put" => { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "patch" => { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
   if ($method in ["head" "options"]) { return $resp }
-  if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
+  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
 def base-url-completer [] { ["https://slack.com/api"] }
@@ -68,8 +79,8 @@ def auth-scheme-completer [] { ["bearer"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "adminappsapprove approve" } } | get name | first)
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "admin-apps-approve approve" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -94,7 +105,7 @@ export def commands []: nothing -> table {
 # POST /admin.apps.approve
 # Docs: https://api.slack.com/methods/admin.apps.approve — API method documentation
 # operationId: admin_apps_approve
-export def "adminappsapprove approve" [
+export def "admin-apps-approve approve" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -102,6 +113,7 @@ export def "adminappsapprove approve" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # Authentication token. Requires scope: `admin.apps:write`
   --app-id: string # The id of the app to approve.
@@ -112,13 +124,14 @@ export def "adminappsapprove approve" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/admin.apps.approve")
-  let body = {app_id: $app_id, request_id: $request_id, team_id: $team_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"token": $hdr_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"app_id": $app_id, "request_id": $request_id, "team_id": $team_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let extra_headers = {"token": $hdr_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # List approved apps for an org or workspace.
@@ -126,7 +139,7 @@ export def "adminappsapprove approve" [
 # GET /admin.apps.approved.list
 # Docs: https://api.slack.com/methods/admin.apps.approved.list — API method documentation
 # operationId: admin_apps_approved_list
-export def "adminappsapprovedlist list" [
+export def "admin-apps-approved-list list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -134,6 +147,7 @@ export def "adminappsapprovedlist list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --qp-token: string # Authentication token. Requires scope: `admin.apps:read`
   --limit: int # The maximum number of items to return. Must be between 1 - 1000 both inclusive.
@@ -147,7 +161,7 @@ export def "adminappsapprovedlist list" [
   let full_url = (build-url $base "/admin.apps.approved.list" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # List app requests for a team/workspace.
@@ -155,7 +169,7 @@ export def "adminappsapprovedlist list" [
 # GET /admin.apps.requests.list
 # Docs: https://api.slack.com/methods/admin.apps.requests.list — API method documentation
 # operationId: admin_apps_requests_list
-export def "adminappsrequestslist list" [
+export def "admin-apps-requests-list list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -163,6 +177,7 @@ export def "adminappsrequestslist list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --qp-token: string # Authentication token. Requires scope: `admin.apps:read`
   --limit: int # The maximum number of items to return. Must be between 1 - 1000 both inclusive.
@@ -175,7 +190,7 @@ export def "adminappsrequestslist list" [
   let full_url = (build-url $base "/admin.apps.requests.list" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Restrict an app for installation on a workspace.
@@ -183,7 +198,7 @@ export def "adminappsrequestslist list" [
 # POST /admin.apps.restrict
 # Docs: https://api.slack.com/methods/admin.apps.restrict — API method documentation
 # operationId: admin_apps_restrict
-export def "adminappsrestrict restrict" [
+export def "admin-apps-restrict create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -191,6 +206,7 @@ export def "adminappsrestrict restrict" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # Authentication token. Requires scope: `admin.apps:write`
   --app-id: string # The id of the app to restrict.
@@ -201,13 +217,14 @@ export def "adminappsrestrict restrict" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/admin.apps.restrict")
-  let body = {app_id: $app_id, request_id: $request_id, team_id: $team_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"token": $hdr_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"app_id": $app_id, "request_id": $request_id, "team_id": $team_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let extra_headers = {"token": $hdr_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # List restricted apps for an org or workspace.
@@ -215,7 +232,7 @@ export def "adminappsrestrict restrict" [
 # GET /admin.apps.restricted.list
 # Docs: https://api.slack.com/methods/admin.apps.restricted.list — API method documentation
 # operationId: admin_apps_restricted_list
-export def "adminappsrestrictedlist list" [
+export def "admin-apps-restricted-list list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -223,6 +240,7 @@ export def "adminappsrestrictedlist list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --qp-token: string # Authentication token. Requires scope: `admin.apps:read`
   --limit: int # The maximum number of items to return. Must be between 1 - 1000 both inclusive.
@@ -236,7 +254,7 @@ export def "adminappsrestrictedlist list" [
   let full_url = (build-url $base "/admin.apps.restricted.list" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Archive a public or private channel.
@@ -244,7 +262,7 @@ export def "adminappsrestrictedlist list" [
 # POST /admin.conversations.archive
 # Docs: https://api.slack.com/methods/admin.conversations.archive — API method documentation
 # operationId: admin_conversations_archive
-export def "adminconversationsarchive archive" [
+export def "admin-conversations-archive archive" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -252,6 +270,7 @@ export def "adminconversationsarchive archive" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # Authentication token. Requires scope: `admin.conversations:write`
   channel_id: string # The channel to archive.
@@ -260,13 +279,14 @@ export def "adminconversationsarchive archive" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/admin.conversations.archive")
-  let body = {channel_id: $channel_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"token": $hdr_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"channel_id": $channel_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let extra_headers = {"token": $hdr_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # Convert a public channel to a private channel.
@@ -274,7 +294,7 @@ export def "adminconversationsarchive archive" [
 # POST /admin.conversations.convertToPrivate
 # Docs: https://api.slack.com/methods/admin.conversations.convertToPrivate — API method documentation
 # operationId: admin_conversations_convertToPrivate
-export def "adminconversationsconvert-to-private convertToPrivate" [
+export def "admin-conversations-convert-to-private create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -282,6 +302,7 @@ export def "adminconversationsconvert-to-private convertToPrivate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # Authentication token. Requires scope: `admin.conversations:write`
   channel_id: string # The channel to convert to private.
@@ -290,13 +311,14 @@ export def "adminconversationsconvert-to-private convertToPrivate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/admin.conversations.convertToPrivate")
-  let body = {channel_id: $channel_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"token": $hdr_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"channel_id": $channel_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let extra_headers = {"token": $hdr_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # Create a public or private channel-based conversation.
@@ -304,7 +326,7 @@ export def "adminconversationsconvert-to-private convertToPrivate" [
 # POST /admin.conversations.create
 # Docs: https://api.slack.com/methods/admin.conversations.create — API method documentation
 # operationId: admin_conversations_create
-export def "adminconversationscreate create" [
+export def "admin-conversations-create create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -312,6 +334,7 @@ export def "adminconversationscreate create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # Authentication token. Requires scope: `admin.conversations:write`
   --description: string # Description of the public or private channel to create.
@@ -324,13 +347,14 @@ export def "adminconversationscreate create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/admin.conversations.create")
-  let body = {description: $description, is_private: $is_private, name: $name, org_wide: $org_wide, team_id: $team_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"token": $hdr_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"description": $description, "is_private": $is_private, "name": $name, "org_wide": $org_wide, "team_id": $team_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let extra_headers = {"token": $hdr_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # Delete a public or private channel.
@@ -338,7 +362,7 @@ export def "adminconversationscreate create" [
 # POST /admin.conversations.delete
 # Docs: https://api.slack.com/methods/admin.conversations.delete — API method documentation
 # operationId: admin_conversations_delete
-export def "adminconversationsdelete delete" [
+export def "admin-conversations-delete delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -346,6 +370,7 @@ export def "adminconversationsdelete delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # Authentication token. Requires scope: `admin.conversations:write`
   channel_id: string # The channel to delete.
@@ -354,13 +379,14 @@ export def "adminconversationsdelete delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/admin.conversations.delete")
-  let body = {channel_id: $channel_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"token": $hdr_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"channel_id": $channel_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let extra_headers = {"token": $hdr_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # Disconnect a connected channel from one or more workspaces.
@@ -368,7 +394,7 @@ export def "adminconversationsdelete delete" [
 # POST /admin.conversations.disconnectShared
 # Docs: https://api.slack.com/methods/admin.conversations.disconnectShared — API method documentation
 # operationId: admin_conversations_disconnectShared
-export def "adminconversationsdisconnect-shared disconnectShared" [
+export def "admin-conversations-disconnect-shared create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -376,6 +402,7 @@ export def "adminconversationsdisconnect-shared disconnectShared" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # Authentication token. Requires scope: `admin.conversations:write`
   channel_id: string # The channel to be disconnected from some workspaces.
@@ -385,13 +412,14 @@ export def "adminconversationsdisconnect-shared disconnectShared" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/admin.conversations.disconnectShared")
-  let body = {channel_id: $channel_id, leaving_team_ids: $leaving_team_ids} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"token": $hdr_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"channel_id": $channel_id, "leaving_team_ids": $leaving_team_ids} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let extra_headers = {"token": $hdr_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # List all disconnected channels—i.e., channels that were once connected to other workspaces and then disconnected—and the corresponding original channel IDs for key revocation with EKM.
@@ -399,7 +427,7 @@ export def "adminconversationsdisconnect-shared disconnectShared" [
 # GET /admin.conversations.ekm.listOriginalConnectedChannelInfo
 # Docs: https://api.slack.com/methods/admin.conversations.ekm.listOriginalConnectedChannelInfo — API method documentation
 # operationId: admin_conversations_ekm_listOriginalConnectedChannelInfo
-export def "adminconversationsekmlist-original-connected-channel-info listOriginalConnectedChannelInfo" [
+export def "admin-conversations-ekm-list-original-connected-channel-info list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -407,6 +435,7 @@ export def "adminconversationsekmlist-original-connected-channel-info listOrigin
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --qp-token: string # Authentication token. Requires scope: `admin.conversations:read`
   --channel-ids: string # A comma-separated list of channels to filter to.
@@ -420,7 +449,7 @@ export def "adminconversationsekmlist-original-connected-channel-info listOrigin
   let full_url = (build-url $base "/admin.conversations.ekm.listOriginalConnectedChannelInfo" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get conversation preferences for a public or private channel.
@@ -428,7 +457,7 @@ export def "adminconversationsekmlist-original-connected-channel-info listOrigin
 # GET /admin.conversations.getConversationPrefs
 # Docs: https://api.slack.com/methods/admin.conversations.getConversationPrefs — API method documentation
 # operationId: admin_conversations_getConversationPrefs
-export def "adminconversationsget-conversation-prefs get" [
+export def "admin-conversations-get-conversation-prefs get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -436,6 +465,7 @@ export def "adminconversationsget-conversation-prefs get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --channel-id: string # The channel to get preferences for.
   --hdr-token: string # Authentication token. Requires scope: `admin.conversations:read`
@@ -444,11 +474,11 @@ export def "adminconversationsget-conversation-prefs get" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "channel_id" $channel_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/admin.conversations.getConversationPrefs" $qp)
-  let extra_headers = {"token": $hdr_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"token": $hdr_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get all the workspaces a given public or private channel is connected to within this Enterprise org.
@@ -456,7 +486,7 @@ export def "adminconversationsget-conversation-prefs get" [
 # GET /admin.conversations.getTeams
 # Docs: https://api.slack.com/methods/admin.conversations.getTeams — API method documentation
 # operationId: admin_conversations_getTeams
-export def "adminconversationsget-teams get" [
+export def "admin-conversations-get-teams get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -464,6 +494,7 @@ export def "adminconversationsget-teams get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --channel-id: string # The channel to determine connected workspaces within the organization for.
   --cursor: string # Set `cursor` to `next_cursor` returned by the previous call to list items in the next page
@@ -474,11 +505,11 @@ export def "adminconversationsget-teams get" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "channel_id" $channel_id "scalar") (serialize-qp "cursor" $cursor "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/admin.conversations.getTeams" $qp)
-  let extra_headers = {"token": $hdr_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"token": $hdr_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Invite a user to a public or private channel.
@@ -486,7 +517,7 @@ export def "adminconversationsget-teams get" [
 # POST /admin.conversations.invite
 # Docs: https://api.slack.com/methods/admin.conversations.invite — API method documentation
 # operationId: admin_conversations_invite
-export def "adminconversationsinvite invite" [
+export def "admin-conversations-invite create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -494,6 +525,7 @@ export def "adminconversationsinvite invite" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # Authentication token. Requires scope: `admin.conversations:write`
   channel_id: string # The channel that the users will be invited to.
@@ -503,13 +535,14 @@ export def "adminconversationsinvite invite" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/admin.conversations.invite")
-  let body = {channel_id: $channel_id, user_ids: $user_ids} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"token": $hdr_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"channel_id": $channel_id, "user_ids": $user_ids} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let extra_headers = {"token": $hdr_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # Rename a public or private channel.
@@ -517,7 +550,7 @@ export def "adminconversationsinvite invite" [
 # POST /admin.conversations.rename
 # Docs: https://api.slack.com/methods/admin.conversations.rename — API method documentation
 # operationId: admin_conversations_rename
-export def "adminconversationsrename rename" [
+export def "admin-conversations-rename rename" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -525,6 +558,7 @@ export def "adminconversationsrename rename" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # Authentication token. Requires scope: `admin.conversations:write`
   channel_id: string # The channel to rename.
@@ -534,13 +568,14 @@ export def "adminconversationsrename rename" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/admin.conversations.rename")
-  let body = {channel_id: $channel_id, name: $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"token": $hdr_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"channel_id": $channel_id, "name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let extra_headers = {"token": $hdr_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # Add an allowlist of IDP groups for accessing a channel
@@ -548,7 +583,7 @@ export def "adminconversationsrename rename" [
 # POST /admin.conversations.restrictAccess.addGroup
 # Docs: https://api.slack.com/methods/admin.conversations.restrictAccess.addGroup — API method documentation
 # operationId: admin_conversations_restrictAccess_addGroup
-export def "adminconversationsrestrict-accessadd-group addGroup" [
+export def "admin-conversations-restrict-access-add-group create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -556,6 +591,7 @@ export def "adminconversationsrestrict-accessadd-group addGroup" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   channel_id: string # The channel to link this group to.
   group_id: string # The [IDP Group](https://slack.com/help/articles/115001435788-Connect-identity-provider-groups-to-your-Enterprise-Grid-org) ID to be an allowlist for the private channel.
@@ -566,11 +602,12 @@ export def "adminconversationsrestrict-accessadd-group addGroup" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/admin.conversations.restrictAccess.addGroup")
-  let body = {channel_id: $channel_id, group_id: $group_id, team_id: $team_id, token: $body_token} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"channel_id": $channel_id, "group_id": $group_id, "team_id": $team_id, "token": $body_token} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # List all IDP Groups linked to a channel
@@ -578,7 +615,7 @@ export def "adminconversationsrestrict-accessadd-group addGroup" [
 # GET /admin.conversations.restrictAccess.listGroups
 # Docs: https://api.slack.com/methods/admin.conversations.restrictAccess.listGroups — API method documentation
 # operationId: admin_conversations_restrictAccess_listGroups
-export def "adminconversationsrestrict-accesslist-groups listGroups" [
+export def "admin-conversations-restrict-access-list-groups list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -586,6 +623,7 @@ export def "adminconversationsrestrict-accesslist-groups listGroups" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --qp-token: string # Authentication token. Requires scope: `admin.conversations:read`
   --channel-id: string
@@ -597,7 +635,7 @@ export def "adminconversationsrestrict-accesslist-groups listGroups" [
   let full_url = (build-url $base "/admin.conversations.restrictAccess.listGroups" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Remove a linked IDP group linked from a private channel
@@ -605,7 +643,7 @@ export def "adminconversationsrestrict-accesslist-groups listGroups" [
 # POST /admin.conversations.restrictAccess.removeGroup
 # Docs: https://api.slack.com/methods/admin.conversations.restrictAccess.removeGroup — API method documentation
 # operationId: admin_conversations_restrictAccess_removeGroup
-export def "adminconversationsrestrict-accessremove-group removeGroup" [
+export def "admin-conversations-restrict-access-remove-group delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -613,6 +651,7 @@ export def "adminconversationsrestrict-accessremove-group removeGroup" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   channel_id: string # The channel to remove the linked group from.
   group_id: string # The [IDP Group](https://slack.com/help/articles/115001435788-Connect-identity-provider-groups-to-your-Enterprise-Grid-org) ID to remove from the private channel.
@@ -623,11 +662,12 @@ export def "adminconversationsrestrict-accessremove-group removeGroup" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/admin.conversations.restrictAccess.removeGroup")
-  let body = {channel_id: $channel_id, group_id: $group_id, team_id: $team_id, token: $body_token} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"channel_id": $channel_id, "group_id": $group_id, "team_id": $team_id, "token": $body_token} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # Search for public or private channels in an Enterprise organization.
@@ -635,7 +675,7 @@ export def "adminconversationsrestrict-accessremove-group removeGroup" [
 # GET /admin.conversations.search
 # Docs: https://api.slack.com/methods/admin.conversations.search — API method documentation
 # operationId: admin_conversations_search
-export def "adminconversationssearch search" [
+export def "admin-conversations-search list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -643,13 +683,14 @@ export def "adminconversationssearch search" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --team-ids: string # Comma separated string of team IDs, signifying the workspaces to search through.
   --query: string # Name of the the channel to query by.
   --limit: int # Maximum number of items to be returned. Must be between 1 - 20 both inclusive. Default is 10.
   --cursor: string # Set `cursor` to `next_cursor` returned by the previous call to list items in the next page.
   --search-channel-types: string # The type of channel to include or exclude in the search. For example `private` will search private channels, while `private_exclude` will exclude them. For a full list of types, check the [Types section](#types).
-  --qp-sort: string # Possible values are `relevant` (search ranking based on what we think is closest), `name` (alphabetical), `member_count` (number of users in the channel), and `created` (date channel was created). You can optionally pair this with the `sort_dir` arg to change how it is sorted 
+  --qp-sort: string # Possible values are `relevant` (search ranking based on what we think is closest), `name` (alphabetical), `member_count` (number of users in the channel), and `created` (date channel was created). You can optionally pair this with the `sort_dir` arg to change how it is sorted
   --sort-dir: string # Sort direction. Possible values are `asc` for ascending order like (1, 2, 3) or (a, b, c), and `desc` for descending order like (3, 2, 1) or (c, b, a)
   --hdr-token: string # Authentication token. Requires scope: `admin.conversations:read`
 ]: nothing -> record<channels: table<accepted_user: string, created: int, creator: string, id: string, is_archived: bool, is_channel: bool, is_frozen: bool, is_general: bool, is_member: bool, is_moved: int, is_mpim: bool, is_non_threadable: bool, is_org_shared: bool, is_pending_ext_shared: bool, is_private: bool, is_read_only: bool, is_shared: bool, is_thread_only: bool, last_read: string, latest: list, members: list, name: string, name_normalized: string, num_members: int, pending_shared: list, previous_names: list, priority: float, purpose: record, topic: record, unlinked: int, unread_count: int, unread_count_display: int>, next_cursor: string> {
@@ -657,11 +698,11 @@ export def "adminconversationssearch search" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "team_ids" $team_ids "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "cursor" $cursor "scalar") (serialize-qp "search_channel_types" $search_channel_types "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "sort_dir" $sort_dir "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/admin.conversations.search" $qp)
-  let extra_headers = {"token": $hdr_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"token": $hdr_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Set the posting permissions for a public or private channel.
@@ -669,7 +710,7 @@ export def "adminconversationssearch search" [
 # POST /admin.conversations.setConversationPrefs
 # Docs: https://api.slack.com/methods/admin.conversations.setConversationPrefs — API method documentation
 # operationId: admin_conversations_setConversationPrefs
-export def "adminconversationsset-conversation-prefs setConversationPrefs" [
+export def "admin-conversations-set-conversation-prefs update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -677,6 +718,7 @@ export def "adminconversationsset-conversation-prefs setConversationPrefs" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # Authentication token. Requires scope: `admin.conversations:write`
   channel_id: string # The channel to set the prefs for
@@ -686,13 +728,14 @@ export def "adminconversationsset-conversation-prefs setConversationPrefs" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/admin.conversations.setConversationPrefs")
-  let body = {channel_id: $channel_id, prefs: $prefs} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"token": $hdr_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"channel_id": $channel_id, "prefs": $prefs} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let extra_headers = {"token": $hdr_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # Set the workspaces in an Enterprise grid org that connect to a public or private channel.
@@ -700,7 +743,7 @@ export def "adminconversationsset-conversation-prefs setConversationPrefs" [
 # POST /admin.conversations.setTeams
 # Docs: https://api.slack.com/methods/admin.conversations.setTeams — API method documentation
 # operationId: admin_conversations_setTeams
-export def "adminconversationsset-teams setTeams" [
+export def "admin-conversations-set-teams update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -708,6 +751,7 @@ export def "adminconversationsset-teams setTeams" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # Authentication token. Requires scope: `admin.conversations:write`
   channel_id: string # The encoded `channel_id` to add or remove to workspaces.
@@ -719,13 +763,14 @@ export def "adminconversationsset-teams setTeams" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/admin.conversations.setTeams")
-  let body = {channel_id: $channel_id, org_channel: $org_channel, target_team_ids: $target_team_ids, team_id: $team_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"token": $hdr_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"channel_id": $channel_id, "org_channel": $org_channel, "target_team_ids": $target_team_ids, "team_id": $team_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let extra_headers = {"token": $hdr_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # Unarchive a public or private channel.
@@ -733,7 +778,7 @@ export def "adminconversationsset-teams setTeams" [
 # POST /admin.conversations.unarchive
 # Docs: https://api.slack.com/methods/admin.conversations.unarchive — API method documentation
 # operationId: admin_conversations_unarchive
-export def "adminconversationsunarchive unarchive" [
+export def "admin-conversations-unarchive unarchive" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -741,6 +786,7 @@ export def "adminconversationsunarchive unarchive" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # Authentication token. Requires scope: `admin.conversations:write`
   channel_id: string # The channel to unarchive.
@@ -749,13 +795,14 @@ export def "adminconversationsunarchive unarchive" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/admin.conversations.unarchive")
-  let body = {channel_id: $channel_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"token": $hdr_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"channel_id": $channel_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let extra_headers = {"token": $hdr_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # Add an emoji.
@@ -763,7 +810,7 @@ export def "adminconversationsunarchive unarchive" [
 # POST /admin.emoji.add
 # Docs: https://api.slack.com/methods/admin.emoji.add — API method documentation
 # operationId: admin_emoji_add
-export def "adminemojiadd add" [
+export def "admin-emoji-add create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -771,20 +818,22 @@ export def "adminemojiadd add" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   name: string # The name of the emoji to be removed. Colons (`:myemoji:`) around the value are not required, although they may be included.
   --body-token: string # Authentication token. Requires scope: `admin.teams:write`
-  --body-url: string # The URL of a file to use as an image for the emoji. Square images under 128KB and with transparent backgrounds work best.
+  url: string # The URL of a file to use as an image for the emoji. Square images under 128KB and with transparent backgrounds work best.
 ]: any -> record<ok: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/admin.emoji.add")
-  let body = {name: $name, token: $body_token, url: $body_url} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"name": $name, "token": $body_token, "url": $url} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # Add an emoji alias.
@@ -792,7 +841,7 @@ export def "adminemojiadd add" [
 # POST /admin.emoji.addAlias
 # Docs: https://api.slack.com/methods/admin.emoji.addAlias — API method documentation
 # operationId: admin_emoji_addAlias
-export def "adminemojiadd-alias addAlias" [
+export def "admin-emoji-add-alias create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -800,6 +849,7 @@ export def "adminemojiadd-alias addAlias" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   alias_for: string # The alias of the emoji.
   name: string # The name of the emoji to be aliased. Colons (`:myemoji:`) around the value are not required, although they may be included.
@@ -809,11 +859,12 @@ export def "adminemojiadd-alias addAlias" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/admin.emoji.addAlias")
-  let body = {alias_for: $alias_for, name: $name, token: $body_token} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"alias_for": $alias_for, "name": $name, "token": $body_token} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # List emoji for an Enterprise Grid organization.
@@ -821,7 +872,7 @@ export def "adminemojiadd-alias addAlias" [
 # GET /admin.emoji.list
 # Docs: https://api.slack.com/methods/admin.emoji.list — API method documentation
 # operationId: admin_emoji_list
-export def "adminemojilist list" [
+export def "admin-emoji-list list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -829,6 +880,7 @@ export def "adminemojilist list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --qp-token: string # Authentication token. Requires scope: `admin.teams:read`
   --cursor: string # Set `cursor` to `next_cursor` returned by the previous call to list items in the next page
@@ -840,7 +892,7 @@ export def "adminemojilist list" [
   let full_url = (build-url $base "/admin.emoji.list" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Remove an emoji across an Enterprise Grid organization
@@ -848,7 +900,7 @@ export def "adminemojilist list" [
 # POST /admin.emoji.remove
 # Docs: https://api.slack.com/methods/admin.emoji.remove — API method documentation
 # operationId: admin_emoji_remove
-export def "adminemojiremove remove" [
+export def "admin-emoji-remove delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -856,6 +908,7 @@ export def "adminemojiremove remove" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   name: string # The name of the emoji to be removed. Colons (`:myemoji:`) around the value are not required, although they may be included.
   --body-token: string # Authentication token. Requires scope: `admin.teams:write`
@@ -864,11 +917,12 @@ export def "adminemojiremove remove" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/admin.emoji.remove")
-  let body = {name: $name, token: $body_token} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"name": $name, "token": $body_token} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # Rename an emoji.
@@ -876,7 +930,7 @@ export def "adminemojiremove remove" [
 # POST /admin.emoji.rename
 # Docs: https://api.slack.com/methods/admin.emoji.rename — API method documentation
 # operationId: admin_emoji_rename
-export def "adminemojirename rename" [
+export def "admin-emoji-rename rename" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -884,6 +938,7 @@ export def "adminemojirename rename" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   name: string # The name of the emoji to be renamed. Colons (`:myemoji:`) around the value are not required, although they may be included.
   new_name: string # The new name of the emoji.
@@ -893,11 +948,12 @@ export def "adminemojirename rename" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/admin.emoji.rename")
-  let body = {name: $name, new_name: $new_name, token: $body_token} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"name": $name, "new_name": $new_name, "token": $body_token} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # Approve a workspace invite request.
@@ -905,7 +961,7 @@ export def "adminemojirename rename" [
 # POST /admin.inviteRequests.approve
 # Docs: https://api.slack.com/methods/admin.inviteRequests.approve — API method documentation
 # operationId: admin_inviteRequests_approve
-export def "admininvite-requestsapprove approve" [
+export def "admin-invite-requests-approve approve" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -913,6 +969,7 @@ export def "admininvite-requestsapprove approve" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # Authentication token. Requires scope: `admin.invites:write`
   invite_request_id: string # ID of the request to invite.
@@ -922,13 +979,14 @@ export def "admininvite-requestsapprove approve" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/admin.inviteRequests.approve")
-  let body = {invite_request_id: $invite_request_id, team_id: $team_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"token": $hdr_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"invite_request_id": $invite_request_id, "team_id": $team_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let extra_headers = {"token": $hdr_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # List all approved workspace invite requests.
@@ -936,7 +994,7 @@ export def "admininvite-requestsapprove approve" [
 # GET /admin.inviteRequests.approved.list
 # Docs: https://api.slack.com/methods/admin.inviteRequests.approved.list — API method documentation
 # operationId: admin_inviteRequests_approved_list
-export def "admininvite-requestsapprovedlist list" [
+export def "admin-invite-requests-approved-list list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -944,6 +1002,7 @@ export def "admininvite-requestsapprovedlist list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --team-id: string # ID for the workspace where the invite requests were made.
   --cursor: string # Value of the `next_cursor` field sent as part of the previous API response
@@ -954,11 +1013,11 @@ export def "admininvite-requestsapprovedlist list" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "team_id" $team_id "scalar") (serialize-qp "cursor" $cursor "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/admin.inviteRequests.approved.list" $qp)
-  let extra_headers = {"token": $hdr_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"token": $hdr_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # List all denied workspace invite requests.
@@ -966,7 +1025,7 @@ export def "admininvite-requestsapprovedlist list" [
 # GET /admin.inviteRequests.denied.list
 # Docs: https://api.slack.com/methods/admin.inviteRequests.denied.list — API method documentation
 # operationId: admin_inviteRequests_denied_list
-export def "admininvite-requestsdeniedlist list" [
+export def "admin-invite-requests-denied-list list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -974,6 +1033,7 @@ export def "admininvite-requestsdeniedlist list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --team-id: string # ID for the workspace where the invite requests were made.
   --cursor: string # Value of the `next_cursor` field sent as part of the previous api response
@@ -984,11 +1044,11 @@ export def "admininvite-requestsdeniedlist list" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "team_id" $team_id "scalar") (serialize-qp "cursor" $cursor "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/admin.inviteRequests.denied.list" $qp)
-  let extra_headers = {"token": $hdr_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"token": $hdr_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Deny a workspace invite request.
@@ -996,7 +1056,7 @@ export def "admininvite-requestsdeniedlist list" [
 # POST /admin.inviteRequests.deny
 # Docs: https://api.slack.com/methods/admin.inviteRequests.deny — API method documentation
 # operationId: admin_inviteRequests_deny
-export def "admininvite-requestsdeny deny" [
+export def "admin-invite-requests-deny create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1004,6 +1064,7 @@ export def "admininvite-requestsdeny deny" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # Authentication token. Requires scope: `admin.invites:write`
   invite_request_id: string # ID of the request to invite.
@@ -1013,13 +1074,14 @@ export def "admininvite-requestsdeny deny" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/admin.inviteRequests.deny")
-  let body = {invite_request_id: $invite_request_id, team_id: $team_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"token": $hdr_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"invite_request_id": $invite_request_id, "team_id": $team_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let extra_headers = {"token": $hdr_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # List all pending workspace invite requests.
@@ -1027,7 +1089,7 @@ export def "admininvite-requestsdeny deny" [
 # GET /admin.inviteRequests.list
 # Docs: https://api.slack.com/methods/admin.inviteRequests.list — API method documentation
 # operationId: admin_inviteRequests_list
-export def "admininvite-requestslist list" [
+export def "admin-invite-requests-list list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1035,6 +1097,7 @@ export def "admininvite-requestslist list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --team-id: string # ID for the workspace where the invite requests were made.
   --cursor: string # Value of the `next_cursor` field sent as part of the previous API response
@@ -1045,11 +1108,11 @@ export def "admininvite-requestslist list" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "team_id" $team_id "scalar") (serialize-qp "cursor" $cursor "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/admin.inviteRequests.list" $qp)
-  let extra_headers = {"token": $hdr_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"token": $hdr_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # List all of the admins on a given workspace.
@@ -1057,7 +1120,7 @@ export def "admininvite-requestslist list" [
 # GET /admin.teams.admins.list
 # Docs: https://api.slack.com/methods/admin.teams.admins.list — API method documentation
 # operationId: admin_teams_admins_list
-export def "adminteamsadminslist list" [
+export def "admin-teams-admins-list list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1065,6 +1128,7 @@ export def "adminteamsadminslist list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --qp-token: string # Authentication token. Requires scope: `admin.teams:read`
   --limit: int # The maximum number of items to return.
@@ -1077,7 +1141,7 @@ export def "adminteamsadminslist list" [
   let full_url = (build-url $base "/admin.teams.admins.list" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Create an Enterprise team.
@@ -1085,7 +1149,7 @@ export def "adminteamsadminslist list" [
 # POST /admin.teams.create
 # Docs: https://api.slack.com/methods/admin.teams.create — API method documentation
 # operationId: admin_teams_create
-export def "adminteamscreate create" [
+export def "admin-teams-create create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1093,6 +1157,7 @@ export def "adminteamscreate create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # Authentication token. Requires scope: `admin.teams:write`
   --team-description: string # Description for the team.
@@ -1104,13 +1169,14 @@ export def "adminteamscreate create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/admin.teams.create")
-  let body = {team_description: $team_description, team_discoverability: $team_discoverability, team_domain: $team_domain, team_name: $team_name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"token": $hdr_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"team_description": $team_description, "team_discoverability": $team_discoverability, "team_domain": $team_domain, "team_name": $team_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let extra_headers = {"token": $hdr_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # List all teams on an Enterprise organization
@@ -1118,7 +1184,7 @@ export def "adminteamscreate create" [
 # GET /admin.teams.list
 # Docs: https://api.slack.com/methods/admin.teams.list — API method documentation
 # operationId: admin_teams_list
-export def "adminteamslist list" [
+export def "admin-teams-list list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1126,6 +1192,7 @@ export def "adminteamslist list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The maximum number of items to return. Must be between 1 - 100 both inclusive.
   --cursor: string # Set `cursor` to `next_cursor` returned by the previous call to list items in the next page.
@@ -1135,11 +1202,11 @@ export def "adminteamslist list" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "cursor" $cursor "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/admin.teams.list" $qp)
-  let extra_headers = {"token": $hdr_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"token": $hdr_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # List all of the owners on a given workspace.
@@ -1147,7 +1214,7 @@ export def "adminteamslist list" [
 # GET /admin.teams.owners.list
 # Docs: https://api.slack.com/methods/admin.teams.owners.list — API method documentation
 # operationId: admin_teams_owners_list
-export def "adminteamsownerslist list" [
+export def "admin-teams-owners-list list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1155,6 +1222,7 @@ export def "adminteamsownerslist list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --qp-token: string # Authentication token. Requires scope: `admin.teams:read`
   --team-id: string
@@ -1167,7 +1235,7 @@ export def "adminteamsownerslist list" [
   let full_url = (build-url $base "/admin.teams.owners.list" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Fetch information about settings in a workspace
@@ -1175,7 +1243,7 @@ export def "adminteamsownerslist list" [
 # GET /admin.teams.settings.info
 # Docs: https://api.slack.com/methods/admin.teams.settings.info — API method documentation
 # operationId: admin_teams_settings_info
-export def "adminteamssettingsinfo info" [
+export def "admin-teams-settings-info get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1183,6 +1251,7 @@ export def "adminteamssettingsinfo info" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --team-id: string
   --hdr-token: string # Authentication token. Requires scope: `admin.teams:read`
@@ -1191,11 +1260,11 @@ export def "adminteamssettingsinfo info" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "team_id" $team_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/admin.teams.settings.info" $qp)
-  let extra_headers = {"token": $hdr_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"token": $hdr_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Set the default channels of a workspace.
@@ -1203,7 +1272,7 @@ export def "adminteamssettingsinfo info" [
 # POST /admin.teams.settings.setDefaultChannels
 # Docs: https://api.slack.com/methods/admin.teams.settings.setDefaultChannels — API method documentation
 # operationId: admin_teams_settings_setDefaultChannels
-export def "adminteamssettingsset-default-channels setDefaultChannels" [
+export def "admin-teams-settings-set-default-channels update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1211,6 +1280,7 @@ export def "adminteamssettingsset-default-channels setDefaultChannels" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   channel_ids: string # An array of channel IDs.
   team_id: string # ID for the workspace to set the default channel for.
@@ -1220,11 +1290,12 @@ export def "adminteamssettingsset-default-channels setDefaultChannels" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/admin.teams.settings.setDefaultChannels")
-  let body = {channel_ids: $channel_ids, team_id: $team_id, token: $body_token} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"channel_ids": $channel_ids, "team_id": $team_id, "token": $body_token} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # Set the description of a given workspace.
@@ -1232,7 +1303,7 @@ export def "adminteamssettingsset-default-channels setDefaultChannels" [
 # POST /admin.teams.settings.setDescription
 # Docs: https://api.slack.com/methods/admin.teams.settings.setDescription — API method documentation
 # operationId: admin_teams_settings_setDescription
-export def "adminteamssettingsset-description setDescription" [
+export def "admin-teams-settings-set-description update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1240,6 +1311,7 @@ export def "adminteamssettingsset-description setDescription" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # Authentication token. Requires scope: `admin.teams:write`
   description: string # The new description for the workspace.
@@ -1249,13 +1321,14 @@ export def "adminteamssettingsset-description setDescription" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/admin.teams.settings.setDescription")
-  let body = {description: $description, team_id: $team_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"token": $hdr_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"description": $description, "team_id": $team_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let extra_headers = {"token": $hdr_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # An API method that allows admins to set the discoverability of a given workspace
@@ -1263,7 +1336,7 @@ export def "adminteamssettingsset-description setDescription" [
 # POST /admin.teams.settings.setDiscoverability
 # Docs: https://api.slack.com/methods/admin.teams.settings.setDiscoverability — API method documentation
 # operationId: admin_teams_settings_setDiscoverability
-export def "adminteamssettingsset-discoverability setDiscoverability" [
+export def "admin-teams-settings-set-discoverability update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1271,6 +1344,7 @@ export def "adminteamssettingsset-discoverability setDiscoverability" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # Authentication token. Requires scope: `admin.teams:write`
   discoverability: string # This workspace's discovery setting. It must be set to one of `open`, `invite_only`, `closed`, or `unlisted`.
@@ -1280,13 +1354,14 @@ export def "adminteamssettingsset-discoverability setDiscoverability" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/admin.teams.settings.setDiscoverability")
-  let body = {discoverability: $discoverability, team_id: $team_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"token": $hdr_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"discoverability": $discoverability, "team_id": $team_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let extra_headers = {"token": $hdr_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # Sets the icon of a workspace.
@@ -1294,7 +1369,7 @@ export def "adminteamssettingsset-discoverability setDiscoverability" [
 # POST /admin.teams.settings.setIcon
 # Docs: https://api.slack.com/methods/admin.teams.settings.setIcon — API method documentation
 # operationId: admin_teams_settings_setIcon
-export def "adminteamssettingsset-icon setIcon" [
+export def "admin-teams-settings-set-icon update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1302,6 +1377,7 @@ export def "adminteamssettingsset-icon setIcon" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   image_url: string # Image URL for the icon
   team_id: string # ID for the workspace to set the icon for.
@@ -1311,11 +1387,12 @@ export def "adminteamssettingsset-icon setIcon" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/admin.teams.settings.setIcon")
-  let body = {image_url: $image_url, team_id: $team_id, token: $body_token} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"image_url": $image_url, "team_id": $team_id, "token": $body_token} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # Set the name of a given workspace.
@@ -1323,7 +1400,7 @@ export def "adminteamssettingsset-icon setIcon" [
 # POST /admin.teams.settings.setName
 # Docs: https://api.slack.com/methods/admin.teams.settings.setName — API method documentation
 # operationId: admin_teams_settings_setName
-export def "adminteamssettingsset-name setName" [
+export def "admin-teams-settings-set-name update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1331,6 +1408,7 @@ export def "adminteamssettingsset-name setName" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # Authentication token. Requires scope: `admin.teams:write`
   name: string # The new name of the workspace.
@@ -1340,13 +1418,14 @@ export def "adminteamssettingsset-name setName" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/admin.teams.settings.setName")
-  let body = {name: $name, team_id: $team_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"token": $hdr_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"name": $name, "team_id": $team_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let extra_headers = {"token": $hdr_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # Add one or more default channels to an IDP group.
@@ -1354,7 +1433,7 @@ export def "adminteamssettingsset-name setName" [
 # POST /admin.usergroups.addChannels
 # Docs: https://api.slack.com/methods/admin.usergroups.addChannels — API method documentation
 # operationId: admin_usergroups_addChannels
-export def "adminusergroupsadd-channels addChannels" [
+export def "admin-usergroups-add-channels create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1362,6 +1441,7 @@ export def "adminusergroupsadd-channels addChannels" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # Authentication token. Requires scope: `admin.usergroups:write`
   channel_ids: string # Comma separated string of channel IDs.
@@ -1372,13 +1452,14 @@ export def "adminusergroupsadd-channels addChannels" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/admin.usergroups.addChannels")
-  let body = {channel_ids: $channel_ids, team_id: $team_id, usergroup_id: $usergroup_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"token": $hdr_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"channel_ids": $channel_ids, "team_id": $team_id, "usergroup_id": $usergroup_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let extra_headers = {"token": $hdr_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # Associate one or more default workspaces with an organization-wide IDP group.
@@ -1386,7 +1467,7 @@ export def "adminusergroupsadd-channels addChannels" [
 # POST /admin.usergroups.addTeams
 # Docs: https://api.slack.com/methods/admin.usergroups.addTeams — API method documentation
 # operationId: admin_usergroups_addTeams
-export def "adminusergroupsadd-teams addTeams" [
+export def "admin-usergroups-add-teams create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1394,6 +1475,7 @@ export def "adminusergroupsadd-teams addTeams" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # Authentication token. Requires scope: `admin.teams:write`
   --auto-provision: oneof<nothing, bool> # When `true`, this method automatically creates new workspace accounts for the IDP group members.
@@ -1404,13 +1486,14 @@ export def "adminusergroupsadd-teams addTeams" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/admin.usergroups.addTeams")
-  let body = {auto_provision: $auto_provision, team_ids: $team_ids, usergroup_id: $usergroup_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"token": $hdr_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"auto_provision": $auto_provision, "team_ids": $team_ids, "usergroup_id": $usergroup_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let extra_headers = {"token": $hdr_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # List the channels linked to an org-level IDP group (user group).
@@ -1418,7 +1501,7 @@ export def "adminusergroupsadd-teams addTeams" [
 # GET /admin.usergroups.listChannels
 # Docs: https://api.slack.com/methods/admin.usergroups.listChannels — API method documentation
 # operationId: admin_usergroups_listChannels
-export def "adminusergroupslist-channels listChannels" [
+export def "admin-usergroups-list-channels list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1426,6 +1509,7 @@ export def "adminusergroupslist-channels listChannels" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --usergroup-id: string # ID of the IDP group to list default channels for.
   --team-id: string # ID of the the workspace.
@@ -1436,11 +1520,11 @@ export def "adminusergroupslist-channels listChannels" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "usergroup_id" $usergroup_id "scalar") (serialize-qp "team_id" $team_id "scalar") (serialize-qp "include_num_members" $include_num_members "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/admin.usergroups.listChannels" $qp)
-  let extra_headers = {"token": $hdr_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"token": $hdr_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Remove one or more default channels from an org-level IDP group (user group).
@@ -1448,7 +1532,7 @@ export def "adminusergroupslist-channels listChannels" [
 # POST /admin.usergroups.removeChannels
 # Docs: https://api.slack.com/methods/admin.usergroups.removeChannels — API method documentation
 # operationId: admin_usergroups_removeChannels
-export def "adminusergroupsremove-channels removeChannels" [
+export def "admin-usergroups-remove-channels delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1456,6 +1540,7 @@ export def "adminusergroupsremove-channels removeChannels" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # Authentication token. Requires scope: `admin.usergroups:write`
   channel_ids: string # Comma-separated string of channel IDs
@@ -1465,13 +1550,14 @@ export def "adminusergroupsremove-channels removeChannels" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/admin.usergroups.removeChannels")
-  let body = {channel_ids: $channel_ids, usergroup_id: $usergroup_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"token": $hdr_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"channel_ids": $channel_ids, "usergroup_id": $usergroup_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let extra_headers = {"token": $hdr_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # Add an Enterprise user to a workspace.
@@ -1479,7 +1565,7 @@ export def "adminusergroupsremove-channels removeChannels" [
 # POST /admin.users.assign
 # Docs: https://api.slack.com/methods/admin.users.assign — API method documentation
 # operationId: admin_users_assign
-export def "adminusersassign assign" [
+export def "admin-users-assign assign" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1487,6 +1573,7 @@ export def "adminusersassign assign" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # Authentication token. Requires scope: `admin.users:write`
   --channel-ids: string # Comma separated values of channel IDs to add user in the new workspace.
@@ -1499,13 +1586,14 @@ export def "adminusersassign assign" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/admin.users.assign")
-  let body = {channel_ids: $channel_ids, is_restricted: $is_restricted, is_ultra_restricted: $is_ultra_restricted, team_id: $team_id, user_id: $user_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"token": $hdr_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"channel_ids": $channel_ids, "is_restricted": $is_restricted, "is_ultra_restricted": $is_ultra_restricted, "team_id": $team_id, "user_id": $user_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let extra_headers = {"token": $hdr_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # Invite a user to a workspace.
@@ -1513,7 +1601,7 @@ export def "adminusersassign assign" [
 # POST /admin.users.invite
 # Docs: https://api.slack.com/methods/admin.users.invite — API method documentation
 # operationId: admin_users_invite
-export def "adminusersinvite invite" [
+export def "admin-users-invite create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1521,6 +1609,7 @@ export def "adminusersinvite invite" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # Authentication token. Requires scope: `admin.users:write`
   channel_ids: string # A comma-separated list of `channel_id`s for this user to join. At least one channel is required.
@@ -1537,13 +1626,14 @@ export def "adminusersinvite invite" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/admin.users.invite")
-  let body = {channel_ids: $channel_ids, custom_message: $custom_message, email: $email, guest_expiration_ts: $guest_expiration_ts, is_restricted: $is_restricted, is_ultra_restricted: $is_ultra_restricted, real_name: $real_name, resend: $resend, team_id: $team_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"token": $hdr_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"channel_ids": $channel_ids, "custom_message": $custom_message, "email": $email, "guest_expiration_ts": $guest_expiration_ts, "is_restricted": $is_restricted, "is_ultra_restricted": $is_ultra_restricted, "real_name": $real_name, "resend": $resend, "team_id": $team_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let extra_headers = {"token": $hdr_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # List users on a workspace
@@ -1551,7 +1641,7 @@ export def "adminusersinvite invite" [
 # GET /admin.users.list
 # Docs: https://api.slack.com/methods/admin.users.list — API method documentation
 # operationId: admin_users_list
-export def "adminuserslist list" [
+export def "admin-users-list list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1559,6 +1649,7 @@ export def "adminuserslist list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --team-id: string # The ID (`T1234`) of the workspace.
   --cursor: string # Set `cursor` to `next_cursor` returned by the previous call to list items in the next page.
@@ -1569,11 +1660,11 @@ export def "adminuserslist list" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "team_id" $team_id "scalar") (serialize-qp "cursor" $cursor "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/admin.users.list" $qp)
-  let extra_headers = {"token": $hdr_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"token": $hdr_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Remove a user from a workspace.
@@ -1581,7 +1672,7 @@ export def "adminuserslist list" [
 # POST /admin.users.remove
 # Docs: https://api.slack.com/methods/admin.users.remove — API method documentation
 # operationId: admin_users_remove
-export def "adminusersremove remove" [
+export def "admin-users-remove delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1589,6 +1680,7 @@ export def "adminusersremove remove" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # Authentication token. Requires scope: `admin.users:write`
   team_id: string # The ID (`T1234`) of the workspace.
@@ -1598,13 +1690,14 @@ export def "adminusersremove remove" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/admin.users.remove")
-  let body = {team_id: $team_id, user_id: $user_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"token": $hdr_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"team_id": $team_id, "user_id": $user_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let extra_headers = {"token": $hdr_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # Invalidate a single session for a user by session_id
@@ -1612,7 +1705,7 @@ export def "adminusersremove remove" [
 # POST /admin.users.session.invalidate
 # Docs: https://api.slack.com/methods/admin.users.session.invalidate — API method documentation
 # operationId: admin_users_session_invalidate
-export def "adminuserssessioninvalidate invalidate" [
+export def "admin-users-session-invalidate create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1620,6 +1713,7 @@ export def "adminuserssessioninvalidate invalidate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # Authentication token. Requires scope: `admin.users:write`
   session_id: int
@@ -1629,13 +1723,14 @@ export def "adminuserssessioninvalidate invalidate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/admin.users.session.invalidate")
-  let body = {session_id: $session_id, team_id: $team_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"token": $hdr_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"session_id": $session_id, "team_id": $team_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let extra_headers = {"token": $hdr_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # Wipes all valid sessions on all devices for a given user
@@ -1643,7 +1738,7 @@ export def "adminuserssessioninvalidate invalidate" [
 # POST /admin.users.session.reset
 # Docs: https://api.slack.com/methods/admin.users.session.reset — API method documentation
 # operationId: admin_users_session_reset
-export def "adminuserssessionreset reset" [
+export def "admin-users-session-reset reset" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1651,6 +1746,7 @@ export def "adminuserssessionreset reset" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # Authentication token. Requires scope: `admin.users:write`
   --mobile-only: oneof<nothing, bool> # Only expire mobile sessions (default: false)
@@ -1661,13 +1757,14 @@ export def "adminuserssessionreset reset" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/admin.users.session.reset")
-  let body = {mobile_only: $mobile_only, user_id: $user_id, web_only: $web_only} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"token": $hdr_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"mobile_only": $mobile_only, "user_id": $user_id, "web_only": $web_only} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let extra_headers = {"token": $hdr_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # Set an existing guest, regular user, or owner to be an admin user.
@@ -1675,7 +1772,7 @@ export def "adminuserssessionreset reset" [
 # POST /admin.users.setAdmin
 # Docs: https://api.slack.com/methods/admin.users.setAdmin — API method documentation
 # operationId: admin_users_setAdmin
-export def "adminusersset-admin setAdmin" [
+export def "admin-users-set-admin update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1683,6 +1780,7 @@ export def "adminusersset-admin setAdmin" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # Authentication token. Requires scope: `admin.users:write`
   team_id: string # The ID (`T1234`) of the workspace.
@@ -1692,13 +1790,14 @@ export def "adminusersset-admin setAdmin" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/admin.users.setAdmin")
-  let body = {team_id: $team_id, user_id: $user_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"token": $hdr_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"team_id": $team_id, "user_id": $user_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let extra_headers = {"token": $hdr_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # Set an expiration for a guest user
@@ -1706,7 +1805,7 @@ export def "adminusersset-admin setAdmin" [
 # POST /admin.users.setExpiration
 # Docs: https://api.slack.com/methods/admin.users.setExpiration — API method documentation
 # operationId: admin_users_setExpiration
-export def "adminusersset-expiration setExpiration" [
+export def "admin-users-set-expiration update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1714,6 +1813,7 @@ export def "adminusersset-expiration setExpiration" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # Authentication token. Requires scope: `admin.users:write`
   expiration_ts: int # Timestamp when guest account should be disabled.
@@ -1724,13 +1824,14 @@ export def "adminusersset-expiration setExpiration" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/admin.users.setExpiration")
-  let body = {expiration_ts: $expiration_ts, team_id: $team_id, user_id: $user_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"token": $hdr_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"expiration_ts": $expiration_ts, "team_id": $team_id, "user_id": $user_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let extra_headers = {"token": $hdr_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # Set an existing guest, regular user, or admin user to be a workspace owner.
@@ -1738,7 +1839,7 @@ export def "adminusersset-expiration setExpiration" [
 # POST /admin.users.setOwner
 # Docs: https://api.slack.com/methods/admin.users.setOwner — API method documentation
 # operationId: admin_users_setOwner
-export def "adminusersset-owner setOwner" [
+export def "admin-users-set-owner update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1746,6 +1847,7 @@ export def "adminusersset-owner setOwner" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # Authentication token. Requires scope: `admin.users:write`
   team_id: string # The ID (`T1234`) of the workspace.
@@ -1755,13 +1857,14 @@ export def "adminusersset-owner setOwner" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/admin.users.setOwner")
-  let body = {team_id: $team_id, user_id: $user_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"token": $hdr_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"team_id": $team_id, "user_id": $user_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let extra_headers = {"token": $hdr_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # Set an existing guest user, admin user, or owner to be a regular user.
@@ -1769,7 +1872,7 @@ export def "adminusersset-owner setOwner" [
 # POST /admin.users.setRegular
 # Docs: https://api.slack.com/methods/admin.users.setRegular — API method documentation
 # operationId: admin_users_setRegular
-export def "adminusersset-regular setRegular" [
+export def "admin-users-set-regular update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1777,6 +1880,7 @@ export def "adminusersset-regular setRegular" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # Authentication token. Requires scope: `admin.users:write`
   team_id: string # The ID (`T1234`) of the workspace.
@@ -1786,13 +1890,14 @@ export def "adminusersset-regular setRegular" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/admin.users.setRegular")
-  let body = {team_id: $team_id, user_id: $user_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"token": $hdr_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"team_id": $team_id, "user_id": $user_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let extra_headers = {"token": $hdr_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # Checks API calling code.
@@ -1800,7 +1905,7 @@ export def "adminusersset-regular setRegular" [
 # GET /api.test
 # Docs: https://api.slack.com/methods/api.test — API method documentation
 # operationId: api_test
-export def "apitest test" [
+export def "api-test test" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1808,6 +1913,7 @@ export def "apitest test" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --qp-error: string # Error response to return
   --foo: string # example property to return
@@ -1818,7 +1924,7 @@ export def "apitest test" [
   let full_url = (build-url $base "/api.test" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get a list of authorizations for the given event context. Each authorization represents an app installation that the event is visible to.
@@ -1826,7 +1932,7 @@ export def "apitest test" [
 # GET /apps.event.authorizations.list
 # Docs: https://api.slack.com/methods/apps.event.authorizations.list — API method documentation
 # operationId: apps_event_authorizations_list
-export def "appseventauthorizationslist list" [
+export def "apps-event-authorizations-list list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1834,6 +1940,7 @@ export def "appseventauthorizationslist list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --event-context: string
   --cursor: string
@@ -1844,11 +1951,11 @@ export def "appseventauthorizationslist list" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "event_context" $event_context "scalar") (serialize-qp "cursor" $cursor "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/apps.event.authorizations.list" $qp)
-  let extra_headers = {"token": $hdr_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"token": $hdr_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Returns list of permissions this app has on a team.
@@ -1856,7 +1963,7 @@ export def "appseventauthorizationslist list" [
 # GET /apps.permissions.info
 # Docs: https://api.slack.com/methods/apps.permissions.info — API method documentation
 # operationId: apps_permissions_info
-export def "appspermissionsinfo info" [
+export def "apps-permissions-info get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1864,6 +1971,7 @@ export def "appspermissionsinfo info" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --qp-token: string # Authentication token. Requires scope: `none`
 ]: nothing -> record<info: record<app_home: record<resources: record, scopes: list>, channel: record<resources: record, scopes: list>, group: record<resources: record, scopes: list>, im: record<resources: record, scopes: list>, mpim: record<resources: record, scopes: list>, team: record<resources: record, scopes: list>>, ok: bool> {
@@ -1873,7 +1981,7 @@ export def "appspermissionsinfo info" [
   let full_url = (build-url $base "/apps.permissions.info" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Allows an app to request additional scopes
@@ -1881,7 +1989,7 @@ export def "appspermissionsinfo info" [
 # GET /apps.permissions.request
 # Docs: https://api.slack.com/methods/apps.permissions.request — API method documentation
 # operationId: apps_permissions_request
-export def "appspermissionsrequest request" [
+export def "apps-permissions-request request" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1889,6 +1997,7 @@ export def "appspermissionsrequest request" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --qp-token: string # Authentication token. Requires scope: `none`
   --scopes: string # A comma separated list of scopes to request for
@@ -1900,7 +2009,7 @@ export def "appspermissionsrequest request" [
   let full_url = (build-url $base "/apps.permissions.request" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Returns list of resource grants this app has on a team.
@@ -1908,7 +2017,7 @@ export def "appspermissionsrequest request" [
 # GET /apps.permissions.resources.list
 # Docs: https://api.slack.com/methods/apps.permissions.resources.list — API method documentation
 # operationId: apps_permissions_resources_list
-export def "appspermissionsresourceslist list" [
+export def "apps-permissions-resources-list list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1916,6 +2025,7 @@ export def "appspermissionsresourceslist list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --qp-token: string # Authentication token. Requires scope: `none`
   --cursor: string # Paginate through collections of data by setting the `cursor` parameter to a `next_cursor` attribute returned by a previous request's `response_metadata`. Default value fetches the first "page" of the collection. See [pagination](/docs/pagination) for more detail.
@@ -1927,7 +2037,7 @@ export def "appspermissionsresourceslist list" [
   let full_url = (build-url $base "/apps.permissions.resources.list" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Returns list of scopes this app has on a team.
@@ -1935,7 +2045,7 @@ export def "appspermissionsresourceslist list" [
 # GET /apps.permissions.scopes.list
 # Docs: https://api.slack.com/methods/apps.permissions.scopes.list — API method documentation
 # operationId: apps_permissions_scopes_list
-export def "appspermissionsscopeslist list" [
+export def "apps-permissions-scopes-list list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1943,6 +2053,7 @@ export def "appspermissionsscopeslist list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --qp-token: string # Authentication token. Requires scope: `none`
 ]: nothing -> record<ok: bool, scopes: record<app_home: list<string>, channel: list<string>, group: list<string>, im: list<string>, mpim: list<string>, team: list<string>, user: list<string>>> {
@@ -1952,7 +2063,7 @@ export def "appspermissionsscopeslist list" [
   let full_url = (build-url $base "/apps.permissions.scopes.list" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Returns list of user grants and corresponding scopes this app has on a team.
@@ -1960,7 +2071,7 @@ export def "appspermissionsscopeslist list" [
 # GET /apps.permissions.users.list
 # Docs: https://api.slack.com/methods/apps.permissions.users.list — API method documentation
 # operationId: apps_permissions_users_list
-export def "appspermissionsuserslist list" [
+export def "apps-permissions-users-list list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1968,6 +2079,7 @@ export def "appspermissionsuserslist list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --qp-token: string # Authentication token. Requires scope: `none`
   --cursor: string # Paginate through collections of data by setting the `cursor` parameter to a `next_cursor` attribute returned by a previous request's `response_metadata`. Default value fetches the first "page" of the collection. See [pagination](/docs/pagination) for more detail.
@@ -1979,7 +2091,7 @@ export def "appspermissionsuserslist list" [
   let full_url = (build-url $base "/apps.permissions.users.list" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Enables an app to trigger a permissions modal to grant an app access to a user access scope.
@@ -1987,7 +2099,7 @@ export def "appspermissionsuserslist list" [
 # GET /apps.permissions.users.request
 # Docs: https://api.slack.com/methods/apps.permissions.users.request — API method documentation
 # operationId: apps_permissions_users_request
-export def "appspermissionsusersrequest request" [
+export def "apps-permissions-users-request request" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1995,6 +2107,7 @@ export def "appspermissionsusersrequest request" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --qp-token: string # Authentication token. Requires scope: `none`
   --scopes: string # A comma separated list of user scopes to request for
@@ -2007,7 +2120,7 @@ export def "appspermissionsusersrequest request" [
   let full_url = (build-url $base "/apps.permissions.users.request" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Uninstalls your app from a workspace.
@@ -2015,7 +2128,7 @@ export def "appspermissionsusersrequest request" [
 # GET /apps.uninstall
 # Docs: https://api.slack.com/methods/apps.uninstall — API method documentation
 # operationId: apps_uninstall
-export def "appsuninstall uninstall" [
+export def "apps-uninstall get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2023,6 +2136,7 @@ export def "appsuninstall uninstall" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --qp-token: string # Authentication token. Requires scope: `none`
   --client-id: string # Issued when you created your application.
@@ -2034,7 +2148,7 @@ export def "appsuninstall uninstall" [
   let full_url = (build-url $base "/apps.uninstall" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Revokes a token.
@@ -2042,7 +2156,7 @@ export def "appsuninstall uninstall" [
 # GET /auth.revoke
 # Docs: https://api.slack.com/methods/auth.revoke — API method documentation
 # operationId: auth_revoke
-export def "authrevoke revoke" [
+export def "auth-revoke delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2050,6 +2164,7 @@ export def "authrevoke revoke" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --qp-token: string # Authentication token. Requires scope: `none`
   --test: oneof<nothing, bool> # Setting this parameter to `1` triggers a _testing mode_ where the specified token will not actually be revoked.
@@ -2060,7 +2175,7 @@ export def "authrevoke revoke" [
   let full_url = (build-url $base "/auth.revoke" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Checks authentication & identity.
@@ -2068,7 +2183,7 @@ export def "authrevoke revoke" [
 # GET /auth.test
 # Docs: https://api.slack.com/methods/auth.test — API method documentation
 # operationId: auth_test
-export def "authtest test" [
+export def "auth-test test" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2076,17 +2191,18 @@ export def "authtest test" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # Authentication token. Requires scope: `none`
 ]: nothing -> record<bot_id: string, is_enterprise_install: bool, ok: bool, team: string, team_id: string, url: string, user: string, user_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/auth.test")
-  let extra_headers = {"token": $hdr_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"token": $hdr_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Gets information about a bot user.
@@ -2094,7 +2210,7 @@ export def "authtest test" [
 # GET /bots.info
 # Docs: https://api.slack.com/methods/bots.info — API method documentation
 # operationId: bots_info
-export def "botsinfo info" [
+export def "bots-info get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2102,6 +2218,7 @@ export def "botsinfo info" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --qp-token: string # Authentication token. Requires scope: `users:read`
   --bot: string # Bot user to get info on
@@ -2112,7 +2229,7 @@ export def "botsinfo info" [
   let full_url = (build-url $base "/bots.info" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Registers a new Call.
@@ -2120,7 +2237,7 @@ export def "botsinfo info" [
 # POST /calls.add
 # Docs: https://api.slack.com/methods/calls.add — API method documentation
 # operationId: calls_add
-export def "callsadd add" [
+export def "calls-add create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2128,6 +2245,7 @@ export def "callsadd add" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # Authentication token. Requires scope: `calls:write`
   --created-by: string # The valid Slack user ID of the user who created this Call. When this method is called with a user token, the `created_by` field is optional and defaults to the authed user of the token. Otherwise, the field is required.
@@ -2143,13 +2261,14 @@ export def "callsadd add" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/calls.add")
-  let body = {created_by: $created_by, date_start: $date_start, desktop_app_join_url: $desktop_app_join_url, external_display_id: $external_display_id, external_unique_id: $external_unique_id, join_url: $join_url, title: $title, users: $users} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"token": $hdr_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"created_by": $created_by, "date_start": $date_start, "desktop_app_join_url": $desktop_app_join_url, "external_display_id": $external_display_id, "external_unique_id": $external_unique_id, "join_url": $join_url, "title": $title, "users": $users} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let extra_headers = {"token": $hdr_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # Ends a Call.
@@ -2157,7 +2276,7 @@ export def "callsadd add" [
 # POST /calls.end
 # Docs: https://api.slack.com/methods/calls.end — API method documentation
 # operationId: calls_end
-export def "callsend end" [
+export def "calls-end create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2165,6 +2284,7 @@ export def "callsend end" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # Authentication token. Requires scope: `calls:write`
   --duration: int # Call duration in seconds
@@ -2174,13 +2294,14 @@ export def "callsend end" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/calls.end")
-  let body = {duration: $duration, id: $id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"token": $hdr_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"duration": $duration, "id": $id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let extra_headers = {"token": $hdr_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # Returns information about a Call.
@@ -2188,7 +2309,7 @@ export def "callsend end" [
 # GET /calls.info
 # Docs: https://api.slack.com/methods/calls.info — API method documentation
 # operationId: calls_info
-export def "callsinfo info" [
+export def "calls-info get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2196,6 +2317,7 @@ export def "callsinfo info" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # `id` of the Call returned by the [`calls.add`](/methods/calls.add) method.
   --hdr-token: string # Authentication token. Requires scope: `calls:read`
@@ -2204,11 +2326,11 @@ export def "callsinfo info" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/calls.info" $qp)
-  let extra_headers = {"token": $hdr_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"token": $hdr_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Registers new participants added to a Call.
@@ -2216,7 +2338,7 @@ export def "callsinfo info" [
 # POST /calls.participants.add
 # Docs: https://api.slack.com/methods/calls.participants.add — API method documentation
 # operationId: calls_participants_add
-export def "callsparticipantsadd add" [
+export def "calls-participants-add create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2224,6 +2346,7 @@ export def "callsparticipantsadd add" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # Authentication token. Requires scope: `calls:write`
   id: string # `id` returned by the [`calls.add`](/methods/calls.add) method.
@@ -2233,13 +2356,14 @@ export def "callsparticipantsadd add" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/calls.participants.add")
-  let body = {id: $id, users: $users} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"token": $hdr_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"id": $id, "users": $users} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let extra_headers = {"token": $hdr_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # Registers participants removed from a Call.
@@ -2247,7 +2371,7 @@ export def "callsparticipantsadd add" [
 # POST /calls.participants.remove
 # Docs: https://api.slack.com/methods/calls.participants.remove — API method documentation
 # operationId: calls_participants_remove
-export def "callsparticipantsremove remove" [
+export def "calls-participants-remove delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2255,6 +2379,7 @@ export def "callsparticipantsremove remove" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # Authentication token. Requires scope: `calls:write`
   id: string # `id` returned by the [`calls.add`](/methods/calls.add) method.
@@ -2264,13 +2389,14 @@ export def "callsparticipantsremove remove" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/calls.participants.remove")
-  let body = {id: $id, users: $users} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"token": $hdr_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"id": $id, "users": $users} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let extra_headers = {"token": $hdr_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # Updates information about a Call.
@@ -2278,7 +2404,7 @@ export def "callsparticipantsremove remove" [
 # POST /calls.update
 # Docs: https://api.slack.com/methods/calls.update — API method documentation
 # operationId: calls_update
-export def "callsupdate update" [
+export def "calls-update update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2286,6 +2412,7 @@ export def "callsupdate update" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # Authentication token. Requires scope: `calls:write`
   --desktop-app-join-url: string # When supplied, available Slack clients will attempt to directly launch the 3rd-party Call with this URL.
@@ -2297,13 +2424,14 @@ export def "callsupdate update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/calls.update")
-  let body = {desktop_app_join_url: $desktop_app_join_url, id: $id, join_url: $join_url, title: $title} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"token": $hdr_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"desktop_app_join_url": $desktop_app_join_url, "id": $id, "join_url": $join_url, "title": $title} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let extra_headers = {"token": $hdr_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # Deletes a message.
@@ -2311,7 +2439,7 @@ export def "callsupdate update" [
 # POST /chat.delete
 # Docs: https://api.slack.com/methods/chat.delete — API method documentation
 # operationId: chat_delete
-export def "chatdelete delete" [
+export def "chat-delete delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2319,6 +2447,7 @@ export def "chatdelete delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # Authentication token. Requires scope: `chat:write`
   --as-user: oneof<nothing, bool> # Pass true to delete the message as the authed user with `chat:write:user` scope. [Bot users](/bot-users) in this context are considered authed users. If unused or false, the message will be deleted with `chat:write:bot` scope.
@@ -2329,13 +2458,14 @@ export def "chatdelete delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/chat.delete")
-  let body = {as_user: $as_user, channel: $channel, ts: $ts} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"token": $hdr_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"as_user": $as_user, "channel": $channel, "ts": $ts} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let extra_headers = {"token": $hdr_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # Deletes a pending scheduled message from the queue.
@@ -2343,7 +2473,7 @@ export def "chatdelete delete" [
 # POST /chat.deleteScheduledMessage
 # Docs: https://api.slack.com/methods/chat.deleteScheduledMessage — API method documentation
 # operationId: chat_deleteScheduledMessage
-export def "chatdelete-scheduled-message post" [
+export def "chat-delete-scheduled-message delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2351,6 +2481,7 @@ export def "chatdelete-scheduled-message post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # Authentication token. Requires scope: `chat:write`
   --as-user: oneof<nothing, bool> # Pass true to delete the message as the authed user with `chat:write:user` scope. [Bot users](/bot-users) in this context are considered authed users. If unused or false, the message will be deleted with `chat:write:bot` scope.
@@ -2361,13 +2492,14 @@ export def "chatdelete-scheduled-message post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/chat.deleteScheduledMessage")
-  let body = {as_user: $as_user, channel: $channel, scheduled_message_id: $scheduled_message_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"token": $hdr_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"as_user": $as_user, "channel": $channel, "scheduled_message_id": $scheduled_message_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let extra_headers = {"token": $hdr_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # Retrieve a permalink URL for a specific extant message
@@ -2375,7 +2507,7 @@ export def "chatdelete-scheduled-message post" [
 # GET /chat.getPermalink
 # Docs: https://api.slack.com/methods/chat.getPermalink — API method documentation
 # operationId: chat_getPermalink
-export def "chatget-permalink get" [
+export def "chat-get-permalink get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2383,6 +2515,7 @@ export def "chatget-permalink get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --qp-token: string # Authentication token. Requires scope: `none`
   --channel: string # The ID of the conversation or channel containing the message
@@ -2394,7 +2527,7 @@ export def "chatget-permalink get" [
   let full_url = (build-url $base "/chat.getPermalink" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Share a me message into a channel.
@@ -2402,7 +2535,7 @@ export def "chatget-permalink get" [
 # POST /chat.meMessage
 # Docs: https://api.slack.com/methods/chat.meMessage — API method documentation
 # operationId: chat_meMessage
-export def "chatme-message meMessage" [
+export def "chat-me-message create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2410,6 +2543,7 @@ export def "chatme-message meMessage" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # Authentication token. Requires scope: `chat:write`
   --channel: string # Channel to send message to. Can be a public channel, private group or IM channel. Can be an encoded ID, or a name.
@@ -2419,13 +2553,14 @@ export def "chatme-message meMessage" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/chat.meMessage")
-  let body = {channel: $channel, text: $text} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"token": $hdr_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"channel": $channel, "text": $text} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let extra_headers = {"token": $hdr_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # Sends an ephemeral message to a user in a channel.
@@ -2433,7 +2568,7 @@ export def "chatme-message meMessage" [
 # POST /chat.postEphemeral
 # Docs: https://api.slack.com/methods/chat.postEphemeral — API method documentation
 # operationId: chat_postEphemeral
-export def "chatpost-ephemeral post" [
+export def "chat-post-ephemeral create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2441,6 +2576,7 @@ export def "chatpost-ephemeral post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # Authentication token. Requires scope: `chat:write`
   --as-user: oneof<nothing, bool> # Pass true to post the message as the authed user. Defaults to true if the chat:write:bot scope is not included. Otherwise, defaults to false.
@@ -2460,13 +2596,14 @@ export def "chatpost-ephemeral post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/chat.postEphemeral")
-  let body = {as_user: $as_user, attachments: $attachments, blocks: $blocks, channel: $channel, icon_emoji: $icon_emoji, icon_url: $icon_url, link_names: $link_names, parse: $parse, text: $text, thread_ts: $thread_ts, user: $user, username: $username} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"token": $hdr_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"as_user": $as_user, "attachments": $attachments, "blocks": $blocks, "channel": $channel, "icon_emoji": $icon_emoji, "icon_url": $icon_url, "link_names": $link_names, "parse": $parse, "text": $text, "thread_ts": $thread_ts, "user": $user, "username": $username} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let extra_headers = {"token": $hdr_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # Sends a message to a channel.
@@ -2474,7 +2611,7 @@ export def "chatpost-ephemeral post" [
 # POST /chat.postMessage
 # Docs: https://api.slack.com/methods/chat.postMessage — API method documentation
 # operationId: chat_postMessage
-export def "chatpost-message post" [
+export def "chat-post-message create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2482,6 +2619,7 @@ export def "chatpost-message post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # Authentication token. Requires scope: `chat:write`
   --as-user: string # Pass true to post the message as the authed user, instead of as a bot. Defaults to false. See [authorship](#authorship) below.
@@ -2504,13 +2642,14 @@ export def "chatpost-message post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/chat.postMessage")
-  let body = {as_user: $as_user, attachments: $attachments, blocks: $blocks, channel: $channel, icon_emoji: $icon_emoji, icon_url: $icon_url, link_names: $link_names, mrkdwn: $mrkdwn, parse: $parse, reply_broadcast: $reply_broadcast, text: $text, thread_ts: $thread_ts, unfurl_links: $unfurl_links, unfurl_media: $unfurl_media, username: $username} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"token": $hdr_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"as_user": $as_user, "attachments": $attachments, "blocks": $blocks, "channel": $channel, "icon_emoji": $icon_emoji, "icon_url": $icon_url, "link_names": $link_names, "mrkdwn": $mrkdwn, "parse": $parse, "reply_broadcast": $reply_broadcast, "text": $text, "thread_ts": $thread_ts, "unfurl_links": $unfurl_links, "unfurl_media": $unfurl_media, "username": $username} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let extra_headers = {"token": $hdr_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # Schedules a message to be sent to a channel.
@@ -2518,7 +2657,7 @@ export def "chatpost-message post" [
 # POST /chat.scheduleMessage
 # Docs: https://api.slack.com/methods/chat.scheduleMessage — API method documentation
 # operationId: chat_scheduleMessage
-export def "chatschedule-message scheduleMessage" [
+export def "chat-schedule-message create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2526,6 +2665,7 @@ export def "chatschedule-message scheduleMessage" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # Authentication token. Requires scope: `chat:write`
   --as-user: oneof<nothing, bool> # Pass true to post the message as the authed user, instead of as a bot. Defaults to false. See [chat.postMessage](chat.postMessage#authorship).
@@ -2545,13 +2685,14 @@ export def "chatschedule-message scheduleMessage" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/chat.scheduleMessage")
-  let body = {as_user: $as_user, attachments: $attachments, blocks: $blocks, channel: $channel, link_names: $link_names, parse: $parse, post_at: $post_at, reply_broadcast: $reply_broadcast, text: $text, thread_ts: $thread_ts, unfurl_links: $unfurl_links, unfurl_media: $unfurl_media} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"token": $hdr_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"as_user": $as_user, "attachments": $attachments, "blocks": $blocks, "channel": $channel, "link_names": $link_names, "parse": $parse, "post_at": $post_at, "reply_broadcast": $reply_broadcast, "text": $text, "thread_ts": $thread_ts, "unfurl_links": $unfurl_links, "unfurl_media": $unfurl_media} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let extra_headers = {"token": $hdr_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # Returns a list of scheduled messages.
@@ -2559,7 +2700,7 @@ export def "chatschedule-message scheduleMessage" [
 # GET /chat.scheduledMessages.list
 # Docs: https://api.slack.com/methods/chat.scheduledMessages.list — API method documentation
 # operationId: chat_scheduledMessages_list
-export def "chatscheduled-messageslist list" [
+export def "chat-scheduled-messages-list list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2567,6 +2708,7 @@ export def "chatscheduled-messageslist list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --channel: string # The channel of the scheduled messages
   --latest: float # A UNIX timestamp of the latest value in the time range
@@ -2579,11 +2721,11 @@ export def "chatscheduled-messageslist list" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "channel" $channel "scalar") (serialize-qp "latest" $latest "scalar") (serialize-qp "oldest" $oldest "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "cursor" $cursor "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/chat.scheduledMessages.list" $qp)
-  let extra_headers = {"token": $hdr_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"token": $hdr_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Provide custom unfurl behavior for user-posted URLs
@@ -2591,7 +2733,7 @@ export def "chatscheduled-messageslist list" [
 # POST /chat.unfurl
 # Docs: https://api.slack.com/methods/chat.unfurl — API method documentation
 # operationId: chat_unfurl
-export def "chatunfurl unfurl" [
+export def "chat-unfurl create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2599,6 +2741,7 @@ export def "chatunfurl unfurl" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # Authentication token. Requires scope: `links:write`
   channel: string # Channel ID of the message
@@ -2612,13 +2755,14 @@ export def "chatunfurl unfurl" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/chat.unfurl")
-  let body = {channel: $channel, ts: $ts, unfurls: $unfurls, user_auth_message: $user_auth_message, user_auth_required: $user_auth_required, user_auth_url: $user_auth_url} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"token": $hdr_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"channel": $channel, "ts": $ts, "unfurls": $unfurls, "user_auth_message": $user_auth_message, "user_auth_required": $user_auth_required, "user_auth_url": $user_auth_url} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let extra_headers = {"token": $hdr_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # Updates a message.
@@ -2626,7 +2770,7 @@ export def "chatunfurl unfurl" [
 # POST /chat.update
 # Docs: https://api.slack.com/methods/chat.update — API method documentation
 # operationId: chat_update
-export def "chatupdate update" [
+export def "chat-update update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2634,6 +2778,7 @@ export def "chatupdate update" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # Authentication token. Requires scope: `chat:write`
   --as-user: string # Pass true to update the message as the authed user. [Bot users](/bot-users) in this context are considered authed users.
@@ -2649,13 +2794,14 @@ export def "chatupdate update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/chat.update")
-  let body = {as_user: $as_user, attachments: $attachments, blocks: $blocks, channel: $channel, link_names: $link_names, parse: $parse, text: $text, ts: $ts} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"token": $hdr_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"as_user": $as_user, "attachments": $attachments, "blocks": $blocks, "channel": $channel, "link_names": $link_names, "parse": $parse, "text": $text, "ts": $ts} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let extra_headers = {"token": $hdr_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # Archives a conversation.
@@ -2663,7 +2809,7 @@ export def "chatupdate update" [
 # POST /conversations.archive
 # Docs: https://api.slack.com/methods/conversations.archive — API method documentation
 # operationId: conversations_archive
-export def "conversationsarchive archive" [
+export def "conversations-archive archive" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2671,6 +2817,7 @@ export def "conversationsarchive archive" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # Authentication token. Requires scope: `conversations:write`
   --channel: string # ID of conversation to archive
@@ -2679,13 +2826,14 @@ export def "conversationsarchive archive" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/conversations.archive")
-  let body = {channel: $channel} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"token": $hdr_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"channel": $channel} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let extra_headers = {"token": $hdr_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # Closes a direct message or multi-person direct message.
@@ -2693,7 +2841,7 @@ export def "conversationsarchive archive" [
 # POST /conversations.close
 # Docs: https://api.slack.com/methods/conversations.close — API method documentation
 # operationId: conversations_close
-export def "conversationsclose close" [
+export def "conversations-close close" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2701,6 +2849,7 @@ export def "conversationsclose close" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # Authentication token. Requires scope: `conversations:write`
   --channel: string # Conversation to close.
@@ -2709,13 +2858,14 @@ export def "conversationsclose close" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/conversations.close")
-  let body = {channel: $channel} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"token": $hdr_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"channel": $channel} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let extra_headers = {"token": $hdr_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # Initiates a public or private channel-based conversation
@@ -2723,7 +2873,7 @@ export def "conversationsclose close" [
 # POST /conversations.create
 # Docs: https://api.slack.com/methods/conversations.create — API method documentation
 # operationId: conversations_create
-export def "conversationscreate create" [
+export def "conversations-create create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2731,6 +2881,7 @@ export def "conversationscreate create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # Authentication token. Requires scope: `conversations:write`
   --is-private: oneof<nothing, bool> # Create a private channel instead of a public one
@@ -2740,13 +2891,14 @@ export def "conversationscreate create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/conversations.create")
-  let body = {is_private: $is_private, name: $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"token": $hdr_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"is_private": $is_private, "name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let extra_headers = {"token": $hdr_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # Fetches a conversation's history of messages and events.
@@ -2754,7 +2906,7 @@ export def "conversationscreate create" [
 # GET /conversations.history
 # Docs: https://api.slack.com/methods/conversations.history — API method documentation
 # operationId: conversations_history
-export def "conversationshistory history" [
+export def "conversations-history get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2762,6 +2914,7 @@ export def "conversationshistory history" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --qp-token: string # Authentication token. Requires scope: `conversations:history`
   --channel: string # Conversation ID to fetch history for.
@@ -2777,7 +2930,7 @@ export def "conversationshistory history" [
   let full_url = (build-url $base "/conversations.history" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Retrieve information about a conversation.
@@ -2785,7 +2938,7 @@ export def "conversationshistory history" [
 # GET /conversations.info
 # Docs: https://api.slack.com/methods/conversations.info — API method documentation
 # operationId: conversations_info
-export def "conversationsinfo info" [
+export def "conversations-info get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2793,6 +2946,7 @@ export def "conversationsinfo info" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --qp-token: string # Authentication token. Requires scope: `conversations:read`
   --channel: string # Conversation ID to learn more about
@@ -2805,7 +2959,7 @@ export def "conversationsinfo info" [
   let full_url = (build-url $base "/conversations.info" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Invites users to a channel.
@@ -2813,7 +2967,7 @@ export def "conversationsinfo info" [
 # POST /conversations.invite
 # Docs: https://api.slack.com/methods/conversations.invite — API method documentation
 # operationId: conversations_invite
-export def "conversationsinvite invite" [
+export def "conversations-invite create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2821,6 +2975,7 @@ export def "conversationsinvite invite" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # Authentication token. Requires scope: `conversations:write`
   --channel: string # The ID of the public or private channel to invite user(s) to.
@@ -2830,13 +2985,14 @@ export def "conversationsinvite invite" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/conversations.invite")
-  let body = {channel: $channel, users: $users} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"token": $hdr_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"channel": $channel, "users": $users} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let extra_headers = {"token": $hdr_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # Joins an existing conversation.
@@ -2844,7 +3000,7 @@ export def "conversationsinvite invite" [
 # POST /conversations.join
 # Docs: https://api.slack.com/methods/conversations.join — API method documentation
 # operationId: conversations_join
-export def "conversationsjoin join" [
+export def "conversations-join create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2852,6 +3008,7 @@ export def "conversationsjoin join" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # Authentication token. Requires scope: `channels:write`
   --channel: string # ID of conversation to join
@@ -2860,13 +3017,14 @@ export def "conversationsjoin join" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/conversations.join")
-  let body = {channel: $channel} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"token": $hdr_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"channel": $channel} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let extra_headers = {"token": $hdr_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # Removes a user from a conversation.
@@ -2874,7 +3032,7 @@ export def "conversationsjoin join" [
 # POST /conversations.kick
 # Docs: https://api.slack.com/methods/conversations.kick — API method documentation
 # operationId: conversations_kick
-export def "conversationskick kick" [
+export def "conversations-kick create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2882,6 +3040,7 @@ export def "conversationskick kick" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # Authentication token. Requires scope: `conversations:write`
   --channel: string # ID of conversation to remove user from.
@@ -2891,13 +3050,14 @@ export def "conversationskick kick" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/conversations.kick")
-  let body = {channel: $channel, user: $user} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"token": $hdr_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"channel": $channel, "user": $user} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let extra_headers = {"token": $hdr_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # Leaves a conversation.
@@ -2905,7 +3065,7 @@ export def "conversationskick kick" [
 # POST /conversations.leave
 # Docs: https://api.slack.com/methods/conversations.leave — API method documentation
 # operationId: conversations_leave
-export def "conversationsleave leave" [
+export def "conversations-leave create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2913,6 +3073,7 @@ export def "conversationsleave leave" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # Authentication token. Requires scope: `conversations:write`
   --channel: string # Conversation to leave
@@ -2921,13 +3082,14 @@ export def "conversationsleave leave" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/conversations.leave")
-  let body = {channel: $channel} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"token": $hdr_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"channel": $channel} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let extra_headers = {"token": $hdr_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # Lists all channels in a Slack team.
@@ -2935,7 +3097,7 @@ export def "conversationsleave leave" [
 # GET /conversations.list
 # Docs: https://api.slack.com/methods/conversations.list — API method documentation
 # operationId: conversations_list
-export def "conversationslist list" [
+export def "conversations-list list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2943,6 +3105,7 @@ export def "conversationslist list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --qp-token: string # Authentication token. Requires scope: `conversations:read`
   --exclude-archived: oneof<nothing, bool> # Set to `true` to exclude archived channels from the list
@@ -2956,7 +3119,7 @@ export def "conversationslist list" [
   let full_url = (build-url $base "/conversations.list" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Sets the read cursor in a channel.
@@ -2964,7 +3127,7 @@ export def "conversationslist list" [
 # POST /conversations.mark
 # Docs: https://api.slack.com/methods/conversations.mark — API method documentation
 # operationId: conversations_mark
-export def "conversationsmark mark" [
+export def "conversations-mark create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2972,6 +3135,7 @@ export def "conversationsmark mark" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # Authentication token. Requires scope: `conversations:write`
   --channel: string # Channel or conversation to set the read cursor for.
@@ -2981,13 +3145,14 @@ export def "conversationsmark mark" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/conversations.mark")
-  let body = {channel: $channel, ts: $ts} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"token": $hdr_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"channel": $channel, "ts": $ts} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let extra_headers = {"token": $hdr_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # Retrieve members of a conversation.
@@ -2995,7 +3160,7 @@ export def "conversationsmark mark" [
 # GET /conversations.members
 # Docs: https://api.slack.com/methods/conversations.members — API method documentation
 # operationId: conversations_members
-export def "conversationsmembers members" [
+export def "conversations-members get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3003,6 +3168,7 @@ export def "conversationsmembers members" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --qp-token: string # Authentication token. Requires scope: `conversations:read`
   --channel: string # ID of the conversation to retrieve members for
@@ -3015,7 +3181,7 @@ export def "conversationsmembers members" [
   let full_url = (build-url $base "/conversations.members" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Opens or resumes a direct message or multi-person direct message.
@@ -3023,7 +3189,7 @@ export def "conversationsmembers members" [
 # POST /conversations.open
 # Docs: https://api.slack.com/methods/conversations.open — API method documentation
 # operationId: conversations_open
-export def "conversationsopen open" [
+export def "conversations-open open" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3031,23 +3197,25 @@ export def "conversationsopen open" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # Authentication token. Requires scope: `conversations:write`
   --channel: string # Resume a conversation by supplying an `im` or `mpim`'s ID. Or provide the `users` field instead.
   --return-im: oneof<nothing, bool> # Boolean, indicates you want the full IM channel definition in the response.
-  --users: string # Comma separated lists of users. If only one user is included, this creates a 1:1 DM.  The ordering of the users is preserved whenever a multi-person direct message is returned. Supply a `channel` when not supplying `users`.
+  --users: string # Comma separated lists of users. If only one user is included, this creates a 1:1 DM. The ordering of the users is preserved whenever a multi-person direct message is returned. Supply a `channel` when not supplying `users`.
 ]: any -> record<already_open: bool, channel: list<any>, no_op: bool, ok: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/conversations.open")
-  let body = {channel: $channel, return_im: $return_im, users: $users} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"token": $hdr_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"channel": $channel, "return_im": $return_im, "users": $users} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let extra_headers = {"token": $hdr_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # Renames a conversation.
@@ -3055,7 +3223,7 @@ export def "conversationsopen open" [
 # POST /conversations.rename
 # Docs: https://api.slack.com/methods/conversations.rename — API method documentation
 # operationId: conversations_rename
-export def "conversationsrename rename" [
+export def "conversations-rename rename" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3063,6 +3231,7 @@ export def "conversationsrename rename" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # Authentication token. Requires scope: `conversations:write`
   --channel: string # ID of conversation to rename
@@ -3072,13 +3241,14 @@ export def "conversationsrename rename" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/conversations.rename")
-  let body = {channel: $channel, name: $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"token": $hdr_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"channel": $channel, "name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let extra_headers = {"token": $hdr_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # Retrieve a thread of messages posted to a conversation
@@ -3086,7 +3256,7 @@ export def "conversationsrename rename" [
 # GET /conversations.replies
 # Docs: https://api.slack.com/methods/conversations.replies — API method documentation
 # operationId: conversations_replies
-export def "conversationsreplies replies" [
+export def "conversations-replies get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3094,6 +3264,7 @@ export def "conversationsreplies replies" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --qp-token: string # Authentication token. Requires scope: `conversations:history`
   --channel: string # Conversation ID to fetch thread from.
@@ -3110,7 +3281,7 @@ export def "conversationsreplies replies" [
   let full_url = (build-url $base "/conversations.replies" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Sets the purpose for a conversation.
@@ -3118,7 +3289,7 @@ export def "conversationsreplies replies" [
 # POST /conversations.setPurpose
 # Docs: https://api.slack.com/methods/conversations.setPurpose — API method documentation
 # operationId: conversations_setPurpose
-export def "conversationsset-purpose setPurpose" [
+export def "conversations-set-purpose update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3126,6 +3297,7 @@ export def "conversationsset-purpose setPurpose" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # Authentication token. Requires scope: `conversations:write`
   --channel: string # Conversation to set the purpose of
@@ -3135,13 +3307,14 @@ export def "conversationsset-purpose setPurpose" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/conversations.setPurpose")
-  let body = {channel: $channel, purpose: $purpose} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"token": $hdr_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"channel": $channel, "purpose": $purpose} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let extra_headers = {"token": $hdr_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # Sets the topic for a conversation.
@@ -3149,7 +3322,7 @@ export def "conversationsset-purpose setPurpose" [
 # POST /conversations.setTopic
 # Docs: https://api.slack.com/methods/conversations.setTopic — API method documentation
 # operationId: conversations_setTopic
-export def "conversationsset-topic setTopic" [
+export def "conversations-set-topic update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3157,6 +3330,7 @@ export def "conversationsset-topic setTopic" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # Authentication token. Requires scope: `conversations:write`
   --channel: string # Conversation to set the topic of
@@ -3166,13 +3340,14 @@ export def "conversationsset-topic setTopic" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/conversations.setTopic")
-  let body = {channel: $channel, topic: $topic} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"token": $hdr_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"channel": $channel, "topic": $topic} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let extra_headers = {"token": $hdr_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # Reverses conversation archival.
@@ -3180,7 +3355,7 @@ export def "conversationsset-topic setTopic" [
 # POST /conversations.unarchive
 # Docs: https://api.slack.com/methods/conversations.unarchive — API method documentation
 # operationId: conversations_unarchive
-export def "conversationsunarchive unarchive" [
+export def "conversations-unarchive unarchive" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3188,6 +3363,7 @@ export def "conversationsunarchive unarchive" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # Authentication token. Requires scope: `conversations:write`
   --channel: string # ID of conversation to unarchive
@@ -3196,13 +3372,14 @@ export def "conversationsunarchive unarchive" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/conversations.unarchive")
-  let body = {channel: $channel} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"token": $hdr_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"channel": $channel} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let extra_headers = {"token": $hdr_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # Open a dialog with a user
@@ -3210,7 +3387,7 @@ export def "conversationsunarchive unarchive" [
 # GET /dialog.open
 # Docs: https://api.slack.com/methods/dialog.open — API method documentation
 # operationId: dialog_open
-export def "dialogopen open" [
+export def "dialog-open open" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3218,6 +3395,7 @@ export def "dialogopen open" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --dialog: string # The dialog definition. This must be a JSON-encoded string.
   --trigger-id: string # Exchange a trigger to post to the user.
@@ -3227,11 +3405,11 @@ export def "dialogopen open" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "dialog" $dialog "scalar") (serialize-qp "trigger_id" $trigger_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/dialog.open" $qp)
-  let extra_headers = {"token": $hdr_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"token": $hdr_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Ends the current user's Do Not Disturb session immediately.
@@ -3239,7 +3417,7 @@ export def "dialogopen open" [
 # POST /dnd.endDnd
 # Docs: https://api.slack.com/methods/dnd.endDnd — API method documentation
 # operationId: dnd_endDnd
-export def "dndend-dnd endDnd" [
+export def "dnd-end-dnd create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3247,17 +3425,18 @@ export def "dndend-dnd endDnd" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # Authentication token. Requires scope: `dnd:write`
 ]: nothing -> record<ok: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/dnd.endDnd")
-  let extra_headers = {"token": $hdr_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"token": $hdr_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Ends the current user's snooze mode immediately.
@@ -3265,7 +3444,7 @@ export def "dndend-dnd endDnd" [
 # POST /dnd.endSnooze
 # Docs: https://api.slack.com/methods/dnd.endSnooze — API method documentation
 # operationId: dnd_endSnooze
-export def "dndend-snooze endSnooze" [
+export def "dnd-end-snooze create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3273,17 +3452,18 @@ export def "dndend-snooze endSnooze" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # Authentication token. Requires scope: `dnd:write`
 ]: nothing -> record<dnd_enabled: bool, next_dnd_end_ts: int, next_dnd_start_ts: int, ok: bool, snooze_enabled: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/dnd.endSnooze")
-  let extra_headers = {"token": $hdr_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"token": $hdr_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Retrieves a user's current Do Not Disturb status.
@@ -3291,7 +3471,7 @@ export def "dndend-snooze endSnooze" [
 # GET /dnd.info
 # Docs: https://api.slack.com/methods/dnd.info — API method documentation
 # operationId: dnd_info
-export def "dndinfo info" [
+export def "dnd-info get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3299,6 +3479,7 @@ export def "dndinfo info" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --qp-token: string # Authentication token. Requires scope: `dnd:read`
   --user: string # User to fetch status for (defaults to current user)
@@ -3309,7 +3490,7 @@ export def "dndinfo info" [
   let full_url = (build-url $base "/dnd.info" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Turns on Do Not Disturb mode for the current user, or changes its duration.
@@ -3317,7 +3498,7 @@ export def "dndinfo info" [
 # POST /dnd.setSnooze
 # Docs: https://api.slack.com/methods/dnd.setSnooze — API method documentation
 # operationId: dnd_setSnooze
-export def "dndset-snooze setSnooze" [
+export def "dnd-set-snooze update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3325,6 +3506,7 @@ export def "dndset-snooze setSnooze" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   num_minutes: string # Number of minutes, from now, to snooze until.
   --body-token: string # Authentication token. Requires scope: `dnd:write`
@@ -3333,11 +3515,12 @@ export def "dndset-snooze setSnooze" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/dnd.setSnooze")
-  let body = {num_minutes: $num_minutes, token: $body_token} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"num_minutes": $num_minutes, "token": $body_token} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # Retrieves the Do Not Disturb status for up to 50 users on a team.
@@ -3345,7 +3528,7 @@ export def "dndset-snooze setSnooze" [
 # GET /dnd.teamInfo
 # Docs: https://api.slack.com/methods/dnd.teamInfo — API method documentation
 # operationId: dnd_teamInfo
-export def "dndteam-info teamInfo" [
+export def "dnd-team-info get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3353,6 +3536,7 @@ export def "dndteam-info teamInfo" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --qp-token: string # Authentication token. Requires scope: `dnd:read`
   --users: string # Comma-separated list of users to fetch Do Not Disturb status for
@@ -3363,7 +3547,7 @@ export def "dndteam-info teamInfo" [
   let full_url = (build-url $base "/dnd.teamInfo" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Lists custom emoji for a team.
@@ -3371,7 +3555,7 @@ export def "dndteam-info teamInfo" [
 # GET /emoji.list
 # Docs: https://api.slack.com/methods/emoji.list — API method documentation
 # operationId: emoji_list
-export def "emojilist list" [
+export def "emoji-list list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3379,6 +3563,7 @@ export def "emojilist list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --qp-token: string # Authentication token. Requires scope: `emoji:read`
 ]: nothing -> record<ok: bool> {
@@ -3388,7 +3573,7 @@ export def "emojilist list" [
   let full_url = (build-url $base "/emoji.list" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Deletes an existing comment on a file.
@@ -3396,7 +3581,7 @@ export def "emojilist list" [
 # POST /files.comments.delete
 # Docs: https://api.slack.com/methods/files.comments.delete — API method documentation
 # operationId: files_comments_delete
-export def "filescommentsdelete delete" [
+export def "files-comments-delete delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3404,6 +3589,7 @@ export def "filescommentsdelete delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # Authentication token. Requires scope: `files:write:user`
   --file: string # File to delete a comment from.
@@ -3413,13 +3599,14 @@ export def "filescommentsdelete delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/files.comments.delete")
-  let body = {file: $file, id: $id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"token": $hdr_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"file": $file, "id": $id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let extra_headers = {"token": $hdr_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # Deletes a file.
@@ -3427,7 +3614,7 @@ export def "filescommentsdelete delete" [
 # POST /files.delete
 # Docs: https://api.slack.com/methods/files.delete — API method documentation
 # operationId: files_delete
-export def "filesdelete delete" [
+export def "files-delete delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3435,6 +3622,7 @@ export def "filesdelete delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # Authentication token. Requires scope: `files:write:user`
   --file: string # ID of file to delete.
@@ -3443,13 +3631,14 @@ export def "filesdelete delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/files.delete")
-  let body = {file: $file} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"token": $hdr_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"file": $file} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let extra_headers = {"token": $hdr_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # Gets information about a file.
@@ -3457,7 +3646,7 @@ export def "filesdelete delete" [
 # GET /files.info
 # Docs: https://api.slack.com/methods/files.info — API method documentation
 # operationId: files_info
-export def "filesinfo info" [
+export def "files-info get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3465,6 +3654,7 @@ export def "filesinfo info" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --qp-token: string # Authentication token. Requires scope: `files:read`
   --file: string # Specify a file by providing its ID.
@@ -3479,7 +3669,7 @@ export def "filesinfo info" [
   let full_url = (build-url $base "/files.info" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # List for a team, in a channel, or from a user with applied filters.
@@ -3487,7 +3677,7 @@ export def "filesinfo info" [
 # GET /files.list
 # Docs: https://api.slack.com/methods/files.list — API method documentation
 # operationId: files_list
-export def "fileslist list" [
+export def "files-list list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3495,6 +3685,7 @@ export def "fileslist list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --qp-token: string # Authentication token. Requires scope: `files:read`
   --user: string # Filter files created by a single user.
@@ -3512,7 +3703,7 @@ export def "fileslist list" [
   let full_url = (build-url $base "/files.list" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Adds a file from a remote service
@@ -3520,7 +3711,7 @@ export def "fileslist list" [
 # POST /files.remote.add
 # Docs: https://api.slack.com/methods/files.remote.add — API method documentation
 # operationId: files_remote_add
-export def "filesremoteadd add" [
+export def "files-remote-add create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3528,6 +3719,7 @@ export def "filesremoteadd add" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --external-id: string # Creator defined GUID for the file.
   --external-url: string # URL of the remote file.
@@ -3541,11 +3733,12 @@ export def "filesremoteadd add" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/files.remote.add")
-  let body = {external_id: $external_id, external_url: $external_url, filetype: $filetype, indexable_file_contents: $indexable_file_contents, preview_image: $preview_image, title: $title, token: $body_token} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"external_id": $external_id, "external_url": $external_url, "filetype": $filetype, "indexable_file_contents": $indexable_file_contents, "preview_image": $preview_image, "title": $title, "token": $body_token} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # Retrieve information about a remote file added to Slack
@@ -3553,7 +3746,7 @@ export def "filesremoteadd add" [
 # GET /files.remote.info
 # Docs: https://api.slack.com/methods/files.remote.info — API method documentation
 # operationId: files_remote_info
-export def "filesremoteinfo info" [
+export def "files-remote-info get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3561,6 +3754,7 @@ export def "filesremoteinfo info" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --qp-token: string # Authentication token. Requires scope: `remote_files:read`
   --file: string # Specify a file by providing its ID.
@@ -3572,7 +3766,7 @@ export def "filesremoteinfo info" [
   let full_url = (build-url $base "/files.remote.info" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Retrieve information about a remote file added to Slack
@@ -3580,7 +3774,7 @@ export def "filesremoteinfo info" [
 # GET /files.remote.list
 # Docs: https://api.slack.com/methods/files.remote.list — API method documentation
 # operationId: files_remote_list
-export def "filesremotelist list" [
+export def "files-remote-list list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3588,6 +3782,7 @@ export def "filesremotelist list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --qp-token: string # Authentication token. Requires scope: `remote_files:read`
   --channel: string # Filter files appearing in a specific channel, indicated by its ID.
@@ -3602,7 +3797,7 @@ export def "filesremotelist list" [
   let full_url = (build-url $base "/files.remote.list" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Remove a remote file.
@@ -3610,7 +3805,7 @@ export def "filesremotelist list" [
 # POST /files.remote.remove
 # Docs: https://api.slack.com/methods/files.remote.remove — API method documentation
 # operationId: files_remote_remove
-export def "filesremoteremove remove" [
+export def "files-remote-remove delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3618,6 +3813,7 @@ export def "filesremoteremove remove" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --external-id: string # Creator defined GUID for the file.
   --file: string # Specify a file by providing its ID.
@@ -3627,11 +3823,12 @@ export def "filesremoteremove remove" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/files.remote.remove")
-  let body = {external_id: $external_id, file: $file, token: $body_token} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"external_id": $external_id, "file": $file, "token": $body_token} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # Share a remote file into a channel.
@@ -3639,7 +3836,7 @@ export def "filesremoteremove remove" [
 # GET /files.remote.share
 # Docs: https://api.slack.com/methods/files.remote.share — API method documentation
 # operationId: files_remote_share
-export def "filesremoteshare share" [
+export def "files-remote-share get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3647,10 +3844,11 @@ export def "filesremoteshare share" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --qp-token: string # Authentication token. Requires scope: `remote_files:share`
   --file: string # Specify a file registered with Slack by providing its ID. Either this field or `external_id` or both are required.
-  --external-id: string # The globally unique identifier (GUID) for the file, as set by the app registering the file with Slack.  Either this field or `file` or both are required.
+  --external-id: string # The globally unique identifier (GUID) for the file, as set by the app registering the file with Slack. Either this field or `file` or both are required.
   --channels: string # Comma-separated list of channel IDs where the file will be shared.
 ]: nothing -> record<ok: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3659,7 +3857,7 @@ export def "filesremoteshare share" [
   let full_url = (build-url $base "/files.remote.share" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Updates an existing remote file.
@@ -3667,7 +3865,7 @@ export def "filesremoteshare share" [
 # POST /files.remote.update
 # Docs: https://api.slack.com/methods/files.remote.update — API method documentation
 # operationId: files_remote_update
-export def "filesremoteupdate update" [
+export def "files-remote-update update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3675,6 +3873,7 @@ export def "filesremoteupdate update" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --external-id: string # Creator defined GUID for the file.
   --external-url: string # URL of the remote file.
@@ -3689,11 +3888,12 @@ export def "filesremoteupdate update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/files.remote.update")
-  let body = {external_id: $external_id, external_url: $external_url, file: $file, filetype: $filetype, indexable_file_contents: $indexable_file_contents, preview_image: $preview_image, title: $title, token: $body_token} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"external_id": $external_id, "external_url": $external_url, "file": $file, "filetype": $filetype, "indexable_file_contents": $indexable_file_contents, "preview_image": $preview_image, "title": $title, "token": $body_token} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # Revokes public/external sharing access for a file
@@ -3701,7 +3901,7 @@ export def "filesremoteupdate update" [
 # POST /files.revokePublicURL
 # Docs: https://api.slack.com/methods/files.revokePublicURL — API method documentation
 # operationId: files_revokePublicURL
-export def "filesrevoke-public-url revokePublicURL" [
+export def "files-revoke-public-url delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3709,6 +3909,7 @@ export def "filesrevoke-public-url revokePublicURL" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # Authentication token. Requires scope: `files:write:user`
   --file: string # File to revoke
@@ -3717,13 +3918,14 @@ export def "filesrevoke-public-url revokePublicURL" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/files.revokePublicURL")
-  let body = {file: $file} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"token": $hdr_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"file": $file} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let extra_headers = {"token": $hdr_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # Enables a file for public/external sharing.
@@ -3731,7 +3933,7 @@ export def "filesrevoke-public-url revokePublicURL" [
 # POST /files.sharedPublicURL
 # Docs: https://api.slack.com/methods/files.sharedPublicURL — API method documentation
 # operationId: files_sharedPublicURL
-export def "filesshared-public-url sharedPublicURL" [
+export def "files-shared-public-url create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3739,6 +3941,7 @@ export def "filesshared-public-url sharedPublicURL" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # Authentication token. Requires scope: `files:write:user`
   --file: string # File to share
@@ -3747,13 +3950,14 @@ export def "filesshared-public-url sharedPublicURL" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/files.sharedPublicURL")
-  let body = {file: $file} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"token": $hdr_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"file": $file} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let extra_headers = {"token": $hdr_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # Uploads or creates a file.
@@ -3761,7 +3965,7 @@ export def "filesshared-public-url sharedPublicURL" [
 # POST /files.upload
 # Docs: https://api.slack.com/methods/files.upload — API method documentation
 # operationId: files_upload
-export def "filesupload upload" [
+export def "files-upload upload" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3769,6 +3973,7 @@ export def "filesupload upload" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --channels: string # Comma-separated list of channel names or IDs where the file will be shared.
   --content: string # File contents via a POST variable. If omitting this parameter, you must provide a `file`.
@@ -3784,11 +3989,12 @@ export def "filesupload upload" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/files.upload")
-  let body = {channels: $channels, content: $content, file: $file, filename: $filename, filetype: $filetype, initial_comment: $initial_comment, thread_ts: $thread_ts, title: $title, token: $body_token} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"channels": $channels, "content": $content, "file": $file, "filename": $filename, "filetype": $filetype, "initial_comment": $initial_comment, "thread_ts": $thread_ts, "title": $title, "token": $body_token} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # For Enterprise Grid workspaces, map local user IDs to global user IDs
@@ -3796,7 +4002,7 @@ export def "filesupload upload" [
 # GET /migration.exchange
 # Docs: https://api.slack.com/methods/migration.exchange — API method documentation
 # operationId: migration_exchange
-export def "migrationexchange exchange" [
+export def "migration-exchange get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3804,6 +4010,7 @@ export def "migrationexchange exchange" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --qp-token: string # Authentication token. Requires scope: `tokens.basic`
   --users: string # A comma-separated list of user ids, up to 400 per request
@@ -3816,7 +4023,7 @@ export def "migrationexchange exchange" [
   let full_url = (build-url $base "/migration.exchange" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Exchanges a temporary OAuth verifier code for an access token.
@@ -3824,7 +4031,7 @@ export def "migrationexchange exchange" [
 # GET /oauth.access
 # Docs: https://api.slack.com/methods/oauth.access — API method documentation
 # operationId: oauth_access
-export def "oauthaccess access" [
+export def "oauth-access get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3832,6 +4039,7 @@ export def "oauthaccess access" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --client-id: string # Issued when you created your application.
   --client-secret: string # Issued when you created your application.
@@ -3845,7 +4053,7 @@ export def "oauthaccess access" [
   let full_url = (build-url $base "/oauth.access" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Exchanges a temporary OAuth verifier code for a workspace token.
@@ -3853,7 +4061,7 @@ export def "oauthaccess access" [
 # GET /oauth.token
 # Docs: https://api.slack.com/methods/oauth.token — API method documentation
 # operationId: oauth_token
-export def "oauthtoken token" [
+export def "oauth-token get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3861,6 +4069,7 @@ export def "oauthtoken token" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --client-id: string # Issued when you created your application.
   --client-secret: string # Issued when you created your application.
@@ -3874,7 +4083,7 @@ export def "oauthtoken token" [
   let full_url = (build-url $base "/oauth.token" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Exchanges a temporary OAuth verifier code for an access token.
@@ -3882,7 +4091,7 @@ export def "oauthtoken token" [
 # GET /oauth.v2.access
 # Docs: https://api.slack.com/methods/oauth.v2.access — API method documentation
 # operationId: oauth_v2_access
-export def "oauthv2access access" [
+export def "oauth-v2-access get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3890,6 +4099,7 @@ export def "oauthv2access access" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --client-id: string # Issued when you created your application.
   --client-secret: string # Issued when you created your application.
@@ -3902,7 +4112,7 @@ export def "oauthv2access access" [
   let full_url = (build-url $base "/oauth.v2.access" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Pins an item to a channel.
@@ -3910,7 +4120,7 @@ export def "oauthv2access access" [
 # POST /pins.add
 # Docs: https://api.slack.com/methods/pins.add — API method documentation
 # operationId: pins_add
-export def "pinsadd add" [
+export def "pins-add create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3918,6 +4128,7 @@ export def "pinsadd add" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # Authentication token. Requires scope: `pins:write`
   channel: string # Channel to pin the item in.
@@ -3927,13 +4138,14 @@ export def "pinsadd add" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/pins.add")
-  let body = {channel: $channel, timestamp: $timestamp} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"token": $hdr_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"channel": $channel, "timestamp": $timestamp} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let extra_headers = {"token": $hdr_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # Lists items pinned to a channel.
@@ -3941,7 +4153,7 @@ export def "pinsadd add" [
 # GET /pins.list
 # Docs: https://api.slack.com/methods/pins.list — API method documentation
 # operationId: pins_list
-export def "pinslist list" [
+export def "pins-list list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3949,6 +4161,7 @@ export def "pinslist list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --qp-token: string # Authentication token. Requires scope: `pins:read`
   --channel: string # Channel to get pinned items for.
@@ -3959,7 +4172,7 @@ export def "pinslist list" [
   let full_url = (build-url $base "/pins.list" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Un-pins an item from a channel.
@@ -3967,7 +4180,7 @@ export def "pinslist list" [
 # POST /pins.remove
 # Docs: https://api.slack.com/methods/pins.remove — API method documentation
 # operationId: pins_remove
-export def "pinsremove remove" [
+export def "pins-remove delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3975,6 +4188,7 @@ export def "pinsremove remove" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # Authentication token. Requires scope: `pins:write`
   channel: string # Channel where the item is pinned to.
@@ -3984,13 +4198,14 @@ export def "pinsremove remove" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/pins.remove")
-  let body = {channel: $channel, timestamp: $timestamp} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"token": $hdr_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"channel": $channel, "timestamp": $timestamp} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let extra_headers = {"token": $hdr_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # Adds a reaction to an item.
@@ -3998,7 +4213,7 @@ export def "pinsremove remove" [
 # POST /reactions.add
 # Docs: https://api.slack.com/methods/reactions.add — API method documentation
 # operationId: reactions_add
-export def "reactionsadd add" [
+export def "reactions-add create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4006,6 +4221,7 @@ export def "reactionsadd add" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # Authentication token. Requires scope: `reactions:write`
   channel: string # Channel where the message to add reaction to was posted.
@@ -4016,13 +4232,14 @@ export def "reactionsadd add" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/reactions.add")
-  let body = {channel: $channel, name: $name, timestamp: $timestamp} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"token": $hdr_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"channel": $channel, "name": $name, "timestamp": $timestamp} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let extra_headers = {"token": $hdr_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # Gets reactions for an item.
@@ -4030,7 +4247,7 @@ export def "reactionsadd add" [
 # GET /reactions.get
 # Docs: https://api.slack.com/methods/reactions.get — API method documentation
 # operationId: reactions_get
-export def "reactionsget get" [
+export def "reactions-get get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4038,21 +4255,22 @@ export def "reactionsget get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --qp-token: string # Authentication token. Requires scope: `reactions:read`
   --channel: string # Channel where the message to get reactions for was posted.
   --file: string # File to get reactions for.
   --file-comment: string # File comment to get reactions for.
-  --full: oneof<nothing, bool> # If true always return the complete reaction list.
+  --qp-full: oneof<nothing, bool> # If true always return the complete reaction list.
   --timestamp: string # Timestamp of the message to get reactions for.
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "token" $qp_token "scalar") (serialize-qp "channel" $channel "scalar") (serialize-qp "file" $file "scalar") (serialize-qp "file_comment" $file_comment "scalar") (serialize-qp "full" $full "scalar") (serialize-qp "timestamp" $timestamp "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "token" $qp_token "scalar") (serialize-qp "channel" $channel "scalar") (serialize-qp "file" $file "scalar") (serialize-qp "file_comment" $file_comment "scalar") (serialize-qp "full" $qp_full "scalar") (serialize-qp "timestamp" $timestamp "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/reactions.get" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Lists reactions made by a user.
@@ -4060,7 +4278,7 @@ export def "reactionsget get" [
 # GET /reactions.list
 # Docs: https://api.slack.com/methods/reactions.list — API method documentation
 # operationId: reactions_list
-export def "reactionslist list" [
+export def "reactions-list list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4068,10 +4286,11 @@ export def "reactionslist list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --qp-token: string # Authentication token. Requires scope: `reactions:read`
   --user: string # Show reactions made by this user. Defaults to the authed user.
-  --full: oneof<nothing, bool> # If true always return the complete reaction list.
+  --qp-full: oneof<nothing, bool> # If true always return the complete reaction list.
   --count: int
   --page: int
   --cursor: string # Parameter for pagination. Set `cursor` equal to the `next_cursor` attribute returned by the previous request's `response_metadata`. This parameter is optional, but pagination is mandatory: the default value simply fetches the first "page" of the collection. See [pagination](/docs/pagination) for more details.
@@ -4079,11 +4298,11 @@ export def "reactionslist list" [
 ]: nothing -> record<items: list<list<any>>, ok: bool, paging: record<count: int, page: int, pages: int, per_page: int, spill: int, total: int>, response_metadata: list<any>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "token" $qp_token "scalar") (serialize-qp "user" $user "scalar") (serialize-qp "full" $full "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "cursor" $cursor "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "token" $qp_token "scalar") (serialize-qp "user" $user "scalar") (serialize-qp "full" $qp_full "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "cursor" $cursor "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/reactions.list" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Removes a reaction from an item.
@@ -4091,7 +4310,7 @@ export def "reactionslist list" [
 # POST /reactions.remove
 # Docs: https://api.slack.com/methods/reactions.remove — API method documentation
 # operationId: reactions_remove
-export def "reactionsremove remove" [
+export def "reactions-remove delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4099,6 +4318,7 @@ export def "reactionsremove remove" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # Authentication token. Requires scope: `reactions:write`
   --channel: string # Channel where the message to remove reaction from was posted.
@@ -4111,13 +4331,14 @@ export def "reactionsremove remove" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/reactions.remove")
-  let body = {channel: $channel, file: $file, file_comment: $file_comment, name: $name, timestamp: $timestamp} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"token": $hdr_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"channel": $channel, "file": $file, "file_comment": $file_comment, "name": $name, "timestamp": $timestamp} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let extra_headers = {"token": $hdr_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # Creates a reminder.
@@ -4125,7 +4346,7 @@ export def "reactionsremove remove" [
 # POST /reminders.add
 # Docs: https://api.slack.com/methods/reminders.add — API method documentation
 # operationId: reminders_add
-export def "remindersadd add" [
+export def "reminders-add create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4133,6 +4354,7 @@ export def "remindersadd add" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # Authentication token. Requires scope: `reminders:write`
   text: string # The content of the reminder
@@ -4143,13 +4365,14 @@ export def "remindersadd add" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/reminders.add")
-  let body = {text: $text, time: $time, user: $user} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"token": $hdr_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"text": $text, "time": $time, "user": $user} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let extra_headers = {"token": $hdr_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # Marks a reminder as complete.
@@ -4157,7 +4380,7 @@ export def "remindersadd add" [
 # POST /reminders.complete
 # Docs: https://api.slack.com/methods/reminders.complete — API method documentation
 # operationId: reminders_complete
-export def "reminderscomplete complete" [
+export def "reminders-complete complete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4165,6 +4388,7 @@ export def "reminderscomplete complete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # Authentication token. Requires scope: `reminders:write`
   --reminder: string # The ID of the reminder to be marked as complete
@@ -4173,13 +4397,14 @@ export def "reminderscomplete complete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/reminders.complete")
-  let body = {reminder: $reminder} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"token": $hdr_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"reminder": $reminder} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let extra_headers = {"token": $hdr_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # Deletes a reminder.
@@ -4187,7 +4412,7 @@ export def "reminderscomplete complete" [
 # POST /reminders.delete
 # Docs: https://api.slack.com/methods/reminders.delete — API method documentation
 # operationId: reminders_delete
-export def "remindersdelete delete" [
+export def "reminders-delete delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4195,6 +4420,7 @@ export def "remindersdelete delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # Authentication token. Requires scope: `reminders:write`
   --reminder: string # The ID of the reminder
@@ -4203,13 +4429,14 @@ export def "remindersdelete delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/reminders.delete")
-  let body = {reminder: $reminder} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"token": $hdr_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"reminder": $reminder} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let extra_headers = {"token": $hdr_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # Gets information about a reminder.
@@ -4217,7 +4444,7 @@ export def "remindersdelete delete" [
 # GET /reminders.info
 # Docs: https://api.slack.com/methods/reminders.info — API method documentation
 # operationId: reminders_info
-export def "remindersinfo info" [
+export def "reminders-info get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4225,6 +4452,7 @@ export def "remindersinfo info" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --qp-token: string # Authentication token. Requires scope: `reminders:read`
   --reminder: string # The ID of the reminder
@@ -4235,7 +4463,7 @@ export def "remindersinfo info" [
   let full_url = (build-url $base "/reminders.info" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Lists all reminders created by or for a given user.
@@ -4243,7 +4471,7 @@ export def "remindersinfo info" [
 # GET /reminders.list
 # Docs: https://api.slack.com/methods/reminders.list — API method documentation
 # operationId: reminders_list
-export def "reminderslist list" [
+export def "reminders-list list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4251,6 +4479,7 @@ export def "reminderslist list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --qp-token: string # Authentication token. Requires scope: `reminders:read`
 ]: nothing -> record<ok: bool, reminders: table<complete_ts: int, creator: string, id: string, recurring: bool, text: string, time: int, user: string>> {
@@ -4260,7 +4489,7 @@ export def "reminderslist list" [
   let full_url = (build-url $base "/reminders.list" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Starts a Real Time Messaging session.
@@ -4268,7 +4497,7 @@ export def "reminderslist list" [
 # GET /rtm.connect
 # Docs: https://api.slack.com/methods/rtm.connect — API method documentation
 # operationId: rtm_connect
-export def "rtmconnect connect" [
+export def "rtm-connect get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4276,6 +4505,7 @@ export def "rtmconnect connect" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --qp-token: string # Authentication token. Requires scope: `rtm:stream`
   --batch-presence-aware: oneof<nothing, bool> # Batch presence deliveries via subscription. Enabling changes the shape of `presence_change` events. See [batch presence](/docs/presence-and-status#batching).
@@ -4287,7 +4517,7 @@ export def "rtmconnect connect" [
   let full_url = (build-url $base "/rtm.connect" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Searches for messages matching a query.
@@ -4295,7 +4525,7 @@ export def "rtmconnect connect" [
 # GET /search.messages
 # Docs: https://api.slack.com/methods/search.messages — API method documentation
 # operationId: search_messages
-export def "searchmessages messages" [
+export def "search-messages list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4303,6 +4533,7 @@ export def "searchmessages messages" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --qp-token: string # Authentication token. Requires scope: `search:read`
   --count: int # Pass the number of results you want per "page". Maximum of `100`.
@@ -4318,7 +4549,7 @@ export def "searchmessages messages" [
   let full_url = (build-url $base "/search.messages" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Adds a star to an item.
@@ -4326,7 +4557,7 @@ export def "searchmessages messages" [
 # POST /stars.add
 # Docs: https://api.slack.com/methods/stars.add — API method documentation
 # operationId: stars_add
-export def "starsadd add" [
+export def "stars-add create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4334,6 +4565,7 @@ export def "starsadd add" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # Authentication token. Requires scope: `stars:write`
   --channel: string # Channel to add star to, or channel where the message to add star to was posted (used with `timestamp`).
@@ -4345,13 +4577,14 @@ export def "starsadd add" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/stars.add")
-  let body = {channel: $channel, file: $file, file_comment: $file_comment, timestamp: $timestamp} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"token": $hdr_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"channel": $channel, "file": $file, "file_comment": $file_comment, "timestamp": $timestamp} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let extra_headers = {"token": $hdr_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # Lists stars for a user.
@@ -4359,7 +4592,7 @@ export def "starsadd add" [
 # GET /stars.list
 # Docs: https://api.slack.com/methods/stars.list — API method documentation
 # operationId: stars_list
-export def "starslist list" [
+export def "stars-list list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4367,6 +4600,7 @@ export def "starslist list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --qp-token: string # Authentication token. Requires scope: `stars:read`
   --count: string
@@ -4380,7 +4614,7 @@ export def "starslist list" [
   let full_url = (build-url $base "/stars.list" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Removes a star from an item.
@@ -4388,7 +4622,7 @@ export def "starslist list" [
 # POST /stars.remove
 # Docs: https://api.slack.com/methods/stars.remove — API method documentation
 # operationId: stars_remove
-export def "starsremove remove" [
+export def "stars-remove delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4396,6 +4630,7 @@ export def "starsremove remove" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # Authentication token. Requires scope: `stars:write`
   --channel: string # Channel to remove star from, or channel where the message to remove star from was posted (used with `timestamp`).
@@ -4407,13 +4642,14 @@ export def "starsremove remove" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/stars.remove")
-  let body = {channel: $channel, file: $file, file_comment: $file_comment, timestamp: $timestamp} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"token": $hdr_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"channel": $channel, "file": $file, "file_comment": $file_comment, "timestamp": $timestamp} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let extra_headers = {"token": $hdr_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # Gets the access logs for the current team.
@@ -4421,7 +4657,7 @@ export def "starsremove remove" [
 # GET /team.accessLogs
 # Docs: https://api.slack.com/methods/team.accessLogs — API method documentation
 # operationId: team_accessLogs
-export def "teamaccess-logs accessLogs" [
+export def "team-access-logs logs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4429,6 +4665,7 @@ export def "teamaccess-logs accessLogs" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --qp-token: string # Authentication token. Requires scope: `admin`
   --before: string # End of time range of logs to include in results (inclusive).
@@ -4441,7 +4678,7 @@ export def "teamaccess-logs accessLogs" [
   let full_url = (build-url $base "/team.accessLogs" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Gets billable users information for the current team.
@@ -4449,7 +4686,7 @@ export def "teamaccess-logs accessLogs" [
 # GET /team.billableInfo
 # Docs: https://api.slack.com/methods/team.billableInfo — API method documentation
 # operationId: team_billableInfo
-export def "teambillable-info billableInfo" [
+export def "team-billable-info get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4457,6 +4694,7 @@ export def "teambillable-info billableInfo" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --qp-token: string # Authentication token. Requires scope: `admin`
   --user: string # A user to retrieve the billable information for. Defaults to all users.
@@ -4467,7 +4705,7 @@ export def "teambillable-info billableInfo" [
   let full_url = (build-url $base "/team.billableInfo" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Gets information about the current team.
@@ -4475,7 +4713,7 @@ export def "teambillable-info billableInfo" [
 # GET /team.info
 # Docs: https://api.slack.com/methods/team.info — API method documentation
 # operationId: team_info
-export def "teaminfo info" [
+export def "team-info get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4483,6 +4721,7 @@ export def "teaminfo info" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --qp-token: string # Authentication token. Requires scope: `team:read`
   --team: string # Team to get info on, if omitted, will return information about the current team. Will only return team that the authenticated token is allowed to see through external shared channels
@@ -4493,7 +4732,7 @@ export def "teaminfo info" [
   let full_url = (build-url $base "/team.info" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Gets the integration logs for the current team.
@@ -4501,7 +4740,7 @@ export def "teaminfo info" [
 # GET /team.integrationLogs
 # Docs: https://api.slack.com/methods/team.integrationLogs — API method documentation
 # operationId: team_integrationLogs
-export def "teamintegration-logs integrationLogs" [
+export def "team-integration-logs logs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4509,6 +4748,7 @@ export def "teamintegration-logs integrationLogs" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --qp-token: string # Authentication token. Requires scope: `admin`
   --app-id: string # Filter logs to this Slack app. Defaults to all logs.
@@ -4524,7 +4764,7 @@ export def "teamintegration-logs integrationLogs" [
   let full_url = (build-url $base "/team.integrationLogs" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Retrieve a team's profile.
@@ -4532,7 +4772,7 @@ export def "teamintegration-logs integrationLogs" [
 # GET /team.profile.get
 # Docs: https://api.slack.com/methods/team.profile.get — API method documentation
 # operationId: team_profile_get
-export def "teamprofileget get" [
+export def "team-profile-get get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4540,6 +4780,7 @@ export def "teamprofileget get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --qp-token: string # Authentication token. Requires scope: `users.profile:read`
   --visibility: string # Filter by visibility.
@@ -4550,7 +4791,7 @@ export def "teamprofileget get" [
   let full_url = (build-url $base "/team.profile.get" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Create a User Group
@@ -4558,7 +4799,7 @@ export def "teamprofileget get" [
 # POST /usergroups.create
 # Docs: https://api.slack.com/methods/usergroups.create — API method documentation
 # operationId: usergroups_create
-export def "usergroupscreate create" [
+export def "usergroups-create create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4566,6 +4807,7 @@ export def "usergroupscreate create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # Authentication token. Requires scope: `usergroups:write`
   --channels: string # A comma separated string of encoded channel IDs for which the User Group uses as a default.
@@ -4578,13 +4820,14 @@ export def "usergroupscreate create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/usergroups.create")
-  let body = {channels: $channels, description: $description, handle: $handle, include_count: $include_count, name: $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"token": $hdr_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"channels": $channels, "description": $description, "handle": $handle, "include_count": $include_count, "name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let extra_headers = {"token": $hdr_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # Disable an existing User Group
@@ -4592,7 +4835,7 @@ export def "usergroupscreate create" [
 # POST /usergroups.disable
 # Docs: https://api.slack.com/methods/usergroups.disable — API method documentation
 # operationId: usergroups_disable
-export def "usergroupsdisable disable" [
+export def "usergroups-disable disable" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4600,6 +4843,7 @@ export def "usergroupsdisable disable" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # Authentication token. Requires scope: `usergroups:write`
   --include-count: oneof<nothing, bool> # Include the number of users in the User Group.
@@ -4609,13 +4853,14 @@ export def "usergroupsdisable disable" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/usergroups.disable")
-  let body = {include_count: $include_count, usergroup: $usergroup} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"token": $hdr_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"include_count": $include_count, "usergroup": $usergroup} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let extra_headers = {"token": $hdr_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # Enable a User Group
@@ -4623,7 +4868,7 @@ export def "usergroupsdisable disable" [
 # POST /usergroups.enable
 # Docs: https://api.slack.com/methods/usergroups.enable — API method documentation
 # operationId: usergroups_enable
-export def "usergroupsenable enable" [
+export def "usergroups-enable enable" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4631,6 +4876,7 @@ export def "usergroupsenable enable" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # Authentication token. Requires scope: `usergroups:write`
   --include-count: oneof<nothing, bool> # Include the number of users in the User Group.
@@ -4640,13 +4886,14 @@ export def "usergroupsenable enable" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/usergroups.enable")
-  let body = {include_count: $include_count, usergroup: $usergroup} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"token": $hdr_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"include_count": $include_count, "usergroup": $usergroup} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let extra_headers = {"token": $hdr_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # List all User Groups for a team
@@ -4654,7 +4901,7 @@ export def "usergroupsenable enable" [
 # GET /usergroups.list
 # Docs: https://api.slack.com/methods/usergroups.list — API method documentation
 # operationId: usergroups_list
-export def "usergroupslist list" [
+export def "usergroups-list list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4662,6 +4909,7 @@ export def "usergroupslist list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --include-users: oneof<nothing, bool> # Include the list of users for each User Group.
   --qp-token: string # Authentication token. Requires scope: `usergroups:read`
@@ -4674,7 +4922,7 @@ export def "usergroupslist list" [
   let full_url = (build-url $base "/usergroups.list" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Update an existing User Group
@@ -4682,7 +4930,7 @@ export def "usergroupslist list" [
 # POST /usergroups.update
 # Docs: https://api.slack.com/methods/usergroups.update — API method documentation
 # operationId: usergroups_update
-export def "usergroupsupdate update" [
+export def "usergroups-update update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4690,6 +4938,7 @@ export def "usergroupsupdate update" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # Authentication token. Requires scope: `usergroups:write`
   --channels: string # A comma separated string of encoded channel IDs for which the User Group uses as a default.
@@ -4703,13 +4952,14 @@ export def "usergroupsupdate update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/usergroups.update")
-  let body = {channels: $channels, description: $description, handle: $handle, include_count: $include_count, name: $name, usergroup: $usergroup} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"token": $hdr_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"channels": $channels, "description": $description, "handle": $handle, "include_count": $include_count, "name": $name, "usergroup": $usergroup} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let extra_headers = {"token": $hdr_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # List all users in a User Group
@@ -4717,7 +4967,7 @@ export def "usergroupsupdate update" [
 # GET /usergroups.users.list
 # Docs: https://api.slack.com/methods/usergroups.users.list — API method documentation
 # operationId: usergroups_users_list
-export def "usergroupsuserslist list" [
+export def "usergroups-users-list list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4725,6 +4975,7 @@ export def "usergroupsuserslist list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --qp-token: string # Authentication token. Requires scope: `usergroups:read`
   --include-disabled: oneof<nothing, bool> # Allow results that involve disabled User Groups.
@@ -4736,7 +4987,7 @@ export def "usergroupsuserslist list" [
   let full_url = (build-url $base "/usergroups.users.list" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Update the list of users for a User Group
@@ -4744,7 +4995,7 @@ export def "usergroupsuserslist list" [
 # POST /usergroups.users.update
 # Docs: https://api.slack.com/methods/usergroups.users.update — API method documentation
 # operationId: usergroups_users_update
-export def "usergroupsusersupdate update" [
+export def "usergroups-users-update update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4752,6 +5003,7 @@ export def "usergroupsusersupdate update" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # Authentication token. Requires scope: `usergroups:write`
   --include-count: oneof<nothing, bool> # Include the number of users in the User Group.
@@ -4762,13 +5014,14 @@ export def "usergroupsusersupdate update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/usergroups.users.update")
-  let body = {include_count: $include_count, usergroup: $usergroup, users: $users} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"token": $hdr_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"include_count": $include_count, "usergroup": $usergroup, "users": $users} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let extra_headers = {"token": $hdr_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # List conversations the calling user may access.
@@ -4776,7 +5029,7 @@ export def "usergroupsusersupdate update" [
 # GET /users.conversations
 # Docs: https://api.slack.com/methods/users.conversations — API method documentation
 # operationId: users_conversations
-export def "usersconversations conversations" [
+export def "users-conversations get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4784,6 +5037,7 @@ export def "usersconversations conversations" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --qp-token: string # Authentication token. Requires scope: `conversations:read`
   --user: string # Browse conversations by a specific user ID's membership. Non-public channels are restricted to those where the calling user shares membership.
@@ -4798,7 +5052,7 @@ export def "usersconversations conversations" [
   let full_url = (build-url $base "/users.conversations" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Delete the user profile photo
@@ -4806,7 +5060,7 @@ export def "usersconversations conversations" [
 # POST /users.deletePhoto
 # Docs: https://api.slack.com/methods/users.deletePhoto — API method documentation
 # operationId: users_deletePhoto
-export def "usersdelete-photo post" [
+export def "users-delete-photo delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4814,6 +5068,7 @@ export def "usersdelete-photo post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body-token: string # Authentication token. Requires scope: `users.profile:write`
 ]: any -> record<ok: bool> {
@@ -4821,11 +5076,12 @@ export def "usersdelete-photo post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/users.deletePhoto")
-  let body = {token: $body_token} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"token": $body_token} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # Gets user presence information.
@@ -4833,7 +5089,7 @@ export def "usersdelete-photo post" [
 # GET /users.getPresence
 # Docs: https://api.slack.com/methods/users.getPresence — API method documentation
 # operationId: users_getPresence
-export def "usersget-presence get" [
+export def "users-get-presence get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4841,6 +5097,7 @@ export def "usersget-presence get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --qp-token: string # Authentication token. Requires scope: `users:read`
   --user: string # User to get presence info on. Defaults to the authed user.
@@ -4851,7 +5108,7 @@ export def "usersget-presence get" [
   let full_url = (build-url $base "/users.getPresence" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get a user's identity.
@@ -4859,7 +5116,7 @@ export def "usersget-presence get" [
 # GET /users.identity
 # Docs: https://api.slack.com/methods/users.identity — API method documentation
 # operationId: users_identity
-export def "usersidentity identity" [
+export def "users-identity get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4867,6 +5124,7 @@ export def "usersidentity identity" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --qp-token: string # Authentication token. Requires scope: `identity.basic`
 ]: nothing -> list<any> {
@@ -4876,7 +5134,7 @@ export def "usersidentity identity" [
   let full_url = (build-url $base "/users.identity" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Gets information about a user.
@@ -4884,7 +5142,7 @@ export def "usersidentity identity" [
 # GET /users.info
 # Docs: https://api.slack.com/methods/users.info — API method documentation
 # operationId: users_info
-export def "usersinfo info" [
+export def "users-info get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4892,6 +5150,7 @@ export def "usersinfo info" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --qp-token: string # Authentication token. Requires scope: `users:read`
   --include-locale: oneof<nothing, bool> # Set this to `true` to receive the locale for this user. Defaults to `false`
@@ -4903,7 +5162,7 @@ export def "usersinfo info" [
   let full_url = (build-url $base "/users.info" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Lists all users in a Slack team.
@@ -4911,7 +5170,7 @@ export def "usersinfo info" [
 # GET /users.list
 # Docs: https://api.slack.com/methods/users.list — API method documentation
 # operationId: users_list
-export def "userslist list" [
+export def "users-list list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4919,6 +5178,7 @@ export def "userslist list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --qp-token: string # Authentication token. Requires scope: `users:read`
   --limit: int # The maximum number of items to return. Fewer than the requested number of items may be returned, even if the end of the users list hasn't been reached. Providing no `limit` value will result in Slack attempting to deliver you the entire result set. If the collection is too large you may experience `limit_required` or HTTP 500 errors.
@@ -4931,7 +5191,7 @@ export def "userslist list" [
   let full_url = (build-url $base "/users.list" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Find a user with an email address.
@@ -4939,7 +5199,7 @@ export def "userslist list" [
 # GET /users.lookupByEmail
 # Docs: https://api.slack.com/methods/users.lookupByEmail — API method documentation
 # operationId: users_lookupByEmail
-export def "userslookup-by-email lookupByEmail" [
+export def "users-lookup-by-email get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4947,6 +5207,7 @@ export def "userslookup-by-email lookupByEmail" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --qp-token: string # Authentication token. Requires scope: `users:read.email`
   --email: string # An email address belonging to a user in the workspace
@@ -4957,7 +5218,7 @@ export def "userslookup-by-email lookupByEmail" [
   let full_url = (build-url $base "/users.lookupByEmail" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Retrieves a user's profile information.
@@ -4965,7 +5226,7 @@ export def "userslookup-by-email lookupByEmail" [
 # GET /users.profile.get
 # Docs: https://api.slack.com/methods/users.profile.get — API method documentation
 # operationId: users_profile_get
-export def "usersprofileget get" [
+export def "users-profile-get get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4973,6 +5234,7 @@ export def "usersprofileget get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --qp-token: string # Authentication token. Requires scope: `users.profile:read`
   --include-labels: oneof<nothing, bool> # Include labels for each ID in custom profile fields
@@ -4984,7 +5246,7 @@ export def "usersprofileget get" [
   let full_url = (build-url $base "/users.profile.get" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Set the profile information for a user.
@@ -4992,7 +5254,7 @@ export def "usersprofileget get" [
 # POST /users.profile.set
 # Docs: https://api.slack.com/methods/users.profile.set — API method documentation
 # operationId: users_profile_set
-export def "usersprofileset set" [
+export def "users-profile-set update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5000,6 +5262,7 @@ export def "usersprofileset set" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # Authentication token. Requires scope: `users.profile:write`
   --name: string # Name of a single key to set. Usable only if `profile` is not passed.
@@ -5011,13 +5274,14 @@ export def "usersprofileset set" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/users.profile.set")
-  let body = {name: $name, profile: $profile, user: $user, value: $value} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"token": $hdr_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"name": $name, "profile": $profile, "user": $user, "value": $value} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let extra_headers = {"token": $hdr_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # Marked a user as active. Deprecated and non-functional.
@@ -5025,7 +5289,7 @@ export def "usersprofileset set" [
 # POST /users.setActive
 # Docs: https://api.slack.com/methods/users.setActive — API method documentation
 # operationId: users_setActive
-export def "usersset-active setActive" [
+export def "users-set-active update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5033,17 +5297,18 @@ export def "usersset-active setActive" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # Authentication token. Requires scope: `users:write`
 ]: nothing -> record<ok: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/users.setActive")
-  let extra_headers = {"token": $hdr_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"token": $hdr_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Set the user profile photo
@@ -5051,7 +5316,7 @@ export def "usersset-active setActive" [
 # POST /users.setPhoto
 # Docs: https://api.slack.com/methods/users.setPhoto — API method documentation
 # operationId: users_setPhoto
-export def "usersset-photo setPhoto" [
+export def "users-set-photo update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5059,6 +5324,7 @@ export def "usersset-photo setPhoto" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --crop-w: string # Width/height of crop box (always square)
   --crop-x: string # X coordinate of top-left corner of crop box
@@ -5070,11 +5336,12 @@ export def "usersset-photo setPhoto" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/users.setPhoto")
-  let body = {crop_w: $crop_w, crop_x: $crop_x, crop_y: $crop_y, image: $image, token: $body_token} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"crop_w": $crop_w, "crop_x": $crop_x, "crop_y": $crop_y, "image": $image, "token": $body_token} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # Manually sets user presence.
@@ -5082,7 +5349,7 @@ export def "usersset-photo setPhoto" [
 # POST /users.setPresence
 # Docs: https://api.slack.com/methods/users.setPresence — API method documentation
 # operationId: users_setPresence
-export def "usersset-presence setPresence" [
+export def "users-set-presence update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5090,6 +5357,7 @@ export def "usersset-presence setPresence" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # Authentication token. Requires scope: `users:write`
   presence: string # Either `auto` or `away`
@@ -5098,13 +5366,14 @@ export def "usersset-presence setPresence" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/users.setPresence")
-  let body = {presence: $presence} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"token": $hdr_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"presence": $presence} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let extra_headers = {"token": $hdr_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # Open a view for a user.
@@ -5112,7 +5381,7 @@ export def "usersset-presence setPresence" [
 # GET /views.open
 # Docs: https://api.slack.com/methods/views.open — API method documentation
 # operationId: views_open
-export def "viewsopen open" [
+export def "views-open open" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5120,6 +5389,7 @@ export def "viewsopen open" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --trigger-id: string # Exchange a trigger to post to the user.
   --view: string # A [view payload](/reference/surfaces/views). This must be a JSON-encoded string.
@@ -5129,11 +5399,11 @@ export def "viewsopen open" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "trigger_id" $trigger_id "scalar") (serialize-qp "view" $view "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/views.open" $qp)
-  let extra_headers = {"token": $hdr_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"token": $hdr_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Publish a static view for a User.
@@ -5141,7 +5411,7 @@ export def "viewsopen open" [
 # GET /views.publish
 # Docs: https://api.slack.com/methods/views.publish — API method documentation
 # operationId: views_publish
-export def "viewspublish publish" [
+export def "views-publish publish" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5149,6 +5419,7 @@ export def "viewspublish publish" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --user-id: string # `id` of the user you want publish a view to.
   --view: string # A [view payload](/reference/surfaces/views). This must be a JSON-encoded string.
@@ -5159,11 +5430,11 @@ export def "viewspublish publish" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "user_id" $user_id "scalar") (serialize-qp "view" $view "scalar") (serialize-qp "hash" $hash "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/views.publish" $qp)
-  let extra_headers = {"token": $hdr_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"token": $hdr_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Push a view onto the stack of a root view.
@@ -5171,7 +5442,7 @@ export def "viewspublish publish" [
 # GET /views.push
 # Docs: https://api.slack.com/methods/views.push — API method documentation
 # operationId: views_push
-export def "viewspush push" [
+export def "views-push push" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5179,6 +5450,7 @@ export def "viewspush push" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --trigger-id: string # Exchange a trigger to post to the user.
   --view: string # A [view payload](/reference/surfaces/views). This must be a JSON-encoded string.
@@ -5188,11 +5460,11 @@ export def "viewspush push" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "trigger_id" $trigger_id "scalar") (serialize-qp "view" $view "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/views.push" $qp)
-  let extra_headers = {"token": $hdr_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"token": $hdr_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Update an existing view.
@@ -5200,7 +5472,7 @@ export def "viewspush push" [
 # GET /views.update
 # Docs: https://api.slack.com/methods/views.update — API method documentation
 # operationId: views_update
-export def "viewsupdate update" [
+export def "views-update update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5208,6 +5480,7 @@ export def "viewsupdate update" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --view-id: string # A unique identifier of the view to be updated. Either `view_id` or `external_id` is required.
   --external-id: string # A unique identifier of the view set by the developer. Must be unique for all views on a team. Max length of 255 characters. Either `view_id` or `external_id` is required.
@@ -5219,11 +5492,11 @@ export def "viewsupdate update" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "view_id" $view_id "scalar") (serialize-qp "external_id" $external_id "scalar") (serialize-qp "view" $view "scalar") (serialize-qp "hash" $hash "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/views.update" $qp)
-  let extra_headers = {"token": $hdr_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"token": $hdr_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Indicate that an app's step in a workflow completed execution.
@@ -5231,7 +5504,7 @@ export def "viewsupdate update" [
 # GET /workflows.stepCompleted
 # Docs: https://api.slack.com/methods/workflows.stepCompleted — API method documentation
 # operationId: workflows_stepCompleted
-export def "workflowsstep-completed stepCompleted" [
+export def "workflows-step-completed get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5239,6 +5512,7 @@ export def "workflowsstep-completed stepCompleted" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --workflow-step-execute-id: string # Context identifier that maps to the correct workflow step execution.
   --outputs: string # Key-value object of outputs from your step. Keys of this object reflect the configured `key` properties of your [`outputs`](/reference/workflows/workflow_step#output) array from your `workflow_step` object.
@@ -5248,11 +5522,11 @@ export def "workflowsstep-completed stepCompleted" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "workflow_step_execute_id" $workflow_step_execute_id "scalar") (serialize-qp "outputs" $outputs "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/workflows.stepCompleted" $qp)
-  let extra_headers = {"token": $hdr_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"token": $hdr_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Indicate that an app's step in a workflow failed to execute.
@@ -5260,7 +5534,7 @@ export def "workflowsstep-completed stepCompleted" [
 # GET /workflows.stepFailed
 # Docs: https://api.slack.com/methods/workflows.stepFailed — API method documentation
 # operationId: workflows_stepFailed
-export def "workflowsstep-failed stepFailed" [
+export def "workflows-step-failed get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5268,6 +5542,7 @@ export def "workflowsstep-failed stepFailed" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --workflow-step-execute-id: string # Context identifier that maps to the correct workflow step execution.
   --qp-error: string # A JSON-based object with a `message` property that should contain a human readable error message.
@@ -5277,11 +5552,11 @@ export def "workflowsstep-failed stepFailed" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "workflow_step_execute_id" $workflow_step_execute_id "scalar") (serialize-qp "error" $qp_error "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/workflows.stepFailed" $qp)
-  let extra_headers = {"token": $hdr_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"token": $hdr_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Update the configuration for a workflow extension step.
@@ -5289,7 +5564,7 @@ export def "workflowsstep-failed stepFailed" [
 # GET /workflows.updateStep
 # Docs: https://api.slack.com/methods/workflows.updateStep — API method documentation
 # operationId: workflows_updateStep
-export def "workflowsupdate-step updateStep" [
+export def "workflows-update-step update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5297,6 +5572,7 @@ export def "workflowsupdate-step updateStep" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --workflow-step-edit-id: string # A context identifier provided with `view_submission` payloads used to call back to `workflows.updateStep`.
   --inputs: string # A JSON key-value map of inputs required from a user during configuration. This is the data your app expects to receive when the workflow step starts. **Please note**: the embedded variable format is set and replaced by the workflow system. You cannot create custom variables that will be replaced at runtime. [Read more about variables in workflow steps here](/workflows/steps#variables).
@@ -5309,9 +5585,9 @@ export def "workflowsupdate-step updateStep" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "workflow_step_edit_id" $workflow_step_edit_id "scalar") (serialize-qp "inputs" $inputs "scalar") (serialize-qp "outputs" $outputs "scalar") (serialize-qp "step_name" $step_name "scalar") (serialize-qp "step_image_url" $step_image_url "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/workflows.updateStep" $qp)
-  let extra_headers = {"token": $hdr_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"token": $hdr_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }

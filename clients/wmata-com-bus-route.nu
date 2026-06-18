@@ -12,28 +12,39 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {headers: {}, query: ""} }
   match $scheme {
     "api_key" => { {headers: {api_key: $token_val}, query: ""} }
-    "query-api_key" => { {headers: {}, query: $"api_key=($token_val)"} }
+    "query-api_key" => { {headers: {}, query: $"(encode-path-segment "api_key")=(encode-path-segment $token_val)"} }
     "none" => { {headers: {}, query: ""} }
     _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
   }
 }
 
 # Serialize a single query parameter based on collection style
+# Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
+# ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = ($name | url encode)
+  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
-  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
-    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
-    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
+    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
+    _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
+}
+
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Build URL from base, path, and optional query string
@@ -45,7 +56,7 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
@@ -54,30 +65,30 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
     "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "put" => { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "patch" => { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
   if ($method in ["head" "options"]) { return $resp }
-  if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
+  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
 def base-url-completer [] { ["http://api.wmata.com/Bus.svc" "https://api.wmata.com/Bus.svc"] }
 def auth-scheme-completer [] { ["api_key" "query-api_key"] }
 
 # Completers for enum parameters
-def RouteID-completer [] { ["70"] }
-def IncludingVariations-completer [] { ["false" "true"] }
-def StopID-completer [] { ["1001195"] }
-def Lat-completer [] { ["38.878586"] }
-def Lon-completer [] { ["-76.989626"] }
-def Radius-completer [] { ["500"] }
+def route-id-completer [] { ["70"] }
+def including-variations-completer [] { ["false" "true"] }
+def stop-id-completer [] { ["1001195"] }
+def lat-completer [] { ["38.878586"] }
+def lon-completer [] { ["-76.989626"] }
+def radius-completer [] { ["500"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "bus-positions 5476362a281d830c946a3d6e" } } | get name | first)
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "bus-positions get-5476362a281d830c946a3d6e" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -101,7 +112,7 @@ export def commands []: nothing -> table {
 #
 # GET /BusPositions
 # operationId: 5476362a281d830c946a3d6e
-export def "bus-positions 5476362a281d830c946a3d6e" [
+export def "bus-positions get-5476362a281d830c946a3d6e" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -109,26 +120,27 @@ export def "bus-positions 5476362a281d830c946a3d6e" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --RouteID: string@RouteID-completer # Bus route, e.g.: 70, 10A. (default: 70)
-  --Lat: string # Center point Latitude, required if Longitude and Radius are specified.
-  --Lon: string # Center point Longitude, required if Latitude and Radius are specified.
-  --Radius: string # Radius (meters) to include in the search area, required if Latitude and Longitude are specified.
+  --route-id: string@route-id-completer # Bus route, e.g.: 70, 10A. (default: 70)
+  --lat: string # Center point Latitude, required if Longitude and Radius are specified.
+  --lon: string # Center point Longitude, required if Latitude and Radius are specified.
+  --radius: string # Radius (meters) to include in the search area, required if Latitude and Longitude are specified.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api_key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "RouteID" $RouteID "scalar") (serialize-qp "Lat" $Lat "scalar") (serialize-qp "Lon" $Lon "scalar") (serialize-qp "Radius" $Radius "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "RouteID" $route_id "scalar") (serialize-qp "Lat" $lat "scalar") (serialize-qp "Lon" $lon "scalar") (serialize-qp "Radius" $radius "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/BusPositions" $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # XML - Path Details
 #
 # GET /RouteDetails
 # operationId: 5476362a281d830c946a3d6f
-export def "route-details 5476362a281d830c946a3d6f" [
+export def "route-details get-5476362a281d830c946a3d6f" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -136,24 +148,25 @@ export def "route-details 5476362a281d830c946a3d6f" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --RouteID: string@RouteID-completer # Bus route variant, e.g.: 70, 10A, 10Av1. (default: 70)
-  --Date: string # Date in YYYY-MM-DD format for which to retrieve route and stop information.  Defaults to today's date unless specified.
+  --route-id: string@route-id-completer # Bus route variant, e.g.: 70, 10A, 10Av1. (default: 70)
+  --date: string # Date in YYYY-MM-DD format for which to retrieve route and stop information. Defaults to today's date unless specified.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api_key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "RouteID" $RouteID "scalar") (serialize-qp "Date" $Date "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "RouteID" $route_id "scalar") (serialize-qp "Date" $date "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/RouteDetails" $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # XML - Schedule
 #
 # GET /RouteSchedule
 # operationId: 5476362a281d830c946a3d71
-export def "route-schedule 5476362a281d830c946a3d71" [
+export def "route-schedule get-5476362a281d830c946a3d71" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -161,25 +174,26 @@ export def "route-schedule 5476362a281d830c946a3d71" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --RouteID: string@RouteID-completer # Bus route variant, e.g.: 70, 10A, 10Av1. (default: 70)
-  --Date: string # Date in YYYY-MM-DD format for which to retrieve schedule.  Defaults to today's date unless specified.
-  --IncludingVariations: oneof<nothing, bool> # Whether or not to include variations.  For example, if B30 is specified, include all variations such as B30v1, B30v2, etc. (default: false)
+  --route-id: string@route-id-completer # Bus route variant, e.g.: 70, 10A, 10Av1. (default: 70)
+  --date: string # Date in YYYY-MM-DD format for which to retrieve schedule. Defaults to today's date unless specified.
+  --including-variations: oneof<nothing, bool> # Whether or not to include variations. For example, if B30 is specified, include all variations such as B30v1, B30v2, etc. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api_key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "RouteID" $RouteID "scalar") (serialize-qp "Date" $Date "scalar") (serialize-qp "IncludingVariations" $IncludingVariations "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "RouteID" $route_id "scalar") (serialize-qp "Date" $date "scalar") (serialize-qp "IncludingVariations" $including_variations "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/RouteSchedule" $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # XML - Routes
 #
 # GET /Routes
 # operationId: 5476362a281d830c946a3d70
-export def "routes 5476362a281d830c946a3d70" [
+export def "routes get-5476362a281d830c946a3d70" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -187,6 +201,7 @@ export def "routes 5476362a281d830c946a3d70" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api_key"))
@@ -194,14 +209,14 @@ export def "routes 5476362a281d830c946a3d70" [
   let full_url = (build-url $base "/Routes")
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # XML - Schedule at Stop
 #
 # GET /StopSchedule
 # operationId: 5476362a281d830c946a3d72
-export def "stop-schedule 5476362a281d830c946a3d72" [
+export def "stop-schedule get-5476362a281d830c946a3d72" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -209,24 +224,25 @@ export def "stop-schedule 5476362a281d830c946a3d72" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --StopID: string@StopID-completer # 7-digit regional stop ID. (default: 1001195)
-  --Date: string # Date in YYYY-MM-DD format for which to retrieve schedule.  Defaults to today's date unless specified.
+  --stop-id: string@stop-id-completer # 7-digit regional stop ID. (default: 1001195)
+  --date: string # Date in YYYY-MM-DD format for which to retrieve schedule. Defaults to today's date unless specified.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api_key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "StopID" $StopID "scalar") (serialize-qp "Date" $Date "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "StopID" $stop_id "scalar") (serialize-qp "Date" $date "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/StopSchedule" $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # XML - Stop Search
 #
 # GET /Stops
 # operationId: 5476362a281d830c946a3d73
-export def "stops 5476362a281d830c946a3d73" [
+export def "stops get-5476362a281d830c946a3d73" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -234,25 +250,26 @@ export def "stops 5476362a281d830c946a3d73" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Lat: string@Lat-completer # Center point Latitude, required if Longitude and Radius are specified.
-  --Lon: string@Lon-completer # Center point Longitude, required if Latitude and Radius are specified.
-  --Radius: string@Radius-completer # Radius (feet) to include in the search area, required if Latitude and Longitude are specified.
+  --lat: string@lat-completer # Center point Latitude, required if Longitude and Radius are specified.
+  --lon: string@lon-completer # Center point Longitude, required if Latitude and Radius are specified.
+  --radius: string@radius-completer # Radius (feet) to include in the search area, required if Latitude and Longitude are specified.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api_key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "Lat" $Lat "scalar") (serialize-qp "Lon" $Lon "scalar") (serialize-qp "Radius" $Radius "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "Lat" $lat "scalar") (serialize-qp "Lon" $lon "scalar") (serialize-qp "Radius" $radius "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/Stops" $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # JSON - Bus Position
 #
 # GET /json/jBusPositions
 # operationId: 5476362a281d830c946a3d68
-export def "json-j-bus-positions 5476362a281d830c946a3d68" [
+export def "json-j-bus-positions get-5476362a281d830c946a3d68" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -260,26 +277,27 @@ export def "json-j-bus-positions 5476362a281d830c946a3d68" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --RouteID: string@RouteID-completer # Base bus route, e.g.: 70, 10A. (default: 70)
-  --Lat: float # Center point Latitude, required if Longitude and Radius are specified.
-  --Lon: float # Center point Longitude, required if Latitude and Radius are specified.
-  --Radius: float # Radius (meters) to include in the search area, required if Latitude and Longitude are specified.
+  --route-id: string@route-id-completer # Base bus route, e.g.: 70, 10A. (default: 70)
+  --lat: float # Center point Latitude, required if Longitude and Radius are specified.
+  --lon: float # Center point Longitude, required if Latitude and Radius are specified.
+  --radius: float # Radius (meters) to include in the search area, required if Latitude and Longitude are specified.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api_key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "RouteID" $RouteID "scalar") (serialize-qp "Lat" $Lat "scalar") (serialize-qp "Lon" $Lon "scalar") (serialize-qp "Radius" $Radius "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "RouteID" $route_id "scalar") (serialize-qp "Lat" $lat "scalar") (serialize-qp "Lon" $lon "scalar") (serialize-qp "Radius" $radius "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/json/jBusPositions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # JSON - Path Details
 #
 # GET /json/jRouteDetails
 # operationId: 5476362a281d830c946a3d69
-export def "json-j-route-details 5476362a281d830c946a3d69" [
+export def "json-j-route-details get-5476362a281d830c946a3d69" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -287,24 +305,25 @@ export def "json-j-route-details 5476362a281d830c946a3d69" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --RouteID: string@RouteID-completer # Bus route variant, e.g.: 70, 10A, 10Av1. (default: 70)
-  --Date: string # Date in YYYY-MM-DD format for which to retrieve route and stop information.  Defaults to today's date unless specified.
+  --route-id: string@route-id-completer # Bus route variant, e.g.: 70, 10A, 10Av1. (default: 70)
+  --date: string # Date in YYYY-MM-DD format for which to retrieve route and stop information. Defaults to today's date unless specified.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api_key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "RouteID" $RouteID "scalar") (serialize-qp "Date" $Date "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "RouteID" $route_id "scalar") (serialize-qp "Date" $date "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/json/jRouteDetails" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # JSON - Schedule
 #
 # GET /json/jRouteSchedule
 # operationId: 5476362a281d830c946a3d6b
-export def "json-j-route-schedule 5476362a281d830c946a3d6b" [
+export def "json-j-route-schedule get-5476362a281d830c946a3d6b" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -312,25 +331,26 @@ export def "json-j-route-schedule 5476362a281d830c946a3d6b" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --RouteID: string@RouteID-completer # Bus route variant, e.g.: 70, 10A, 10Av1, etc. (default: 70)
-  --Date: string # Date in YYYY-MM-DD format for which to retrieve schedule.  Defaults to today's date unless specified.
-  --IncludingVariations: oneof<nothing, bool> # Whether or not to include variations if a base route is specified in RouteID.  For example, if B30 is specified and IncludingVariations is set to true, data for all variations of B30 such as B30v1, B30v2, etc. will be returned. (default: false)
+  --route-id: string@route-id-completer # Bus route variant, e.g.: 70, 10A, 10Av1, etc. (default: 70)
+  --date: string # Date in YYYY-MM-DD format for which to retrieve schedule. Defaults to today's date unless specified.
+  --including-variations: oneof<nothing, bool> # Whether or not to include variations if a base route is specified in RouteID. For example, if B30 is specified and IncludingVariations is set to true, data for all variations of B30 such as B30v1, B30v2, etc. will be returned. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api_key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "RouteID" $RouteID "scalar") (serialize-qp "Date" $Date "scalar") (serialize-qp "IncludingVariations" $IncludingVariations "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "RouteID" $route_id "scalar") (serialize-qp "Date" $date "scalar") (serialize-qp "IncludingVariations" $including_variations "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/json/jRouteSchedule" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # JSON - Routes
 #
 # GET /json/jRoutes
 # operationId: 5476362a281d830c946a3d6a
-export def "json-j-routes 5476362a281d830c946a3d6a" [
+export def "json-j-routes get-5476362a281d830c946a3d6a" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -338,6 +358,7 @@ export def "json-j-routes 5476362a281d830c946a3d6a" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api_key"))
@@ -345,14 +366,14 @@ export def "json-j-routes 5476362a281d830c946a3d6a" [
   let full_url = (build-url $base "/json/jRoutes")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # JSON - Schedule at Stop
 #
 # GET /json/jStopSchedule
 # operationId: 5476362a281d830c946a3d6c
-export def "json-j-stop-schedule 5476362a281d830c946a3d6c" [
+export def "json-j-stop-schedule get-5476362a281d830c946a3d6c" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -360,24 +381,25 @@ export def "json-j-stop-schedule 5476362a281d830c946a3d6c" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --StopID: string@StopID-completer # 7-digit regional stop ID. (default: 1001195)
-  --Date: string # Date in YYYY-MM-DD format for which to retrieve schedule.  Defaults to today's date unless specified.
+  --stop-id: string@stop-id-completer # 7-digit regional stop ID. (default: 1001195)
+  --date: string # Date in YYYY-MM-DD format for which to retrieve schedule. Defaults to today's date unless specified.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api_key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "StopID" $StopID "scalar") (serialize-qp "Date" $Date "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "StopID" $stop_id "scalar") (serialize-qp "Date" $date "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/json/jStopSchedule" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # JSON - Stop Search
 #
 # GET /json/jStops
 # operationId: 5476362a281d830c946a3d6d
-export def "json-j-stops 5476362a281d830c946a3d6d" [
+export def "json-j-stops get-5476362a281d830c946a3d6d" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -385,16 +407,17 @@ export def "json-j-stops 5476362a281d830c946a3d6d" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Lat: float@Lat-completer # Center point Latitude, required if Longitude and Radius are specified.
-  --Lon: float@Lon-completer # Center point Longitude, required if Latitude and Radius are specified.
-  --Radius: float@Radius-completer # Radius (meters) to include in the search area, required if Latitude and Longitude are specified.
+  --lat: float@lat-completer # Center point Latitude, required if Longitude and Radius are specified.
+  --lon: float@lon-completer # Center point Longitude, required if Latitude and Radius are specified.
+  --radius: float@radius-completer # Radius (meters) to include in the search area, required if Latitude and Longitude are specified.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api_key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "Lat" $Lat "scalar") (serialize-qp "Lon" $Lon "scalar") (serialize-qp "Radius" $Radius "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "Lat" $lat "scalar") (serialize-qp "Lon" $lon "scalar") (serialize-qp "Radius" $radius "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/json/jStops" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }

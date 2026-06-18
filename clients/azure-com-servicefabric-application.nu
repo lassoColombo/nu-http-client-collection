@@ -18,21 +18,32 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 }
 
 # Serialize a single query parameter based on collection style
+# Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
+# ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = ($name | url encode)
+  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
-  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
-    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
-    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
+    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
+    _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
+}
+
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Build URL from base, path, and optional query string
@@ -44,7 +55,7 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
@@ -53,13 +64,13 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
     "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "put" => { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "patch" => { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
   if ($method in ["head" "options"]) { return $resp }
-  if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
+  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
 def base-url-completer [] { ["https://management.azure.com"] }
@@ -70,8 +81,8 @@ def api-version-completer [] { ["2019-03-01-preview"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-service-fabric-operations List" } } | get name | first)
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-service-fabric-operations list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -95,7 +106,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.ServiceFabric/operations
 # operationId: Operations_List
-export def "providers-microsoft-service-fabric-operations List" [
+export def "providers-microsoft-service-fabric-operations list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -103,6 +114,7 @@ export def "providers-microsoft-service-fabric-operations List" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The version of the Service Fabric resource provider API
 ]: nothing -> record<nextLink: string, value: table<display: record, name: string, nextLink: string, origin: string>> {
@@ -112,17 +124,17 @@ export def "providers-microsoft-service-fabric-operations List" [
   let full_url = (build-url $base "/providers/Microsoft.ServiceFabric/operations" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Gets the list of application type name resources created in the specified Service Fabric cluster resource.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceFabric/clusters/{clusterName}/applicationTypes
 # operationId: ApplicationTypes_List
-export def "subscriptions-resource-groups-providers-microsoft-service-fabric-clusters-application-types List" [
-  subscriptionId: string
-  resourceGroupName: string
-  clusterName: string
+export def "subscriptions-resource-groups-providers-microsoft-service-fabric-clusters-application-types list" [
+  subscription_id: string
+  resource_group_name: string
+  cluster_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -130,27 +142,28 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-clu
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string@api-version-completer # The version of the Service Fabric resource provider API. This is a required parameter and it's value must be "2019-03-01-preview" for this specification. (default: 2019-03-01-preview)
 ]: nothing -> record<nextLink: string, value: table<properties: record, etag: string, id: string, location: string, name: string, tags: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.ServiceFabric/clusters/($clusterName)/applicationTypes" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), cluster_name: (encode-path-segment $cluster_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ServiceFabric/clusters/{cluster_name}/applicationTypes") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Deletes a Service Fabric application type name resource.
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceFabric/clusters/{clusterName}/applicationTypes/{applicationTypeName}
 # operationId: ApplicationTypes_Delete
-export def "subscriptions-resource-groups-providers-microsoft-service-fabric-clusters-application-types Delete" [
-  subscriptionId: string
-  resourceGroupName: string
-  clusterName: string
-  applicationTypeName: string
+export def "subscriptions-resource-groups-providers-microsoft-service-fabric-clusters-application-types delete" [
+  subscription_id: string
+  resource_group_name: string
+  cluster_name: string
+  application_type_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -158,27 +171,28 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-clu
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string@api-version-completer # The version of the Service Fabric resource provider API. This is a required parameter and it's value must be "2019-03-01-preview" for this specification. (default: 2019-03-01-preview)
 ]: nothing -> record<error: record<code: string, message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.ServiceFabric/clusters/($clusterName)/applicationTypes/($applicationTypeName)" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), cluster_name: (encode-path-segment $cluster_name), application_type_name: (encode-path-segment $application_type_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ServiceFabric/clusters/{cluster_name}/applicationTypes/{application_type_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Gets a Service Fabric application type name resource.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceFabric/clusters/{clusterName}/applicationTypes/{applicationTypeName}
 # operationId: ApplicationTypes_Get
-export def "subscriptions-resource-groups-providers-microsoft-service-fabric-clusters-application-types Get" [
-  subscriptionId: string
-  resourceGroupName: string
-  clusterName: string
-  applicationTypeName: string
+export def "subscriptions-resource-groups-providers-microsoft-service-fabric-clusters-application-types get" [
+  subscription_id: string
+  resource_group_name: string
+  cluster_name: string
+  application_type_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -186,27 +200,28 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-clu
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string@api-version-completer # The version of the Service Fabric resource provider API. This is a required parameter and it's value must be "2019-03-01-preview" for this specification. (default: 2019-03-01-preview)
 ]: nothing -> record<properties: record<provisioningState: string>, etag: string, id: string, location: string, name: string, tags: record, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.ServiceFabric/clusters/($clusterName)/applicationTypes/($applicationTypeName)" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), cluster_name: (encode-path-segment $cluster_name), application_type_name: (encode-path-segment $application_type_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ServiceFabric/clusters/{cluster_name}/applicationTypes/{application_type_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Creates or updates a Service Fabric application type name resource.
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceFabric/clusters/{clusterName}/applicationTypes/{applicationTypeName}
 # operationId: ApplicationTypes_Create
-export def "subscriptions-resource-groups-providers-microsoft-service-fabric-clusters-application-types Create" [
-  subscriptionId: string
-  resourceGroupName: string
-  clusterName: string
-  applicationTypeName: string
+export def "subscriptions-resource-groups-providers-microsoft-service-fabric-clusters-application-types create" [
+  subscription_id: string
+  resource_group_name: string
+  cluster_name: string
+  application_type_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -214,6 +229,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-clu
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string@api-version-completer # The version of the Service Fabric resource provider API. This is a required parameter and it's value must be "2019-03-01-preview" for this specification. (default: 2019-03-01-preview)
   --properties: any # The application type name properties
@@ -224,23 +240,23 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-clu
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.ServiceFabric/clusters/($clusterName)/applicationTypes/($applicationTypeName)" $qp)
-  let body = {properties: $properties, location: $location, tags: $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), cluster_name: (encode-path-segment $cluster_name), application_type_name: (encode-path-segment $application_type_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ServiceFabric/clusters/{cluster_name}/applicationTypes/{application_type_name}") $qp)
+  let req_body = {"properties": $properties, "location": $location, "tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Gets the list of application type version resources created in the specified Service Fabric application type name resource.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceFabric/clusters/{clusterName}/applicationTypes/{applicationTypeName}/versions
 # operationId: ApplicationTypeVersions_List
-export def "subscriptions-resource-groups-providers-microsoft-service-fabric-clusters-application-types-versions List" [
-  subscriptionId: string
-  resourceGroupName: string
-  clusterName: string
-  applicationTypeName: string
+export def "subscriptions-resource-groups-providers-microsoft-service-fabric-clusters-application-types-versions list" [
+  subscription_id: string
+  resource_group_name: string
+  cluster_name: string
+  application_type_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -248,27 +264,28 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-clu
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string@api-version-completer # The version of the Service Fabric resource provider API. This is a required parameter and it's value must be "2019-03-01-preview" for this specification. (default: 2019-03-01-preview)
 ]: nothing -> record<nextLink: string, value: table<properties: record, etag: string, id: string, location: string, name: string, tags: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.ServiceFabric/clusters/($clusterName)/applicationTypes/($applicationTypeName)/versions" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), cluster_name: (encode-path-segment $cluster_name), application_type_name: (encode-path-segment $application_type_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ServiceFabric/clusters/{cluster_name}/applicationTypes/{application_type_name}/versions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Deletes a Service Fabric application type version resource.
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceFabric/clusters/{clusterName}/applicationTypes/{applicationTypeName}/versions/{version}
 # operationId: ApplicationTypeVersions_Delete
-export def "subscriptions-resource-groups-providers-microsoft-service-fabric-clusters-application-types-versions Delete" [
-  subscriptionId: string
-  resourceGroupName: string
-  clusterName: string
-  applicationTypeName: string
+export def "subscriptions-resource-groups-providers-microsoft-service-fabric-clusters-application-types-versions delete" [
+  subscription_id: string
+  resource_group_name: string
+  cluster_name: string
+  application_type_name: string
   version: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -277,27 +294,28 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-clu
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string@api-version-completer # The version of the Service Fabric resource provider API. This is a required parameter and it's value must be "2019-03-01-preview" for this specification. (default: 2019-03-01-preview)
 ]: nothing -> record<error: record<code: string, message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.ServiceFabric/clusters/($clusterName)/applicationTypes/($applicationTypeName)/versions/($version)" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), cluster_name: (encode-path-segment $cluster_name), application_type_name: (encode-path-segment $application_type_name), version: (encode-path-segment $version)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ServiceFabric/clusters/{cluster_name}/applicationTypes/{application_type_name}/versions/{version}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Gets a Service Fabric application type version resource.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceFabric/clusters/{clusterName}/applicationTypes/{applicationTypeName}/versions/{version}
 # operationId: ApplicationTypeVersions_Get
-export def "subscriptions-resource-groups-providers-microsoft-service-fabric-clusters-application-types-versions Get" [
-  subscriptionId: string
-  resourceGroupName: string
-  clusterName: string
-  applicationTypeName: string
+export def "subscriptions-resource-groups-providers-microsoft-service-fabric-clusters-application-types-versions get" [
+  subscription_id: string
+  resource_group_name: string
+  cluster_name: string
+  application_type_name: string
   version: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -306,16 +324,17 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-clu
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string@api-version-completer # The version of the Service Fabric resource provider API. This is a required parameter and it's value must be "2019-03-01-preview" for this specification. (default: 2019-03-01-preview)
 ]: nothing -> record<properties: record<appPackageUrl: string, defaultParameterList: record, provisioningState: string>, etag: string, id: string, location: string, name: string, tags: record, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.ServiceFabric/clusters/($clusterName)/applicationTypes/($applicationTypeName)/versions/($version)" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), cluster_name: (encode-path-segment $cluster_name), application_type_name: (encode-path-segment $application_type_name), version: (encode-path-segment $version)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ServiceFabric/clusters/{cluster_name}/applicationTypes/{application_type_name}/versions/{version}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Creates or updates a Service Fabric application type version resource.
@@ -323,11 +342,11 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-clu
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceFabric/clusters/{clusterName}/applicationTypes/{applicationTypeName}/versions/{version}
 # operationId: ApplicationTypeVersions_Create
 # --properties shape: {appPackageUrl: string, defaultParameterList?: record}
-export def "subscriptions-resource-groups-providers-microsoft-service-fabric-clusters-application-types-versions Create" [
-  subscriptionId: string
-  resourceGroupName: string
-  clusterName: string
-  applicationTypeName: string
+export def "subscriptions-resource-groups-providers-microsoft-service-fabric-clusters-application-types-versions create" [
+  subscription_id: string
+  resource_group_name: string
+  cluster_name: string
+  application_type_name: string
   version: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -336,6 +355,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-clu
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string@api-version-completer # The version of the Service Fabric resource provider API. This is a required parameter and it's value must be "2019-03-01-preview" for this specification. (default: 2019-03-01-preview)
   --properties: any # The properties of the application type version resource. — shape: {appPackageUrl: string, defaultParameterList?: record}
@@ -346,22 +366,22 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-clu
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.ServiceFabric/clusters/($clusterName)/applicationTypes/($applicationTypeName)/versions/($version)" $qp)
-  let body = {properties: $properties, location: $location, tags: $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), cluster_name: (encode-path-segment $cluster_name), application_type_name: (encode-path-segment $application_type_name), version: (encode-path-segment $version)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ServiceFabric/clusters/{cluster_name}/applicationTypes/{application_type_name}/versions/{version}") $qp)
+  let req_body = {"properties": $properties, "location": $location, "tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Gets the list of application resources created in the specified Service Fabric cluster resource.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceFabric/clusters/{clusterName}/applications
 # operationId: Applications_List
-export def "subscriptions-resource-groups-providers-microsoft-service-fabric-clusters-applications List" [
-  subscriptionId: string
-  resourceGroupName: string
-  clusterName: string
+export def "subscriptions-resource-groups-providers-microsoft-service-fabric-clusters-applications list" [
+  subscription_id: string
+  resource_group_name: string
+  cluster_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -369,27 +389,28 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-clu
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string@api-version-completer # The version of the Service Fabric resource provider API. This is a required parameter and it's value must be "2019-03-01-preview" for this specification. (default: 2019-03-01-preview)
 ]: nothing -> record<nextLink: string, value: table<properties: record, etag: string, id: string, location: string, name: string, tags: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.ServiceFabric/clusters/($clusterName)/applications" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), cluster_name: (encode-path-segment $cluster_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ServiceFabric/clusters/{cluster_name}/applications") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Deletes a Service Fabric application resource.
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceFabric/clusters/{clusterName}/applications/{applicationName}
 # operationId: Applications_Delete
-export def "subscriptions-resource-groups-providers-microsoft-service-fabric-clusters-applications Delete" [
-  subscriptionId: string
-  resourceGroupName: string
-  clusterName: string
-  applicationName: string
+export def "subscriptions-resource-groups-providers-microsoft-service-fabric-clusters-applications delete" [
+  subscription_id: string
+  resource_group_name: string
+  cluster_name: string
+  application_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -397,27 +418,28 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-clu
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string@api-version-completer # The version of the Service Fabric resource provider API. This is a required parameter and it's value must be "2019-03-01-preview" for this specification. (default: 2019-03-01-preview)
 ]: nothing -> record<error: record<code: string, message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.ServiceFabric/clusters/($clusterName)/applications/($applicationName)" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), cluster_name: (encode-path-segment $cluster_name), application_name: (encode-path-segment $application_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ServiceFabric/clusters/{cluster_name}/applications/{application_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Gets a Service Fabric application resource.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceFabric/clusters/{clusterName}/applications/{applicationName}
 # operationId: Applications_Get
-export def "subscriptions-resource-groups-providers-microsoft-service-fabric-clusters-applications Get" [
-  subscriptionId: string
-  resourceGroupName: string
-  clusterName: string
-  applicationName: string
+export def "subscriptions-resource-groups-providers-microsoft-service-fabric-clusters-applications get" [
+  subscription_id: string
+  resource_group_name: string
+  cluster_name: string
+  application_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -425,16 +447,17 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-clu
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string@api-version-completer # The version of the Service Fabric resource provider API. This is a required parameter and it's value must be "2019-03-01-preview" for this specification. (default: 2019-03-01-preview)
 ]: nothing -> record<properties: record<provisioningState: string, typeName: string, maximumNodes: int, metrics: list<record>, minimumNodes: int, parameters: record, removeApplicationCapacity: bool, typeVersion: string, upgradePolicy: record<applicationHealthPolicy: record, forceRestart: bool, rollingUpgradeMonitoringPolicy: record, upgradeReplicaSetCheckTimeout: string>>, etag: string, id: string, location: string, name: string, tags: record, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.ServiceFabric/clusters/($clusterName)/applications/($applicationName)" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), cluster_name: (encode-path-segment $cluster_name), application_name: (encode-path-segment $application_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ServiceFabric/clusters/{cluster_name}/applications/{application_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Updates a Service Fabric application resource.
@@ -442,11 +465,11 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-clu
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceFabric/clusters/{clusterName}/applications/{applicationName}
 # operationId: Applications_Update
 # --properties shape: {maximumNodes?: int, metrics?: list, minimumNodes?: int, parameters?: record, removeApplicationCapacity?: bool, typeVersion?: string, upgradePolicy?: any}
-export def "subscriptions-resource-groups-providers-microsoft-service-fabric-clusters-applications Update" [
-  subscriptionId: string
-  resourceGroupName: string
-  clusterName: string
-  applicationName: string
+export def "subscriptions-resource-groups-providers-microsoft-service-fabric-clusters-applications update" [
+  subscription_id: string
+  resource_group_name: string
+  cluster_name: string
+  application_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -454,6 +477,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-clu
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string@api-version-completer # The version of the Service Fabric resource provider API. This is a required parameter and it's value must be "2019-03-01-preview" for this specification. (default: 2019-03-01-preview)
   --properties: any # The application resource properties for patch operations. — shape: {maximumNodes?: int, metrics?: list, minimumNodes?: int, parameters?: record, removeApplicationCapacity?: bool, typeVersion?: string, upgradePolicy?: any}
@@ -464,12 +488,12 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-clu
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.ServiceFabric/clusters/($clusterName)/applications/($applicationName)" $qp)
-  let body = {properties: $properties, location: $location, tags: $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), cluster_name: (encode-path-segment $cluster_name), application_name: (encode-path-segment $application_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ServiceFabric/clusters/{cluster_name}/applications/{application_name}") $qp)
+  let req_body = {"properties": $properties, "location": $location, "tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Creates or updates a Service Fabric application resource.
@@ -477,11 +501,11 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-clu
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceFabric/clusters/{clusterName}/applications/{applicationName}
 # operationId: Applications_Create
 # --properties shape: {typeName?: string, maximumNodes?: int, metrics?: list, minimumNodes?: int, parameters?: record, removeApplicationCapacity?: bool, typeVersion?: string, upgradePolicy?: any}
-export def "subscriptions-resource-groups-providers-microsoft-service-fabric-clusters-applications Create" [
-  subscriptionId: string
-  resourceGroupName: string
-  clusterName: string
-  applicationName: string
+export def "subscriptions-resource-groups-providers-microsoft-service-fabric-clusters-applications create" [
+  subscription_id: string
+  resource_group_name: string
+  cluster_name: string
+  application_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -489,6 +513,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-clu
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string@api-version-completer # The version of the Service Fabric resource provider API. This is a required parameter and it's value must be "2019-03-01-preview" for this specification. (default: 2019-03-01-preview)
   --properties: any # The application resource properties. — shape: {typeName?: string, maximumNodes?: int, metrics?: list, minimumNodes?: int, parameters?: record, removeApplicationCapacity?: bool, typeVersion?: string, upgradePolicy?: any}
@@ -499,23 +524,23 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-clu
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.ServiceFabric/clusters/($clusterName)/applications/($applicationName)" $qp)
-  let body = {properties: $properties, location: $location, tags: $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), cluster_name: (encode-path-segment $cluster_name), application_name: (encode-path-segment $application_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ServiceFabric/clusters/{cluster_name}/applications/{application_name}") $qp)
+  let req_body = {"properties": $properties, "location": $location, "tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Gets the list of service resources created in the specified Service Fabric application resource.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceFabric/clusters/{clusterName}/applications/{applicationName}/services
 # operationId: Services_List
-export def "subscriptions-resource-groups-providers-microsoft-service-fabric-clusters-applications-services List" [
-  subscriptionId: string
-  resourceGroupName: string
-  clusterName: string
-  applicationName: string
+export def "subscriptions-resource-groups-providers-microsoft-service-fabric-clusters-applications-services list" [
+  subscription_id: string
+  resource_group_name: string
+  cluster_name: string
+  application_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -523,28 +548,29 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-clu
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string@api-version-completer # The version of the Service Fabric resource provider API. This is a required parameter and it's value must be "2019-03-01-preview" for this specification. (default: 2019-03-01-preview)
 ]: nothing -> record<nextLink: string, value: table<properties: record, etag: string, id: string, location: string, name: string, tags: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.ServiceFabric/clusters/($clusterName)/applications/($applicationName)/services" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), cluster_name: (encode-path-segment $cluster_name), application_name: (encode-path-segment $application_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ServiceFabric/clusters/{cluster_name}/applications/{application_name}/services") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Deletes a Service Fabric service resource.
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceFabric/clusters/{clusterName}/applications/{applicationName}/services/{serviceName}
 # operationId: Services_Delete
-export def "subscriptions-resource-groups-providers-microsoft-service-fabric-clusters-applications-services Delete" [
-  subscriptionId: string
-  resourceGroupName: string
-  clusterName: string
-  applicationName: string
-  serviceName: string
+export def "subscriptions-resource-groups-providers-microsoft-service-fabric-clusters-applications-services delete" [
+  subscription_id: string
+  resource_group_name: string
+  cluster_name: string
+  application_name: string
+  service_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -552,28 +578,29 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-clu
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string@api-version-completer # The version of the Service Fabric resource provider API. This is a required parameter and it's value must be "2019-03-01-preview" for this specification. (default: 2019-03-01-preview)
 ]: nothing -> record<error: record<code: string, message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.ServiceFabric/clusters/($clusterName)/applications/($applicationName)/services/($serviceName)" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), cluster_name: (encode-path-segment $cluster_name), application_name: (encode-path-segment $application_name), service_name: (encode-path-segment $service_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ServiceFabric/clusters/{cluster_name}/applications/{application_name}/services/{service_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Gets a Service Fabric service resource.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceFabric/clusters/{clusterName}/applications/{applicationName}/services/{serviceName}
 # operationId: Services_Get
-export def "subscriptions-resource-groups-providers-microsoft-service-fabric-clusters-applications-services Get" [
-  subscriptionId: string
-  resourceGroupName: string
-  clusterName: string
-  applicationName: string
-  serviceName: string
+export def "subscriptions-resource-groups-providers-microsoft-service-fabric-clusters-applications-services get" [
+  subscription_id: string
+  resource_group_name: string
+  cluster_name: string
+  application_name: string
+  service_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -581,16 +608,17 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-clu
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string@api-version-completer # The version of the Service Fabric resource provider API. This is a required parameter and it's value must be "2019-03-01-preview" for this specification. (default: 2019-03-01-preview)
 ]: nothing -> record<properties: record<partitionDescription: record<partitionScheme: string>, provisioningState: string, serviceKind: string, servicePackageActivationMode: string, serviceTypeName: string, correlationScheme: list<record>, defaultMoveCost: string, placementConstraints: string, serviceLoadMetrics: list<record>, servicePlacementPolicies: list<record>>, etag: string, id: string, location: string, name: string, tags: record, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.ServiceFabric/clusters/($clusterName)/applications/($applicationName)/services/($serviceName)" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), cluster_name: (encode-path-segment $cluster_name), application_name: (encode-path-segment $application_name), service_name: (encode-path-segment $service_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ServiceFabric/clusters/{cluster_name}/applications/{application_name}/services/{service_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Updates a Service Fabric service resource.
@@ -598,12 +626,12 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-clu
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceFabric/clusters/{clusterName}/applications/{applicationName}/services/{serviceName}
 # operationId: Services_Update
 # --properties shape: {serviceKind: "Invalid"|"Stateless"|"Stateful", correlationScheme?: list, defaultMoveCost?: "Zero"|"Low"|"Medium"|"High", placementConstraints?: string, serviceLoadMetrics?: list, servicePlacementPolicies?: list}
-export def "subscriptions-resource-groups-providers-microsoft-service-fabric-clusters-applications-services Update" [
-  subscriptionId: string
-  resourceGroupName: string
-  clusterName: string
-  applicationName: string
-  serviceName: string
+export def "subscriptions-resource-groups-providers-microsoft-service-fabric-clusters-applications-services update" [
+  subscription_id: string
+  resource_group_name: string
+  cluster_name: string
+  application_name: string
+  service_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -611,6 +639,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-clu
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string@api-version-completer # The version of the Service Fabric resource provider API. This is a required parameter and it's value must be "2019-03-01-preview" for this specification. (default: 2019-03-01-preview)
   --properties: any # The service resource properties for patch operations. — shape: {serviceKind: "Invalid"|"Stateless"|"Stateful", correlationScheme?: list, defaultMoveCost?: "Zero"|"Low"|"Medium"|"High", placementConstraints?: string, serviceLoadMetrics?: list, servicePlacementPolicies?: list}
@@ -621,12 +650,12 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-clu
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.ServiceFabric/clusters/($clusterName)/applications/($applicationName)/services/($serviceName)" $qp)
-  let body = {properties: $properties, location: $location, tags: $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), cluster_name: (encode-path-segment $cluster_name), application_name: (encode-path-segment $application_name), service_name: (encode-path-segment $service_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ServiceFabric/clusters/{cluster_name}/applications/{application_name}/services/{service_name}") $qp)
+  let req_body = {"properties": $properties, "location": $location, "tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Creates or updates a Service Fabric service resource.
@@ -634,12 +663,12 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-clu
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceFabric/clusters/{clusterName}/applications/{applicationName}/services/{serviceName}
 # operationId: Services_Create
 # --properties shape: {partitionDescription?: record, serviceKind: "Invalid"|"Stateless"|"Stateful", servicePackageActivationMode?: "SharedProcess"|"ExclusiveProcess", serviceTypeName?: string, correlationScheme?: list, defaultMoveCost?: "Zero"|"Low"|"Medium"|"High", placementConstraints?: string, serviceLoadMetrics?: list, servicePlacementPolicies?: list}
-export def "subscriptions-resource-groups-providers-microsoft-service-fabric-clusters-applications-services Create" [
-  subscriptionId: string
-  resourceGroupName: string
-  clusterName: string
-  applicationName: string
-  serviceName: string
+export def "subscriptions-resource-groups-providers-microsoft-service-fabric-clusters-applications-services create" [
+  subscription_id: string
+  resource_group_name: string
+  cluster_name: string
+  application_name: string
+  service_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -647,6 +676,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-clu
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string@api-version-completer # The version of the Service Fabric resource provider API. This is a required parameter and it's value must be "2019-03-01-preview" for this specification. (default: 2019-03-01-preview)
   --properties: any # The service resource properties. — shape: {partitionDescription?: record, serviceKind: "Invalid"|"Stateless"|"Stateful", servicePackageActivationMode?: "SharedProcess"|"ExclusiveProcess", serviceTypeName?: string, correlationScheme?: list, defaultMoveCost?: "Zero"|"Low"|"Medium"|"High", placementConstraints?: string, serviceLoadMetrics?: list, servicePlacementPolicies?: list}
@@ -657,10 +687,10 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-clu
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.ServiceFabric/clusters/($clusterName)/applications/($applicationName)/services/($serviceName)" $qp)
-  let body = {properties: $properties, location: $location, tags: $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), cluster_name: (encode-path-segment $cluster_name), application_name: (encode-path-segment $application_name), service_name: (encode-path-segment $service_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ServiceFabric/clusters/{cluster_name}/applications/{application_name}/services/{service_name}") $qp)
+  let req_body = {"properties": $properties, "location": $location, "tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }

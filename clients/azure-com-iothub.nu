@@ -18,21 +18,32 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 }
 
 # Serialize a single query parameter based on collection style
+# Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
+# ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = ($name | url encode)
+  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
-  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
-    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
-    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
+    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
+    _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
+}
+
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Build URL from base, path, and optional query string
@@ -44,7 +55,7 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
@@ -53,25 +64,25 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
     "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "put" => { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "patch" => { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
   if ($method in ["head" "options"]) { return $resp }
-  if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
+  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
 def base-url-completer [] { ["https://management.azure.com"] }
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
-def routingSource-completer [] { ["DeviceJobLifecycleEvents" "DeviceLifecycleEvents" "DeviceMessages" "DigitalTwinChangeEvents" "Invalid" "TwinChangeEvents"] }
+def routing-source-completer [] { ["DeviceJobLifecycleEvents" "DeviceLifecycleEvents" "DeviceMessages" "DigitalTwinChangeEvents" "Invalid" "TwinChangeEvents"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-devices-operations List" } } | get name | first)
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-devices-operations list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -95,7 +106,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.Devices/operations
 # operationId: Operations_List
-export def "providers-microsoft-devices-operations List" [
+export def "providers-microsoft-devices-operations list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -103,6 +114,7 @@ export def "providers-microsoft-devices-operations List" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The version of the API.
 ]: nothing -> record<nextLink: string, value: table<display: record, name: string>> {
@@ -112,15 +124,15 @@ export def "providers-microsoft-devices-operations List" [
   let full_url = (build-url $base "/providers/Microsoft.Devices/operations" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get all the IoT hubs in a subscription
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Devices/IotHubs
 # operationId: IotHubResource_ListBySubscription
-export def "subscriptions-providers-microsoft-devices-iot-hubs ListBySubscription" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-devices-iot-hubs list-resource" [
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -128,24 +140,25 @@ export def "subscriptions-providers-microsoft-devices-iot-hubs ListBySubscriptio
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The version of the API.
 ]: nothing -> record<nextLink: string, value: table<etag: string, properties: record, sku: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Devices/IotHubs" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Devices/IotHubs") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Check if an IoT hub name is available
 #
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.Devices/checkNameAvailability
 # operationId: IotHubResource_CheckNameAvailability
-export def "subscriptions-providers-microsoft-devices-check-name-availability CheckNameAvailability" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-devices-check-name-availability check-iot-hub-resource" [
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -153,6 +166,7 @@ export def "subscriptions-providers-microsoft-devices-check-name-availability Ch
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The version of the API.
   name: string # The name of the IoT hub to check.
@@ -161,20 +175,20 @@ export def "subscriptions-providers-microsoft-devices-check-name-availability Ch
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Devices/checkNameAvailability" $qp)
-  let body = {name: $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Devices/checkNameAvailability") $qp)
+  let req_body = {"name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Get the number of iot hubs in the subscription
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Devices/usages
 # operationId: ResourceProviderCommon_GetSubscriptionQuota
-export def "subscriptions-providers-microsoft-devices-usages GetSubscriptionQuota" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-devices-usages get-resource-common-quota" [
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -182,25 +196,26 @@ export def "subscriptions-providers-microsoft-devices-usages GetSubscriptionQuot
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The version of the API.
 ]: nothing -> record<nextLink: string, value: table<currentValue: int, id: string, limit: int, name: record, type: string, unit: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Devices/usages" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Devices/usages") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get all the IoT hubs in a resource group
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Devices/IotHubs
 # operationId: IotHubResource_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-devices-iot-hubs ListByResourceGroup" [
-  subscriptionId: string
-  resourceGroupName: string
+export def "subscriptions-resource-groups-providers-microsoft-devices-iot-hubs list" [
+  subscription_id: string
+  resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -208,26 +223,27 @@ export def "subscriptions-resource-groups-providers-microsoft-devices-iot-hubs L
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The version of the API.
 ]: nothing -> record<nextLink: string, value: table<etag: string, properties: record, sku: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Devices/IotHubs" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Devices/IotHubs") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Manual Failover Fail over
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Devices/IotHubs/{iotHubName}/failover
 # operationId: IotHub_ManualFailover
-export def "subscriptions-resource-groups-providers-microsoft-devices-iot-hubs-failover ManualFailover" [
-  iotHubName: string
-  subscriptionId: string
-  resourceGroupName: string
+export def "subscriptions-resource-groups-providers-microsoft-devices-iot-hubs-failover create-manual" [
+  subscription_id: string
+  resource_group_name: string
+  iot_hub_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -235,20 +251,21 @@ export def "subscriptions-resource-groups-providers-microsoft-devices-iot-hubs-f
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The version of the API.
-  failoverRegion: string # Region the hub will be failed over to
+  failover_region: string # Region the hub will be failed over to
 ]: any -> record<code: string, details: string, httpStatusCode: string, message: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Devices/IotHubs/($iotHubName)/failover" $qp)
-  let body = {failoverRegion: $failoverRegion} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), iot_hub_name: (encode-path-segment $iot_hub_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Devices/IotHubs/{iot_hub_name}/failover") $qp)
+  let req_body = {"failoverRegion": $failover_region} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Test all routes
@@ -257,10 +274,10 @@ export def "subscriptions-resource-groups-providers-microsoft-devices-iot-hubs-f
 # operationId: IotHubResource_TestAllRoutes
 # --message shape: {appProperties?: record, body?: string, systemProperties?: record}
 # --twin shape: {properties?: any, tags?: record}
-export def "subscriptions-resource-groups-providers-microsoft-devices-iot-hubs-routing-routes-testall TestAllRoutes" [
-  iotHubName: string
-  subscriptionId: string
-  resourceGroupName: string
+export def "subscriptions-resource-groups-providers-microsoft-devices-iot-hubs-routing-routes-testall test-list" [
+  subscription_id: string
+  resource_group_name: string
+  iot_hub_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -268,22 +285,23 @@ export def "subscriptions-resource-groups-providers-microsoft-devices-iot-hubs-r
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The version of the API.
   --message: record # Routing message — shape: {appProperties?: record, body?: string, systemProperties?: record}
-  --routingSource: string@routingSource-completer # Routing source
+  --routing-source: string@routing-source-completer # Routing source
   --twin: record # Twin reference input parameter. This is an optional parameter — shape: {properties?: any, tags?: record}
 ]: any -> record<routes: table<properties: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Devices/IotHubs/($iotHubName)/routing/routes/$testall" $qp)
-  let body = {message: $message, routingSource: $routingSource, twin: $twin} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), iot_hub_name: (encode-path-segment $iot_hub_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Devices/IotHubs/{iot_hub_name}/routing/routes/$testall") $qp)
+  let req_body = {"message": $message, "routingSource": $routing_source, "twin": $twin} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Test the new route
@@ -291,12 +309,12 @@ export def "subscriptions-resource-groups-providers-microsoft-devices-iot-hubs-r
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Devices/IotHubs/{iotHubName}/routing/routes/$testnew
 # operationId: IotHubResource_TestRoute
 # --message shape: {appProperties?: record, body?: string, systemProperties?: record}
-# --route shape: {condition?: string, endpointNames: list, isEnabled: bool, name: string, source: "Invalid"|"DeviceMessages"|"TwinChangeEvents"|"DeviceLifecycleEvents"|"DeviceJobLifecycleEvents"|"DigitalTwinChangeEvents"}
+# --route shape: {condition?: string, endpointNames: list<string>, isEnabled: bool, name: string, source: "Invalid"|"DeviceMessages"|"TwinChangeEvents"|"DeviceLifecycleEvents"|"DeviceJobLifecycleEvents"|"DigitalTwinChangeEvents"}
 # --twin shape: {properties?: any, tags?: record}
-export def "subscriptions-resource-groups-providers-microsoft-devices-iot-hubs-routing-routes-testnew TestRoute" [
-  iotHubName: string
-  subscriptionId: string
-  resourceGroupName: string
+export def "subscriptions-resource-groups-providers-microsoft-devices-iot-hubs-routing-routes-testnew test" [
+  subscription_id: string
+  resource_group_name: string
+  iot_hub_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -304,32 +322,33 @@ export def "subscriptions-resource-groups-providers-microsoft-devices-iot-hubs-r
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The version of the API.
   --message: record # Routing message — shape: {appProperties?: record, body?: string, systemProperties?: record}
-  route: record # The properties of a routing rule that your IoT hub uses to route messages to endpoints. — shape: {condition?: string, endpointNames: list, isEnabled: bool, name: string, source: "Invalid"|"DeviceMessages"|"TwinChangeEvents"|"DeviceLifecycleEvents"|"DeviceJobLifecycleEvents"|"DigitalTwinChangeEvents"}
+  route: record # The properties of a routing rule that your IoT hub uses to route messages to endpoints. — shape: {condition?: string, endpointNames: list<string>, isEnabled: bool, name: string, source: "Invalid"|"DeviceMessages"|"TwinChangeEvents"|"DeviceLifecycleEvents"|"DeviceJobLifecycleEvents"|"DigitalTwinChangeEvents"}
   --twin: record # Twin reference input parameter. This is an optional parameter — shape: {properties?: any, tags?: record}
 ]: any -> record<details: record<compilationErrors: list<record>>, result: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Devices/IotHubs/($iotHubName)/routing/routes/$testnew" $qp)
-  let body = {message: $message, route: $route, twin: $twin} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), iot_hub_name: (encode-path-segment $iot_hub_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Devices/IotHubs/{iot_hub_name}/routing/routes/$testnew") $qp)
+  let req_body = {"message": $message, "route": $route, "twin": $twin} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Get the health for routing endpoints
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Devices/IotHubs/{iotHubName}/routingEndpointsHealth
 # operationId: IotHubResource_GetEndpointHealth
-export def "subscriptions-resource-groups-providers-microsoft-devices-iot-hubs-routing-endpoints-health GetEndpointHealth" [
-  subscriptionId: string
-  resourceGroupName: string
-  iotHubName: string
+export def "subscriptions-resource-groups-providers-microsoft-devices-iot-hubs-routing-endpoints-health get" [
+  subscription_id: string
+  resource_group_name: string
+  iot_hub_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -337,26 +356,27 @@ export def "subscriptions-resource-groups-providers-microsoft-devices-iot-hubs-r
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The version of the API.
 ]: nothing -> record<nextLink: string, value: table<endpointId: string, healthStatus: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Devices/IotHubs/($iotHubName)/routingEndpointsHealth" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), iot_hub_name: (encode-path-segment $iot_hub_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Devices/IotHubs/{iot_hub_name}/routingEndpointsHealth") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Delete an IoT hub
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Devices/IotHubs/{resourceName}
 # operationId: IotHubResource_Delete
-export def "subscriptions-resource-groups-providers-microsoft-devices-iot-hubs Delete" [
-  subscriptionId: string
-  resourceGroupName: string
-  resourceName: string
+export def "subscriptions-resource-groups-providers-microsoft-devices-iot-hubs delete" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -364,26 +384,27 @@ export def "subscriptions-resource-groups-providers-microsoft-devices-iot-hubs D
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The version of the API.
 ]: nothing -> record<etag: string, properties: record<authorizationPolicies: list<record>, cloudToDevice: record<defaultTtlAsIso8601: string, feedback: record, maxDeliveryCount: int>, comments: string, deviceStreams: record<streamingEndpoints: list>, enableFileUploadNotifications: bool, eventHubEndpoints: record, features: string, hostName: string, ipFilterRules: list<record>, locations: list<record>, messagingEndpoints: record, provisioningState: string, routing: record<endpoints: record, enrichments: list, fallbackRoute: record, routes: list>, state: string, storageEndpoints: record>, sku: record<capacity: int, name: string, tier: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Devices/IotHubs/($resourceName)" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Devices/IotHubs/{resource_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get the non-security related metadata of an IoT hub
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Devices/IotHubs/{resourceName}
 # operationId: IotHubResource_Get
-export def "subscriptions-resource-groups-providers-microsoft-devices-iot-hubs Get" [
-  subscriptionId: string
-  resourceGroupName: string
-  resourceName: string
+export def "subscriptions-resource-groups-providers-microsoft-devices-iot-hubs get" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -391,26 +412,27 @@ export def "subscriptions-resource-groups-providers-microsoft-devices-iot-hubs G
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The version of the API.
 ]: nothing -> record<etag: string, properties: record<authorizationPolicies: list<record>, cloudToDevice: record<defaultTtlAsIso8601: string, feedback: record, maxDeliveryCount: int>, comments: string, deviceStreams: record<streamingEndpoints: list>, enableFileUploadNotifications: bool, eventHubEndpoints: record, features: string, hostName: string, ipFilterRules: list<record>, locations: list<record>, messagingEndpoints: record, provisioningState: string, routing: record<endpoints: record, enrichments: list, fallbackRoute: record, routes: list>, state: string, storageEndpoints: record>, sku: record<capacity: int, name: string, tier: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Devices/IotHubs/($resourceName)" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Devices/IotHubs/{resource_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Update an existing IoT Hubs tags.
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Devices/IotHubs/{resourceName}
 # operationId: IotHubResource_Update
-export def "subscriptions-resource-groups-providers-microsoft-devices-iot-hubs Update" [
-  subscriptionId: string
-  resourceGroupName: string
-  resourceName: string
+export def "subscriptions-resource-groups-providers-microsoft-devices-iot-hubs update" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -418,6 +440,7 @@ export def "subscriptions-resource-groups-providers-microsoft-devices-iot-hubs U
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The version of the API.
   --tags: any # Resource tags
@@ -426,12 +449,12 @@ export def "subscriptions-resource-groups-providers-microsoft-devices-iot-hubs U
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Devices/IotHubs/($resourceName)" $qp)
-  let body = {tags: $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Devices/IotHubs/{resource_name}") $qp)
+  let req_body = {"tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Create or update the metadata of an IoT hub.
@@ -440,10 +463,10 @@ export def "subscriptions-resource-groups-providers-microsoft-devices-iot-hubs U
 # operationId: IotHubResource_CreateOrUpdate
 # --properties shape: {authorizationPolicies?: list, cloudToDevice?: record, comments?: string, deviceStreams?: record, enableFileUploadNotifications?: bool, eventHubEndpoints?: record, features?: "None"|"DeviceManagement", ipFilterRules?: list, messagingEndpoints?: record, routing?: record, storageEndpoints?: record}
 # --sku shape: {capacity?: int, name: "F1"|"S1"|"S2"|"S3"|"B1"|"B2"|"B3"}
-export def "subscriptions-resource-groups-providers-microsoft-devices-iot-hubs CreateOrUpdate" [
-  subscriptionId: string
-  resourceGroupName: string
-  resourceName: string
+export def "subscriptions-resource-groups-providers-microsoft-devices-iot-hubs create-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -451,9 +474,10 @@ export def "subscriptions-resource-groups-providers-microsoft-devices-iot-hubs C
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The version of the API.
-  --If-Match: string # ETag of the IoT Hub. Do not specify for creating a brand new IoT Hub. Required to update an existing IoT Hub.
+  --if-match: string # ETag of the IoT Hub. Do not specify for creating a brand new IoT Hub. Required to update an existing IoT Hub.
   --etag: string # The Etag field is *not* required. If it is provided in the response body, it must also be provided as a header per the normal ETag convention.
   --properties: record # The properties of an IoT hub. — shape: {authorizationPolicies?: list, cloudToDevice?: record, comments?: string, deviceStreams?: record, enableFileUploadNotifications?: bool, eventHubEndpoints?: record, features?: "None"|"DeviceManagement", ipFilterRules?: list, messagingEndpoints?: record, routing?: record, storageEndpoints?: record}
   sku: record # Information about the SKU of the IoT hub. — shape: {capacity?: int, name: "F1"|"S1"|"S2"|"S3"|"B1"|"B2"|"B3"}
@@ -464,25 +488,25 @@ export def "subscriptions-resource-groups-providers-microsoft-devices-iot-hubs C
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Devices/IotHubs/($resourceName)" $qp)
-  let body = {etag: $etag, properties: $properties, sku: $sku, location: $location, tags: $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"If-Match": $If_Match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Devices/IotHubs/{resource_name}") $qp)
+  let req_body = {"etag": $etag, "properties": $properties, "sku": $sku, "location": $location, "tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"If-Match": $if_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Get a shared access policy by name from an IoT hub. For more information, see: https://docs.microsoft.com/azure/iot-hub/iot-hub-devguide-security
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Devices/IotHubs/{resourceName}/IotHubKeys/{keyName}/listkeys
 # operationId: IotHubResource_GetKeysForKeyName
-export def "subscriptions-resource-groups-providers-microsoft-devices-iot-hubs-iot-hub-keys-listkeys GetKeysForKeyName" [
-  subscriptionId: string
-  resourceGroupName: string
-  resourceName: string
-  keyName: string
+export def "subscriptions-resource-groups-providers-microsoft-devices-iot-hubs-iot-hub-keys-listkeys get-for-name" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
+  key_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -490,26 +514,27 @@ export def "subscriptions-resource-groups-providers-microsoft-devices-iot-hubs-i
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The version of the API.
 ]: nothing -> record<keyName: string, primaryKey: string, rights: string, secondaryKey: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Devices/IotHubs/($resourceName)/IotHubKeys/($keyName)/listkeys" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), key_name: (encode-path-segment $key_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Devices/IotHubs/{resource_name}/IotHubKeys/{key_name}/listkeys") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get the statistics from an IoT hub
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Devices/IotHubs/{resourceName}/IotHubStats
 # operationId: IotHubResource_GetStats
-export def "subscriptions-resource-groups-providers-microsoft-devices-iot-hubs-iot-hub-stats GetStats" [
-  subscriptionId: string
-  resourceGroupName: string
-  resourceName: string
+export def "subscriptions-resource-groups-providers-microsoft-devices-iot-hubs-iot-hub-stats get" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -517,26 +542,27 @@ export def "subscriptions-resource-groups-providers-microsoft-devices-iot-hubs-i
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The version of the API.
 ]: nothing -> record<disabledDeviceCount: int, enabledDeviceCount: int, totalDeviceCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Devices/IotHubs/($resourceName)/IotHubStats" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Devices/IotHubs/{resource_name}/IotHubStats") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get the certificate list.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Devices/IotHubs/{resourceName}/certificates
 # operationId: Certificates_ListByIotHub
-export def "subscriptions-resource-groups-providers-microsoft-devices-iot-hubs-certificates ListByIotHub" [
-  subscriptionId: string
-  resourceGroupName: string
-  resourceName: string
+export def "subscriptions-resource-groups-providers-microsoft-devices-iot-hubs-certificates list" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -544,27 +570,28 @@ export def "subscriptions-resource-groups-providers-microsoft-devices-iot-hubs-c
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The version of the API.
 ]: nothing -> record<value: table<etag: string, id: string, name: string, properties: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Devices/IotHubs/($resourceName)/certificates" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Devices/IotHubs/{resource_name}/certificates") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Delete an X509 certificate.
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Devices/IotHubs/{resourceName}/certificates/{certificateName}
 # operationId: Certificates_Delete
-export def "subscriptions-resource-groups-providers-microsoft-devices-iot-hubs-certificates Delete" [
-  subscriptionId: string
-  resourceGroupName: string
-  resourceName: string
-  certificateName: string
+export def "subscriptions-resource-groups-providers-microsoft-devices-iot-hubs-certificates delete" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
+  certificate_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -572,30 +599,31 @@ export def "subscriptions-resource-groups-providers-microsoft-devices-iot-hubs-c
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The version of the API.
-  --If-Match: string # ETag of the Certificate.
+  --if-match: string # ETag of the Certificate.
 ]: nothing -> record<code: string, details: string, httpStatusCode: string, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Devices/IotHubs/($resourceName)/certificates/($certificateName)" $qp)
-  let extra_headers = {"If-Match": $If_Match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), certificate_name: (encode-path-segment $certificate_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Devices/IotHubs/{resource_name}/certificates/{certificate_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"If-Match": $if_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get the certificate.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Devices/IotHubs/{resourceName}/certificates/{certificateName}
 # operationId: Certificates_Get
-export def "subscriptions-resource-groups-providers-microsoft-devices-iot-hubs-certificates Get" [
-  subscriptionId: string
-  resourceGroupName: string
-  resourceName: string
-  certificateName: string
+export def "subscriptions-resource-groups-providers-microsoft-devices-iot-hubs-certificates get" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
+  certificate_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -603,27 +631,28 @@ export def "subscriptions-resource-groups-providers-microsoft-devices-iot-hubs-c
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The version of the API.
 ]: nothing -> record<etag: string, id: string, name: string, properties: record<certificate: string, created: string, expiry: string, isVerified: bool, subject: string, thumbprint: string, updated: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Devices/IotHubs/($resourceName)/certificates/($certificateName)" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), certificate_name: (encode-path-segment $certificate_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Devices/IotHubs/{resource_name}/certificates/{certificate_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Upload the certificate to the IoT hub.
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Devices/IotHubs/{resourceName}/certificates/{certificateName}
 # operationId: Certificates_CreateOrUpdate
-export def "subscriptions-resource-groups-providers-microsoft-devices-iot-hubs-certificates CreateOrUpdate" [
-  subscriptionId: string
-  resourceGroupName: string
-  resourceName: string
-  certificateName: string
+export def "subscriptions-resource-groups-providers-microsoft-devices-iot-hubs-certificates create-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
+  certificate_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -631,34 +660,35 @@ export def "subscriptions-resource-groups-providers-microsoft-devices-iot-hubs-c
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The version of the API.
-  --If-Match: string # ETag of the Certificate. Do not specify for creating a brand new certificate. Required to update an existing certificate.
+  --if-match: string # ETag of the Certificate. Do not specify for creating a brand new certificate. Required to update an existing certificate.
   --certificate: string # base-64 representation of the X509 leaf certificate .cer file or just .pem file content.
 ]: any -> record<etag: string, id: string, name: string, properties: record<certificate: string, created: string, expiry: string, isVerified: bool, subject: string, thumbprint: string, updated: string>, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Devices/IotHubs/($resourceName)/certificates/($certificateName)" $qp)
-  let body = {certificate: $certificate} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"If-Match": $If_Match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), certificate_name: (encode-path-segment $certificate_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Devices/IotHubs/{resource_name}/certificates/{certificate_name}") $qp)
+  let req_body = {"certificate": $certificate} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"If-Match": $if_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Generate verification code for proof of possession flow.
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Devices/IotHubs/{resourceName}/certificates/{certificateName}/generateVerificationCode
 # operationId: Certificates_GenerateVerificationCode
-export def "subscriptions-resource-groups-providers-microsoft-devices-iot-hubs-certificates-generate-verification-code GenerateVerificationCode" [
-  subscriptionId: string
-  resourceGroupName: string
-  resourceName: string
-  certificateName: string
+export def "subscriptions-resource-groups-providers-microsoft-devices-iot-hubs-certificates-generate-verification-code generate" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
+  certificate_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -666,30 +696,31 @@ export def "subscriptions-resource-groups-providers-microsoft-devices-iot-hubs-c
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The version of the API.
-  --If-Match: string # ETag of the Certificate.
+  --if-match: string # ETag of the Certificate.
 ]: nothing -> record<etag: string, id: string, name: string, properties: record<certificate: string, created: string, expiry: string, isVerified: bool, subject: string, thumbprint: string, updated: string, verificationCode: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Devices/IotHubs/($resourceName)/certificates/($certificateName)/generateVerificationCode" $qp)
-  let extra_headers = {"If-Match": $If_Match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), certificate_name: (encode-path-segment $certificate_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Devices/IotHubs/{resource_name}/certificates/{certificate_name}/generateVerificationCode") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"If-Match": $if_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Verify certificate's private key possession.
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Devices/IotHubs/{resourceName}/certificates/{certificateName}/verify
 # operationId: Certificates_Verify
-export def "subscriptions-resource-groups-providers-microsoft-devices-iot-hubs-certificates-verify Verify" [
-  subscriptionId: string
-  resourceGroupName: string
-  resourceName: string
-  certificateName: string
+export def "subscriptions-resource-groups-providers-microsoft-devices-iot-hubs-certificates-verify verify" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
+  certificate_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -697,34 +728,35 @@ export def "subscriptions-resource-groups-providers-microsoft-devices-iot-hubs-c
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The version of the API.
-  --If-Match: string # ETag of the Certificate.
+  --if-match: string # ETag of the Certificate.
   --certificate: string # base-64 representation of X509 certificate .cer file or just .pem file content.
 ]: any -> record<etag: string, id: string, name: string, properties: record<certificate: string, created: string, expiry: string, isVerified: bool, subject: string, thumbprint: string, updated: string>, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Devices/IotHubs/($resourceName)/certificates/($certificateName)/verify" $qp)
-  let body = {certificate: $certificate} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"If-Match": $If_Match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), certificate_name: (encode-path-segment $certificate_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Devices/IotHubs/{resource_name}/certificates/{certificate_name}/verify") $qp)
+  let req_body = {"certificate": $certificate} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"If-Match": $if_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Get a list of the consumer groups in the Event Hub-compatible device-to-cloud endpoint in an IoT hub
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Devices/IotHubs/{resourceName}/eventHubEndpoints/{eventHubEndpointName}/ConsumerGroups
 # operationId: IotHubResource_ListEventHubConsumerGroups
-export def "subscriptions-resource-groups-providers-microsoft-devices-iot-hubs-event-hub-endpoints-consumer-groups ListEventHubConsumerGroups" [
-  subscriptionId: string
-  resourceGroupName: string
-  resourceName: string
-  eventHubEndpointName: string
+export def "subscriptions-resource-groups-providers-microsoft-devices-iot-hubs-event-hub-endpoints-consumer-groups list" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
+  event_hub_endpoint_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -732,27 +764,28 @@ export def "subscriptions-resource-groups-providers-microsoft-devices-iot-hubs-e
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The version of the API.
 ]: nothing -> record<nextLink: string, value: table<etag: string, id: string, name: string, properties: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Devices/IotHubs/($resourceName)/eventHubEndpoints/($eventHubEndpointName)/ConsumerGroups" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), event_hub_endpoint_name: (encode-path-segment $event_hub_endpoint_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Devices/IotHubs/{resource_name}/eventHubEndpoints/{event_hub_endpoint_name}/ConsumerGroups") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Delete a consumer group from an Event Hub-compatible endpoint in an IoT hub
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Devices/IotHubs/{resourceName}/eventHubEndpoints/{eventHubEndpointName}/ConsumerGroups/{name}
 # operationId: IotHubResource_DeleteEventHubConsumerGroup
-export def "subscriptions-resource-groups-providers-microsoft-devices-iot-hubs-event-hub-endpoints-consumer-groups DeleteEventHubConsumerGroup" [
-  subscriptionId: string
-  resourceGroupName: string
-  resourceName: string
-  eventHubEndpointName: string
+export def "subscriptions-resource-groups-providers-microsoft-devices-iot-hubs-event-hub-endpoints-consumer-groups delete" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
+  event_hub_endpoint_name: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -761,27 +794,28 @@ export def "subscriptions-resource-groups-providers-microsoft-devices-iot-hubs-e
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The version of the API.
 ]: nothing -> record<code: string, details: string, httpStatusCode: string, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Devices/IotHubs/($resourceName)/eventHubEndpoints/($eventHubEndpointName)/ConsumerGroups/($name)" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), event_hub_endpoint_name: (encode-path-segment $event_hub_endpoint_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Devices/IotHubs/{resource_name}/eventHubEndpoints/{event_hub_endpoint_name}/ConsumerGroups/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get a consumer group from the Event Hub-compatible device-to-cloud endpoint for an IoT hub
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Devices/IotHubs/{resourceName}/eventHubEndpoints/{eventHubEndpointName}/ConsumerGroups/{name}
 # operationId: IotHubResource_GetEventHubConsumerGroup
-export def "subscriptions-resource-groups-providers-microsoft-devices-iot-hubs-event-hub-endpoints-consumer-groups GetEventHubConsumerGroup" [
-  subscriptionId: string
-  resourceGroupName: string
-  resourceName: string
-  eventHubEndpointName: string
+export def "subscriptions-resource-groups-providers-microsoft-devices-iot-hubs-event-hub-endpoints-consumer-groups get" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
+  event_hub_endpoint_name: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -790,27 +824,28 @@ export def "subscriptions-resource-groups-providers-microsoft-devices-iot-hubs-e
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The version of the API.
 ]: nothing -> record<etag: string, id: string, name: string, properties: record, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Devices/IotHubs/($resourceName)/eventHubEndpoints/($eventHubEndpointName)/ConsumerGroups/($name)" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), event_hub_endpoint_name: (encode-path-segment $event_hub_endpoint_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Devices/IotHubs/{resource_name}/eventHubEndpoints/{event_hub_endpoint_name}/ConsumerGroups/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Add a consumer group to an Event Hub-compatible endpoint in an IoT hub
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Devices/IotHubs/{resourceName}/eventHubEndpoints/{eventHubEndpointName}/ConsumerGroups/{name}
 # operationId: IotHubResource_CreateEventHubConsumerGroup
-export def "subscriptions-resource-groups-providers-microsoft-devices-iot-hubs-event-hub-endpoints-consumer-groups CreateEventHubConsumerGroup" [
-  subscriptionId: string
-  resourceGroupName: string
-  resourceName: string
-  eventHubEndpointName: string
+export def "subscriptions-resource-groups-providers-microsoft-devices-iot-hubs-event-hub-endpoints-consumer-groups create" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
+  event_hub_endpoint_name: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -819,26 +854,27 @@ export def "subscriptions-resource-groups-providers-microsoft-devices-iot-hubs-e
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The version of the API.
 ]: nothing -> record<etag: string, id: string, name: string, properties: record, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Devices/IotHubs/($resourceName)/eventHubEndpoints/($eventHubEndpointName)/ConsumerGroups/($name)" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), event_hub_endpoint_name: (encode-path-segment $event_hub_endpoint_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Devices/IotHubs/{resource_name}/eventHubEndpoints/{event_hub_endpoint_name}/ConsumerGroups/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Exports all the device identities in the IoT hub identity registry to an Azure Storage blob container. For more information, see: https://docs.microsoft.com/azure/iot-hub/iot-hub-devguide-identity-registry#import-and-export-device-identities
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Devices/IotHubs/{resourceName}/exportDevices
 # operationId: IotHubResource_ExportDevices
-export def "subscriptions-resource-groups-providers-microsoft-devices-iot-hubs-export-devices ExportDevices" [
-  subscriptionId: string
-  resourceGroupName: string
-  resourceName: string
+export def "subscriptions-resource-groups-providers-microsoft-devices-iot-hubs-export-devices export" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -846,31 +882,32 @@ export def "subscriptions-resource-groups-providers-microsoft-devices-iot-hubs-e
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The version of the API.
-  --excludeKeys: oneof<nothing, bool> # The value indicating whether keys should be excluded during export.
-  exportBlobContainerUri: string # The export blob container URI.
+  --exclude-keys: oneof<nothing, bool> # The value indicating whether keys should be excluded during export.
+  export_blob_container_uri: string # The export blob container URI.
 ]: any -> record<endTimeUtc: string, failureReason: string, jobId: string, parentJobId: string, startTimeUtc: string, status: string, statusMessage: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Devices/IotHubs/($resourceName)/exportDevices" $qp)
-  let body = {excludeKeys: $excludeKeys, exportBlobContainerUri: $exportBlobContainerUri} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Devices/IotHubs/{resource_name}/exportDevices") $qp)
+  let req_body = {"excludeKeys": $exclude_keys, "exportBlobContainerUri": $export_blob_container_uri} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Import, update, or delete device identities in the IoT hub identity registry from a blob. For more information, see: https://docs.microsoft.com/azure/iot-hub/iot-hub-devguide-identity-registry#import-and-export-device-identities
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Devices/IotHubs/{resourceName}/importDevices
 # operationId: IotHubResource_ImportDevices
-export def "subscriptions-resource-groups-providers-microsoft-devices-iot-hubs-import-devices ImportDevices" [
-  subscriptionId: string
-  resourceGroupName: string
-  resourceName: string
+export def "subscriptions-resource-groups-providers-microsoft-devices-iot-hubs-import-devices import" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -878,31 +915,32 @@ export def "subscriptions-resource-groups-providers-microsoft-devices-iot-hubs-i
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The version of the API.
-  inputBlobContainerUri: string # The input blob container URI.
-  outputBlobContainerUri: string # The output blob container URI.
+  input_blob_container_uri: string # The input blob container URI.
+  output_blob_container_uri: string # The output blob container URI.
 ]: any -> record<endTimeUtc: string, failureReason: string, jobId: string, parentJobId: string, startTimeUtc: string, status: string, statusMessage: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Devices/IotHubs/($resourceName)/importDevices" $qp)
-  let body = {inputBlobContainerUri: $inputBlobContainerUri, outputBlobContainerUri: $outputBlobContainerUri} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Devices/IotHubs/{resource_name}/importDevices") $qp)
+  let req_body = {"inputBlobContainerUri": $input_blob_container_uri, "outputBlobContainerUri": $output_blob_container_uri} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Get a list of all the jobs in an IoT hub. For more information, see: https://docs.microsoft.com/azure/iot-hub/iot-hub-devguide-identity-registry
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Devices/IotHubs/{resourceName}/jobs
 # operationId: IotHubResource_ListJobs
-export def "subscriptions-resource-groups-providers-microsoft-devices-iot-hubs-jobs ListJobs" [
-  subscriptionId: string
-  resourceGroupName: string
-  resourceName: string
+export def "subscriptions-resource-groups-providers-microsoft-devices-iot-hubs-jobs list" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -910,27 +948,28 @@ export def "subscriptions-resource-groups-providers-microsoft-devices-iot-hubs-j
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The version of the API.
 ]: nothing -> record<nextLink: string, value: table<endTimeUtc: string, failureReason: string, jobId: string, parentJobId: string, startTimeUtc: string, status: string, statusMessage: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Devices/IotHubs/($resourceName)/jobs" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Devices/IotHubs/{resource_name}/jobs") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get the details of a job from an IoT hub. For more information, see: https://docs.microsoft.com/azure/iot-hub/iot-hub-devguide-identity-registry
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Devices/IotHubs/{resourceName}/jobs/{jobId}
 # operationId: IotHubResource_GetJob
-export def "subscriptions-resource-groups-providers-microsoft-devices-iot-hubs-jobs GetJob" [
-  subscriptionId: string
-  resourceGroupName: string
-  resourceName: string
-  jobId: string
+export def "subscriptions-resource-groups-providers-microsoft-devices-iot-hubs-jobs get" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
+  job_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -938,26 +977,27 @@ export def "subscriptions-resource-groups-providers-microsoft-devices-iot-hubs-j
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The version of the API.
 ]: nothing -> record<endTimeUtc: string, failureReason: string, jobId: string, parentJobId: string, startTimeUtc: string, status: string, statusMessage: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Devices/IotHubs/($resourceName)/jobs/($jobId)" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), job_id: (encode-path-segment $job_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Devices/IotHubs/{resource_name}/jobs/{job_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get the security metadata for an IoT hub. For more information, see: https://docs.microsoft.com/azure/iot-hub/iot-hub-devguide-security
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Devices/IotHubs/{resourceName}/listkeys
 # operationId: IotHubResource_ListKeys
-export def "subscriptions-resource-groups-providers-microsoft-devices-iot-hubs-listkeys ListKeys" [
-  subscriptionId: string
-  resourceGroupName: string
-  resourceName: string
+export def "subscriptions-resource-groups-providers-microsoft-devices-iot-hubs-listkeys list-keys" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -965,26 +1005,27 @@ export def "subscriptions-resource-groups-providers-microsoft-devices-iot-hubs-l
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The version of the API.
 ]: nothing -> record<nextLink: string, value: table<keyName: string, primaryKey: string, rights: string, secondaryKey: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Devices/IotHubs/($resourceName)/listkeys" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Devices/IotHubs/{resource_name}/listkeys") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get the quota metrics for an IoT hub
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Devices/IotHubs/{resourceName}/quotaMetrics
 # operationId: IotHubResource_GetQuotaMetrics
-export def "subscriptions-resource-groups-providers-microsoft-devices-iot-hubs-quota-metrics GetQuotaMetrics" [
-  subscriptionId: string
-  resourceGroupName: string
-  resourceName: string
+export def "subscriptions-resource-groups-providers-microsoft-devices-iot-hubs-quota-metrics get" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -992,26 +1033,27 @@ export def "subscriptions-resource-groups-providers-microsoft-devices-iot-hubs-q
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The version of the API.
 ]: nothing -> record<nextLink: string, value: table<currentValue: int, maxValue: int, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Devices/IotHubs/($resourceName)/quotaMetrics" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Devices/IotHubs/{resource_name}/quotaMetrics") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get the list of valid SKUs for an IoT hub
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Devices/IotHubs/{resourceName}/skus
 # operationId: IotHubResource_GetValidSkus
-export def "subscriptions-resource-groups-providers-microsoft-devices-iot-hubs-skus GetValidSkus" [
-  subscriptionId: string
-  resourceGroupName: string
-  resourceName: string
+export def "subscriptions-resource-groups-providers-microsoft-devices-iot-hubs-skus get-valid" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1019,14 +1061,15 @@ export def "subscriptions-resource-groups-providers-microsoft-devices-iot-hubs-s
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The version of the API.
 ]: nothing -> record<nextLink: string, value: table<capacity: record, resourceType: string, sku: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Devices/IotHubs/($resourceName)/skus" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Devices/IotHubs/{resource_name}/skus") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }

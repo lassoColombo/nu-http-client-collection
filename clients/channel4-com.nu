@@ -11,28 +11,39 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {headers: {}, query: ""} }
   match $scheme {
-    "query-apikey" => { {headers: {}, query: $"apikey=($token_val)"} }
+    "query-apikey" => { {headers: {}, query: $"(encode-path-segment "apikey")=(encode-path-segment $token_val)"} }
     "none" => { {headers: {}, query: ""} }
     _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
   }
 }
 
 # Serialize a single query parameter based on collection style
+# Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
+# ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = ($name | url encode)
+  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
-  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
-    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
-    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
+    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
+    _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
+}
+
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Build URL from base, path, and optional query string
@@ -44,7 +55,7 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
@@ -53,13 +64,13 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
     "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "put" => { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "patch" => { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
   if ($method in ["head" "options"]) { return $resp }
-  if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
+  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
 def base-url-completer [] { ["http://channel4.com/pmlsd" "https://channel4.com/pmlsd"] }
@@ -70,8 +81,8 @@ def platform-completer [] { ["android" "c4" "ctv" "fm" "freesat" "ios" "p06" "ps
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "4od-episode-list-date Feed" } } | get name | first)
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "4od-episode-list-date get-4o-d-browse-by-feed" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -95,7 +106,7 @@ export def commands []: nothing -> table {
 #
 # GET /4od/episode-list/date/{yyyy}/{mm}/{dd}.atom
 # operationId: 4oD_Browse_by_Date_Feed
-export def "4od-episode-list-date Feed" [
+export def "4od-episode-list-date get-4o-d-browse-by-feed" [
   yyyy: string
   mm: string
   dd: string
@@ -106,23 +117,24 @@ export def "4od-episode-list-date Feed" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --platform: string@platform-completer # The platform to use for the query. Alias 'client'.
 ]: nothing -> record<feed: record> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/4od/episode-list/date/($yyyy)/($mm)/($dd).atom" $qp)
+  let full_url = (build-url $base ({yyyy: (encode-path-segment $yyyy), mm: (encode-path-segment $mm), dd: (encode-path-segment $dd)} | format pattern "/4od/episode-list/date/{yyyy}/{mm}/{dd}.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # 4oD Most Popular Episodes Feed
 #
 # GET /4od/episode-list/popular.atom
 # operationId: 4oD_Most_Popular_Episodes_Feed
-export def "4od-episode-list-popularatom Feed" [
+export def "4od-episode-list-popular-atom get-4o-d-most-feed" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -130,6 +142,7 @@ export def "4od-episode-list-popularatom Feed" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --platform: string@platform-completer # The platform to use for the query. Alias 'client'.
 ]: nothing -> record<feed: record> {
@@ -139,14 +152,14 @@ export def "4od-episode-list-popularatom Feed" [
   let full_url = (build-url $base "/4od/episode-list/popular.atom" $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # 4oD Clips Catch Up Feed
 #
 # GET /4od/recently-added/videos.atom
 # operationId: 4oD_Clips_Catch_Up_Feed
-export def "4od-recently-added-videosatom Feed" [
+export def "4od-recently-added-videos-atom get-4o-d-clips-catch-up-feed" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -154,6 +167,7 @@ export def "4od-recently-added-videosatom Feed" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --platform: string@platform-completer # The platform to use for the query. Alias 'client'.
 ]: nothing -> record<feed: record> {
@@ -163,14 +177,14 @@ export def "4od-recently-added-videosatom Feed" [
   let full_url = (build-url $base "/4od/recently-added/videos.atom" $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # A to Z Landing Feed
 #
 # GET /atoz.atom
 # operationId: A_to_Z_Landing_Feed
-export def "atozatom Feed" [
+export def "atoz-atom get-to-z-landing-feed" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -178,6 +192,7 @@ export def "atozatom Feed" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --platform: string@platform-completer # The platform to use for the query. Alias 'client'.
 ]: nothing -> record<feed: record> {
@@ -187,14 +202,14 @@ export def "atozatom Feed" [
   let full_url = (build-url $base "/atoz.atom" $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # A to Z Letter Feed
 #
 # GET /atoz/{start_letter}.atom
 # operationId: A_to_Z_Letter_Feed
-export def "atoz Feed" [
+export def "atoz get-to-z-feed" [
   start_letter: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -203,23 +218,24 @@ export def "atoz Feed" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --platform: string@platform-completer # The platform to use for the query. Alias 'client'.
 ]: nothing -> record<feed: record> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/atoz/($start_letter).atom" $qp)
+  let full_url = (build-url $base ({start_letter: (encode-path-segment $start_letter)} | format pattern "/atoz/{start_letter}.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # A to Z Letter Feed(2)
 #
 # GET /atoz/{start_letter}/page-{pageno}.atom
 # operationId: A_to_Z_Letter_Feed(2)
-export def "atoz-page-pageno-atom Feed2" [
+export def "atoz-page-pageno-atom get-to-z-feed2" [
   start_letter: string
   pageno: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -229,23 +245,24 @@ export def "atoz-page-pageno-atom Feed2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --platform: string@platform-completer # The platform to use for the query. Alias 'client'.
 ]: nothing -> record<feed: record> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/atoz/($start_letter)/page-($pageno).atom" $qp)
+  let full_url = (build-url $base ({start_letter: (encode-path-segment $start_letter), pageno: (encode-path-segment $pageno)} | format pattern "/atoz/{start_letter}/page-{pageno}.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # 4oD Title All Brands Feed
 #
 # GET /brands/4od.atom
 # operationId: 4oD_Title_All_Brands_Feed
-export def "brands-4odatom Feed" [
+export def "brands-4od-atom list-4o-d-title-feed" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -253,6 +270,7 @@ export def "brands-4odatom Feed" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --platform: string@platform-completer # The platform to use for the query. Alias 'client'.
 ]: nothing -> record<feed: record> {
@@ -262,14 +280,14 @@ export def "brands-4odatom Feed" [
   let full_url = (build-url $base "/brands/4od.atom" $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # 4oD Title All Brands Feed(2)
 #
 # GET /brands/4od/page-{pageno}.atom
 # operationId: 4oD_Title_All_Brands_Feed(2)
-export def "brands-4od-page-pageno-atom Feed2" [
+export def "brands-4od-page-pageno-atom list-4o-d-title-feed2" [
   pageno: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -278,23 +296,24 @@ export def "brands-4od-page-pageno-atom Feed2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --platform: string@platform-completer # The platform to use for the query. Alias 'client'.
 ]: nothing -> record<feed: record> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/brands/4od/page-($pageno).atom" $qp)
+  let full_url = (build-url $base ({pageno: (encode-path-segment $pageno)} | format pattern "/brands/4od/page-{pageno}.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # 4oD Popular All Brands Feed
 #
 # GET /brands/4od/popular.atom
 # operationId: 4oD_Popular_All_Brands_Feed
-export def "brands-4od-popularatom Feed" [
+export def "brands-4od-popular-atom list-4o-d-feed" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -302,6 +321,7 @@ export def "brands-4od-popularatom Feed" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --platform: string@platform-completer # The platform to use for the query. Alias 'client'.
 ]: nothing -> record<feed: record> {
@@ -311,14 +331,14 @@ export def "brands-4od-popularatom Feed" [
   let full_url = (build-url $base "/brands/4od/popular.atom" $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # 4oD Popular All Brands Feed(2)
 #
 # GET /brands/4od/popular/page-{pageno}.atom
 # operationId: 4oD_Popular_All_Brands_Feed(2)
-export def "brands-4od-popular-page-pageno-atom Feed2" [
+export def "brands-4od-popular-page-pageno-atom list-4o-d-feed2" [
   pageno: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -327,23 +347,24 @@ export def "brands-4od-popular-page-pageno-atom Feed2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --platform: string@platform-completer # The platform to use for the query. Alias 'client'.
 ]: nothing -> record<feed: record> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/brands/4od/popular/page-($pageno).atom" $qp)
+  let full_url = (build-url $base ({pageno: (encode-path-segment $pageno)} | format pattern "/brands/4od/popular/page-{pageno}.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Popular Brands Feed
 #
 # GET /brands/popular.atom
 # operationId: Popular_Brands_Feed
-export def "brands-popularatom Feed" [
+export def "brands-popular-atom get-feed" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -351,6 +372,7 @@ export def "brands-popularatom Feed" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --platform: string@platform-completer # The platform to use for the query. Alias 'client'.
 ]: nothing -> record<feed: record> {
@@ -360,14 +382,14 @@ export def "brands-popularatom Feed" [
   let full_url = (build-url $base "/brands/popular.atom" $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Popular Brands Feed(2)
 #
 # GET /brands/popular/page-{pageno}.atom
 # operationId: Popular_Brands_Feed(2)
-export def "brands-popular-page-pageno-atom Feed2" [
+export def "brands-popular-page-pageno-atom get-feed2" [
   pageno: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -376,23 +398,24 @@ export def "brands-popular-page-pageno-atom Feed2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --platform: string@platform-completer # The platform to use for the query. Alias 'client'.
 ]: nothing -> record<feed: record> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/brands/popular/page-($pageno).atom" $qp)
+  let full_url = (build-url $base ({pageno: (encode-path-segment $pageno)} | format pattern "/brands/popular/page-{pageno}.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Categories Landing Feed
 #
 # GET /categories.atom
 # operationId: Categories_Landing_Feed
-export def "categoriesatom Feed" [
+export def "categories-atom get-landing-feed" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -400,6 +423,7 @@ export def "categoriesatom Feed" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --platform: string@platform-completer # The platform to use for the query. Alias 'client'.
 ]: nothing -> record<feed: record> {
@@ -409,14 +433,14 @@ export def "categoriesatom Feed" [
   let full_url = (build-url $base "/categories.atom" $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # All Programmes by TX Date
 #
 # GET /categories/{category}.atom
 # operationId: All_Programmes_by_TX_Date
-export def "categories Date" [
+export def "categories list-programmes-by-tx-date" [
   category: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -425,23 +449,24 @@ export def "categories Date" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --platform: string@platform-completer # The platform to use for the query. Alias 'client'.
 ]: nothing -> record<feed: record> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/categories/($category).atom" $qp)
+  let full_url = (build-url $base ({category: (encode-path-segment $category)} | format pattern "/categories/{category}.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # 4oD Programmes by TX Date
 #
 # GET /categories/{category}/4od.atom
 # operationId: 4oD_Programmes_by_TX_Date
-export def "categories-4odatom Date" [
+export def "categories-4od-atom get-4o-d-programmes-by-tx-date" [
   category: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -450,23 +475,24 @@ export def "categories-4odatom Date" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --platform: string@platform-completer # The platform to use for the query. Alias 'client'.
 ]: nothing -> record<feed: record> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/categories/($category)/4od.atom" $qp)
+  let full_url = (build-url $base ({category: (encode-path-segment $category)} | format pattern "/categories/{category}/4od.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # 4oD Programmes by TX Date(4)
 #
 # GET /categories/{category}/4od/page-{pageno}.atom
 # operationId: 4oD_Programmes_by_TX_Date(4)
-export def "categories-4od-page-pageno-atom Date4" [
+export def "categories-4od-page-pageno-atom get-4o-d-programmes-by-tx-date4" [
   category: string
   pageno: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -476,23 +502,24 @@ export def "categories-4od-page-pageno-atom Date4" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --platform: string@platform-completer # The platform to use for the query. Alias 'client'.
 ]: nothing -> record<feed: record> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/categories/($category)/4od/page-($pageno).atom" $qp)
+  let full_url = (build-url $base ({category: (encode-path-segment $category), pageno: (encode-path-segment $pageno)} | format pattern "/categories/{category}/4od/page-{pageno}.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Most Popular Brands Feed
 #
 # GET /categories/{category}/4od/popular.atom
 # operationId: Most_Popular_Brands_Feed
-export def "categories-4od-popularatom Feed" [
+export def "categories-4od-popular-atom get-most-brands-feed" [
   category: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -501,23 +528,24 @@ export def "categories-4od-popularatom Feed" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --platform: string@platform-completer # The platform to use for the query. Alias 'client'.
 ]: nothing -> record<feed: record> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/categories/($category)/4od/popular.atom" $qp)
+  let full_url = (build-url $base ({category: (encode-path-segment $category)} | format pattern "/categories/{category}/4od/popular.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Most Popular Brands Feed(5)
 #
 # GET /categories/{category}/4od/popular/page-{pageno}.atom
 # operationId: Most_Popular_Brands_Feed(5)
-export def "categories-4od-popular-page-pageno-atom Feed5" [
+export def "categories-4od-popular-page-pageno-atom get-most-brands-feed5" [
   category: string
   pageno: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -527,23 +555,24 @@ export def "categories-4od-popular-page-pageno-atom Feed5" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --platform: string@platform-completer # The platform to use for the query. Alias 'client'.
 ]: nothing -> record<feed: record> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/categories/($category)/4od/popular/page-($pageno).atom" $qp)
+  let full_url = (build-url $base ({category: (encode-path-segment $category), pageno: (encode-path-segment $pageno)} | format pattern "/categories/{category}/4od/popular/page-{pageno}.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # 4oD Programmes by Title
 #
 # GET /categories/{category}/4od/title.atom
 # operationId: 4oD_Programmes_by_Title
-export def "categories-4od-titleatom Title" [
+export def "categories-4od-title-atom get-4o-d-programmes" [
   category: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -552,23 +581,24 @@ export def "categories-4od-titleatom Title" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --platform: string@platform-completer # The platform to use for the query. Alias 'client'.
 ]: nothing -> record<feed: record> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/categories/($category)/4od/title.atom" $qp)
+  let full_url = (build-url $base ({category: (encode-path-segment $category)} | format pattern "/categories/{category}/4od/title.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # 4oD Programmes by Title(4)
 #
 # GET /categories/{category}/4od/title/page-{pageno}.atom
 # operationId: 4oD_Programmes_by_Title(4)
-export def "categories-4od-title-page-pageno-atom Title4" [
+export def "categories-4od-title-page-pageno-atom get-4o-d-programmes-by-title4" [
   category: string
   pageno: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -578,23 +608,24 @@ export def "categories-4od-title-page-pageno-atom Title4" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --platform: string@platform-completer # The platform to use for the query. Alias 'client'.
 ]: nothing -> record<feed: record> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/categories/($category)/4od/title/page-($pageno).atom" $qp)
+  let full_url = (build-url $base ({category: (encode-path-segment $category), pageno: (encode-path-segment $pageno)} | format pattern "/categories/{category}/4od/title/page-{pageno}.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # All Programmes by TX Date(2)
 #
 # GET /categories/{category}/channel/{channel}.atom
 # operationId: All_Programmes_by_TX_Date(2)
-export def "categories-channel Date2" [
+export def "categories-channel list-programmes-by-tx-date2" [
   category: string
   channel: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -604,23 +635,24 @@ export def "categories-channel Date2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --platform: string@platform-completer # The platform to use for the query. Alias 'client'.
 ]: nothing -> record<feed: record> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/categories/($category)/channel/($channel).atom" $qp)
+  let full_url = (build-url $base ({category: (encode-path-segment $category), channel: (encode-path-segment $channel)} | format pattern "/categories/{category}/channel/{channel}.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # 4oD Programmes by TX Date(2)
 #
 # GET /categories/{category}/channel/{channel}/4od.atom
 # operationId: 4oD_Programmes_by_TX_Date(2)
-export def "categories-channel-4odatom Date2" [
+export def "categories-channel-4od-atom get-4o-d-programmes-by-tx-date2" [
   category: string
   channel: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -630,23 +662,24 @@ export def "categories-channel-4odatom Date2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --platform: string@platform-completer # The platform to use for the query. Alias 'client'.
 ]: nothing -> record<feed: record> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/categories/($category)/channel/($channel)/4od.atom" $qp)
+  let full_url = (build-url $base ({category: (encode-path-segment $category), channel: (encode-path-segment $channel)} | format pattern "/categories/{category}/channel/{channel}/4od.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # 4oD Programmes by TX Date(5)
 #
 # GET /categories/{category}/channel/{channel}/4od/page-{pageno}.atom
 # operationId: 4oD_Programmes_by_TX_Date(5)
-export def "categories-channel-4od-page-pageno-atom Date5" [
+export def "categories-channel-4od-page-pageno-atom get-4o-d-programmes-by-tx-date5" [
   category: string
   channel: string
   pageno: int
@@ -657,23 +690,24 @@ export def "categories-channel-4od-page-pageno-atom Date5" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --platform: string@platform-completer # The platform to use for the query. Alias 'client'.
 ]: nothing -> record<feed: record> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/categories/($category)/channel/($channel)/4od/page-($pageno).atom" $qp)
+  let full_url = (build-url $base ({category: (encode-path-segment $category), channel: (encode-path-segment $channel), pageno: (encode-path-segment $pageno)} | format pattern "/categories/{category}/channel/{channel}/4od/page-{pageno}.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Most Popular Brands Feed(3)
 #
 # GET /categories/{category}/channel/{channel}/4od/popular.atom
 # operationId: Most_Popular_Brands_Feed(3)
-export def "categories-channel-4od-popularatom Feed3" [
+export def "categories-channel-4od-popular-atom get-most-brands-feed3" [
   category: string
   channel: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -683,23 +717,24 @@ export def "categories-channel-4od-popularatom Feed3" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --platform: string@platform-completer # The platform to use for the query. Alias 'client'.
 ]: nothing -> record<feed: record> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/categories/($category)/channel/($channel)/4od/popular.atom" $qp)
+  let full_url = (build-url $base ({category: (encode-path-segment $category), channel: (encode-path-segment $channel)} | format pattern "/categories/{category}/channel/{channel}/4od/popular.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Most Popular Brands Feed(7)
 #
 # GET /categories/{category}/channel/{channel}/4od/popular/page-{pageno}.atom
 # operationId: Most_Popular_Brands_Feed(7)
-export def "categories-channel-4od-popular-page-pageno-atom Feed7" [
+export def "categories-channel-4od-popular-page-pageno-atom get-most-brands-feed7" [
   category: string
   channel: string
   pageno: int
@@ -710,23 +745,24 @@ export def "categories-channel-4od-popular-page-pageno-atom Feed7" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --platform: string@platform-completer # The platform to use for the query. Alias 'client'.
 ]: nothing -> record<feed: record> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/categories/($category)/channel/($channel)/4od/popular/page-($pageno).atom" $qp)
+  let full_url = (build-url $base ({category: (encode-path-segment $category), channel: (encode-path-segment $channel), pageno: (encode-path-segment $pageno)} | format pattern "/categories/{category}/channel/{channel}/4od/popular/page-{pageno}.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # 4oD Programmes by Title(2)
 #
 # GET /categories/{category}/channel/{channel}/4od/title.atom
 # operationId: 4oD_Programmes_by_Title(2)
-export def "categories-channel-4od-titleatom Title2" [
+export def "categories-channel-4od-title-atom get-4o-d-programmes-by-title2" [
   category: string
   channel: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -736,23 +772,24 @@ export def "categories-channel-4od-titleatom Title2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --platform: string@platform-completer # The platform to use for the query. Alias 'client'.
 ]: nothing -> record<feed: record> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/categories/($category)/channel/($channel)/4od/title.atom" $qp)
+  let full_url = (build-url $base ({category: (encode-path-segment $category), channel: (encode-path-segment $channel)} | format pattern "/categories/{category}/channel/{channel}/4od/title.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # 4oD Programmes by Title(5)
 #
 # GET /categories/{category}/channel/{channel}/4od/title/page-{pageno}.atom
 # operationId: 4oD_Programmes_by_Title(5)
-export def "categories-channel-4od-title-page-pageno-atom Title5" [
+export def "categories-channel-4od-title-page-pageno-atom get-4o-d-programmes-by-title5" [
   category: string
   channel: string
   pageno: int
@@ -763,23 +800,24 @@ export def "categories-channel-4od-title-page-pageno-atom Title5" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --platform: string@platform-completer # The platform to use for the query. Alias 'client'.
 ]: nothing -> record<feed: record> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/categories/($category)/channel/($channel)/4od/title/page-($pageno).atom" $qp)
+  let full_url = (build-url $base ({category: (encode-path-segment $category), channel: (encode-path-segment $channel), pageno: (encode-path-segment $pageno)} | format pattern "/categories/{category}/channel/{channel}/4od/title/page-{pageno}.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # All Programmes by TX Date(5)
 #
 # GET /categories/{category}/channel/{channel}/page-{pageno}.atom
 # operationId: All_Programmes_by_TX_Date(5)
-export def "categories-channel-page-pageno-atom Date5" [
+export def "categories-channel-page-pageno-atom list-programmes-by-tx-date5" [
   category: string
   channel: string
   pageno: int
@@ -790,23 +828,24 @@ export def "categories-channel-page-pageno-atom Date5" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --platform: string@platform-completer # The platform to use for the query. Alias 'client'.
 ]: nothing -> record<feed: record> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/categories/($category)/channel/($channel)/page-($pageno).atom" $qp)
+  let full_url = (build-url $base ({category: (encode-path-segment $category), channel: (encode-path-segment $channel), pageno: (encode-path-segment $pageno)} | format pattern "/categories/{category}/channel/{channel}/page-{pageno}.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # All Programmes by Title(2)
 #
 # GET /categories/{category}/channel/{channel}/title.atom
 # operationId: All_Programmes_by_Title(2)
-export def "categories-channel-titleatom Title2" [
+export def "categories-channel-title-atom list-programmes-by-title2" [
   category: string
   channel: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -816,23 +855,24 @@ export def "categories-channel-titleatom Title2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --platform: string@platform-completer # The platform to use for the query. Alias 'client'.
 ]: nothing -> record<feed: record> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/categories/($category)/channel/($channel)/title.atom" $qp)
+  let full_url = (build-url $base ({category: (encode-path-segment $category), channel: (encode-path-segment $channel)} | format pattern "/categories/{category}/channel/{channel}/title.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # All Programmes by Title(5)
 #
 # GET /categories/{category}/channel/{channel}/title/page-{pageno}.atom
 # operationId: All_Programmes_by_Title(5)
-export def "categories-channel-title-page-pageno-atom Title5" [
+export def "categories-channel-title-page-pageno-atom list-programmes-by-title5" [
   category: string
   channel: string
   pageno: int
@@ -843,23 +883,24 @@ export def "categories-channel-title-page-pageno-atom Title5" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --platform: string@platform-completer # The platform to use for the query. Alias 'client'.
 ]: nothing -> record<feed: record> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/categories/($category)/channel/($channel)/title/page-($pageno).atom" $qp)
+  let full_url = (build-url $base ({category: (encode-path-segment $category), channel: (encode-path-segment $channel), pageno: (encode-path-segment $pageno)} | format pattern "/categories/{category}/channel/{channel}/title/page-{pageno}.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # All Programmes by TX Date(3)
 #
 # GET /categories/{category}/derived/ad.atom
 # operationId: All_Programmes_by_TX_Date(3)
-export def "categories-derived-adatom Date3" [
+export def "categories-derived-ad-atom list-programmes-by-tx-date3" [
   category: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -868,23 +909,24 @@ export def "categories-derived-adatom Date3" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --platform: string@platform-completer # The platform to use for the query. Alias 'client'.
 ]: nothing -> record<feed: record> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/categories/($category)/derived/ad.atom" $qp)
+  let full_url = (build-url $base ({category: (encode-path-segment $category)} | format pattern "/categories/{category}/derived/ad.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # 4oD Programmes by TX Date(3)
 #
 # GET /categories/{category}/derived/ad/4od.atom
 # operationId: 4oD_Programmes_by_TX_Date(3)
-export def "categories-derived-ad-4odatom Date3" [
+export def "categories-derived-ad-4od-atom get-4o-d-programmes-by-tx-date3" [
   category: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -893,23 +935,24 @@ export def "categories-derived-ad-4odatom Date3" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --platform: string@platform-completer # The platform to use for the query. Alias 'client'.
 ]: nothing -> record<feed: record> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/categories/($category)/derived/ad/4od.atom" $qp)
+  let full_url = (build-url $base ({category: (encode-path-segment $category)} | format pattern "/categories/{category}/derived/ad/4od.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # 4oD Programmes by TX Date(6)
 #
 # GET /categories/{category}/derived/ad/4od/page-{pageno}.atom
 # operationId: 4oD_Programmes_by_TX_Date(6)
-export def "categories-derived-ad-4od-page-pageno-atom Date6" [
+export def "categories-derived-ad-4od-page-pageno-atom get-4o-d-programmes-by-tx-date6" [
   category: string
   pageno: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -919,23 +962,24 @@ export def "categories-derived-ad-4od-page-pageno-atom Date6" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --platform: string@platform-completer # The platform to use for the query. Alias 'client'.
 ]: nothing -> record<feed: record> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/categories/($category)/derived/ad/4od/page-($pageno).atom" $qp)
+  let full_url = (build-url $base ({category: (encode-path-segment $category), pageno: (encode-path-segment $pageno)} | format pattern "/categories/{category}/derived/ad/4od/page-{pageno}.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Most Popular Brands Feed(4)
 #
 # GET /categories/{category}/derived/ad/4od/popular.atom
 # operationId: Most_Popular_Brands_Feed(4)
-export def "categories-derived-ad-4od-popularatom Feed4" [
+export def "categories-derived-ad-4od-popular-atom get-most-brands-feed4" [
   category: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -944,23 +988,24 @@ export def "categories-derived-ad-4od-popularatom Feed4" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --platform: string@platform-completer # The platform to use for the query. Alias 'client'.
 ]: nothing -> record<feed: record> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/categories/($category)/derived/ad/4od/popular.atom" $qp)
+  let full_url = (build-url $base ({category: (encode-path-segment $category)} | format pattern "/categories/{category}/derived/ad/4od/popular.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Most Popular Brands Feed(8)
 #
 # GET /categories/{category}/derived/ad/4od/popular/page-{pageno}.atom
 # operationId: Most_Popular_Brands_Feed(8)
-export def "categories-derived-ad-4od-popular-page-pageno-atom Feed8" [
+export def "categories-derived-ad-4od-popular-page-pageno-atom get-most-brands-feed8" [
   category: string
   pageno: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -970,23 +1015,24 @@ export def "categories-derived-ad-4od-popular-page-pageno-atom Feed8" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --platform: string@platform-completer # The platform to use for the query. Alias 'client'.
 ]: nothing -> record<feed: record> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/categories/($category)/derived/ad/4od/popular/page-($pageno).atom" $qp)
+  let full_url = (build-url $base ({category: (encode-path-segment $category), pageno: (encode-path-segment $pageno)} | format pattern "/categories/{category}/derived/ad/4od/popular/page-{pageno}.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # 4oD Programmes by Title(3)
 #
 # GET /categories/{category}/derived/ad/4od/title.atom
 # operationId: 4oD_Programmes_by_Title(3)
-export def "categories-derived-ad-4od-titleatom Title3" [
+export def "categories-derived-ad-4od-title-atom get-4o-d-programmes-by-title3" [
   category: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -995,23 +1041,24 @@ export def "categories-derived-ad-4od-titleatom Title3" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --platform: string@platform-completer # The platform to use for the query. Alias 'client'.
 ]: nothing -> record<feed: record> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/categories/($category)/derived/ad/4od/title.atom" $qp)
+  let full_url = (build-url $base ({category: (encode-path-segment $category)} | format pattern "/categories/{category}/derived/ad/4od/title.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # 4oD Programmes by Title(6)
 #
 # GET /categories/{category}/derived/ad/4od/title/page-{pageno}.atom
 # operationId: 4oD_Programmes_by_Title(6)
-export def "categories-derived-ad-4od-title-page-pageno-atom Title6" [
+export def "categories-derived-ad-4od-title-page-pageno-atom get-4o-d-programmes-by-title6" [
   category: string
   pageno: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1021,23 +1068,24 @@ export def "categories-derived-ad-4od-title-page-pageno-atom Title6" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --platform: string@platform-completer # The platform to use for the query. Alias 'client'.
 ]: nothing -> record<feed: record> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/categories/($category)/derived/ad/4od/title/page-($pageno).atom" $qp)
+  let full_url = (build-url $base ({category: (encode-path-segment $category), pageno: (encode-path-segment $pageno)} | format pattern "/categories/{category}/derived/ad/4od/title/page-{pageno}.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # All Programmes by TX Date(6)
 #
 # GET /categories/{category}/derived/ad/page-{pageno}.atom
 # operationId: All_Programmes_by_TX_Date(6)
-export def "categories-derived-ad-page-pageno-atom Date6" [
+export def "categories-derived-ad-page-pageno-atom list-programmes-by-tx-date6" [
   category: string
   pageno: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1047,23 +1095,24 @@ export def "categories-derived-ad-page-pageno-atom Date6" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --platform: string@platform-completer # The platform to use for the query. Alias 'client'.
 ]: nothing -> record<feed: record> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/categories/($category)/derived/ad/page-($pageno).atom" $qp)
+  let full_url = (build-url $base ({category: (encode-path-segment $category), pageno: (encode-path-segment $pageno)} | format pattern "/categories/{category}/derived/ad/page-{pageno}.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # All Programmes by Title(3)
 #
 # GET /categories/{category}/derived/ad/title.atom
 # operationId: All_Programmes_by_Title(3)
-export def "categories-derived-ad-titleatom Title3" [
+export def "categories-derived-ad-title-atom list-programmes-by-title3" [
   category: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1072,23 +1121,24 @@ export def "categories-derived-ad-titleatom Title3" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --platform: string@platform-completer # The platform to use for the query. Alias 'client'.
 ]: nothing -> record<feed: record> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/categories/($category)/derived/ad/title.atom" $qp)
+  let full_url = (build-url $base ({category: (encode-path-segment $category)} | format pattern "/categories/{category}/derived/ad/title.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # All Programmes by Title(6)
 #
 # GET /categories/{category}/derived/ad/title/page-{pageno}.atom
 # operationId: All_Programmes_by_Title(6)
-export def "categories-derived-ad-title-page-pageno-atom Title6" [
+export def "categories-derived-ad-title-page-pageno-atom list-programmes-by-title6" [
   category: string
   pageno: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1098,23 +1148,24 @@ export def "categories-derived-ad-title-page-pageno-atom Title6" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --platform: string@platform-completer # The platform to use for the query. Alias 'client'.
 ]: nothing -> record<feed: record> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/categories/($category)/derived/ad/title/page-($pageno).atom" $qp)
+  let full_url = (build-url $base ({category: (encode-path-segment $category), pageno: (encode-path-segment $pageno)} | format pattern "/categories/{category}/derived/ad/title/page-{pageno}.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # All Programmes by TX Date(4)
 #
 # GET /categories/{category}/page-{pageno}.atom
 # operationId: All_Programmes_by_TX_Date(4)
-export def "categories-page-pageno-atom Date4" [
+export def "categories-page-pageno-atom list-programmes-by-tx-date4" [
   category: string
   pageno: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1124,23 +1175,24 @@ export def "categories-page-pageno-atom Date4" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --platform: string@platform-completer # The platform to use for the query. Alias 'client'.
 ]: nothing -> record<feed: record> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/categories/($category)/page-($pageno).atom" $qp)
+  let full_url = (build-url $base ({category: (encode-path-segment $category), pageno: (encode-path-segment $pageno)} | format pattern "/categories/{category}/page-{pageno}.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Most Popular Brands Feed(2)
 #
 # GET /categories/{category}/popular.atom
 # operationId: Most_Popular_Brands_Feed(2)
-export def "categories-popularatom Feed2" [
+export def "categories-popular-atom get-most-brands-feed2" [
   category: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1149,23 +1201,24 @@ export def "categories-popularatom Feed2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --platform: string@platform-completer # The platform to use for the query. Alias 'client'.
 ]: nothing -> record<feed: record> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/categories/($category)/popular.atom" $qp)
+  let full_url = (build-url $base ({category: (encode-path-segment $category)} | format pattern "/categories/{category}/popular.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Most Popular Brands Feed(6)
 #
 # GET /categories/{category}/popular/page-{pageno}.atom
 # operationId: Most_Popular_Brands_Feed(6)
-export def "categories-popular-page-pageno-atom Feed6" [
+export def "categories-popular-page-pageno-atom get-most-brands-feed6" [
   category: string
   pageno: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1175,23 +1228,24 @@ export def "categories-popular-page-pageno-atom Feed6" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --platform: string@platform-completer # The platform to use for the query. Alias 'client'.
 ]: nothing -> record<feed: record> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/categories/($category)/popular/page-($pageno).atom" $qp)
+  let full_url = (build-url $base ({category: (encode-path-segment $category), pageno: (encode-path-segment $pageno)} | format pattern "/categories/{category}/popular/page-{pageno}.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # All Programmes by Title
 #
 # GET /categories/{category}/title.atom
 # operationId: All_Programmes_by_Title
-export def "categories-titleatom Title" [
+export def "categories-title-atom list-programmes" [
   category: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1200,23 +1254,24 @@ export def "categories-titleatom Title" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --platform: string@platform-completer # The platform to use for the query. Alias 'client'.
 ]: nothing -> record<feed: record> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/categories/($category)/title.atom" $qp)
+  let full_url = (build-url $base ({category: (encode-path-segment $category)} | format pattern "/categories/{category}/title.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # All Programmes by Title(4)
 #
 # GET /categories/{category}/title/page-{pageno}.atom
 # operationId: All_Programmes_by_Title(4)
-export def "categories-title-page-pageno-atom Title4" [
+export def "categories-title-page-pageno-atom list-programmes-by-title4" [
   category: string
   pageno: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1226,23 +1281,24 @@ export def "categories-title-page-pageno-atom Title4" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --platform: string@platform-completer # The platform to use for the query. Alias 'client'.
 ]: nothing -> record<feed: record> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/categories/($category)/title/page-($pageno).atom" $qp)
+  let full_url = (build-url $base ({category: (encode-path-segment $category), pageno: (encode-path-segment $pageno)} | format pattern "/categories/{category}/title/page-{pageno}.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Collections Feed(2)
 #
 # GET /collections/{collection_name}.atom
 # operationId: Collections_Feed(2)
-export def "collections Feed2" [
+export def "collections get-feed2" [
   collection_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1251,23 +1307,24 @@ export def "collections Feed2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --platform: string@platform-completer # The platform to use for the query. Alias 'client'.
 ]: nothing -> record<feed: record> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/collections/($collection_name).atom" $qp)
+  let full_url = (build-url $base ({collection_name: (encode-path-segment $collection_name)} | format pattern "/collections/{collection_name}.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Collections Feed
 #
 # GET /collections/{collection_name}/4od.atom
 # operationId: Collections_Feed
-export def "collections-4odatom Feed" [
+export def "collections-4od-atom get-feed" [
   collection_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1276,23 +1333,24 @@ export def "collections-4odatom Feed" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --platform: string@platform-completer # The platform to use for the query. Alias 'client'.
 ]: nothing -> record<feed: record> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/collections/($collection_name)/4od.atom" $qp)
+  let full_url = (build-url $base ({collection_name: (encode-path-segment $collection_name)} | format pattern "/collections/{collection_name}/4od.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Flattened Collection Feed(2)
 #
 # GET /collections/{collection_name}/flattened.atom
 # operationId: Flattened_Collection_Feed(2)
-export def "collections-flattenedatom Feed2" [
+export def "collections-flattened-atom get-feed2" [
   collection_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1301,23 +1359,24 @@ export def "collections-flattenedatom Feed2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --platform: string@platform-completer # The platform to use for the query. Alias 'client'.
 ]: nothing -> record<feed: record> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/collections/($collection_name)/flattened.atom" $qp)
+  let full_url = (build-url $base ({collection_name: (encode-path-segment $collection_name)} | format pattern "/collections/{collection_name}/flattened.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Flattened Collection Feed
 #
 # GET /collections/{collection_name}/flattened/4od.atom
 # operationId: Flattened_Collection_Feed
-export def "collections-flattened-4odatom Feed" [
+export def "collections-flattened-4od-atom get-feed" [
   collection_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1326,23 +1385,24 @@ export def "collections-flattened-4odatom Feed" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --platform: string@platform-completer # The platform to use for the query. Alias 'client'.
 ]: nothing -> record<feed: record> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/collections/($collection_name)/flattened/4od.atom" $qp)
+  let full_url = (build-url $base ({collection_name: (encode-path-segment $collection_name)} | format pattern "/collections/{collection_name}/flattened/4od.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Coming Soon feed
 #
 # GET /coming-soon.atom
 # operationId: Coming_Soon_feed
-export def "coming-soonatom feed" [
+export def "coming-soon-atom get-feed" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1350,6 +1410,7 @@ export def "coming-soonatom feed" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --platform: string@platform-completer # The platform to use for the query. Alias 'client'.
 ]: nothing -> record<feed: record> {
@@ -1359,14 +1420,14 @@ export def "coming-soonatom feed" [
   let full_url = (build-url $base "/coming-soon.atom" $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Coming Soon feed(2)
 #
 # GET /coming-soon/{category}.atom
 # operationId: Coming_Soon_feed(2)
-export def "coming-soon feed2" [
+export def "coming-soon get-feed2" [
   category: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1375,23 +1436,24 @@ export def "coming-soon feed2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --platform: string@platform-completer # The platform to use for the query. Alias 'client'.
 ]: nothing -> record<feed: record> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/coming-soon/($category).atom" $qp)
+  let full_url = (build-url $base ({category: (encode-path-segment $category)} | format pattern "/coming-soon/{category}.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Programme Feed
 #
 # GET /programme/{programme-id}.atom
 # operationId: Programme_Feed
-export def "programme Feed" [
+export def "programme get-feed" [
   programme_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1400,23 +1462,24 @@ export def "programme Feed" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --platform: string@platform-completer # The platform to use for the query. Alias 'client'.
 ]: nothing -> record<feed: record> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/programme/($programme_id).atom" $qp)
+  let full_url = (build-url $base ({programme_id: (encode-path-segment $programme_id)} | format pattern "/programme/{programme_id}.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Search Feed
 #
 # GET /search.atom
 # operationId: Search_Feed
-export def "searchatom Feed" [
+export def "search-atom list-feed" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1424,6 +1487,7 @@ export def "searchatom Feed" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --platform: string@platform-completer # The platform to use for the query. Alias 'client'.
   --q: string # The programme name to look for, minimum length: 2 chars.Looking for programme names with special chars might be URL encoded.
@@ -1434,14 +1498,14 @@ export def "searchatom Feed" [
   let full_url = (build-url $base "/search.atom" $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Search Feed(3)
 #
 # GET /search/page-{pageno}.atom
 # operationId: Search_Feed(3)
-export def "search-page-pageno-atom Feed3" [
+export def "search-page-pageno-atom list-feed3" [
   pageno: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1450,6 +1514,7 @@ export def "search-page-pageno-atom Feed3" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --platform: string@platform-completer # The platform to use for the query. Alias 'client'.
   --q: string # The programme name to look for, minimum length: 2 chars.Looking for programme names with special chars might be URL encoded.
@@ -1457,17 +1522,17 @@ export def "search-page-pageno-atom Feed3" [
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "platform" $platform "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/search/page-($pageno).atom" $qp)
+  let full_url = (build-url $base ({pageno: (encode-path-segment $pageno)} | format pattern "/search/page-{pageno}.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Search Feed(2)
 #
 # GET /search/{q}.atom
 # operationId: Search_Feed(2)
-export def "search Feed2" [
+export def "search list-feed2" [
   q: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1476,23 +1541,24 @@ export def "search Feed2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --platform: string@platform-completer # The platform to use for the query. Alias 'client'.
 ]: nothing -> record<feed: record> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/search/($q).atom" $qp)
+  let full_url = (build-url $base ({q: (encode-path-segment $q)} | format pattern "/search/{q}.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Search Feed(4)
 #
 # GET /search/{q}/page-{pageno}.atom
 # operationId: Search_Feed(4)
-export def "search-page-pageno-atom Feed4" [
+export def "search-page-pageno-atom list-feed4" [
   q: string
   pageno: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1502,23 +1568,24 @@ export def "search-page-pageno-atom Feed4" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --platform: string@platform-completer # The platform to use for the query. Alias 'client'.
 ]: nothing -> record<feed: record> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/search/($q)/page-($pageno).atom" $qp)
+  let full_url = (build-url $base ({q: (encode-path-segment $q), pageno: (encode-path-segment $pageno)} | format pattern "/search/{q}/page-{pageno}.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # TV Listings Feed
 #
 # GET /tv-listings/daily/{yyyy}/{mm}/{dd}.atom
 # operationId: TV_Listings_Feed
-export def "tv-listings-daily Feed" [
+export def "tv-listings-daily get-feed" [
   yyyy: string
   mm: string
   dd: string
@@ -1529,23 +1596,24 @@ export def "tv-listings-daily Feed" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --platform: string@platform-completer # The platform to use for the query. Alias 'client'.
 ]: nothing -> record<feed: record> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/tv-listings/daily/($yyyy)/($mm)/($dd).atom" $qp)
+  let full_url = (build-url $base ({yyyy: (encode-path-segment $yyyy), mm: (encode-path-segment $mm), dd: (encode-path-segment $dd)} | format pattern "/tv-listings/daily/{yyyy}/{mm}/{dd}.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # TV Listings Feed(2)
 #
 # GET /tv-listings/daily/{yyyy}/{mm}/{dd}/{channel}.atom
 # operationId: TV_Listings_Feed(2)
-export def "tv-listings-daily Feed2" [
+export def "tv-listings-daily get-feed2" [
   yyyy: string
   mm: string
   dd: string
@@ -1557,23 +1625,24 @@ export def "tv-listings-daily Feed2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --platform: string@platform-completer # The platform to use for the query. Alias 'client'.
 ]: nothing -> record<feed: record> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/tv-listings/daily/($yyyy)/($mm)/($dd)/($channel).atom" $qp)
+  let full_url = (build-url $base ({yyyy: (encode-path-segment $yyyy), mm: (encode-path-segment $mm), dd: (encode-path-segment $dd), channel: (encode-path-segment $channel)} | format pattern "/tv-listings/daily/{yyyy}/{mm}/{dd}/{channel}.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Hub Feed
 #
 # GET /{brand-web-safe-title}.atom
 # operationId: Hub_Feed
-export def "metadataresources Feed" [
+export def "metadataresources get-hub-feed" [
   brand_web_safe_title: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1582,23 +1651,24 @@ export def "metadataresources Feed" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --platform: string@platform-completer # The platform to use for the query. Alias 'client'.
 ]: nothing -> record<feed: record> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($brand_web_safe_title).atom" $qp)
+  let full_url = (build-url $base ({brand_web_safe_title: (encode-path-segment $brand_web_safe_title)} | format pattern "/{brand_web_safe_title}.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # 4oD Feed
 #
 # GET /{brand-web-safe-title}/4od.atom
 # operationId: 4oD_Feed
-export def "4odatom Feed" [
+export def "4od-atom get-4o-d-feed" [
   brand_web_safe_title: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1607,23 +1677,24 @@ export def "4odatom Feed" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --platform: string@platform-completer # The platform to use for the query. Alias 'client'.
 ]: nothing -> record<feed: record> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($brand_web_safe_title)/4od.atom" $qp)
+  let full_url = (build-url $base ({brand_web_safe_title: (encode-path-segment $brand_web_safe_title)} | format pattern "/{brand_web_safe_title}/4od.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Brand EPG Atom Feed
 #
 # GET /{brand-web-safe-title}/epg.atom
 # operationId: Brand_EPG_Atom_Feed
-export def "epgatom Feed" [
+export def "epg-atom get-feed" [
   brand_web_safe_title: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1632,23 +1703,24 @@ export def "epgatom Feed" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --platform: string@platform-completer # The platform to use for the query. Alias 'client'.
 ]: nothing -> record<feed: record> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($brand_web_safe_title)/epg.atom" $qp)
+  let full_url = (build-url $base ({brand_web_safe_title: (encode-path-segment $brand_web_safe_title)} | format pattern "/{brand_web_safe_title}/epg.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Episode Guide Feed Series Landing
 #
 # GET /{brand-web-safe-title}/episode-guide.atom
 # operationId: Episode_Guide_Feed_Series_Landing
-export def "episode-guideatom Landing" [
+export def "episode-guide-atom get-feed-series-landing" [
   brand_web_safe_title: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1657,23 +1729,24 @@ export def "episode-guideatom Landing" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --platform: string@platform-completer # The platform to use for the query. Alias 'client'.
 ]: nothing -> record<feed: record> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($brand_web_safe_title)/episode-guide.atom" $qp)
+  let full_url = (build-url $base ({brand_web_safe_title: (encode-path-segment $brand_web_safe_title)} | format pattern "/{brand_web_safe_title}/episode-guide.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Episode Guide Feed Series Detail
 #
 # GET /{brand-web-safe-title}/episode-guide/series-{series_number}.atom
 # operationId: Episode_Guide_Feed_Series_Detail
-export def "episode-guide-series-series-number-atom Detail" [
+export def "episode-guide-series-series-number-atom get-feed-detail" [
   brand_web_safe_title: string
   series_number: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1683,23 +1756,24 @@ export def "episode-guide-series-series-number-atom Detail" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --platform: string@platform-completer # The platform to use for the query. Alias 'client'.
 ]: nothing -> record<feed: record> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($brand_web_safe_title)/episode-guide/series-($series_number).atom" $qp)
+  let full_url = (build-url $base ({brand_web_safe_title: (encode-path-segment $brand_web_safe_title), series_number: (encode-path-segment $series_number)} | format pattern "/{brand_web_safe_title}/episode-guide/series-{series_number}.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Episode Guide Feed Episode Detail
 #
 # GET /{brand-web-safe-title}/episode-guide/series-{series_number}/episode-{episode_number}.atom
 # operationId: Episode_Guide_Feed_Episode_Detail
-export def "episode-guide-series-series-number-episode-episode-number-atom Detail" [
+export def "episode-guide-series-series-number-episode-episode-number-atom get-feed-detail" [
   brand_web_safe_title: string
   series_number: string
   episode_number: string
@@ -1710,23 +1784,24 @@ export def "episode-guide-series-series-number-episode-episode-number-atom Detai
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --platform: string@platform-completer # The platform to use for the query. Alias 'client'.
 ]: nothing -> record<feed: record> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($brand_web_safe_title)/episode-guide/series-($series_number)/episode-($episode_number).atom" $qp)
+  let full_url = (build-url $base ({brand_web_safe_title: (encode-path-segment $brand_web_safe_title), series_number: (encode-path-segment $series_number), episode_number: (encode-path-segment $episode_number)} | format pattern "/{brand_web_safe_title}/episode-guide/series-{series_number}/episode-{episode_number}.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Clips Landing Feed Brand Series and Episode Levels
 #
 # GET /{brand-web-safe-title}/videos/all.atom
 # operationId: Clips_Landing_Feed_Brand_Series_and_Episode_Levels
-export def "videos-allatom Levels" [
+export def "videos-all-atom get-clips-landing-feed-series-and-episode-levels" [
   brand_web_safe_title: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1735,23 +1810,24 @@ export def "videos-allatom Levels" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --platform: string@platform-completer # The platform to use for the query. Alias 'client'.
 ]: nothing -> record<feed: record> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($brand_web_safe_title)/videos/all.atom" $qp)
+  let full_url = (build-url $base ({brand_web_safe_title: (encode-path-segment $brand_web_safe_title)} | format pattern "/{brand_web_safe_title}/videos/all.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Clips Landing Feed Brand Series and Episode Levels(2)
 #
 # GET /{brand-web-safe-title}/videos/series-{series_number}.atom
 # operationId: Clips_Landing_Feed_Brand_Series_and_Episode_Levels(2)
-export def "videos-series-series-number-atom Levels2" [
+export def "videos-series-series-number-atom get-clips-landing-feed-and-episode-levels2" [
   brand_web_safe_title: string
   series_number: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1761,23 +1837,24 @@ export def "videos-series-series-number-atom Levels2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --platform: string@platform-completer # The platform to use for the query. Alias 'client'.
 ]: nothing -> record<feed: record> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($brand_web_safe_title)/videos/series-($series_number).atom" $qp)
+  let full_url = (build-url $base ({brand_web_safe_title: (encode-path-segment $brand_web_safe_title), series_number: (encode-path-segment $series_number)} | format pattern "/{brand_web_safe_title}/videos/series-{series_number}.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Clips Landing Feed Brand Series and Episode Levels(3)
 #
 # GET /{brand-web-safe-title}/videos/series-{series_number}/episode-{episode_number}.atom
 # operationId: Clips_Landing_Feed_Brand_Series_and_Episode_Levels(3)
-export def "videos-series-series-number-episode-episode-number-atom Levels3" [
+export def "videos-series-series-number-episode-episode-number-atom get-clips-landing-feed-and-levels3" [
   brand_web_safe_title: string
   series_number: string
   episode_number: string
@@ -1788,23 +1865,24 @@ export def "videos-series-series-number-episode-episode-number-atom Levels3" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --platform: string@platform-completer # The platform to use for the query. Alias 'client'.
 ]: nothing -> record<feed: record> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($brand_web_safe_title)/videos/series-($series_number)/episode-($episode_number).atom" $qp)
+  let full_url = (build-url $base ({brand_web_safe_title: (encode-path-segment $brand_web_safe_title), series_number: (encode-path-segment $series_number), episode_number: (encode-path-segment $episode_number)} | format pattern "/{brand_web_safe_title}/videos/series-{series_number}/episode-{episode_number}.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Clip Detail Atom Feed
 #
 # GET /{brand-web-safe-title}/videos/{clip-asset-id}.atom
 # operationId: Clip_Detail_Atom_Feed
-export def "videos Feed" [
+export def "videos get-detail-atom-feed" [
   brand_web_safe_title: string
   clip_asset_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1814,14 +1892,15 @@ export def "videos Feed" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --platform: string@platform-completer # The platform to use for the query. Alias 'client'.
 ]: nothing -> record<feed: record> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($brand_web_safe_title)/videos/($clip_asset_id).atom" $qp)
+  let full_url = (build-url $base ({brand_web_safe_title: (encode-path-segment $brand_web_safe_title), clip_asset_id: (encode-path-segment $clip_asset_id)} | format pattern "/{brand_web_safe_title}/videos/{clip_asset_id}.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }

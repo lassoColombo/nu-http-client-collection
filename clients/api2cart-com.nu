@@ -19,21 +19,32 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 }
 
 # Serialize a single query parameter based on collection style
+# Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
+# ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = ($name | url encode)
+  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
-  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
-    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
-    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
+    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
+    _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
+}
+
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Build URL from base, path, and optional query string
@@ -45,7 +56,7 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
@@ -54,13 +65,13 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
     "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "put" => { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "patch" => { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
   if ($method in ["head" "options"]) { return $resp }
-  if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
+  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
 def base-url-completer [] { ["https://api.api2cart.com/v1.1"] }
@@ -82,8 +93,8 @@ def type-completer-3 [] { ["option_type_checkbox" "option_type_date" "option_typ
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "accountcartaddjson AccountCartAdd" } } | get name | first)
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "account-cart-add-json create" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -107,8 +118,8 @@ export def commands []: nothing -> table {
 #
 # POST /account.cart.add.json
 # operationId: AccountCartAdd
-# --hybris_websites item shape: {storeIds: list, uid: string, url: string}
-export def "accountcartaddjson AccountCartAdd" [
+# --hybris_websites item shape: {storeIds: list<string>, uid: string, url: string}
+export def "account-cart-add-json create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -116,6 +127,7 @@ export def "accountcartaddjson AccountCartAdd" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --3dcart-access-token: string # 3DCart Token
   --3dcart-private-key: string # 3DCart Private Key
@@ -174,7 +186,7 @@ export def "accountcartaddjson AccountCartAdd" [
   --hybris-client-secret: string # Omni Commerce Connector Client Secret
   --hybris-password: string # User password
   --hybris-username: string # User Name
-  --hybris-websites: list # Websites to stores mapping data — item shape: {storeIds: list, uid: string, url: string}
+  --hybris-websites: list # Websites to stores mapping data — item shape: {storeIds: list<string>, uid: string, url: string}
   --lightspeed-api-key: string # LightSpeed api key
   --lightspeed-api-secret: string # LightSpeed api secret
   --magento-access-token: string # Magento Access Token
@@ -221,18 +233,18 @@ export def "accountcartaddjson AccountCartAdd" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/account.cart.add.json")
-  let body = {3dcart_access_token: $3dcart_access_token, 3dcart_private_key: $3dcart_private_key, 3dcartapi_api_key: $3dcartapi_api_key, amazon_access_key_id: $amazon_access_key_id, amazon_access_token: $amazon_access_token, amazon_marketplaces_ids: $amazon_marketplaces_ids, amazon_secret_key: $amazon_secret_key, amazon_seller_id: $amazon_seller_id, amazon_sp_api_environment: $amazon_sp_api_environment, amazon_sp_aws_region: $amazon_sp_aws_region, amazon_sp_aws_role_arn: $amazon_sp_aws_role_arn, amazon_sp_aws_user_key_id: $amazon_sp_aws_user_key_id, amazon_sp_aws_user_secret: $amazon_sp_aws_user_secret, amazon_sp_client_id: $amazon_sp_client_id, amazon_sp_client_secret: $amazon_sp_client_secret, amazon_sp_refresh_token: $amazon_sp_refresh_token, aspdotnetstorefront_api_pass: $aspdotnetstorefront_api_pass, aspdotnetstorefront_api_user: $aspdotnetstorefront_api_user, bigcommerceapi_access_token: $bigcommerceapi_access_token, bigcommerceapi_admin_account: $bigcommerceapi_admin_account, bigcommerceapi_api_key: $bigcommerceapi_api_key, bigcommerceapi_api_path: $bigcommerceapi_api_path, bigcommerceapi_client_id: $bigcommerceapi_client_id, bigcommerceapi_context: $bigcommerceapi_context, bridge_url: $bridge_url, cart_id: $cart_id, commercehq_api_key: $commercehq_api_key, commercehq_api_password: $commercehq_api_password, db_tables_prefix: $db_tables_prefix, demandware_api_password: $demandware_api_password, demandware_client_id: $demandware_client_id, demandware_user_name: $demandware_user_name, demandware_user_password: $demandware_user_password, ebay_access_token: $ebay_access_token, ebay_client_id: $ebay_client_id, ebay_client_secret: $ebay_client_secret, ebay_environment: $ebay_environment, ebay_refresh_token: $ebay_refresh_token, ebay_runame: $ebay_runame, ebay_site_id: $ebay_site_id, ecwid_acess_token: $ecwid_acess_token, ecwid_store_id: $ecwid_store_id, etsy_access_token: $etsy_access_token, etsy_client_id: $etsy_client_id, etsy_keystring: $etsy_keystring, etsy_refresh_token: $etsy_refresh_token, etsy_shared_secret: $etsy_shared_secret, etsy_token_secret: $etsy_token_secret, ftp_host: $ftp_host, ftp_password: $ftp_password, ftp_port: $ftp_port, ftp_store_dir: $ftp_store_dir, ftp_user: $ftp_user, hybris_client_id: $hybris_client_id, hybris_client_secret: $hybris_client_secret, hybris_password: $hybris_password, hybris_username: $hybris_username, hybris_websites: $hybris_websites, lightspeed_api_key: $lightspeed_api_key, lightspeed_api_secret: $lightspeed_api_secret, magento_access_token: $magento_access_token, magento_consumer_key: $magento_consumer_key, magento_consumer_secret: $magento_consumer_secret, magento_token_secret: $magento_token_secret, mercado_libre_app_id: $mercado_libre_app_id, mercado_libre_app_secret_key: $mercado_libre_app_secret_key, mercado_libre_refresh_token: $mercado_libre_refresh_token, neto_api_key: $neto_api_key, neto_api_username: $neto_api_username, prestashop_webservice_key: $prestashop_webservice_key, shopify_access_token: $shopify_access_token, shopify_api_key: $shopify_api_key, shopify_api_password: $shopify_api_password, shopify_shared_secret: $shopify_shared_secret, shopware_access_key: $shopware_access_key, shopware_api_key: $shopware_api_key, shopware_api_secret: $shopware_api_secret, squarespace_api_key: $squarespace_api_key, store_key: $store_key, store_root: $store_root, store_url: $store_url, validate_version: $validate_version, verify: $verify, volusion_login: $volusion_login, volusion_password: $volusion_password, walmart_channel_type: $walmart_channel_type, walmart_client_id: $walmart_client_id, walmart_client_secret: $walmart_client_secret, walmart_environment: $walmart_environment, wc_consumer_key: $wc_consumer_key, wc_consumer_secret: $wc_consumer_secret, wix_app_id: $wix_app_id, wix_app_secret_key: $wix_app_secret_key, wix_refresh_token: $wix_refresh_token, zid_access_token: $zid_access_token, zid_authorization: $zid_authorization, zid_client_id: $zid_client_id, zid_client_secret: $zid_client_secret, zid_refresh_token: $zid_refresh_token} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"3dcart_access_token": $3dcart_access_token, "3dcart_private_key": $3dcart_private_key, "3dcartapi_api_key": $3dcartapi_api_key, "amazon_access_key_id": $amazon_access_key_id, "amazon_access_token": $amazon_access_token, "amazon_marketplaces_ids": $amazon_marketplaces_ids, "amazon_secret_key": $amazon_secret_key, "amazon_seller_id": $amazon_seller_id, "amazon_sp_api_environment": $amazon_sp_api_environment, "amazon_sp_aws_region": $amazon_sp_aws_region, "amazon_sp_aws_role_arn": $amazon_sp_aws_role_arn, "amazon_sp_aws_user_key_id": $amazon_sp_aws_user_key_id, "amazon_sp_aws_user_secret": $amazon_sp_aws_user_secret, "amazon_sp_client_id": $amazon_sp_client_id, "amazon_sp_client_secret": $amazon_sp_client_secret, "amazon_sp_refresh_token": $amazon_sp_refresh_token, "aspdotnetstorefront_api_pass": $aspdotnetstorefront_api_pass, "aspdotnetstorefront_api_user": $aspdotnetstorefront_api_user, "bigcommerceapi_access_token": $bigcommerceapi_access_token, "bigcommerceapi_admin_account": $bigcommerceapi_admin_account, "bigcommerceapi_api_key": $bigcommerceapi_api_key, "bigcommerceapi_api_path": $bigcommerceapi_api_path, "bigcommerceapi_client_id": $bigcommerceapi_client_id, "bigcommerceapi_context": $bigcommerceapi_context, "bridge_url": $bridge_url, "cart_id": $cart_id, "commercehq_api_key": $commercehq_api_key, "commercehq_api_password": $commercehq_api_password, "db_tables_prefix": $db_tables_prefix, "demandware_api_password": $demandware_api_password, "demandware_client_id": $demandware_client_id, "demandware_user_name": $demandware_user_name, "demandware_user_password": $demandware_user_password, "ebay_access_token": $ebay_access_token, "ebay_client_id": $ebay_client_id, "ebay_client_secret": $ebay_client_secret, "ebay_environment": $ebay_environment, "ebay_refresh_token": $ebay_refresh_token, "ebay_runame": $ebay_runame, "ebay_site_id": $ebay_site_id, "ecwid_acess_token": $ecwid_acess_token, "ecwid_store_id": $ecwid_store_id, "etsy_access_token": $etsy_access_token, "etsy_client_id": $etsy_client_id, "etsy_keystring": $etsy_keystring, "etsy_refresh_token": $etsy_refresh_token, "etsy_shared_secret": $etsy_shared_secret, "etsy_token_secret": $etsy_token_secret, "ftp_host": $ftp_host, "ftp_password": $ftp_password, "ftp_port": $ftp_port, "ftp_store_dir": $ftp_store_dir, "ftp_user": $ftp_user, "hybris_client_id": $hybris_client_id, "hybris_client_secret": $hybris_client_secret, "hybris_password": $hybris_password, "hybris_username": $hybris_username, "hybris_websites": $hybris_websites, "lightspeed_api_key": $lightspeed_api_key, "lightspeed_api_secret": $lightspeed_api_secret, "magento_access_token": $magento_access_token, "magento_consumer_key": $magento_consumer_key, "magento_consumer_secret": $magento_consumer_secret, "magento_token_secret": $magento_token_secret, "mercado_libre_app_id": $mercado_libre_app_id, "mercado_libre_app_secret_key": $mercado_libre_app_secret_key, "mercado_libre_refresh_token": $mercado_libre_refresh_token, "neto_api_key": $neto_api_key, "neto_api_username": $neto_api_username, "prestashop_webservice_key": $prestashop_webservice_key, "shopify_access_token": $shopify_access_token, "shopify_api_key": $shopify_api_key, "shopify_api_password": $shopify_api_password, "shopify_shared_secret": $shopify_shared_secret, "shopware_access_key": $shopware_access_key, "shopware_api_key": $shopware_api_key, "shopware_api_secret": $shopware_api_secret, "squarespace_api_key": $squarespace_api_key, "store_key": $store_key, "store_root": $store_root, "store_url": $store_url, "validate_version": $validate_version, "verify": $verify, "volusion_login": $volusion_login, "volusion_password": $volusion_password, "walmart_channel_type": $walmart_channel_type, "walmart_client_id": $walmart_client_id, "walmart_client_secret": $walmart_client_secret, "walmart_environment": $walmart_environment, "wc_consumer_key": $wc_consumer_key, "wc_consumer_secret": $wc_consumer_secret, "wix_app_id": $wix_app_id, "wix_app_secret_key": $wix_app_secret_key, "wix_refresh_token": $wix_refresh_token, "zid_access_token": $zid_access_token, "zid_authorization": $zid_authorization, "zid_client_id": $zid_client_id, "zid_client_secret": $zid_client_secret, "zid_refresh_token": $zid_refresh_token} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Get list of carts.
 #
 # GET /account.cart.list.json
 # operationId: AccountCartList
-export def "accountcartlistjson AccountCartList" [
+export def "account-cart-list-json list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -240,6 +252,7 @@ export def "accountcartlistjson AccountCartList" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --params: string # Set this parameter in order to choose which entity fields you want to retrieve (default: force_all)
   --exclude: string # Set this parameter in order to choose which entity fields you want to ignore. Works only if parameter `params` equal force_all
@@ -254,14 +267,14 @@ export def "accountcartlistjson AccountCartList" [
   let full_url = (build-url $base "/account.cart.list.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Update configs in the API2Cart database.
 #
 # PUT /account.config.update.json
 # operationId: AccountConfigUpdate
-export def "accountconfigupdatejson AccountConfigUpdate" [
+export def "account-config-update-json update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -269,6 +282,7 @@ export def "accountconfigupdatejson AccountConfigUpdate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --new-store-key: string # Update store key
   --bridge-url: string # This parameter allows to set up store with custom bridge url (also you must use store_root parameter if a bridge folder is not in the root folder of the store)
@@ -337,7 +351,7 @@ export def "accountconfigupdatejson AccountConfigUpdate" [
   --hybris-client-secret: string # Omni Commerce Connector Client Secret
   --hybris-username: string # User Name
   --hybris-password: string # User password
-  --hybris-websites: list # Websites to stores mapping data
+  --hybris-websites: list<string> # Websites to stores mapping data
   --lightspeed-api-key: string # LightSpeed api key
   --lightspeed-api-secret: string # LightSpeed api secret
   --commercehq-api-key: string # CommerceHQ api key
@@ -367,14 +381,14 @@ export def "accountconfigupdatejson AccountConfigUpdate" [
   let full_url = (build-url $base "/account.config.update.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # List webhooks that was not delivered to the callback.
 #
 # GET /account.failed_webhooks.json
 # operationId: AccountFailedWebhooks
-export def "accountfailed-webhooksjson AccountFailedWebhooks" [
+export def "account-failed-webhooks-json get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -382,6 +396,7 @@ export def "accountfailed-webhooksjson AccountFailedWebhooks" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --count: int # This parameter sets the entity amount that has to be retrieved. Max allowed count=250 (default: 10)
   --start: int # This parameter sets the number from which you want to get entities (default: 0)
@@ -393,14 +408,14 @@ export def "accountfailed-webhooksjson AccountFailedWebhooks" [
   let full_url = (build-url $base "/account.failed_webhooks.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get list of supported platforms
 #
 # GET /account.supported_platforms.json
 # operationId: AccountSupportedPlatforms
-export def "accountsupported-platformsjson AccountSupportedPlatforms" [
+export def "account-supported-platforms-json get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -408,6 +423,7 @@ export def "accountsupported-platformsjson AccountSupportedPlatforms" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<result: record<supported_platforms: list<record>>, return_code: int, return_message: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -415,14 +431,14 @@ export def "accountsupported-platformsjson AccountSupportedPlatforms" [
   let full_url = (build-url $base "/account.supported_platforms.json")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Add new attribute
 #
 # POST /attribute.add.json
 # operationId: AttributeAdd
-export def "attributeaddjson AttributeAdd" [
+export def "attribute-add-json create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -430,6 +446,7 @@ export def "attributeaddjson AttributeAdd" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --type: string@type-completer # Defines attribute's type
   --code: string # Entity code
@@ -459,14 +476,14 @@ export def "attributeaddjson AttributeAdd" [
   let full_url = (build-url $base "/attribute.add.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Assign attribute to the group
 #
 # POST /attribute.assign.group.json
 # operationId: AttributeAssignGroup
-export def "attributeassigngroupjson AttributeAssignGroup" [
+export def "attribute-assign-group-json assign" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -474,6 +491,7 @@ export def "attributeassigngroupjson AttributeAssignGroup" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # Entity id
   --group-id: string # Attribute group_id
@@ -485,14 +503,14 @@ export def "attributeassigngroupjson AttributeAssignGroup" [
   let full_url = (build-url $base "/attribute.assign.group.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Assign attribute to the attribute set
 #
 # POST /attribute.assign.set.json
 # operationId: AttributeAssignSet
-export def "attributeassignsetjson AttributeAssignSet" [
+export def "attribute-assign-set-json assign" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -500,6 +518,7 @@ export def "attributeassignsetjson AttributeAssignSet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # Entity id
   --group-id: string # Attribute group_id
@@ -511,14 +530,14 @@ export def "attributeassignsetjson AttributeAssignSet" [
   let full_url = (build-url $base "/attribute.assign.set.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get attribute_set list
 #
 # GET /attribute.attributeset.list.json
 # operationId: AttributeAttributesetList
-export def "attributeattributesetlistjson AttributeAttributesetList" [
+export def "attribute-attributeset-list-json list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -526,6 +545,7 @@ export def "attributeattributesetlistjson AttributeAttributesetList" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --start: int # This parameter sets the number from which you want to get entities (default: 0)
   --count: int # This parameter sets the entity amount that has to be retrieved. Max allowed count=250 (default: 10)
@@ -539,14 +559,14 @@ export def "attributeattributesetlistjson AttributeAttributesetList" [
   let full_url = (build-url $base "/attribute.attributeset.list.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get attributes count
 #
 # GET /attribute.count.json
 # operationId: AttributeCount
-export def "attributecountjson AttributeCount" [
+export def "attribute-count-json get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -554,6 +574,7 @@ export def "attributecountjson AttributeCount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --type: string # Defines attribute's type
   --store-id: string # Store Id
@@ -568,14 +589,14 @@ export def "attributecountjson AttributeCount" [
   let full_url = (build-url $base "/attribute.count.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Delete attribute from store
 #
 # DELETE /attribute.delete.json
 # operationId: AttributeDelete
-export def "attributedeletejson AttributeDelete" [
+export def "attribute-delete-json delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -583,6 +604,7 @@ export def "attributedeletejson AttributeDelete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --store-id: string # Store Id
   --id: string # Entity id
@@ -593,14 +615,14 @@ export def "attributedeletejson AttributeDelete" [
   let full_url = (build-url $base "/attribute.delete.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get attribute group list
 #
 # GET /attribute.group.list.json
 # operationId: AttributeGroupList
-export def "attributegrouplistjson AttributeGroupList" [
+export def "attribute-group-list-json list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -608,6 +630,7 @@ export def "attributegrouplistjson AttributeGroupList" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --start: int # This parameter sets the number from which you want to get entities (default: 0)
   --count: int # This parameter sets the entity amount that has to be retrieved. Max allowed count=250 (default: 10)
@@ -623,14 +646,14 @@ export def "attributegrouplistjson AttributeGroupList" [
   let full_url = (build-url $base "/attribute.group.list.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get attribute info
 #
 # GET /attribute.info.json
 # operationId: AttributeInfo
-export def "attributeinfojson AttributeInfo" [
+export def "attribute-info-json get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -638,6 +661,7 @@ export def "attributeinfojson AttributeInfo" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # Entity id
   --store-id: string # Store Id
@@ -652,14 +676,14 @@ export def "attributeinfojson AttributeInfo" [
   let full_url = (build-url $base "/attribute.info.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get attributes list
 #
 # GET /attribute.list.json
 # operationId: AttributeList
-export def "attributelistjson AttributeList" [
+export def "attribute-list-json list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -667,6 +691,7 @@ export def "attributelistjson AttributeList" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --start: int # This parameter sets the number from which you want to get entities (default: 0)
   --count: int # This parameter sets the entity amount that has to be retrieved. Max allowed count=250 (default: 10)
@@ -687,14 +712,14 @@ export def "attributelistjson AttributeList" [
   let full_url = (build-url $base "/attribute.list.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get list of supported attributes types
 #
 # GET /attribute.type.list.json
 # operationId: AttributeTypeList
-export def "attributetypelistjson AttributeTypeList" [
+export def "attribute-type-list-json list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -702,6 +727,7 @@ export def "attributetypelistjson AttributeTypeList" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<result: record<attribute_type: list<string>>, return_code: int, return_message: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -709,14 +735,14 @@ export def "attributetypelistjson AttributeTypeList" [
   let full_url = (build-url $base "/attribute.type.list.json")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Unassign attribute from group
 #
 # POST /attribute.unassign.group.json
 # operationId: AttributeUnassignGroup
-export def "attributeunassigngroupjson AttributeUnassignGroup" [
+export def "attribute-unassign-group-json create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -724,6 +750,7 @@ export def "attributeunassigngroupjson AttributeUnassignGroup" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # Entity id
   --group-id: string # Customer group_id
@@ -734,14 +761,14 @@ export def "attributeunassigngroupjson AttributeUnassignGroup" [
   let full_url = (build-url $base "/attribute.unassign.group.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Unassign attribute from attribute set
 #
 # POST /attribute.unassign.set.json
 # operationId: AttributeUnassignSet
-export def "attributeunassignsetjson AttributeUnassignSet" [
+export def "attribute-unassign-set-json update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -749,6 +776,7 @@ export def "attributeunassignsetjson AttributeUnassignSet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # Entity id
   --attribute-set-id: string # Attribute set id
@@ -759,14 +787,14 @@ export def "attributeunassignsetjson AttributeUnassignSet" [
   let full_url = (build-url $base "/attribute.unassign.set.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Update attribute data
 #
 # POST /attribute.update.json
 # operationId: AttributeUpdate
-export def "attributeupdatejson AttributeUpdate" [
+export def "attribute-update-json update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -774,6 +802,7 @@ export def "attributeupdatejson AttributeUpdate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # Entity id
   --name: string # Defines new attributes's name
@@ -786,14 +815,14 @@ export def "attributeupdatejson AttributeUpdate" [
   let full_url = (build-url $base "/attribute.update.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Retrieve basket information.
 #
 # GET /basket.info.json
 # operationId: BasketInfo
-export def "basketinfojson BasketInfo" [
+export def "basket-info-json get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -801,6 +830,7 @@ export def "basketinfojson BasketInfo" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # Entity id
   --store-id: string # Store Id
@@ -814,14 +844,14 @@ export def "basketinfojson BasketInfo" [
   let full_url = (build-url $base "/basket.info.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Add item to basket
 #
 # POST /basket.item.add.json
 # operationId: BasketItemAdd
-export def "basketitemaddjson BasketItemAdd" [
+export def "basket-item-add-json create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -829,6 +859,7 @@ export def "basketitemaddjson BasketItemAdd" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --customer-id: string # Retrieves orders specified by customer id
   --product-id: string # Defines id of the product which should be added to the basket
@@ -842,14 +873,14 @@ export def "basketitemaddjson BasketItemAdd" [
   let full_url = (build-url $base "/basket.item.add.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Create live shipping rate service. (Beta)
 #
 # POST /basket.live_shipping_service.create.json
 # operationId: BasketLiveShippingServiceCreate
-export def "basketlive-shipping-servicecreatejson BasketLiveShippingServiceCreate" [
+export def "basket-live-shipping-service-create-json create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -857,6 +888,7 @@ export def "basketlive-shipping-servicecreatejson BasketLiveShippingServiceCreat
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --store-id: string # Store Id
   --name: string # Shipping Service Name
@@ -868,14 +900,14 @@ export def "basketlive-shipping-servicecreatejson BasketLiveShippingServiceCreat
   let full_url = (build-url $base "/basket.live_shipping_service.create.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Delete live shipping rate service. (Beta)
 #
 # DELETE /basket.live_shipping_service.delete.json
 # operationId: BasketLiveShippingServiceDelete
-export def "basketlive-shipping-servicedeletejson BasketLiveShippingServiceDelete" [
+export def "basket-live-shipping-service-delete-json delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -883,6 +915,7 @@ export def "basketlive-shipping-servicedeletejson BasketLiveShippingServiceDelet
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --id: int # Entity id
 ]: nothing -> record<result: record<status: bool>, return_code: int, return_message: string> {
@@ -892,14 +925,14 @@ export def "basketlive-shipping-servicedeletejson BasketLiveShippingServiceDelet
   let full_url = (build-url $base "/basket.live_shipping_service.delete.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Retrieve a list of live shipping rate services. (Beta)
 #
 # GET /basket.live_shipping_service.list.json
 # operationId: BasketLiveShippingServiceList
-export def "basketlive-shipping-servicelistjson BasketLiveShippingServiceList" [
+export def "basket-live-shipping-service-list-json list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -907,6 +940,7 @@ export def "basketlive-shipping-servicelistjson BasketLiveShippingServiceList" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --store-id: string # Store Id
   --start: int # This parameter sets the number from which you want to get entities (default: 0)
@@ -918,14 +952,14 @@ export def "basketlive-shipping-servicelistjson BasketLiveShippingServiceList" [
   let full_url = (build-url $base "/basket.live_shipping_service.list.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Delete bridge from the store.
 #
 # POST /bridge.delete.json
 # operationId: BridgeDelete
-export def "bridgedeletejson BridgeDelete" [
+export def "bridge-delete-json delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -933,6 +967,7 @@ export def "bridgedeletejson BridgeDelete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<result: record<deleted: bool>, return_code: int, return_message: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -940,14 +975,14 @@ export def "bridgedeletejson BridgeDelete" [
   let full_url = (build-url $base "/bridge.delete.json")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Download bridge for store
 #
 # GET /bridge.download.file
 # operationId: BridgeDownload
-export def "bridgedownloadfile BridgeDownload" [
+export def "bridge-download-file download" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -955,6 +990,7 @@ export def "bridgedownloadfile BridgeDownload" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --whitelabel: oneof<nothing, bool> # Identifies if there is a necessity to download whitelabel bridge. (default: false)
 ]: nothing -> any {
@@ -964,14 +1000,14 @@ export def "bridgedownloadfile BridgeDownload" [
   let full_url = (build-url $base "/bridge.download.file" $qp)
   let accept_val = "application/zip"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Update bridge in the store.
 #
 # POST /bridge.update.json
 # operationId: BridgeUpdate
-export def "bridgeupdatejson BridgeUpdate" [
+export def "bridge-update-json update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -979,6 +1015,7 @@ export def "bridgeupdatejson BridgeUpdate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<result: record<updated: bool>, return_code: int, return_message: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -986,14 +1023,14 @@ export def "bridgeupdatejson BridgeUpdate" [
   let full_url = (build-url $base "/bridge.update.json")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get bridge key and store key
 #
 # GET /cart.bridge.json
 # operationId: CartBridge
-export def "cartbridgejson CartBridge" [
+export def "cart-bridge-json get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1001,6 +1038,7 @@ export def "cartbridgejson CartBridge" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<result: record<bridge: string, store_key: string>, return_code: int, return_message: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -1008,14 +1046,14 @@ export def "cartbridgejson CartBridge" [
   let full_url = (build-url $base "/cart.bridge.json")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get count of cart catalog price rules discounts.
 #
 # GET /cart.catalog_price_rules.count.json
 # operationId: CartCatalogPriceRulesCount
-export def "cartcatalog-price-rulescountjson CartCatalogPriceRulesCount" [
+export def "cart-catalog-price-rules-count-json get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1023,6 +1061,7 @@ export def "cartcatalog-price-rulescountjson CartCatalogPriceRulesCount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<result: record<catalog_price_rules_count: string>, return_code: int, return_message: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -1030,14 +1069,14 @@ export def "cartcatalog-price-rulescountjson CartCatalogPriceRulesCount" [
   let full_url = (build-url $base "/cart.catalog_price_rules.count.json")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get cart catalog price rules discounts.
 #
 # GET /cart.catalog_price_rules.list.json
 # operationId: CartCatalogPriceRulesList
-export def "cartcatalog-price-ruleslistjson CartCatalogPriceRulesList" [
+export def "cart-catalog-price-rules-list-json list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1045,11 +1084,12 @@ export def "cartcatalog-price-ruleslistjson CartCatalogPriceRulesList" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --page-cursor: string # Used to retrieve entities via cursor-based pagination (it can't be used with any other filtering parameter)
   --start: int # This parameter sets the number from which you want to get entities (default: 0)
   --count: int # This parameter sets the entity amount that has to be retrieved. Max allowed count=250 (default: 10)
-  --ids: string # Retrieves  catalog_price_rules by ids
+  --ids: string # Retrieves catalog_price_rules by ids
   --params: string # Set this parameter in order to choose which entity fields you want to retrieve (default: id,name,description)
   --response-fields: string # Set this parameter in order to choose which entity fields you want to retrieve
   --exclude: string # Set this parameter in order to choose which entity fields you want to ignore. Works only if parameter `params` equal force_all
@@ -1060,14 +1100,14 @@ export def "cartcatalog-price-ruleslistjson CartCatalogPriceRulesList" [
   let full_url = (build-url $base "/cart.catalog_price_rules.list.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Clear cache on store.
 #
 # POST /cart.clear_cache.json
 # operationId: CartClearCache
-export def "cartclear-cachejson CartClearCache" [
+export def "cart-clear-cache-json create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1075,6 +1115,7 @@ export def "cartclear-cachejson CartClearCache" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --cache-type: string # Defines which cache should be cleared.
 ]: nothing -> record<result: record<cache_cleared: string>, return_code: int, return_message: string> {
@@ -1084,14 +1125,14 @@ export def "cartclear-cachejson CartClearCache" [
   let full_url = (build-url $base "/cart.clear_cache.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get list of cart configs
 #
 # GET /cart.config.json
 # operationId: CartConfig
-export def "cartconfigjson CartConfig" [
+export def "cart-config-json get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1099,6 +1140,7 @@ export def "cartconfigjson CartConfig" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --params: string # Set this parameter in order to choose which entity fields you want to retrieve (default: store_name,store_url,db_prefix)
   --exclude: string # Set this parameter in order to choose which entity fields you want to ignore. Works only if parameter `params` equal force_all
@@ -1109,7 +1151,7 @@ export def "cartconfigjson CartConfig" [
   let full_url = (build-url $base "/cart.config.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Use this API method to update custom data in client database.
@@ -1118,7 +1160,7 @@ export def "cartconfigjson CartConfig" [
 # DEPRECATED
 # operationId: CartConfigUpdate
 @deprecated
-export def "cartconfigupdatejson CartConfigUpdate" [
+export def "cart-config-update-json update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1126,6 +1168,7 @@ export def "cartconfigupdatejson CartConfigUpdate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --custom-fields: record # This parameter sets the list of params to the shopping cart.
   --db-tables-prefix: string # This parameter is deprecated for this method. Please, use this parameter in method account.config.update
@@ -1135,18 +1178,18 @@ export def "cartconfigupdatejson CartConfigUpdate" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/cart.config.update.json")
-  let body = {custom_fields: $custom_fields, db_tables_prefix: $db_tables_prefix, store_id: $store_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"custom_fields": $custom_fields, "db_tables_prefix": $db_tables_prefix, "store_id": $store_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Create new coupon
 #
 # POST /cart.coupon.add.json
 # operationId: CartCouponAdd
-export def "cartcouponaddjson CartCouponAdd" [
+export def "cart-coupon-add-json create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1154,6 +1197,7 @@ export def "cartcouponaddjson CartCouponAdd" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   action_amount: float # Defines the discount amount value.
   action_apply_to: string@action-apply-to-completer # Defines where discount should be applied
@@ -1164,7 +1208,7 @@ export def "cartcouponaddjson CartCouponAdd" [
   action_scope: string@action-scope-completer # Specify how discount should be applied. If scope=matching_items, then discount will be applied to each of the items that match action conditions. Scope order means that discount will be applied once.
   action_type: string@action-type-completer # Coupon discount type
   code: string # Coupon code
-  --codes: list # Entity codes
+  --codes: list<string> # Entity codes
   --date-end: string # Defines when discount code will be expired.
   --date-start: string # Defines when discount code will be available. (default: now)
   --name: string # Coupon name
@@ -1176,18 +1220,18 @@ export def "cartcouponaddjson CartCouponAdd" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/cart.coupon.add.json")
-  let body = {action_amount: $action_amount, action_apply_to: $action_apply_to, action_condition_entity: $action_condition_entity, action_condition_key: $action_condition_key, action_condition_operator: $action_condition_operator, action_condition_value: $action_condition_value, action_scope: $action_scope, action_type: $action_type, code: $code, codes: $codes, date_end: $date_end, date_start: $date_start, name: $name, store_id: $store_id, usage_limit: $usage_limit, usage_limit_per_customer: $usage_limit_per_customer} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"action_amount": $action_amount, "action_apply_to": $action_apply_to, "action_condition_entity": $action_condition_entity, "action_condition_key": $action_condition_key, "action_condition_operator": $action_condition_operator, "action_condition_value": $action_condition_value, "action_scope": $action_scope, "action_type": $action_type, "code": $code, "codes": $codes, "date_end": $date_end, "date_start": $date_start, "name": $name, "store_id": $store_id, "usage_limit": $usage_limit, "usage_limit_per_customer": $usage_limit_per_customer} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Create new coupon condition
 #
 # POST /cart.coupon.condition.add.json
 # operationId: CartCouponConditionAdd
-export def "cartcouponconditionaddjson CartCouponConditionAdd" [
+export def "cart-coupon-condition-add-json create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1195,6 +1239,7 @@ export def "cartcouponconditionaddjson CartCouponConditionAdd" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --store-id: string # Store Id
   --coupon-id: string # Coupon Id
@@ -1210,14 +1255,14 @@ export def "cartcouponconditionaddjson CartCouponConditionAdd" [
   let full_url = (build-url $base "/cart.coupon.condition.add.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get cart coupons count.
 #
 # GET /cart.coupon.count.json
 # operationId: CartCouponCount
-export def "cartcouponcountjson CartCouponCount" [
+export def "cart-coupon-count-json get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1225,6 +1270,7 @@ export def "cartcouponcountjson CartCouponCount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --store-id: string # Store Id
   --date-start-from: string # Filter entity by date_start (greater or equal)
@@ -1239,14 +1285,14 @@ export def "cartcouponcountjson CartCouponCount" [
   let full_url = (build-url $base "/cart.coupon.count.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Delete coupon
 #
 # DELETE /cart.coupon.delete.json
 # operationId: CartCouponDelete
-export def "cartcoupondeletejson CartCouponDelete" [
+export def "cart-coupon-delete-json delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1254,6 +1300,7 @@ export def "cartcoupondeletejson CartCouponDelete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # Entity id
   --store-id: string # Store Id
@@ -1264,14 +1311,14 @@ export def "cartcoupondeletejson CartCouponDelete" [
   let full_url = (build-url $base "/cart.coupon.delete.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get cart coupon discounts.
 #
 # GET /cart.coupon.list.json
 # operationId: CartCouponList
-export def "cartcouponlistjson CartCouponList" [
+export def "cart-coupon-list-json list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1279,6 +1326,7 @@ export def "cartcouponlistjson CartCouponList" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --page-cursor: string # Used to retrieve entities via cursor-based pagination (it can't be used with any other filtering parameter)
   --start: int # This parameter sets the number from which you want to get entities (default: 0)
@@ -1301,7 +1349,7 @@ export def "cartcouponlistjson CartCouponList" [
   let full_url = (build-url $base "/cart.coupon.list.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Add store to the account
@@ -1310,7 +1358,7 @@ export def "cartcouponlistjson CartCouponList" [
 # DEPRECATED
 # operationId: CartCreate
 @deprecated
-export def "cartcreatejson CartCreate" [
+export def "cart-create-json create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1318,6 +1366,7 @@ export def "cartcreatejson CartCreate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --cart-id: string@cart-id-completer # Store’s identifier which you can get from cart_list method
   --store-url: string # A web address of a store that you would like to connect to API2Cart
@@ -1333,31 +1382,31 @@ export def "cartcreatejson CartCreate" [
   --ftp-password: string # FTP Password
   --ftp-port: int # FTP Port
   --ftp-store-dir: string # FTP Store dir
-  --apiKey-3dcart: string # 3DCart API Key
-  --AdminAccount: string # It's a BigCommerce account for which API is enabled
-  --ApiPath: string # BigCommerce API URL
-  --ApiKey: string # Bigcommerce API Key
+  --api-key-3dcart: string # 3DCart API Key
+  --admin-account: string # It's a BigCommerce account for which API is enabled
+  --api-path: string # BigCommerce API URL
+  --api-key: string # Bigcommerce API Key
   --client-id: string # Client ID of the requesting app
-  --accessToken: string # Access token authorizing the app to access resources on behalf of a user
+  --access-token: string # Access token authorizing the app to access resources on behalf of a user
   --context: string # API Path section unique to the store
   --access-token: string # Access token authorizing the app to access resources on behalf of a user
-  --apiKey-shopify: string # Shopify API Key
-  --apiPassword: string # Shopify API Password
-  --accessToken-shopify: string # Access token authorizing the app to access resources on behalf of a user
-  --apiKey: string # Neto API Key
-  --apiUsername: string # Neto User Name
-  --EncryptedPassword: string # Volusion API Password
-  --Login: string # It's a Volusion account for which API is enabled
-  --apiUser-adnsf: string # It's a AspDotNetStorefront account for which API is available
-  --apiPass: string # AspDotNetStorefront API Password
-  --accessKey-scelite: string # Shopping Cart Elite Access Key
-  --apiKey-scelite: string # Shopping Cart Elite API Key
-  --apiSecretKey-scelite: string # Shopping Cart Elite API Secret Key
-  --privateKey: string # 3DCart Application Private Key
-  --appToken: string # 3DCart Token from Application
+  --api-key-shopify: string # Shopify API Key
+  --api-password: string # Shopify API Password
+  --access-token-shopify: string # Access token authorizing the app to access resources on behalf of a user
+  --api-key: string # Neto API Key
+  --api-username: string # Neto User Name
+  --encrypted-password: string # Volusion API Password
+  --login: string # It's a Volusion account for which API is enabled
+  --api-user-adnsf: string # It's a AspDotNetStorefront account for which API is available
+  --api-pass: string # AspDotNetStorefront API Password
+  --access-key-scelite: string # Shopping Cart Elite Access Key
+  --api-key-scelite: string # Shopping Cart Elite API Key
+  --api-secret-key-scelite: string # Shopping Cart Elite API Secret Key
+  --private-key: string # 3DCart Application Private Key
+  --app-token: string # 3DCart Token from Application
   --etsy-keystring: string # Etsy keystring
   --etsy-shared-secret: string # Etsy shared secret
-  --tokenSecret: string # Secret token authorizing the app to access resources on behalf of a user
+  --token-secret: string # Secret token authorizing the app to access resources on behalf of a user
   --etsy-client-id: string # Etsy Client Id
   --etsy-refresh-token: string # Etsy Refresh token
   --ebay-client-id: string # Application ID (AppID).
@@ -1381,7 +1430,7 @@ export def "cartcreatejson CartCreate" [
   --hybris-client-secret: string # Omni Commerce Connector Client Secret
   --hybris-username: string # User Name
   --hybris-password: string # User password
-  --hybris-websites: list # Websites to stores mapping data
+  --hybris-websites: list<string> # Websites to stores mapping data
   --walmart-client-id: string # Walmart client ID
   --walmart-client-secret: string # Walmart client secret
   --walmart-environment: string # Walmart environment (default: production)
@@ -1416,18 +1465,18 @@ export def "cartcreatejson CartCreate" [
 ]: nothing -> record<result: record<store_key: string>, return_code: int, return_message: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "cart_id" $cart_id "scalar") (serialize-qp "store_url" $store_url "scalar") (serialize-qp "bridge_url" $bridge_url "scalar") (serialize-qp "store_root" $store_root "scalar") (serialize-qp "store_key" $store_key "scalar") (serialize-qp "shared_secret" $shared_secret "scalar") (serialize-qp "validate_version" $validate_version "scalar") (serialize-qp "verify" $verify "scalar") (serialize-qp "db_tables_prefix" $db_tables_prefix "scalar") (serialize-qp "ftp_host" $ftp_host "scalar") (serialize-qp "ftp_user" $ftp_user "scalar") (serialize-qp "ftp_password" $ftp_password "scalar") (serialize-qp "ftp_port" $ftp_port "scalar") (serialize-qp "ftp_store_dir" $ftp_store_dir "scalar") (serialize-qp "apiKey_3dcart" $apiKey_3dcart "scalar") (serialize-qp "AdminAccount" $AdminAccount "scalar") (serialize-qp "ApiPath" $ApiPath "scalar") (serialize-qp "ApiKey" $ApiKey "scalar") (serialize-qp "client_id" $client_id "scalar") (serialize-qp "accessToken" $accessToken "scalar") (serialize-qp "context" $context "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "apiKey_shopify" $apiKey_shopify "scalar") (serialize-qp "apiPassword" $apiPassword "scalar") (serialize-qp "accessToken_shopify" $accessToken_shopify "scalar") (serialize-qp "apiKey" $apiKey "scalar") (serialize-qp "apiUsername" $apiUsername "scalar") (serialize-qp "EncryptedPassword" $EncryptedPassword "scalar") (serialize-qp "Login" $Login "scalar") (serialize-qp "apiUser_adnsf" $apiUser_adnsf "scalar") (serialize-qp "apiPass" $apiPass "scalar") (serialize-qp "accessKey_scelite" $accessKey_scelite "scalar") (serialize-qp "apiKey_scelite" $apiKey_scelite "scalar") (serialize-qp "apiSecretKey_scelite" $apiSecretKey_scelite "scalar") (serialize-qp "privateKey" $privateKey "scalar") (serialize-qp "appToken" $appToken "scalar") (serialize-qp "etsy_keystring" $etsy_keystring "scalar") (serialize-qp "etsy_shared_secret" $etsy_shared_secret "scalar") (serialize-qp "tokenSecret" $tokenSecret "scalar") (serialize-qp "etsy_client_id" $etsy_client_id "scalar") (serialize-qp "etsy_refresh_token" $etsy_refresh_token "scalar") (serialize-qp "ebay_client_id" $ebay_client_id "scalar") (serialize-qp "ebay_client_secret" $ebay_client_secret "scalar") (serialize-qp "ebay_runame" $ebay_runame "scalar") (serialize-qp "ebay_access_token" $ebay_access_token "scalar") (serialize-qp "ebay_refresh_token" $ebay_refresh_token "scalar") (serialize-qp "ebay_environment" $ebay_environment "scalar") (serialize-qp "ebay_site_id" $ebay_site_id "scalar") (serialize-qp "dw_client_id" $dw_client_id "scalar") (serialize-qp "dw_api_pass" $dw_api_pass "scalar") (serialize-qp "demandware_user_name" $demandware_user_name "scalar") (serialize-qp "demandware_user_password" $demandware_user_password "scalar") (serialize-qp "store_id" $store_id "scalar") (serialize-qp "seller_id" $seller_id "scalar") (serialize-qp "amazon_secret_key" $amazon_secret_key "scalar") (serialize-qp "amazon_access_key_id" $amazon_access_key_id "scalar") (serialize-qp "marketplaces_ids" $marketplaces_ids "scalar") (serialize-qp "environment" $environment "scalar") (serialize-qp "hybris_client_id" $hybris_client_id "scalar") (serialize-qp "hybris_client_secret" $hybris_client_secret "scalar") (serialize-qp "hybris_username" $hybris_username "scalar") (serialize-qp "hybris_password" $hybris_password "scalar") (serialize-qp "hybris_websites" $hybris_websites "csv") (serialize-qp "walmart_client_id" $walmart_client_id "scalar") (serialize-qp "walmart_client_secret" $walmart_client_secret "scalar") (serialize-qp "walmart_environment" $walmart_environment "scalar") (serialize-qp "walmart_channel_type" $walmart_channel_type "scalar") (serialize-qp "lightspeed_api_key" $lightspeed_api_key "scalar") (serialize-qp "lightspeed_api_secret" $lightspeed_api_secret "scalar") (serialize-qp "shopware_access_key" $shopware_access_key "scalar") (serialize-qp "shopware_api_key" $shopware_api_key "scalar") (serialize-qp "shopware_api_secret" $shopware_api_secret "scalar") (serialize-qp "commercehq_api_key" $commercehq_api_key "scalar") (serialize-qp "commercehq_api_password" $commercehq_api_password "scalar") (serialize-qp "3dcart_private_key" $3dcart_private_key "scalar") (serialize-qp "3dcart_access_token" $3dcart_access_token "scalar") (serialize-qp "wc_consumer_key" $wc_consumer_key "scalar") (serialize-qp "wc_consumer_secret" $wc_consumer_secret "scalar") (serialize-qp "magento_consumer_key" $magento_consumer_key "scalar") (serialize-qp "magento_consumer_secret" $magento_consumer_secret "scalar") (serialize-qp "magento_access_token" $magento_access_token "scalar") (serialize-qp "magento_token_secret" $magento_token_secret "scalar") (serialize-qp "prestashop_webservice_key" $prestashop_webservice_key "scalar") (serialize-qp "wix_app_id" $wix_app_id "scalar") (serialize-qp "wix_app_secret_key" $wix_app_secret_key "scalar") (serialize-qp "wix_refresh_token" $wix_refresh_token "scalar") (serialize-qp "mercado_libre_app_id" $mercado_libre_app_id "scalar") (serialize-qp "mercado_libre_app_secret_key" $mercado_libre_app_secret_key "scalar") (serialize-qp "mercado_libre_refresh_token" $mercado_libre_refresh_token "scalar") (serialize-qp "zid_client_id" $zid_client_id "scalar") (serialize-qp "zid_client_secret" $zid_client_secret "scalar") (serialize-qp "zid_access_token" $zid_access_token "scalar") (serialize-qp "zid_authorization" $zid_authorization "scalar") (serialize-qp "zid_refresh_token" $zid_refresh_token "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "cart_id" $cart_id "scalar") (serialize-qp "store_url" $store_url "scalar") (serialize-qp "bridge_url" $bridge_url "scalar") (serialize-qp "store_root" $store_root "scalar") (serialize-qp "store_key" $store_key "scalar") (serialize-qp "shared_secret" $shared_secret "scalar") (serialize-qp "validate_version" $validate_version "scalar") (serialize-qp "verify" $verify "scalar") (serialize-qp "db_tables_prefix" $db_tables_prefix "scalar") (serialize-qp "ftp_host" $ftp_host "scalar") (serialize-qp "ftp_user" $ftp_user "scalar") (serialize-qp "ftp_password" $ftp_password "scalar") (serialize-qp "ftp_port" $ftp_port "scalar") (serialize-qp "ftp_store_dir" $ftp_store_dir "scalar") (serialize-qp "apiKey_3dcart" $api_key_3dcart "scalar") (serialize-qp "AdminAccount" $admin_account "scalar") (serialize-qp "ApiPath" $api_path "scalar") (serialize-qp "ApiKey" $api_key "scalar") (serialize-qp "client_id" $client_id "scalar") (serialize-qp "accessToken" $access_token "scalar") (serialize-qp "context" $context "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "apiKey_shopify" $api_key_shopify "scalar") (serialize-qp "apiPassword" $api_password "scalar") (serialize-qp "accessToken_shopify" $access_token_shopify "scalar") (serialize-qp "apiKey" $api_key "scalar") (serialize-qp "apiUsername" $api_username "scalar") (serialize-qp "EncryptedPassword" $encrypted_password "scalar") (serialize-qp "Login" $login "scalar") (serialize-qp "apiUser_adnsf" $api_user_adnsf "scalar") (serialize-qp "apiPass" $api_pass "scalar") (serialize-qp "accessKey_scelite" $access_key_scelite "scalar") (serialize-qp "apiKey_scelite" $api_key_scelite "scalar") (serialize-qp "apiSecretKey_scelite" $api_secret_key_scelite "scalar") (serialize-qp "privateKey" $private_key "scalar") (serialize-qp "appToken" $app_token "scalar") (serialize-qp "etsy_keystring" $etsy_keystring "scalar") (serialize-qp "etsy_shared_secret" $etsy_shared_secret "scalar") (serialize-qp "tokenSecret" $token_secret "scalar") (serialize-qp "etsy_client_id" $etsy_client_id "scalar") (serialize-qp "etsy_refresh_token" $etsy_refresh_token "scalar") (serialize-qp "ebay_client_id" $ebay_client_id "scalar") (serialize-qp "ebay_client_secret" $ebay_client_secret "scalar") (serialize-qp "ebay_runame" $ebay_runame "scalar") (serialize-qp "ebay_access_token" $ebay_access_token "scalar") (serialize-qp "ebay_refresh_token" $ebay_refresh_token "scalar") (serialize-qp "ebay_environment" $ebay_environment "scalar") (serialize-qp "ebay_site_id" $ebay_site_id "scalar") (serialize-qp "dw_client_id" $dw_client_id "scalar") (serialize-qp "dw_api_pass" $dw_api_pass "scalar") (serialize-qp "demandware_user_name" $demandware_user_name "scalar") (serialize-qp "demandware_user_password" $demandware_user_password "scalar") (serialize-qp "store_id" $store_id "scalar") (serialize-qp "seller_id" $seller_id "scalar") (serialize-qp "amazon_secret_key" $amazon_secret_key "scalar") (serialize-qp "amazon_access_key_id" $amazon_access_key_id "scalar") (serialize-qp "marketplaces_ids" $marketplaces_ids "scalar") (serialize-qp "environment" $environment "scalar") (serialize-qp "hybris_client_id" $hybris_client_id "scalar") (serialize-qp "hybris_client_secret" $hybris_client_secret "scalar") (serialize-qp "hybris_username" $hybris_username "scalar") (serialize-qp "hybris_password" $hybris_password "scalar") (serialize-qp "hybris_websites" $hybris_websites "csv") (serialize-qp "walmart_client_id" $walmart_client_id "scalar") (serialize-qp "walmart_client_secret" $walmart_client_secret "scalar") (serialize-qp "walmart_environment" $walmart_environment "scalar") (serialize-qp "walmart_channel_type" $walmart_channel_type "scalar") (serialize-qp "lightspeed_api_key" $lightspeed_api_key "scalar") (serialize-qp "lightspeed_api_secret" $lightspeed_api_secret "scalar") (serialize-qp "shopware_access_key" $shopware_access_key "scalar") (serialize-qp "shopware_api_key" $shopware_api_key "scalar") (serialize-qp "shopware_api_secret" $shopware_api_secret "scalar") (serialize-qp "commercehq_api_key" $commercehq_api_key "scalar") (serialize-qp "commercehq_api_password" $commercehq_api_password "scalar") (serialize-qp "3dcart_private_key" $3dcart_private_key "scalar") (serialize-qp "3dcart_access_token" $3dcart_access_token "scalar") (serialize-qp "wc_consumer_key" $wc_consumer_key "scalar") (serialize-qp "wc_consumer_secret" $wc_consumer_secret "scalar") (serialize-qp "magento_consumer_key" $magento_consumer_key "scalar") (serialize-qp "magento_consumer_secret" $magento_consumer_secret "scalar") (serialize-qp "magento_access_token" $magento_access_token "scalar") (serialize-qp "magento_token_secret" $magento_token_secret "scalar") (serialize-qp "prestashop_webservice_key" $prestashop_webservice_key "scalar") (serialize-qp "wix_app_id" $wix_app_id "scalar") (serialize-qp "wix_app_secret_key" $wix_app_secret_key "scalar") (serialize-qp "wix_refresh_token" $wix_refresh_token "scalar") (serialize-qp "mercado_libre_app_id" $mercado_libre_app_id "scalar") (serialize-qp "mercado_libre_app_secret_key" $mercado_libre_app_secret_key "scalar") (serialize-qp "mercado_libre_refresh_token" $mercado_libre_refresh_token "scalar") (serialize-qp "zid_client_id" $zid_client_id "scalar") (serialize-qp "zid_client_secret" $zid_client_secret "scalar") (serialize-qp "zid_access_token" $zid_access_token "scalar") (serialize-qp "zid_authorization" $zid_authorization "scalar") (serialize-qp "zid_refresh_token" $zid_refresh_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/cart.create.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Remove store from API2Cart
 #
 # DELETE /cart.delete.json
 # operationId: CartDelete
-export def "cartdeletejson CartDelete" [
+export def "cart-delete-json delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1435,6 +1484,7 @@ export def "cartdeletejson CartDelete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --delete-bridge: oneof<nothing, bool> # Identifies if there is a necessity to delete bridge (default: true)
 ]: nothing -> record<result: record<store: string>, return_code: int, return_message: string> {
@@ -1444,7 +1494,7 @@ export def "cartdeletejson CartDelete" [
   let full_url = (build-url $base "/cart.delete.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Disconnect with the store and clear store session data.
@@ -1453,7 +1503,7 @@ export def "cartdeletejson CartDelete" [
 # DEPRECATED
 # operationId: CartDisconnect
 @deprecated
-export def "cartdisconnectjson CartDisconnect" [
+export def "cart-disconnect-json get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1461,6 +1511,7 @@ export def "cartdisconnectjson CartDisconnect" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --delete-bridge: oneof<nothing, bool> # Identifies if there is a necessity to delete bridge (default: false)
 ]: nothing -> record<result: record<connection: string>, return_code: int, return_message: string> {
@@ -1470,14 +1521,14 @@ export def "cartdisconnectjson CartDisconnect" [
   let full_url = (build-url $base "/cart.disconnect.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Create new gift card
 #
 # POST /cart.giftcard.add.json
 # operationId: CartGiftcardAdd
-export def "cartgiftcardaddjson CartGiftcardAdd" [
+export def "cart-giftcard-add-json create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1485,6 +1536,7 @@ export def "cartgiftcardaddjson CartGiftcardAdd" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --amount: float # Defines the gift card amount value.
   --code: string # Gift card code
@@ -1497,14 +1549,14 @@ export def "cartgiftcardaddjson CartGiftcardAdd" [
   let full_url = (build-url $base "/cart.giftcard.add.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get gift cards count.
 #
 # GET /cart.giftcard.count.json
 # operationId: CartGiftcardCount
-export def "cartgiftcardcountjson CartGiftcardCount" [
+export def "cart-giftcard-count-json get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1512,6 +1564,7 @@ export def "cartgiftcardcountjson CartGiftcardCount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --store-id: string # Store Id
 ]: nothing -> record<result: record<gift_cards_count: string>, return_code: int, return_message: string> {
@@ -1521,14 +1574,14 @@ export def "cartgiftcardcountjson CartGiftcardCount" [
   let full_url = (build-url $base "/cart.giftcard.count.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get gift cards list.
 #
 # GET /cart.giftcard.list.json
 # operationId: CartGiftcardList
-export def "cartgiftcardlistjson CartGiftcardList" [
+export def "cart-giftcard-list-json list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1536,6 +1589,7 @@ export def "cartgiftcardlistjson CartGiftcardList" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --page-cursor: string # Used to retrieve entities via cursor-based pagination (it can't be used with any other filtering parameter)
   --start: int # This parameter sets the number from which you want to get entities (default: 0)
@@ -1551,14 +1605,14 @@ export def "cartgiftcardlistjson CartGiftcardList" [
   let full_url = (build-url $base "/cart.giftcard.list.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get cart information
 #
 # GET /cart.info.json
 # operationId: CartInfo
-export def "cartinfojson CartInfo" [
+export def "cart-info-json get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1566,6 +1620,7 @@ export def "cartinfojson CartInfo" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --params: string # Set this parameter in order to choose which entity fields you want to retrieve (default: store_name,store_url,db_prefix)
   --response-fields: string # Set this parameter in order to choose which entity fields you want to retrieve
@@ -1578,7 +1633,7 @@ export def "cartinfojson CartInfo" [
   let full_url = (build-url $base "/cart.info.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get list of supported carts
@@ -1587,7 +1642,7 @@ export def "cartinfojson CartInfo" [
 # DEPRECATED
 # operationId: CartList
 @deprecated
-export def "cartlistjson CartList" [
+export def "cart-list-json list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1595,6 +1650,7 @@ export def "cartlistjson CartList" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<result: record<supported_carts: list<record>>, return_code: int, return_message: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -1602,14 +1658,14 @@ export def "cartlistjson CartList" [
   let full_url = (build-url $base "/cart.list.json")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get entity meta data
 #
 # GET /cart.meta_data.list.json
 # operationId: CartMetaDataList
-export def "cartmeta-datalistjson CartMetaDataList" [
+export def "cart-meta-data-list-json list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1617,6 +1673,7 @@ export def "cartmeta-datalistjson CartMetaDataList" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --entity-id: string # Entity Id
   --entity: string # Entity (default: product)
@@ -1634,14 +1691,14 @@ export def "cartmeta-datalistjson CartMetaDataList" [
   let full_url = (build-url $base "/cart.meta_data.list.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Set meta data for a specific entity
 #
 # POST /cart.meta_data.set.json
 # operationId: CartMetaDataSet
-export def "cartmeta-datasetjson CartMetaDataSet" [
+export def "cart-meta-data-set-json update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1649,6 +1706,7 @@ export def "cartmeta-datasetjson CartMetaDataSet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --entity-id: string # Entity Id
   --entity: string # Entity (default: product)
@@ -1663,14 +1721,14 @@ export def "cartmeta-datasetjson CartMetaDataSet" [
   let full_url = (build-url $base "/cart.meta_data.set.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Unset meta data for a specific entity
 #
 # DELETE /cart.meta_data.unset.json
 # operationId: CartMetaDataUnset
-export def "cartmeta-dataunsetjson CartMetaDataUnset" [
+export def "cart-meta-data-unset-json delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1678,6 +1736,7 @@ export def "cartmeta-dataunsetjson CartMetaDataUnset" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --entity-id: string # Entity Id
   --entity: string # Entity (default: product)
@@ -1691,14 +1750,14 @@ export def "cartmeta-dataunsetjson CartMetaDataUnset" [
   let full_url = (build-url $base "/cart.meta_data.unset.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get list of cart methods
 #
 # GET /cart.methods.json
 # operationId: CartMethods
-export def "cartmethodsjson CartMethods" [
+export def "cart-methods-json get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1706,6 +1765,7 @@ export def "cartmethodsjson CartMethods" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<result: record<method: list<string>>, return_code: int, return_message: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -1713,14 +1773,14 @@ export def "cartmethodsjson CartMethods" [
   let full_url = (build-url $base "/cart.methods.json")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get list of installed plugins
 #
 # GET /cart.plugin.list.json
 # operationId: CartPluginList
-export def "cartpluginlistjson CartPluginList" [
+export def "cart-plugin-list-json list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1728,6 +1788,7 @@ export def "cartpluginlistjson CartPluginList" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --store-key: string # Set this parameter if bridge is already uploaded to store
   --store-id: string # Store Id
@@ -1740,14 +1801,14 @@ export def "cartpluginlistjson CartPluginList" [
   let full_url = (build-url $base "/cart.plugin.list.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Add new script to the storefront
 #
 # POST /cart.script.add.json
 # operationId: CartScriptAdd
-export def "cartscriptaddjson CartScriptAdd" [
+export def "cart-script-add-json create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1755,6 +1816,7 @@ export def "cartscriptaddjson CartScriptAdd" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # The user-friendly script name
   --description: string # The user-friendly description
@@ -1770,14 +1832,14 @@ export def "cartscriptaddjson CartScriptAdd" [
   let full_url = (build-url $base "/cart.script.add.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Remove script from the storefront
 #
 # DELETE /cart.script.delete.json
 # operationId: CartScriptDelete
-export def "cartscriptdeletejson CartScriptDelete" [
+export def "cart-script-delete-json delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1785,6 +1847,7 @@ export def "cartscriptdeletejson CartScriptDelete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # Entity id
   --store-id: string # Store Id
@@ -1795,14 +1858,14 @@ export def "cartscriptdeletejson CartScriptDelete" [
   let full_url = (build-url $base "/cart.script.delete.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get scripts installed to the storefront
 #
 # GET /cart.script.list.json
 # operationId: CartScriptList
-export def "cartscriptlistjson CartScriptList" [
+export def "cart-script-list-json list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1810,6 +1873,7 @@ export def "cartscriptlistjson CartScriptList" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --page-cursor: string # Used to retrieve entities via cursor-based pagination (it can't be used with any other filtering parameter)
   --start: int # This parameter sets the number from which you want to get entities (default: 0)
@@ -1830,14 +1894,14 @@ export def "cartscriptlistjson CartScriptList" [
   let full_url = (build-url $base "/cart.script.list.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get list of shipping zones
 #
 # GET /cart.shipping_zones.list.json
 # operationId: CartShippingZonesList
-export def "cartshipping-zoneslistjson CartShippingZonesList" [
+export def "cart-shipping-zones-list-json list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1845,6 +1909,7 @@ export def "cartshipping-zoneslistjson CartShippingZonesList" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --store-id: string # Store Id
   --start: int # This parameter sets the number from which you want to get entities (default: 0)
@@ -1859,14 +1924,14 @@ export def "cartshipping-zoneslistjson CartShippingZonesList" [
   let full_url = (build-url $base "/cart.shipping_zones.list.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Check store availability, bridge connection for the downloadable carts, identify DB prefix, validate API accesses for API carts.
 #
 # GET /cart.validate.json
 # operationId: CartValidate
-export def "cartvalidatejson CartValidate" [
+export def "cart-validate-json validate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1874,6 +1939,7 @@ export def "cartvalidatejson CartValidate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --validate-version: oneof<nothing, bool> # Specify if api2cart should validate cart version (default: false)
 ]: nothing -> record<result: record<status: string>, return_code: int, return_message: string> {
@@ -1883,14 +1949,14 @@ export def "cartvalidatejson CartValidate" [
   let full_url = (build-url $base "/cart.validate.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Add new category in store
 #
 # POST /category.add.json
 # operationId: CategoryAdd
-export def "categoryaddjson CategoryAdd" [
+export def "category-add-json create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1898,6 +1964,7 @@ export def "categoryaddjson CategoryAdd" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # Defines category's name that has to be added
   --parent-id: string # Adds categories specified by parent id
@@ -1920,14 +1987,14 @@ export def "categoryaddjson CategoryAdd" [
   let full_url = (build-url $base "/category.add.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Assign category to product
 #
 # POST /category.assign.json
 # operationId: CategoryAssign
-export def "categoryassignjson CategoryAssign" [
+export def "category-assign-json assign" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1935,6 +2002,7 @@ export def "categoryassignjson CategoryAssign" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --product-id: string # Defines category assign to the product, specified by product id
   --category-id: string # Defines category assign, specified by category id
@@ -1946,14 +2014,14 @@ export def "categoryassignjson CategoryAssign" [
   let full_url = (build-url $base "/category.assign.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Count categories in store.
 #
 # GET /category.count.json
 # operationId: CategoryCount
-export def "categorycountjson CategoryCount" [
+export def "category-count-json get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1961,6 +2029,7 @@ export def "categorycountjson CategoryCount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --parent-id: string # Counts categories specified by parent id
   --store-id: string # Counts category specified by store id
@@ -1977,14 +2046,14 @@ export def "categorycountjson CategoryCount" [
   let full_url = (build-url $base "/category.count.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Delete category in store
 #
 # DELETE /category.delete.json
 # operationId: CategoryDelete
-export def "categorydeletejson CategoryDelete" [
+export def "category-delete-json delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1992,6 +2061,7 @@ export def "categorydeletejson CategoryDelete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # Defines category removal, specified by category id
 ]: nothing -> record<result: record<deleted: bool>, return_code: int, return_message: string> {
@@ -2001,14 +2071,14 @@ export def "categorydeletejson CategoryDelete" [
   let full_url = (build-url $base "/category.delete.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Search category in store. "Laptop" is specified here by default.
 #
 # GET /category.find.json
 # operationId: CategoryFind
-export def "categoryfindjson CategoryFind" [
+export def "category-find-json find" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2016,6 +2086,7 @@ export def "categoryfindjson CategoryFind" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --find-value: string # Entity search that is specified by some value
   --find-where: string # Entity search that is specified by the comma-separated unique fields (default: name)
@@ -2029,14 +2100,14 @@ export def "categoryfindjson CategoryFind" [
   let full_url = (build-url $base "/category.find.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Add image to category
 #
 # POST /category.image.add.json
 # operationId: CategoryImageAdd
-export def "categoryimageaddjson CategoryImageAdd" [
+export def "category-image-add-json create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2044,10 +2115,11 @@ export def "categoryimageaddjson CategoryImageAdd" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --category-id: string # Defines category id where the image should be added
   --image-name: string # Defines image's name
-  --qp-url: string # Defines URL of the image that has to be added
+  --url: string # Defines URL of the image that has to be added
   --label: string # Defines alternative text that has to be attached to the picture
   --mime: string # Mime type of image http://en.wikipedia.org/wiki/Internet_media_type.
   --type: string@type-completer-1 # Defines image's types that are specified by comma-separated list
@@ -2056,18 +2128,18 @@ export def "categoryimageaddjson CategoryImageAdd" [
 ]: nothing -> record<result: record<image_path: string>, return_code: int, return_message: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "category_id" $category_id "scalar") (serialize-qp "image_name" $image_name "scalar") (serialize-qp "url" $qp_url "scalar") (serialize-qp "label" $label "scalar") (serialize-qp "mime" $mime "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "position" $position "scalar") (serialize-qp "store_id" $store_id "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "category_id" $category_id "scalar") (serialize-qp "image_name" $image_name "scalar") (serialize-qp "url" $url "scalar") (serialize-qp "label" $label "scalar") (serialize-qp "mime" $mime "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "position" $position "scalar") (serialize-qp "store_id" $store_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/category.image.add.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Delete image
 #
 # DELETE /category.image.delete.json
 # operationId: CategoryImageDelete
-export def "categoryimagedeletejson CategoryImageDelete" [
+export def "category-image-delete-json delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2075,6 +2147,7 @@ export def "categoryimagedeletejson CategoryImageDelete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --category-id: string # Defines category id where the image should be deleted
   --image-id: string # Define image id
@@ -2086,14 +2159,14 @@ export def "categoryimagedeletejson CategoryImageDelete" [
   let full_url = (build-url $base "/category.image.delete.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get category info about category ID*** or specify other category ID.
 #
 # GET /category.info.json
 # operationId: CategoryInfo
-export def "categoryinfojson CategoryInfo" [
+export def "category-info-json get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2101,13 +2174,14 @@ export def "categoryinfojson CategoryInfo" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # Retrieves category's info specified by category id
   --params: string # Set this parameter in order to choose which entity fields you want to retrieve (default: id,parent_id,name,description)
   --response-fields: string # Set this parameter in order to choose which entity fields you want to retrieve
   --exclude: string # Set this parameter in order to choose which entity fields you want to ignore. Works only if parameter `params` equal force_all
-  --store-id: string # Retrieves category info  specified by store id
-  --lang-id: string # Retrieves category info  specified by language id
+  --store-id: string # Retrieves category info specified by store id
+  --lang-id: string # Retrieves category info specified by language id
 ]: nothing -> record<result: record<additional_fields: record, avail: bool, created_at: record<additional_fields: record, custom_fields: record, format: string, value: string>, custom_fields: record, description: string, id: string, images: list<record>, keywords: string, meta_description: string, meta_title: string, modified_at: record<additional_fields: record, custom_fields: record, format: string, value: string>, name: string, parent_id: string, path: string, seo_url: string, short_description: string, sort_order: int, stores_ids: list<string>>, return_code: int, return_message: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -2115,14 +2189,14 @@ export def "categoryinfojson CategoryInfo" [
   let full_url = (build-url $base "/category.info.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get list of categories from store.
 #
 # GET /category.list.json
 # operationId: CategoryList
-export def "categorylistjson CategoryList" [
+export def "category-list-json list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2130,6 +2204,7 @@ export def "categorylistjson CategoryList" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --start: int # This parameter sets the number from which you want to get entities (default: 0)
   --count: int # This parameter sets the entity amount that has to be retrieved. Max allowed count=250 (default: 10)
@@ -2152,14 +2227,14 @@ export def "categorylistjson CategoryList" [
   let full_url = (build-url $base "/category.list.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Unassign category to product
 #
 # POST /category.unassign.json
 # operationId: CategoryUnassign
-export def "categoryunassignjson CategoryUnassign" [
+export def "category-unassign-json create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2167,6 +2242,7 @@ export def "categoryunassignjson CategoryUnassign" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --category-id: string # Defines category unassign, specified by category id
   --product-id: string # Defines category unassign to the product, specified by product id
@@ -2178,14 +2254,14 @@ export def "categoryunassignjson CategoryUnassign" [
   let full_url = (build-url $base "/category.unassign.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Update category in store
 #
 # PUT /category.update.json
 # operationId: CategoryUpdate
-export def "categoryupdatejson CategoryUpdate" [
+export def "category-update-json update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2193,6 +2269,7 @@ export def "categoryupdatejson CategoryUpdate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # Defines category update specified by category id
   --name: string # Defines new category’s name
@@ -2215,7 +2292,7 @@ export def "categoryupdatejson CategoryUpdate" [
   let full_url = (build-url $base "/category.update.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Add customer into store.
@@ -2223,7 +2300,7 @@ export def "categoryupdatejson CategoryUpdate" [
 # POST /customer.add.json
 # operationId: CustomerAdd
 # --address item shape: {address_book_address1?: string, address_book_address2?: string, address_book_city?: string, address_book_company?: string, address_book_country?: string, address_book_default?: bool, address_book_fax?: string, address_book_first_name?: string, address_book_gender?: string, address_book_last_name?: string, address_book_phone?: string, address_book_postcode?: string, address_book_region?: string, address_book_state?: string, address_book_type?: string, address_book_website?: string}
-export def "customeraddjson CustomerAdd" [
+export def "customer-add-json create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2231,6 +2308,7 @@ export def "customeraddjson CustomerAdd" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --address: list # item shape: {address_book_address1?: string, address_book_address2?: string, address_book_city?: string, address_book_company?: string, address_book_country?: string, address_book_default?: bool, address_book_fax?: string, address_book_first_name?: string, address_book_gender?: string, address_book_last_name?: string, address_book_phone?: string, address_book_postcode?: string, address_book_region?: string, address_book_state?: string, address_book_type?: string, address_book_website?: string}
   --birth-day: string # Defines customer's birthday
@@ -2256,18 +2334,18 @@ export def "customeraddjson CustomerAdd" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/customer.add.json")
-  let body = {address: $address, birth_day: $birth_day, company: $company, created_time: $created_time, email: $email, fax: $fax, first_name: $first_name, gender: $gender, group: $group, last_login: $last_login, last_name: $last_name, login: $login, modified_time: $modified_time, news_letter_subscription: $news_letter_subscription, password: $password, phone: $phone, status: $status, store_id: $store_id, website: $website} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"address": $address, "birth_day": $birth_day, "company": $company, "created_time": $created_time, "email": $email, "fax": $fax, "first_name": $first_name, "gender": $gender, "group": $group, "last_login": $last_login, "last_name": $last_name, "login": $login, "modified_time": $modified_time, "news_letter_subscription": $news_letter_subscription, "password": $password, "phone": $phone, "status": $status, "store_id": $store_id, "website": $website} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Get attributes for specific customer
 #
 # GET /customer.attribute.list.json
 # operationId: CustomerAttributeList
-export def "customerattributelistjson CustomerAttributeList" [
+export def "customer-attribute-list-json list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2275,6 +2353,7 @@ export def "customerattributelistjson CustomerAttributeList" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --count: int # This parameter sets the entity amount that has to be retrieved. Max allowed count=250 (default: 10)
   --page-cursor: string # Used to retrieve entities via cursor-based pagination (it can't be used with any other filtering parameter)
@@ -2291,14 +2370,14 @@ export def "customerattributelistjson CustomerAttributeList" [
   let full_url = (build-url $base "/customer.attribute.list.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get number of customers from store.
 #
 # GET /customer.count.json
 # operationId: CustomerCount
-export def "customercountjson CustomerCount" [
+export def "customer-count-json get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2306,6 +2385,7 @@ export def "customercountjson CustomerCount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --group-id: string # Customer group_id
   --created-from: string # Retrieve entities from their creation date
@@ -2322,14 +2402,14 @@ export def "customercountjson CustomerCount" [
   let full_url = (build-url $base "/customer.count.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Find customers in store.
 #
 # GET /customer.find.json
 # operationId: CustomerFind
-export def "customerfindjson CustomerFind" [
+export def "customer-find-json find" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2337,6 +2417,7 @@ export def "customerfindjson CustomerFind" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --find-value: string # Entity search that is specified by some value
   --find-where: string # Entity search that is specified by the comma-separated unique fields (default: email)
@@ -2349,14 +2430,14 @@ export def "customerfindjson CustomerFind" [
   let full_url = (build-url $base "/customer.find.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Create customer group.
 #
 # POST /customer.group.add.json
 # operationId: CustomerGroupAdd
-export def "customergroupaddjson CustomerGroupAdd" [
+export def "customer-group-add-json create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2364,6 +2445,7 @@ export def "customergroupaddjson CustomerGroupAdd" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # Customer group name
   --store-id: string # Store Id
@@ -2375,14 +2457,14 @@ export def "customergroupaddjson CustomerGroupAdd" [
   let full_url = (build-url $base "/customer.group.add.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get list of customers groups.
 #
 # GET /customer.group.list.json
 # operationId: CustomerGroupList
-export def "customergrouplistjson CustomerGroupList" [
+export def "customer-group-list-json list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2390,6 +2472,7 @@ export def "customergrouplistjson CustomerGroupList" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --page-cursor: string # Used to retrieve entities via cursor-based pagination (it can't be used with any other filtering parameter)
   --start: int # This parameter sets the number from which you want to get entities (default: 0)
@@ -2407,14 +2490,14 @@ export def "customergrouplistjson CustomerGroupList" [
   let full_url = (build-url $base "/customer.group.list.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get customers' details from store.
 #
 # GET /customer.info.json
 # operationId: CustomerInfo
-export def "customerinfojson CustomerInfo" [
+export def "customer-info-json get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2422,6 +2505,7 @@ export def "customerinfojson CustomerInfo" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # Retrieves customer's info specified by customer id
   --params: string # Set this parameter in order to choose which entity fields you want to retrieve (default: id,email,first_name,last_name)
@@ -2435,14 +2519,14 @@ export def "customerinfojson CustomerInfo" [
   let full_url = (build-url $base "/customer.info.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get list of customers from store.
 #
 # GET /customer.list.json
 # operationId: CustomerList
-export def "customerlistjson CustomerList" [
+export def "customer-list-json list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2450,6 +2534,7 @@ export def "customerlistjson CustomerList" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --page-cursor: string # Used to retrieve entities via cursor-based pagination (it can't be used with any other filtering parameter)
   --start: int # This parameter sets the number from which you want to get entities (default: 0)
@@ -2472,14 +2557,14 @@ export def "customerlistjson CustomerList" [
   let full_url = (build-url $base "/customer.list.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Update information of customer in store.
 #
 # PUT /customer.update.json
 # operationId: CustomerUpdate
-export def "customerupdatejson CustomerUpdate" [
+export def "customer-update-json update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2487,6 +2572,7 @@ export def "customerupdatejson CustomerUpdate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # Entity id
   --group-id: string # Customer group_id
@@ -2495,32 +2581,32 @@ export def "customerupdatejson CustomerUpdate" [
   --last-name: string # Defines customer's last name
   --news-letter-subscription: oneof<nothing, bool> # Defines whether the newsletter subscription is available for the user
   --tags: string # Customer tags
-  --address-book-id-{x}: string # The ID of the address.
-  --address-book-first-name-{x}: string # Specifies customer's first name in the address book
-  --address-book-last-name-{x}: string # Specifies customer's last name in the address book
-  --address-book-company-{x}: string # Specifies customer's company name in the address book
-  --address-book-phone-{x}: string # Specifies customer's phone number in the address book
-  --address-book-address1-{x}: string # Specifies customer's first address in the address book
-  --address-book-address2-{x}: string # Specifies customer's second address in the address book
-  --address-book-city-{x}: string # Specifies customer's city in the address book
-  --address-book-country-{x}: string # ISO code or name of country
-  --address-book-state-{x}: string # ISO code or name of state.
-  --address-book-postcode-{x}: string # Specifies customer's postcode
+  --address-book-id-x: string # The ID of the address.
+  --address-book-first-name-x: string # Specifies customer's first name in the address book
+  --address-book-last-name-x: string # Specifies customer's last name in the address book
+  --address-book-company-x: string # Specifies customer's company name in the address book
+  --address-book-phone-x: string # Specifies customer's phone number in the address book
+  --address-book-address1-x: string # Specifies customer's first address in the address book
+  --address-book-address2-x: string # Specifies customer's second address in the address book
+  --address-book-city-x: string # Specifies customer's city in the address book
+  --address-book-country-x: string # ISO code or name of country
+  --address-book-state-x: string # ISO code or name of state.
+  --address-book-postcode-x: string # Specifies customer's postcode
 ]: nothing -> record<result: record<updated: string>, return_code: int, return_message: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "group_id" $group_id "scalar") (serialize-qp "group_ids" $group_ids "scalar") (serialize-qp "first_name" $first_name "scalar") (serialize-qp "last_name" $last_name "scalar") (serialize-qp "news_letter_subscription" $news_letter_subscription "scalar") (serialize-qp "tags" $tags "scalar") (serialize-qp "address_book_id_{x}" $address_book_id_{x} "scalar") (serialize-qp "address_book_first_name_{x}" $address_book_first_name_{x} "scalar") (serialize-qp "address_book_last_name_{x}" $address_book_last_name_{x} "scalar") (serialize-qp "address_book_company_{x}" $address_book_company_{x} "scalar") (serialize-qp "address_book_phone_{x}" $address_book_phone_{x} "scalar") (serialize-qp "address_book_address1_{x}" $address_book_address1_{x} "scalar") (serialize-qp "address_book_address2_{x}" $address_book_address2_{x} "scalar") (serialize-qp "address_book_city_{x}" $address_book_city_{x} "scalar") (serialize-qp "address_book_country_{x}" $address_book_country_{x} "scalar") (serialize-qp "address_book_state_{x}" $address_book_state_{x} "scalar") (serialize-qp "address_book_postcode_{x}" $address_book_postcode_{x} "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "group_id" $group_id "scalar") (serialize-qp "group_ids" $group_ids "scalar") (serialize-qp "first_name" $first_name "scalar") (serialize-qp "last_name" $last_name "scalar") (serialize-qp "news_letter_subscription" $news_letter_subscription "scalar") (serialize-qp "tags" $tags "scalar") (serialize-qp "address_book_id_{x}" $address_book_id_x "scalar") (serialize-qp "address_book_first_name_{x}" $address_book_first_name_x "scalar") (serialize-qp "address_book_last_name_{x}" $address_book_last_name_x "scalar") (serialize-qp "address_book_company_{x}" $address_book_company_x "scalar") (serialize-qp "address_book_phone_{x}" $address_book_phone_x "scalar") (serialize-qp "address_book_address1_{x}" $address_book_address1_x "scalar") (serialize-qp "address_book_address2_{x}" $address_book_address2_x "scalar") (serialize-qp "address_book_city_{x}" $address_book_city_x "scalar") (serialize-qp "address_book_country_{x}" $address_book_country_x "scalar") (serialize-qp "address_book_state_{x}" $address_book_state_x "scalar") (serialize-qp "address_book_postcode_{x}" $address_book_postcode_x "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/customer.update.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get list of orders that were left by customers before completing the order.
 #
 # GET /order.abandoned.list.json
 # operationId: OrderAbandonedList
-export def "orderabandonedlistjson OrderAbandonedList" [
+export def "order-abandoned-list-json list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2528,6 +2614,7 @@ export def "orderabandonedlistjson OrderAbandonedList" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --customer-id: string # Retrieves orders specified by customer id
   --customer-email: string # Retrieves orders specified by customer email
@@ -2550,7 +2637,7 @@ export def "orderabandonedlistjson OrderAbandonedList" [
   let full_url = (build-url $base "/order.abandoned.list.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Add a new order to the cart.
@@ -2559,7 +2646,7 @@ export def "orderabandonedlistjson OrderAbandonedList" [
 # operationId: OrderAdd
 # --note_attributes item shape: {name?: string, value?: string}
 # --order_item item shape: {order_item_allow_refund_items_separately?: bool, order_item_allow_ship_items_separately?: bool, order_item_id: string, order_item_model?: string, order_item_name: string, order_item_option?: list, order_item_parent?: int, order_item_parent_option_name?: string, order_item_price: float, order_item_price_includes_tax?: bool, order_item_property?: list, order_item_quantity: int, order_item_tax?: float, order_item_variant_id?: string, order_item_weight?: float}
-export def "orderaddjson OrderAdd" [
+export def "order-add-json create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2567,6 +2654,7 @@ export def "orderaddjson OrderAdd" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --admin-comment: string # Specifies admin's order comment
   --admin-private-comment: string # Specifies private admin's order comment
@@ -2585,7 +2673,7 @@ export def "orderaddjson OrderAdd" [
   --clear-cache: oneof<nothing, bool> # Is cache clear required (default: true)
   --comment: string # Specifies order comment
   --coupon-discount: float # Specifies order's coupon discount
-  --coupons: list # Coupons that will be applied to order
+  --coupons: list<string> # Coupons that will be applied to order
   --create-invoice: oneof<nothing, bool> # Defines whether the invoice is created automatically along with the order (default: false)
   --currency: string # Currency code of order
   --customer-birthday: string # Specifies customer’s birthday
@@ -2595,19 +2683,19 @@ export def "orderaddjson OrderAdd" [
   --customer-last-name: string # Specifies customer’s last name
   --customer-phone: string # Specifies customer’s phone
   --date: string # Specifies an order creation date in format Y-m-d H:i:s
-  --date-finished: string # Specifies order's  finished date
-  --date-modified: string # Specifies order's  modification date
+  --date-finished: string # Specifies order's finished date
+  --date-modified: string # Specifies order's modification date
   --discount: float # Specifies order's discount
   --external-source: string # Identifying the system used to generate the order
   --financial-status: string # Create order with financial status
   --fulfillment-status: string # Create order with fulfillment status
   --gift-certificate-discount: float # Discounts for order with gift certificates
   --id: string # Defines order's id
-  --inventory-behaviour: string # The behaviour to use when updating inventory.<hr><div style="font-style:normal">Values description:<div style="margin-left: 2%; padding-top: 2%"><div style="font-size:85%"><b>bypass</b> = Do not claim inventory </br></br><b>decrement_ignoring_policy</b> = Ignore the product's </br> inventory policy and claim amounts</br></br><b>decrement_obeying_policy</b> =  Obey the product's </br> inventory policy.</br></br></div></div></div> (default: bypass)
+  --inventory-behaviour: string # The behaviour to use when updating inventory.Values description:bypass = Do not claim inventory decrement_ignoring_policy = Ignore the product's inventory policy and claim amountsdecrement_obeying_policy = Obey the product's inventory policy. (default: bypass)
   --note-attributes: list # Defines note attributes — item shape: {name?: string, value?: string}
   --order-id: string # Defines the order id if it is supported by the cart
   order_item: list # item shape: {order_item_allow_refund_items_separately?: bool, order_item_allow_ship_items_separately?: bool, order_item_id: string, order_item_model?: string, order_item_name: string, order_item_option?: list, order_item_parent?: int, order_item_parent_option_name?: string, order_item_price: float, order_item_price_includes_tax?: bool, order_item_property?: list, order_item_quantity: int, order_item_tax?: float, order_item_variant_id?: string, order_item_weight?: float}
-  --order-payment-method: string # Defines order payment method.<br/>Setting order_payment_method on Shopify will also change financial_status field value to 'paid'
+  --order-payment-method: string # Defines order payment method.Setting order_payment_method on Shopify will also change financial_status field value to 'paid'
   --order-shipping-method: string # Defines order shipping method
   order_status: string # Defines order status.
   --prices-inc-tax: oneof<nothing, bool> # Indicates whether prices and subtotal includes tax. (default: false)
@@ -2639,18 +2727,18 @@ export def "orderaddjson OrderAdd" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/order.add.json")
-  let body = {admin_comment: $admin_comment, admin_private_comment: $admin_private_comment, bill_address_1: $bill_address_1, bill_address_2: $bill_address_2, bill_city: $bill_city, bill_company: $bill_company, bill_country: $bill_country, bill_fax: $bill_fax, bill_first_name: $bill_first_name, bill_last_name: $bill_last_name, bill_phone: $bill_phone, bill_postcode: $bill_postcode, bill_state: $bill_state, channel_id: $channel_id, clear_cache: $clear_cache, comment: $comment, coupon_discount: $coupon_discount, coupons: $coupons, create_invoice: $create_invoice, currency: $currency, customer_birthday: $customer_birthday, customer_email: $customer_email, customer_fax: $customer_fax, customer_first_name: $customer_first_name, customer_last_name: $customer_last_name, customer_phone: $customer_phone, date: $date, date_finished: $date_finished, date_modified: $date_modified, discount: $discount, external_source: $external_source, financial_status: $financial_status, fulfillment_status: $fulfillment_status, gift_certificate_discount: $gift_certificate_discount, id: $id, inventory_behaviour: $inventory_behaviour, note_attributes: $note_attributes, order_id: $order_id, order_item: $order_item, order_payment_method: $order_payment_method, order_shipping_method: $order_shipping_method, order_status: $order_status, prices_inc_tax: $prices_inc_tax, send_admin_notifications: $send_admin_notifications, send_notifications: $send_notifications, shipp_address_1: $shipp_address_1, shipp_address_2: $shipp_address_2, shipp_city: $shipp_city, shipp_company: $shipp_company, shipp_country: $shipp_country, shipp_fax: $shipp_fax, shipp_first_name: $shipp_first_name, shipp_last_name: $shipp_last_name, shipp_phone: $shipp_phone, shipp_postcode: $shipp_postcode, shipp_state: $shipp_state, shipping_price: $shipping_price, shipping_tax: $shipping_tax, store_id: $store_id, subtotal_price: $subtotal_price, tags: $tags, tax_price: $tax_price, total_paid: $total_paid, total_price: $total_price, total_weight: $total_weight, transaction_id: $transaction_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"admin_comment": $admin_comment, "admin_private_comment": $admin_private_comment, "bill_address_1": $bill_address_1, "bill_address_2": $bill_address_2, "bill_city": $bill_city, "bill_company": $bill_company, "bill_country": $bill_country, "bill_fax": $bill_fax, "bill_first_name": $bill_first_name, "bill_last_name": $bill_last_name, "bill_phone": $bill_phone, "bill_postcode": $bill_postcode, "bill_state": $bill_state, "channel_id": $channel_id, "clear_cache": $clear_cache, "comment": $comment, "coupon_discount": $coupon_discount, "coupons": $coupons, "create_invoice": $create_invoice, "currency": $currency, "customer_birthday": $customer_birthday, "customer_email": $customer_email, "customer_fax": $customer_fax, "customer_first_name": $customer_first_name, "customer_last_name": $customer_last_name, "customer_phone": $customer_phone, "date": $date, "date_finished": $date_finished, "date_modified": $date_modified, "discount": $discount, "external_source": $external_source, "financial_status": $financial_status, "fulfillment_status": $fulfillment_status, "gift_certificate_discount": $gift_certificate_discount, "id": $id, "inventory_behaviour": $inventory_behaviour, "note_attributes": $note_attributes, "order_id": $order_id, "order_item": $order_item, "order_payment_method": $order_payment_method, "order_shipping_method": $order_shipping_method, "order_status": $order_status, "prices_inc_tax": $prices_inc_tax, "send_admin_notifications": $send_admin_notifications, "send_notifications": $send_notifications, "shipp_address_1": $shipp_address_1, "shipp_address_2": $shipp_address_2, "shipp_city": $shipp_city, "shipp_company": $shipp_company, "shipp_country": $shipp_country, "shipp_fax": $shipp_fax, "shipp_first_name": $shipp_first_name, "shipp_last_name": $shipp_last_name, "shipp_phone": $shipp_phone, "shipp_postcode": $shipp_postcode, "shipp_state": $shipp_state, "shipping_price": $shipping_price, "shipping_tax": $shipping_tax, "store_id": $store_id, "subtotal_price": $subtotal_price, "tags": $tags, "tax_price": $tax_price, "total_paid": $total_paid, "total_price": $total_price, "total_weight": $total_weight, "transaction_id": $transaction_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Count orders in store
 #
 # GET /order.count.json
 # operationId: OrderCount
-export def "ordercountjson OrderCount" [
+export def "order-count-json get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2658,11 +2746,12 @@ export def "ordercountjson OrderCount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --customer-id: string # Counts orders quantity specified by customer id
   --customer-email: string # Counts orders quantity specified by customer email
   --order-status: string # Counts orders quantity specified by order status
-  --order-status-ids: list # Retrieves orders specified by order statuses
+  --order-status-ids: list<string> # Retrieves orders specified by order statuses
   --created-to: string # Retrieve entities to their creation date
   --created-from: string # Retrieve entities from their creation date
   --modified-to: string # Retrieve entities to their modification date
@@ -2683,14 +2772,14 @@ export def "ordercountjson OrderCount" [
   let full_url = (build-url $base "/order.count.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Retrieve list of financial statuses
 #
 # GET /order.financial_status.list.json
 # operationId: OrderFinancialStatusList
-export def "orderfinancial-statuslistjson OrderFinancialStatusList" [
+export def "order-financial-status-list-json list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2698,6 +2787,7 @@ export def "orderfinancial-statuslistjson OrderFinancialStatusList" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<result: record<order_financial_statuses: list<record>>, return_code: int, return_message: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -2705,7 +2795,7 @@ export def "orderfinancial-statuslistjson OrderFinancialStatusList" [
   let full_url = (build-url $base "/order.financial_status.list.json")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # This method is deprecated and won't be supported in the future. Please use "order.list" instead.
@@ -2714,7 +2804,7 @@ export def "orderfinancial-statuslistjson OrderFinancialStatusList" [
 # DEPRECATED
 # operationId: OrderFind
 @deprecated
-export def "orderfindjson OrderFind" [
+export def "order-find-json find" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2722,6 +2812,7 @@ export def "orderfindjson OrderFind" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --customer-id: string # Retrieves orders specified by customer id
   --customer-email: string # Retrieves orders specified by customer email
@@ -2742,14 +2833,14 @@ export def "orderfindjson OrderFind" [
   let full_url = (build-url $base "/order.find.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Retrieve list of fulfillment statuses
 #
 # GET /order.fulfillment_status.list.json
 # operationId: OrderFulfillmentStatusList
-export def "orderfulfillment-statuslistjson OrderFulfillmentStatusList" [
+export def "order-fulfillment-status-list-json list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2757,6 +2848,7 @@ export def "orderfulfillment-statuslistjson OrderFulfillmentStatusList" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<result: record<order_fulfillment_statuses: list<record>>, return_code: int, return_message: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -2764,14 +2856,14 @@ export def "orderfulfillment-statuslistjson OrderFulfillmentStatusList" [
   let full_url = (build-url $base "/order.fulfillment_status.list.json")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Info about a specific order by ID
 #
 # GET /order.info.json
 # operationId: OrderInfo
-export def "orderinfojson OrderInfo" [
+export def "order-info-json get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2779,6 +2871,7 @@ export def "orderinfojson OrderInfo" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --order-id: string # Retrieves order’s info specified by order id
   --id: string # Retrieves order info specified by id
@@ -2794,14 +2887,14 @@ export def "orderinfojson OrderInfo" [
   let full_url = (build-url $base "/order.info.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get list of orders from store.
 #
 # GET /order.list.json
 # operationId: OrderList
-export def "orderlistjson OrderList" [
+export def "order-list-json list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2809,12 +2902,13 @@ export def "orderlistjson OrderList" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --customer-id: string # Retrieves orders specified by customer id
   --customer-email: string # Retrieves orders specified by customer email
   --phone: string # Filter orders by customer's phone number
   --order-status: string # Retrieves orders specified by order status
-  --order-status-ids: list # Retrieves orders specified by order statuses
+  --order-status-ids: list<string> # Retrieves orders specified by order statuses
   --start: int # This parameter sets the number from which you want to get entities (default: 0)
   --count: int # This parameter sets the entity amount that has to be retrieved. Max allowed count=250 (default: 10)
   --page-cursor: string # Used to retrieve orders via cursor-based pagination (it can't be used with any other filtering parameter)
@@ -2850,7 +2944,7 @@ export def "orderlistjson OrderList" [
   let full_url = (build-url $base "/order.list.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Retrieve list of order preestimated shipping methods
@@ -2858,7 +2952,7 @@ export def "orderlistjson OrderList" [
 # POST /order.preestimate_shipping.list.json
 # operationId: OrderPreestimateShippingList
 # --order_item item shape: {order_item_id: string, order_item_model?: string, order_item_option?: list, order_item_quantity: int, order_item_variant_id?: string, order_item_weight?: float}
-export def "orderpreestimate-shippinglistjson OrderPreestimateShippingList" [
+export def "order-preestimate-shipping-list-json list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2866,6 +2960,7 @@ export def "orderpreestimate-shippinglistjson OrderPreestimateShippingList" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --customer-email: string # Retrieves orders specified by customer email
   --customer-id: string # Retrieves orders specified by customer id
@@ -2884,11 +2979,11 @@ export def "orderpreestimate-shippinglistjson OrderPreestimateShippingList" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/order.preestimate_shipping.list.json")
-  let body = {customer_email: $customer_email, customer_id: $customer_id, exclude: $exclude, order_item: $order_item, params: $params, shipp_address_1: $shipp_address_1, shipp_city: $shipp_city, shipp_country: $shipp_country, shipp_postcode: $shipp_postcode, shipp_state: $shipp_state, store_id: $store_id, warehouse_id: $warehouse_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"customer_email": $customer_email, "customer_id": $customer_id, "exclude": $exclude, "order_item": $order_item, "params": $params, "shipp_address_1": $shipp_address_1, "shipp_city": $shipp_city, "shipp_country": $shipp_country, "shipp_postcode": $shipp_postcode, "shipp_state": $shipp_state, "store_id": $store_id, "warehouse_id": $warehouse_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Add a refund to the order.
@@ -2896,7 +2991,7 @@ export def "orderpreestimate-shippinglistjson OrderPreestimateShippingList" [
 # POST /order.refund.add.json
 # operationId: OrderRefundAdd
 # --items item shape: {order_product_id?: string, price?: float, quantity?: int}
-export def "orderrefundaddjson OrderRefundAdd" [
+export def "order-refund-add-json create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2904,6 +2999,7 @@ export def "orderrefundaddjson OrderRefundAdd" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --date: string # Specifies an order creation date in format Y-m-d H:i:s
   --fee-price: float # Specifies refund's fee price
@@ -2920,11 +3016,11 @@ export def "orderrefundaddjson OrderRefundAdd" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/order.refund.add.json")
-  let body = {date: $date, fee_price: $fee_price, is_online: $is_online, item_restock: $item_restock, items: $items, message: $message, order_id: $order_id, send_notifications: $send_notifications, shipping_price: $shipping_price, total_price: $total_price} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"date": $date, "fee_price": $fee_price, "is_online": $is_online, "item_restock": $item_restock, "items": $items, "message": $message, "order_id": $order_id, "send_notifications": $send_notifications, "shipping_price": $shipping_price, "total_price": $total_price} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Add a shipment to the order.
@@ -2933,7 +3029,7 @@ export def "orderrefundaddjson OrderRefundAdd" [
 # operationId: OrderShipmentAdd
 # --items item shape: {order_product_id?: string, quantity?: float}
 # --tracking_numbers item shape: {carrier_id?: string, tracking_number?: string}
-export def "ordershipmentaddjson OrderShipmentAdd" [
+export def "order-shipment-add-json create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2941,6 +3037,7 @@ export def "ordershipmentaddjson OrderShipmentAdd" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --adjust-stock: oneof<nothing, bool> # This parameter is used for adjust stock. (default: false)
   --enable-cache: oneof<nothing, bool> # If the value is 'true' and order exist in our cache, we will use order.info from cache to prepare shipment items. (default: false)
@@ -2952,25 +3049,25 @@ export def "ordershipmentaddjson OrderShipmentAdd" [
   --shipping-method: string # Define shipping method
   --store-id: string # Store Id
   --tracking-link: string # Defines custom tracking link
-  --tracking-numbers: list # Defines shipment's tracking numbers that have to be added</br> How set tracking numbers to appropriate carrier:<ul><li>tracking_numbers[]=a2c.demo1,a2c.demo2 - set default carrier</li><li>tracking_numbers[<b>carrier_id</b>]=a2c.demo - set appropriate carrier</li></ul>To get the list of carriers IDs that are available in your store, use the <a href = "https://api2cart.com/docs/#/cart/CartInfo">cart.info</a > method — item shape: {carrier_id?: string, tracking_number?: string}
+  --tracking-numbers: list # Defines shipment's tracking numbers that have to be added How set tracking numbers to appropriate carrier:tracking_numbers[]=a2c.demo1,a2c.demo2 - set default carriertracking_numbers[carrier_id]=a2c.demo - set appropriate carrierTo get the list of carriers IDs that are available in your store, use the cart.info method — item shape: {carrier_id?: string, tracking_number?: string}
   --warehouse-id: string # This parameter is used for selecting a warehouse where you need to set/modify a product quantity.
 ]: any -> record<result: record<shipment_id: string>, return_code: int, return_message: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/order.shipment.add.json")
-  let body = {adjust_stock: $adjust_stock, enable_cache: $enable_cache, is_shipped: $is_shipped, items: $items, order_id: $order_id, send_notifications: $send_notifications, shipment_provider: $shipment_provider, shipping_method: $shipping_method, store_id: $store_id, tracking_link: $tracking_link, tracking_numbers: $tracking_numbers, warehouse_id: $warehouse_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"adjust_stock": $adjust_stock, "enable_cache": $enable_cache, "is_shipped": $is_shipped, "items": $items, "order_id": $order_id, "send_notifications": $send_notifications, "shipment_provider": $shipment_provider, "shipping_method": $shipping_method, "store_id": $store_id, "tracking_link": $tracking_link, "tracking_numbers": $tracking_numbers, "warehouse_id": $warehouse_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Delete order's shipment.
 #
 # DELETE /order.shipment.delete.json
 # operationId: OrderShipmentDelete
-export def "ordershipmentdeletejson OrderShipmentDelete" [
+export def "order-shipment-delete-json delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2978,6 +3075,7 @@ export def "ordershipmentdeletejson OrderShipmentDelete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --shipment-id: string # Shipment id indicates the number of delivery
   --order-id: string # Defines the order for which the shipment will be deleted
@@ -2989,14 +3087,14 @@ export def "ordershipmentdeletejson OrderShipmentDelete" [
   let full_url = (build-url $base "/order.shipment.delete.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get information of shipment.
 #
 # GET /order.shipment.info.json
 # operationId: OrderShipmentInfo
-export def "ordershipmentinfojson OrderShipmentInfo" [
+export def "order-shipment-info-json get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3004,6 +3102,7 @@ export def "ordershipmentinfojson OrderShipmentInfo" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # Entity id
   --order-id: string # Defines the order id
@@ -3019,14 +3118,14 @@ export def "ordershipmentinfojson OrderShipmentInfo" [
   let full_url = (build-url $base "/order.shipment.info.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get list of shipments by orders.
 #
 # GET /order.shipment.list.json
 # operationId: OrderShipmentList
-export def "ordershipmentlistjson OrderShipmentList" [
+export def "order-shipment-list-json list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3034,6 +3133,7 @@ export def "ordershipmentlistjson OrderShipmentList" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --order-id: string # Retrieves shipments specified by order id
   --page-cursor: string # Used to retrieve entities via cursor-based pagination (it can't be used with any other filtering parameter)
@@ -3054,14 +3154,14 @@ export def "ordershipmentlistjson OrderShipmentList" [
   let full_url = (build-url $base "/order.shipment.list.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Add order shipment's tracking info.
 #
 # POST /order.shipment.tracking.add.json
 # operationId: OrderShipmentTrackingAdd
-export def "ordershipmenttrackingaddjson OrderShipmentTrackingAdd" [
+export def "order-shipment-tracking-add-json create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3069,6 +3169,7 @@ export def "ordershipmenttrackingaddjson OrderShipmentTrackingAdd" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --carrier-id: string # Defines tracking carrier id
   --order-id: string # Defines the order id
@@ -3083,11 +3184,11 @@ export def "ordershipmenttrackingaddjson OrderShipmentTrackingAdd" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/order.shipment.tracking.add.json")
-  let body = {carrier_id: $carrier_id, order_id: $order_id, send_notifications: $send_notifications, shipment_id: $shipment_id, store_id: $store_id, tracking_link: $tracking_link, tracking_number: $tracking_number, tracking_provider: $tracking_provider} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"carrier_id": $carrier_id, "order_id": $order_id, "send_notifications": $send_notifications, "shipment_id": $shipment_id, "store_id": $store_id, "tracking_link": $tracking_link, "tracking_number": $tracking_number, "tracking_provider": $tracking_provider} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Update order's shipment information.
@@ -3095,7 +3196,7 @@ export def "ordershipmenttrackingaddjson OrderShipmentTrackingAdd" [
 # PUT /order.shipment.update.json
 # operationId: OrderShipmentUpdate
 # --tracking_numbers item shape: {carrier_id?: string, tracking_number?: string}
-export def "ordershipmentupdatejson OrderShipmentUpdate" [
+export def "order-shipment-update-json update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3103,6 +3204,7 @@ export def "ordershipmentupdatejson OrderShipmentUpdate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --is-shipped: oneof<nothing, bool> # Defines shipment's status (default: true)
   --order-id: string # Defines the order that will be updated
@@ -3110,24 +3212,24 @@ export def "ordershipmentupdatejson OrderShipmentUpdate" [
   shipment_id: string # Shipment id indicates the number of delivery
   --store-id: string # Store Id
   --tracking-link: string # Defines custom tracking link
-  --tracking-numbers: list # Defines shipment's tracking numbers that have to be added</br> How set tracking numbers to appropriate carrier:<ul><li>tracking_numbers[]=a2c.demo1,a2c.demo2 - set default carrier</li><li>tracking_numbers[<b>carrier_id</b>]=a2c.demo - set appropriate carrier</li></ul>To get the list of carriers IDs that are available in your store, use the <a href = "https://api2cart.com/docs/#/cart/CartInfo">cart.info</a > method — item shape: {carrier_id?: string, tracking_number?: string}
+  --tracking-numbers: list # Defines shipment's tracking numbers that have to be added How set tracking numbers to appropriate carrier:tracking_numbers[]=a2c.demo1,a2c.demo2 - set default carriertracking_numbers[carrier_id]=a2c.demo - set appropriate carrierTo get the list of carriers IDs that are available in your store, use the cart.info method — item shape: {carrier_id?: string, tracking_number?: string}
 ]: any -> record<result: record<updated_items: int>, return_code: int, return_message: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/order.shipment.update.json")
-  let body = {is_shipped: $is_shipped, order_id: $order_id, replace: $replace, shipment_id: $shipment_id, store_id: $store_id, tracking_link: $tracking_link, tracking_numbers: $tracking_numbers} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"is_shipped": $is_shipped, "order_id": $order_id, "replace": $replace, "shipment_id": $shipment_id, "store_id": $store_id, "tracking_link": $tracking_link, "tracking_numbers": $tracking_numbers} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Retrieve list of statuses
 #
 # GET /order.status.list.json
 # operationId: OrderStatusList
-export def "orderstatuslistjson OrderStatusList" [
+export def "order-status-list-json list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3135,6 +3237,7 @@ export def "orderstatuslistjson OrderStatusList" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --store-id: string # Store Id
 ]: nothing -> record<result: record<cart_order_statuses: list<record>>, return_code: int, return_message: string> {
@@ -3144,14 +3247,14 @@ export def "orderstatuslistjson OrderStatusList" [
   let full_url = (build-url $base "/order.status.list.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Retrieve list of order transaction
 #
 # GET /order.transaction.list.json
 # operationId: OrderTransactionList
-export def "ordertransactionlistjson OrderTransactionList" [
+export def "order-transaction-list-json list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3159,6 +3262,7 @@ export def "ordertransactionlistjson OrderTransactionList" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --count: int # This parameter sets the entity amount that has to be retrieved. Max allowed count=250 (default: 10)
   --order-ids: string # Retrieves order transactions specified by order ids
@@ -3174,14 +3278,14 @@ export def "ordertransactionlistjson OrderTransactionList" [
   let full_url = (build-url $base "/order.transaction.list.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Update existing order.
 #
 # PUT /order.update.json
 # operationId: OrderUpdate
-export def "orderupdatejson OrderUpdate" [
+export def "order-update-json update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3189,6 +3293,7 @@ export def "orderupdatejson OrderUpdate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --order-id: string # Defines the orders specified by order id
   --store-id: string # Defines store id where the order should be found
@@ -3196,11 +3301,11 @@ export def "orderupdatejson OrderUpdate" [
   --comment: string # Specifies order comment
   --admin-comment: string # Specifies admin's order comment
   --admin-private-comment: string # Specifies private admin's order comment
-  --date-modified: string # Specifies order's  modification date
-  --date-finished: string # Specifies order's  finished date
+  --date-modified: string # Specifies order's modification date
+  --date-finished: string # Specifies order's finished date
   --financial-status: string # Update order financial status to specified
   --fulfillment-status: string # Create order with fulfillment status
-  --order-payment-method: string # Defines order payment method.<br/>Setting order_payment_method on Shopify will also change financial_status field value to 'paid'
+  --order-payment-method: string # Defines order payment method.Setting order_payment_method on Shopify will also change financial_status field value to 'paid'
   --send-notifications: oneof<nothing, bool> # Send notifications to customer after order was created (default: false)
 ]: nothing -> record<result: record<updated_items: int>, return_code: int, return_message: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -3209,7 +3314,7 @@ export def "orderupdatejson OrderUpdate" [
   let full_url = (build-url $base "/order.update.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Add new product to store.
@@ -3221,7 +3326,7 @@ export def "orderupdatejson OrderUpdate" [
 # --seller_profiles shape: {payment_profile_id?: string, return_profile_id?: string, shipping_profile_id?: string}
 # --shipping_details item shape: {shipping_cost?: float, shipping_service?: string, shipping_type?: string}
 # --tier_prices item shape: {price?: float, quantity?: float}
-export def "productaddjson ProductAdd" [
+export def "product-add-json create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3229,6 +3334,7 @@ export def "productaddjson ProductAdd" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --attribute-name: string # Defines product’s attribute name separated with a comma in Magento
   --attribute-set-name: string # Defines product’s attribute set name in Magento (default: Default)
@@ -3237,7 +3343,7 @@ export def "productaddjson ProductAdd" [
   --available-for-view: oneof<nothing, bool> # Specifies the set of visible/invisible products for users (default: true)
   --backorder-status: string # Set backorder status
   --barcode: string # A barcode is a unique code composed of numbers used as a product identifier.
-  --best-offer: list # The price at which Best Offers are automatically accepted.<hr><div style="font-style:normal">Param structure:<div style="margin-left: 2%;"><code style="padding:0; background-color:#ffffff;font-size:85%;font-family:monospace;">best_offer[<b>minimum_offer_price</b>] = decimal</br>best_offer[<b>auto_accept_price</b>] = decimal</br></code></div></div>
+  --best-offer: list<string> # The price at which Best Offers are automatically accepted.Param structure:best_offer[minimum_offer_price] = decimalbest_offer[auto_accept_price] = decimal
   --brand-name: string # Retrieves brands specified by brand name
   --categories-ids: string # Defines product add that is specified by comma-separated categories id
   --category-id: string # Defines product add that is specified by category id
@@ -3272,23 +3378,23 @@ export def "productaddjson ProductAdd" [
   name: string # Defines product's name that has to be added
   --old-price: float # Defines product's old price
   --ordered-count: int # Defines how many times the product was ordered (default: 0)
-  --package-details: list # If the seller is subscribed to "Business Policies", use the seller_profiles instead of the shipping_details, payment_methods and return_accepted params.<hr><div style="font-style:normal">Param structure:<div style="margin-left: 2%;"><code style="padding:0; background-color:#ffffff;font-size:85%;font-family:monospace;">package_details[<b>measure_unit</b>] = string</br> Allowed measure_unit values: [English or Metric] </br> Default: Metric</br>package_details[<b>weigh_unit</b>] = string</br> Allowed weigh_unit values: [kg, g, lbs, oz]</br>package_details[<b>package_depth</b>] = decimal</br>package_details[<b>package_length</b>] = decimal</br>package_details[<b>package_width</b>] = decimal</br>package_details[<b>weight_major</b>] = decimal</br>package_details[<b>weight_minor</b>] = decimal</br>package_details[<b>shipping_package</b>] = string</br> See cart.info method, param `eBay_shipping_package_details`</code></div></div>
-  --payment-methods: list # Identifies the payment method (such as PayPal) that the seller will accept when the buyer pays for the item. Look at cart.info method response for allowed values.<hr><div style="font-style:normal">Param structure:<div style="margin-left: 2%;"><code style="padding:0; background-color:#ffffff;font-size:85%;font-family:monospace;">payment_methods[0] = string</br>payment_methods[1] = string</br></code></div></div>
+  --package-details: list<string> # If the seller is subscribed to "Business Policies", use the seller_profiles instead of the shipping_details, payment_methods and return_accepted params.Param structure:package_details[measure_unit] = string Allowed measure_unit values: [English or Metric] Default: Metricpackage_details[weigh_unit] = string Allowed weigh_unit values: [kg, g, lbs, oz]package_details[package_depth] = decimalpackage_details[package_length] = decimalpackage_details[package_width] = decimalpackage_details[weight_major] = decimalpackage_details[weight_minor] = decimalpackage_details[shipping_package] = string See cart.info method, param `eBay_shipping_package_details`
+  --payment-methods: list<string> # Identifies the payment method (such as PayPal) that the seller will accept when the buyer pays for the item. Look at cart.info method response for allowed values.Param structure:payment_methods[0] = stringpayment_methods[1] = string
   --paypal-email: string # Valid PayPal email address for the PayPal account that the seller will use if they offer PayPal as a payment method for the listing.
   price: float # Defines product's price that has to be added
   --product-class: string # A categorization for the product
   --quantity: float # Defines product's quantity that has to be added (default: 0)
   --return-accepted: oneof<nothing, bool> # Indicates whether the seller allows the buyer to return the item.
-  --sales-tax: list # Percent of an item's price to be charged as the sales tax for the order. Look at cart.info method response for allowed values.<hr><div style="font-style:normal">Param structure:<div style="margin-left: 2%;"><code style="padding:0; background-color:#ffffff;font-size:85%;font-family:monospace;">sales_tax[<b>tax_percent</b>] = decimal (##.###)</br>sales_tax[<b>tax_state</b>] = string</br>sales_tax[<b>shipping_inc_in_tax</b>] = bool</br></code></div></div>
+  --sales-tax: list<string> # Percent of an item's price to be charged as the sales tax for the order. Look at cart.info method response for allowed values.Param structure:sales_tax[tax_percent] = decimal (##.###)sales_tax[tax_state] = stringsales_tax[shipping_inc_in_tax] = bool
   --search-keywords: string # Defines unique search keywords
-  --seller-profiles: record # If the seller is subscribed to "Business Policies", use the seller_profiles instead of the shipping_details, payment_methods and return_accepted params.<hr><div style="font-style:normal">Param structure:<div style="margin-left: 2%;"><code style="padding:0; background-color:#ffffff;font-size:85%;font-family:monospace;">seller_profiles[<b>shipping_profile_id</b>] = integer</br>seller_profiles[<b>payment_profile_id</b>] = integer</br>seller_profiles[<b>return_profile_id</b>] = integer</br></code></div></div> — shape: {payment_profile_id?: string, return_profile_id?: string, shipping_profile_id?: string}
+  --seller-profiles: record # If the seller is subscribed to "Business Policies", use the seller_profiles instead of the shipping_details, payment_methods and return_accepted params.Param structure:seller_profiles[shipping_profile_id] = integerseller_profiles[payment_profile_id] = integerseller_profiles[return_profile_id] = integer — shape: {payment_profile_id?: string, return_profile_id?: string, shipping_profile_id?: string}
   --seo-url: string # Defines unique URL for SEO
-  --shipping-details: list # The shipping details, including flat and calculated shipping costs and shipping insurance costs. Look at cart.info method response for allowed values.<hr><div style="font-style:normal">Param structure:<div style="margin-left: 2%;"><code style="padding:0; background-color:#ffffff;font-size:85%;font-family:monospace;">shipping_details[0][<b>shipping_type</b>] = string </br>shipping_details[0][<b>shipping_service</b>] = string</br>shipping_details[0][<b>shipping_cost</b>] = decimal</br>shipping_details[1][<b>shipping_type</b>] = string </br>shipping_details[1][<b>shipping_service</b>] = string</br>shipping_details[1][<b>shipping_cost</b>] = decimal</br></code></div></div> — item shape: {shipping_cost?: float, shipping_service?: string, shipping_type?: string}
+  --shipping-details: list # The shipping details, including flat and calculated shipping costs and shipping insurance costs. Look at cart.info method response for allowed values.Param structure:shipping_details[0][shipping_type] = string shipping_details[0][shipping_service] = stringshipping_details[0][shipping_cost] = decimalshipping_details[1][shipping_type] = string shipping_details[1][shipping_service] = stringshipping_details[1][shipping_cost] = decimal — item shape: {shipping_cost?: float, shipping_service?: string, shipping_type?: string}
   --shipping-template-id: int # The numeric ID of the shipping template associated with the products in Etsy. (default: 0)
   --short-description: string # Defines short description
   --sku: string # Defines product's sku that has to be added
   --special-price: float # Defines product's model that has to be added
-  --specifics: list # An array of Item Specific Name/Value pairs used by the seller to provide descriptive details of an item in a structured manner.         <hr>         <div style="font-style:normal">Param structure:           <div style="margin-left: 2%;">             <code style="padding:0; background-color:#ffffff;font-size:85%;font-family:monospace;">               specifics[int][<b>name</b>] = string</br>               specifics[int][<b>value</b>] = string</br>             </code>           </div>         </div>
+  --specifics: list<string> # An array of Item Specific Name/Value pairs used by the seller to provide descriptive details of an item in a structured manner. Param structure: specifics[int][name] = string specifics[int][value] = string
   --sprice-create: string # Defines the date of special price creation
   --sprice-expire: string # Defines the term of special price offer duration
   --sprice-modified: string # Defines the date of special price modification
@@ -3301,7 +3407,7 @@ export def "productaddjson ProductAdd" [
   --tier-prices: list # Defines product's tier prices — item shape: {price?: float, quantity?: float}
   --type: string # Defines product's type (default: simple)
   --upc: string # Universal Product Code. A UPC (UPC-A) is a commonly used identifer for many different products.
-  --body-url: string # Defines unique product's URL
+  --url: string # Defines unique product's URL
   --viewed-count: int # Specifies the number of product's reviews (default: 0)
   --visible: string # Set visibility status
   --warehouse-id: string # This parameter is used for selecting a warehouse where you need to set/modify a product quantity.
@@ -3314,18 +3420,18 @@ export def "productaddjson ProductAdd" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/product.add.json")
-  let body = {attribute_name: $attribute_name, attribute_set_name: $attribute_set_name, avail_from: $avail_from, available_for_sale: $available_for_sale, available_for_view: $available_for_view, backorder_status: $backorder_status, barcode: $barcode, best_offer: $best_offer, brand_name: $brand_name, categories_ids: $categories_ids, category_id: $category_id, clear_cache: $clear_cache, condition: $condition, cost_price: $cost_price, country_of_origin: $country_of_origin, created_at: $created_at, description: $description, downloadable: $downloadable, ean: $ean, files: $files, group_prices: $group_prices, gtin: $gtin, harmonized_system_code: $harmonized_system_code, height: $height, image_name: $image_name, image_url: $image_url, isbn: $isbn, lang_id: $lang_id, length: $length, listing_duration: $listing_duration, listing_type: $listing_type, manage_stock: $manage_stock, manufacturer: $manufacturer, marketplace_item_properties: $marketplace_item_properties, meta_description: $meta_description, meta_keywords: $meta_keywords, meta_title: $meta_title, model: $model, mpn: $mpn, name: $name, old_price: $old_price, ordered_count: $ordered_count, package_details: $package_details, payment_methods: $payment_methods, paypal_email: $paypal_email, price: $price, product_class: $product_class, quantity: $quantity, return_accepted: $return_accepted, sales_tax: $sales_tax, search_keywords: $search_keywords, seller_profiles: $seller_profiles, seo_url: $seo_url, shipping_details: $shipping_details, shipping_template_id: $shipping_template_id, short_description: $short_description, sku: $sku, special_price: $special_price, specifics: $specifics, sprice_create: $sprice_create, sprice_expire: $sprice_expire, sprice_modified: $sprice_modified, status: $status, store_id: $store_id, stores_ids: $stores_ids, tags: $tags, tax_class_id: $tax_class_id, taxable: $taxable, tier_prices: $tier_prices, type: $type, upc: $upc, url: $body_url, viewed_count: $viewed_count, visible: $visible, warehouse_id: $warehouse_id, weight: $weight, weight_unit: $weight_unit, wholesale_price: $wholesale_price, width: $width} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"attribute_name": $attribute_name, "attribute_set_name": $attribute_set_name, "avail_from": $avail_from, "available_for_sale": $available_for_sale, "available_for_view": $available_for_view, "backorder_status": $backorder_status, "barcode": $barcode, "best_offer": $best_offer, "brand_name": $brand_name, "categories_ids": $categories_ids, "category_id": $category_id, "clear_cache": $clear_cache, "condition": $condition, "cost_price": $cost_price, "country_of_origin": $country_of_origin, "created_at": $created_at, "description": $description, "downloadable": $downloadable, "ean": $ean, "files": $files, "group_prices": $group_prices, "gtin": $gtin, "harmonized_system_code": $harmonized_system_code, "height": $height, "image_name": $image_name, "image_url": $image_url, "isbn": $isbn, "lang_id": $lang_id, "length": $length, "listing_duration": $listing_duration, "listing_type": $listing_type, "manage_stock": $manage_stock, "manufacturer": $manufacturer, "marketplace_item_properties": $marketplace_item_properties, "meta_description": $meta_description, "meta_keywords": $meta_keywords, "meta_title": $meta_title, "model": $model, "mpn": $mpn, "name": $name, "old_price": $old_price, "ordered_count": $ordered_count, "package_details": $package_details, "payment_methods": $payment_methods, "paypal_email": $paypal_email, "price": $price, "product_class": $product_class, "quantity": $quantity, "return_accepted": $return_accepted, "sales_tax": $sales_tax, "search_keywords": $search_keywords, "seller_profiles": $seller_profiles, "seo_url": $seo_url, "shipping_details": $shipping_details, "shipping_template_id": $shipping_template_id, "short_description": $short_description, "sku": $sku, "special_price": $special_price, "specifics": $specifics, "sprice_create": $sprice_create, "sprice_expire": $sprice_expire, "sprice_modified": $sprice_modified, "status": $status, "store_id": $store_id, "stores_ids": $stores_ids, "tags": $tags, "tax_class_id": $tax_class_id, "taxable": $taxable, "tier_prices": $tier_prices, "type": $type, "upc": $upc, "url": $url, "viewed_count": $viewed_count, "visible": $visible, "warehouse_id": $warehouse_id, "weight": $weight, "weight_unit": $weight_unit, "wholesale_price": $wholesale_price, "width": $width} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Get list of attributes and values.
 #
 # GET /product.attribute.list.json
 # operationId: ProductAttributeList
-export def "productattributelistjson ProductAttributeList" [
+export def "product-attribute-list-json list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3333,6 +3439,7 @@ export def "productattributelistjson ProductAttributeList" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --product-id: string # Retrieves attributes specified by product id
   --attribute-id: string # Retrieves info for specified attribute_id
@@ -3356,14 +3463,14 @@ export def "productattributelistjson ProductAttributeList" [
   let full_url = (build-url $base "/product.attribute.list.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Set attribute value to product.
 #
 # POST /product.attribute.value.set.json
 # operationId: ProductAttributeValueSet
-export def "productattributevaluesetjson ProductAttributeValueSet" [
+export def "product-attribute-value-set-json update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3371,6 +3478,7 @@ export def "productattributevaluesetjson ProductAttributeValueSet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --product-id: string # Defines product id where the attribute should be added
   --attribute-id: string # Filter by attribute_id
@@ -3387,14 +3495,14 @@ export def "productattributevaluesetjson ProductAttributeValueSet" [
   let full_url = (build-url $base "/product.attribute.value.set.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Removes attribute value for a product.
 #
 # POST /product.attribute.value.unset.json
 # operationId: ProductAttributeValueUnset
-export def "productattributevalueunsetjson ProductAttributeValueUnset" [
+export def "product-attribute-value-unset-json create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3402,6 +3510,7 @@ export def "productattributevalueunsetjson ProductAttributeValueUnset" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --product-id: string # Product id
   --attribute-id: string # Attribute Id
@@ -3416,14 +3525,14 @@ export def "productattributevalueunsetjson ProductAttributeValueUnset" [
   let full_url = (build-url $base "/product.attribute.value.unset.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get list of brands from your store.
 #
 # GET /product.brand.list.json
 # operationId: ProductBrandList
-export def "productbrandlistjson ProductBrandList" [
+export def "product-brand-list-json list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3431,6 +3540,7 @@ export def "productbrandlistjson ProductBrandList" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --start: int # This parameter sets the number from which you want to get entities (default: 0)
   --count: int # This parameter sets the entity amount that has to be retrieved. Max allowed count=250 (default: 10)
@@ -3451,14 +3561,14 @@ export def "productbrandlistjson ProductBrandList" [
   let full_url = (build-url $base "/product.brand.list.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Search product child item (bundled item or configurable product variant) in store catalog.
 #
 # GET /product.child_item.find.json
 # operationId: ProductChildItemFind
-export def "productchild-itemfindjson ProductChildItemFind" [
+export def "product-child-item-find-json find" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3466,6 +3576,7 @@ export def "productchild-itemfindjson ProductChildItemFind" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --find-value: string # Entity search that is specified by some value
   --find-where: string # Entity search that is specified by the comma-separated unique fields (default: name)
@@ -3478,14 +3589,14 @@ export def "productchild-itemfindjson ProductChildItemFind" [
   let full_url = (build-url $base "/product.child_item.find.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get child for specific product.
 #
 # GET /product.child_item.info.json
 # operationId: ProductChildItemInfo
-export def "productchild-iteminfojson ProductChildItemInfo" [
+export def "product-child-item-info-json get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3493,6 +3604,7 @@ export def "productchild-iteminfojson ProductChildItemInfo" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --params: string # Set this parameter in order to choose which entity fields you want to retrieve (default: force_all)
   --response-fields: string # Set this parameter in order to choose which entity fields you want to retrieve
@@ -3509,14 +3621,14 @@ export def "productchild-iteminfojson ProductChildItemInfo" [
   let full_url = (build-url $base "/product.child_item.info.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get child items list of specific product(s).
 #
 # GET /product.child_item.list.json
 # operationId: ProductChildItemList
-export def "productchild-itemlistjson ProductChildItemList" [
+export def "product-child-item-list-json list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3524,6 +3636,7 @@ export def "productchild-itemlistjson ProductChildItemList" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --page-cursor: string # Used to retrieve products child items via cursor-based pagination (it can't be used with any other filtering parameter)
   --start: int # This parameter sets the number from which you want to get entities (default: 0)
@@ -3550,14 +3663,14 @@ export def "productchild-itemlistjson ProductChildItemList" [
   let full_url = (build-url $base "/product.child_item.list.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Count products in store.
 #
 # GET /product.count.json
 # operationId: ProductCount
-export def "productcountjson ProductCount" [
+export def "product-count-json get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3565,6 +3678,7 @@ export def "productcountjson ProductCount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --category-id: string # Counts products specified by category id
   --created-from: string # Retrieve entities from their creation date
@@ -3579,7 +3693,7 @@ export def "productcountjson ProductCount" [
   --report-request-id: string # Report request id
   --disable-report-cache: oneof<nothing, bool> # Disable report cache for current request (default: false)
   --brand-name: string # Retrieves brands specified by brand name
-  --product-attributes: list # Defines product attributes
+  --product-attributes: list<string> # Defines product attributes
   --status: string # Defines product's status
   --type: string # Defines products's type
 ]: nothing -> record<result: record<products_count: int>, return_code: int, return_message: string> {
@@ -3589,14 +3703,14 @@ export def "productcountjson ProductCount" [
   let full_url = (build-url $base "/product.count.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Add currency and/or set default in store
 #
 # POST /product.currency.add.json
 # operationId: ProductCurrencyAdd
-export def "productcurrencyaddjson ProductCurrencyAdd" [
+export def "product-currency-add-json create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3604,6 +3718,7 @@ export def "productcurrencyaddjson ProductCurrencyAdd" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --iso3: string # Specifies standardized currency code
   --rate: float # Defines the numerical identifier against to the major currency
@@ -3619,14 +3734,14 @@ export def "productcurrencyaddjson ProductCurrencyAdd" [
   let full_url = (build-url $base "/product.currency.add.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get list of currencies
 #
 # GET /product.currency.list.json
 # operationId: ProductCurrencyList
-export def "productcurrencylistjson ProductCurrencyList" [
+export def "product-currency-list-json list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3634,6 +3749,7 @@ export def "productcurrencylistjson ProductCurrencyList" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --start: int # This parameter sets the number from which you want to get entities (default: 0)
   --count: int # This parameter sets the entity amount that has to be retrieved. Max allowed count=250 (default: 10)
@@ -3650,14 +3766,14 @@ export def "productcurrencylistjson ProductCurrencyList" [
   let full_url = (build-url $base "/product.currency.list.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Product delete
 #
 # DELETE /product.delete.json
 # operationId: ProductDelete
-export def "productdeletejson ProductDelete" [
+export def "product-delete-json delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3665,6 +3781,7 @@ export def "productdeletejson ProductDelete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # Product id that will be removed
 ]: nothing -> record<result: record<delete_items: int>, return_code: int, return_message: string> {
@@ -3674,14 +3791,14 @@ export def "productdeletejson ProductDelete" [
   let full_url = (build-url $base "/product.delete.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Retrieve all available fields for product item in store.
 #
 # GET /product.fields.json
 # operationId: ProductFields
-export def "productfieldsjson ProductFields" [
+export def "product-fields-json get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3689,6 +3806,7 @@ export def "productfieldsjson ProductFields" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<result: record, return_code: int, return_message: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -3696,14 +3814,14 @@ export def "productfieldsjson ProductFields" [
   let full_url = (build-url $base "/product.fields.json")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Search product in store catalog. "Apple" is specified here by default.
 #
 # GET /product.find.json
 # operationId: ProductFind
-export def "productfindjson ProductFind" [
+export def "product-find-json find" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3711,6 +3829,7 @@ export def "productfindjson ProductFind" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --find-value: string # Entity search that is specified by some value
   --find-where: string # Entity search that is specified by the comma-separated unique fields (default: name)
@@ -3725,14 +3844,14 @@ export def "productfindjson ProductFind" [
   let full_url = (build-url $base "/product.find.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Add image to product
 #
 # POST /product.image.add.json
 # operationId: ProductImageAdd
-export def "productimageaddjson ProductImageAdd" [
+export def "product-image-add-json create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3740,6 +3859,7 @@ export def "productimageaddjson ProductImageAdd" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content: string # Content(body) encoded in base64 of image file
   image_name: string # Defines image's name
@@ -3751,25 +3871,25 @@ export def "productimageaddjson ProductImageAdd" [
   --product-variant-id: int # Defines product's variants specified by variant id
   --store-id: string # Store Id
   type: string@type-completer-2 # Defines image's types that are specified by comma-separated list
-  --body-url: string # Defines URL of the image that has to be added
+  --url: string # Defines URL of the image that has to be added
   --variant-ids: string # Defines product's variants ids
 ]: any -> record<result: record<id: string, image_path: string>, return_code: int, return_message: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/product.image.add.json")
-  let body = {content: $content, image_name: $image_name, label: $label, lang_id: $lang_id, mime: $mime, position: $position, product_id: $product_id, product_variant_id: $product_variant_id, store_id: $store_id, type: $type, url: $body_url, variant_ids: $variant_ids} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"content": $content, "image_name": $image_name, "label": $label, "lang_id": $lang_id, "mime": $mime, "position": $position, "product_id": $product_id, "product_variant_id": $product_variant_id, "store_id": $store_id, "type": $type, "url": $url, "variant_ids": $variant_ids} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Delete image
 #
 # DELETE /product.image.delete.json
 # operationId: ProductImageDelete
-export def "productimagedeletejson ProductImageDelete" [
+export def "product-image-delete-json delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3777,6 +3897,7 @@ export def "productimagedeletejson ProductImageDelete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --product-id: string # Defines product id where the image should be deleted
   --id: string # Entity id
@@ -3788,14 +3909,14 @@ export def "productimagedeletejson ProductImageDelete" [
   let full_url = (build-url $base "/product.image.delete.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Update details of image
 #
 # PUT /product.image.update.json
 # operationId: ProductImageUpdate
-export def "productimageupdatejson ProductImageUpdate" [
+export def "product-image-update-json update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3803,6 +3924,7 @@ export def "productimageupdatejson ProductImageUpdate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --product-id: string # Defines product id where the image should be updated
   --image-name: string # Defines image's name
@@ -3820,14 +3942,14 @@ export def "productimageupdatejson ProductImageUpdate" [
   let full_url = (build-url $base "/product.image.update.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get product info about product ID *** or specify other product ID.
 #
 # GET /product.info.json
 # operationId: ProductInfo
-export def "productinfojson ProductInfo" [
+export def "product-info-json get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3835,6 +3957,7 @@ export def "productinfojson ProductInfo" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # Retrieves product's info specified by product id
   --params: string # Set this parameter in order to choose which entity fields you want to retrieve (default: id,name,description,price,categories_ids)
@@ -3852,14 +3975,14 @@ export def "productinfojson ProductInfo" [
   let full_url = (build-url $base "/product.info.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get list of products from your store. Returns 10 products by default.
 #
 # GET /product.list.json
 # operationId: ProductList
-export def "productlistjson ProductList" [
+export def "product-list-json list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3867,6 +3990,7 @@ export def "productlistjson ProductList" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --page-cursor: string # Used to retrieve products via cursor-based pagination (it can't be used with any other filtering parameter)
   --start: int # This parameter sets the number from which you want to get entities (default: 0)
@@ -3893,7 +4017,7 @@ export def "productlistjson ProductList" [
   --sku: string # Filter by product's sku
   --disable-cache: oneof<nothing, bool> # Disable cache for current request (default: false)
   --brand-name: string # Retrieves brands specified by brand name
-  --product-attributes: list # Defines product attributes
+  --product-attributes: list<string> # Defines product attributes
   --status: string # Defines product's status
   --type: string # Defines products's type
 ]: nothing -> record<additional_fields: record, custom_fields: record, pagination: record<additional_fields: record, custom_fields: record, next: string, previous: string>, result: record<additional_fields: record, custom_fields: record, product: list<record>, products_count: int>, return_code: int, return_message: string> {
@@ -3903,14 +4027,14 @@ export def "productlistjson ProductList" [
   let full_url = (build-url $base "/product.list.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Add manufacturer to store and assign to product
 #
 # POST /product.manufacturer.add.json
 # operationId: ProductManufacturerAdd
-export def "productmanufactureraddjson ProductManufacturerAdd" [
+export def "product-manufacturer-add-json create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3918,6 +4042,7 @@ export def "productmanufactureraddjson ProductManufacturerAdd" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --product-id: string # Defines products specified by product id
   --manufacturer: string # Defines product’s manufacturer's name
@@ -3928,14 +4053,14 @@ export def "productmanufactureraddjson ProductManufacturerAdd" [
   let full_url = (build-url $base "/product.manufacturer.add.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Add product option from store.
 #
 # POST /product.option.add.json
 # operationId: ProductOptionAdd
-export def "productoptionaddjson ProductOptionAdd" [
+export def "product-option-add-json create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3943,6 +4068,7 @@ export def "productoptionaddjson ProductOptionAdd" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # Defines option's name
   --type: string@type-completer-3 # Defines option's type that has to be added
@@ -3961,14 +4087,14 @@ export def "productoptionaddjson ProductOptionAdd" [
   let full_url = (build-url $base "/product.option.add.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Assign option from product.
 #
 # POST /product.option.assign.json
 # operationId: ProductOptionAssign
-export def "productoptionassignjson ProductOptionAssign" [
+export def "product-option-assign-json assign" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3976,6 +4102,7 @@ export def "productoptionassignjson ProductOptionAssign" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --product-id: string # Defines product id where the option should be assigned
   --option-id: string # Defines option id which has to be assigned
@@ -3990,14 +4117,14 @@ export def "productoptionassignjson ProductOptionAssign" [
   let full_url = (build-url $base "/product.option.assign.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get list of options.
 #
 # GET /product.option.list.json
 # operationId: ProductOptionList
-export def "productoptionlistjson ProductOptionList" [
+export def "product-option-list-json list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4005,6 +4132,7 @@ export def "productoptionlistjson ProductOptionList" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --start: int # This parameter sets the number from which you want to get entities (default: 0)
   --count: int # This parameter sets the entity amount that has to be retrieved. Max allowed count=250 (default: 10)
@@ -4021,14 +4149,14 @@ export def "productoptionlistjson ProductOptionList" [
   let full_url = (build-url $base "/product.option.list.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Add product option item from option.
 #
 # POST /product.option.value.add.json
 # operationId: ProductOptionValueAdd
-export def "productoptionvalueaddjson ProductOptionValueAdd" [
+export def "product-option-value-add-json create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4036,6 +4164,7 @@ export def "productoptionvalueaddjson ProductOptionValueAdd" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --product-id: string # Defines product id where the option value should be added
   --option-id: string # Defines option id where the value has to be added
@@ -4049,14 +4178,14 @@ export def "productoptionvalueaddjson ProductOptionValueAdd" [
   let full_url = (build-url $base "/product.option.value.add.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Assign product option item from product.
 #
 # POST /product.option.value.assign.json
 # operationId: ProductOptionValueAssign
-export def "productoptionvalueassignjson ProductOptionValueAssign" [
+export def "product-option-value-assign-json assign" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4064,6 +4193,7 @@ export def "productoptionvalueassignjson ProductOptionValueAssign" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --product-option-id: int # Defines product's option id where the value has to be assigned
   --option-value-id: int # Defines value id that has to be assigned
@@ -4075,14 +4205,14 @@ export def "productoptionvalueassignjson ProductOptionValueAssign" [
   let full_url = (build-url $base "/product.option.value.assign.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Update product option item from option.
 #
 # PUT /product.option.value.update.json
 # operationId: ProductOptionValueUpdate
-export def "productoptionvalueupdatejson ProductOptionValueUpdate" [
+export def "product-option-value-update-json update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4090,6 +4220,7 @@ export def "productoptionvalueupdatejson ProductOptionValueUpdate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --product-id: string # Defines product id where the option value should be updated
   --option-id: string # Defines option id where the value has to be updated
@@ -4105,7 +4236,7 @@ export def "productoptionvalueupdatejson ProductOptionValueUpdate" [
   let full_url = (build-url $base "/product.option.value.update.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Add some prices to the product.
@@ -4113,7 +4244,7 @@ export def "productoptionvalueupdatejson ProductOptionValueUpdate" [
 # POST /product.price.add.json
 # operationId: ProductPriceAdd
 # --group_prices item shape: {group_id?: string, price?: float}
-export def "productpriceaddjson ProductPriceAdd" [
+export def "product-price-add-json create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4121,6 +4252,7 @@ export def "productpriceaddjson ProductPriceAdd" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --group-prices: list # Defines product's group prices — item shape: {group_id?: string, price?: float}
   --product-id: string # Defines the product to which the price has to be added
@@ -4129,18 +4261,18 @@ export def "productpriceaddjson ProductPriceAdd" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/product.price.add.json")
-  let body = {group_prices: $group_prices, product_id: $product_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"group_prices": $group_prices, "product_id": $product_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Delete some prices of the product
 #
 # DELETE /product.price.delete.json
 # operationId: ProductPriceDelete
-export def "productpricedeletejson ProductPriceDelete" [
+export def "product-price-delete-json delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4148,6 +4280,7 @@ export def "productpricedeletejson ProductPriceDelete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --product-id: string # Defines the product where the price has to be deleted
   --group-prices: string # Defines product's group prices
@@ -4158,7 +4291,7 @@ export def "productpricedeletejson ProductPriceDelete" [
   let full_url = (build-url $base "/product.price.delete.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Update some prices of the product.
@@ -4166,7 +4299,7 @@ export def "productpricedeletejson ProductPriceDelete" [
 # PUT /product.price.update.json
 # operationId: ProductPriceUpdate
 # --group_prices item shape: {group_id?: string, id?: int, price?: float}
-export def "productpriceupdatejson ProductPriceUpdate" [
+export def "product-price-update-json update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4174,6 +4307,7 @@ export def "productpriceupdatejson ProductPriceUpdate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --group-prices: list # Defines product's group prices — item shape: {group_id?: string, id?: int, price?: float}
   --product-id: string # Defines the product where the price has to be updated
@@ -4182,18 +4316,18 @@ export def "productpriceupdatejson ProductPriceUpdate" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/product.price.update.json")
-  let body = {group_prices: $group_prices, product_id: $product_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"group_prices": $group_prices, "product_id": $product_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Get reviews of a specific product.
 #
 # GET /product.review.list.json
 # operationId: ProductReviewList
-export def "productreviewlistjson ProductReviewList" [
+export def "product-review-list-json list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4201,6 +4335,7 @@ export def "productreviewlistjson ProductReviewList" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --start: int # This parameter sets the number from which you want to get entities (default: 0)
   --page-cursor: string # Used to retrieve entities via cursor-based pagination (it can't be used with any other filtering parameter)
@@ -4219,14 +4354,14 @@ export def "productreviewlistjson ProductReviewList" [
   let full_url = (build-url $base "/product.review.list.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Assign product to store
 #
 # POST /product.store.assign.json
 # operationId: ProductStoreAssign
-export def "productstoreassignjson ProductStoreAssign" [
+export def "product-store-assign-json assign" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4234,6 +4369,7 @@ export def "productstoreassignjson ProductStoreAssign" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --product-id: string # Defines id of the product which should be assigned to a store
   --store-id: string # Defines id of the store product should be assigned to
@@ -4244,7 +4380,7 @@ export def "productstoreassignjson ProductStoreAssign" [
   let full_url = (build-url $base "/product.store.assign.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Add tax class and tax rate to store and assign to product.
@@ -4252,7 +4388,7 @@ export def "productstoreassignjson ProductStoreAssign" [
 # POST /product.tax.add.json
 # operationId: ProductTaxAdd
 # --tax_rates item shape: {name?: string, type?: string, value?: float}
-export def "producttaxaddjson ProductTaxAdd" [
+export def "product-tax-add-json create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4260,6 +4396,7 @@ export def "producttaxaddjson ProductTaxAdd" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   name: string # Defines tax class name where tax has to be added
   --product-id: string # Defines products specified by product id
@@ -4269,18 +4406,18 @@ export def "producttaxaddjson ProductTaxAdd" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/product.tax.add.json")
-  let body = {name: $name, product_id: $product_id, tax_rates: $tax_rates} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"name": $name, "product_id": $product_id, "tax_rates": $tax_rates} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Update price and quantity for a specific product
 #
 # PUT /product.update.json
 # operationId: ProductUpdate
-export def "productupdatejson ProductUpdate" [
+export def "product-update-json update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4288,6 +4425,7 @@ export def "productupdatejson ProductUpdate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # Defines product id that has to be updated
   --model: string # Defines product model that has to be updated
@@ -4344,7 +4482,7 @@ export def "productupdatejson ProductUpdate" [
   let full_url = (build-url $base "/product.update.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Add variant to product.
@@ -4352,7 +4490,7 @@ export def "productupdatejson ProductUpdate" [
 # POST /product.variant.add.json
 # operationId: ProductVariantAdd
 # --attributes item shape: {attribute_name?: string, attribute_price?: float, attribute_value?: string}
-export def "productvariantaddjson ProductVariantAdd" [
+export def "product-variant-add-json create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4360,6 +4498,7 @@ export def "productvariantaddjson ProductVariantAdd" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --attributes: list # Defines variant's attributes list — item shape: {attribute_name?: string, attribute_price?: float, attribute_value?: string}
   --available-for-sale: oneof<nothing, bool> # Specifies the set of visible/invisible product's variants for sale (default: true)
@@ -4393,7 +4532,7 @@ export def "productvariantaddjson ProductVariantAdd" [
   --store-id: string # Add variants specified by store id
   --tax-class-id: int # Defines tax classes where entity has to be added
   --taxable: oneof<nothing, bool> # Specifies whether a tax is charged (default: true)
-  --body-url: string # Defines unique product variant's URL
+  --url: string # Defines unique product variant's URL
   --warehouse-id: string # This parameter is used for selecting a warehouse where you need to set/modify a product quantity.
   --weight: float # Weight (default: 0)
   --weight-unit: string # Weight Unit
@@ -4403,18 +4542,18 @@ export def "productvariantaddjson ProductVariantAdd" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/product.variant.add.json")
-  let body = {attributes: $attributes, available_for_sale: $available_for_sale, available_for_view: $available_for_view, barcode: $barcode, clear_cache: $clear_cache, cost_price: $cost_price, country_of_origin: $country_of_origin, created_at: $created_at, description: $description, harmonized_system_code: $harmonized_system_code, height: $height, lang_id: $lang_id, length: $length, manage_stock: $manage_stock, manufacturer: $manufacturer, meta_description: $meta_description, meta_keywords: $meta_keywords, meta_title: $meta_title, model: $model, name: $name, price: $price, product_id: $product_id, quantity: $quantity, short_description: $short_description, sku: $sku, special_price: $special_price, sprice_create: $sprice_create, sprice_expire: $sprice_expire, sprice_modified: $sprice_modified, store_id: $store_id, tax_class_id: $tax_class_id, taxable: $taxable, url: $body_url, warehouse_id: $warehouse_id, weight: $weight, weight_unit: $weight_unit, width: $width} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"attributes": $attributes, "available_for_sale": $available_for_sale, "available_for_view": $available_for_view, "barcode": $barcode, "clear_cache": $clear_cache, "cost_price": $cost_price, "country_of_origin": $country_of_origin, "created_at": $created_at, "description": $description, "harmonized_system_code": $harmonized_system_code, "height": $height, "lang_id": $lang_id, "length": $length, "manage_stock": $manage_stock, "manufacturer": $manufacturer, "meta_description": $meta_description, "meta_keywords": $meta_keywords, "meta_title": $meta_title, "model": $model, "name": $name, "price": $price, "product_id": $product_id, "quantity": $quantity, "short_description": $short_description, "sku": $sku, "special_price": $special_price, "sprice_create": $sprice_create, "sprice_expire": $sprice_expire, "sprice_modified": $sprice_modified, "store_id": $store_id, "tax_class_id": $tax_class_id, "taxable": $taxable, "url": $url, "warehouse_id": $warehouse_id, "weight": $weight, "weight_unit": $weight_unit, "width": $width} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Get count variants.
 #
 # GET /product.variant.count.json
 # operationId: ProductVariantCount
-export def "productvariantcountjson ProductVariantCount" [
+export def "product-variant-count-json get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4422,6 +4561,7 @@ export def "productvariantcountjson ProductVariantCount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --created-from: string # Retrieve entities from their creation date
   --created-to: string # Retrieve entities to their creation date
@@ -4437,14 +4577,14 @@ export def "productvariantcountjson ProductVariantCount" [
   let full_url = (build-url $base "/product.variant.count.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Delete variant.
 #
 # DELETE /product.variant.delete.json
 # operationId: ProductVariantDelete
-export def "productvariantdeletejson ProductVariantDelete" [
+export def "product-variant-delete-json delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4452,6 +4592,7 @@ export def "productvariantdeletejson ProductVariantDelete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # Defines variant removal, specified by variant id
   --product-id: string # Defines product's id where the variant has to be deleted
@@ -4462,14 +4603,14 @@ export def "productvariantdeletejson ProductVariantDelete" [
   let full_url = (build-url $base "/product.variant.delete.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Add image to product
 #
 # POST /product.variant.image.add.json
 # operationId: ProductVariantImageAdd
-export def "productvariantimageaddjson ProductVariantImageAdd" [
+export def "product-variant-image-add-json create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4477,6 +4618,7 @@ export def "productvariantimageaddjson ProductVariantImageAdd" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content: string # Content(body) encoded in base64 of image file
   image_name: string # Defines image's name
@@ -4488,24 +4630,24 @@ export def "productvariantimageaddjson ProductVariantImageAdd" [
   product_variant_id: int # Defines product's variants specified by variant id
   --store-id: string # Store Id
   type: string@type-completer-2 # Defines image's types that are specified by comma-separated list (default: base)
-  --body-url: string # Defines URL of the image that has to be added
+  --url: string # Defines URL of the image that has to be added
 ]: any -> record<result: record<id: string, image_path: string>, return_code: int, return_message: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/product.variant.image.add.json")
-  let body = {content: $content, image_name: $image_name, label: $label, mime: $mime, option_id: $option_id, position: $position, product_id: $product_id, product_variant_id: $product_variant_id, store_id: $store_id, type: $type, url: $body_url} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"content": $content, "image_name": $image_name, "label": $label, "mime": $mime, "option_id": $option_id, "position": $position, "product_id": $product_id, "product_variant_id": $product_variant_id, "store_id": $store_id, "type": $type, "url": $url} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
-# Delete  image to product
+# Delete image to product
 #
 # DELETE /product.variant.image.delete.json
 # operationId: ProductVariantImageDelete
-export def "productvariantimagedeletejson ProductVariantImageDelete" [
+export def "product-variant-image-delete-json delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4513,6 +4655,7 @@ export def "productvariantimagedeletejson ProductVariantImageDelete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --product-id: string # Defines product id where the variant image should be deleted
   --product-variant-id: int # Defines product's variants specified by variant id
@@ -4525,14 +4668,14 @@ export def "productvariantimagedeletejson ProductVariantImageDelete" [
   let full_url = (build-url $base "/product.variant.image.delete.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get variant info.
 #
 # GET /product.variant.info.json
 # operationId: ProductVariantInfo
-export def "productvariantinfojson ProductVariantInfo" [
+export def "product-variant-info-json get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4540,6 +4683,7 @@ export def "productvariantinfojson ProductVariantInfo" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --params: string # Set this parameter in order to choose which entity fields you want to retrieve (default: id,name,description,price)
   --exclude: string # Set this parameter in order to choose which entity fields you want to ignore. Works only if parameter `params` equal force_all
@@ -4552,14 +4696,14 @@ export def "productvariantinfojson ProductVariantInfo" [
   let full_url = (build-url $base "/product.variant.info.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get list variants.
 #
 # GET /product.variant.list.json
 # operationId: ProductVariantList
-export def "productvariantlistjson ProductVariantList" [
+export def "product-variant-list-json list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4567,6 +4711,7 @@ export def "productvariantlistjson ProductVariantList" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --start: int # This parameter sets the number from which you want to get entities (default: 0)
   --count: int # This parameter sets the entity amount that has to be retrieved. Max allowed count=250 (default: 10)
@@ -4586,7 +4731,7 @@ export def "productvariantlistjson ProductVariantList" [
   let full_url = (build-url $base "/product.variant.list.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Add some prices to the product variant.
@@ -4594,7 +4739,7 @@ export def "productvariantlistjson ProductVariantList" [
 # POST /product.variant.price.add.json
 # operationId: ProductVariantPriceAdd
 # --group_prices item shape: {group_id?: string, price?: float}
-export def "productvariantpriceaddjson ProductVariantPriceAdd" [
+export def "product-variant-price-add-json create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4602,6 +4747,7 @@ export def "productvariantpriceaddjson ProductVariantPriceAdd" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --group-prices: list # Defines variants's group prices — item shape: {group_id?: string, price?: float}
   --id: string # Defines the variant to which the price has to be added
@@ -4610,18 +4756,18 @@ export def "productvariantpriceaddjson ProductVariantPriceAdd" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/product.variant.price.add.json")
-  let body = {group_prices: $group_prices, id: $id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"group_prices": $group_prices, "id": $id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Delete some prices of the product variant.
 #
 # DELETE /product.variant.price.delete.json
 # operationId: ProductVariantPriceDelete
-export def "productvariantpricedeletejson ProductVariantPriceDelete" [
+export def "product-variant-price-delete-json delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4629,6 +4775,7 @@ export def "productvariantpricedeletejson ProductVariantPriceDelete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # Defines the variant where the price has to be deleted
   --group-prices: string # Defines variants's group prices
@@ -4639,7 +4786,7 @@ export def "productvariantpricedeletejson ProductVariantPriceDelete" [
   let full_url = (build-url $base "/product.variant.price.delete.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Update some prices of the product variant.
@@ -4647,7 +4794,7 @@ export def "productvariantpricedeletejson ProductVariantPriceDelete" [
 # PUT /product.variant.price.update.json
 # operationId: ProductVariantPriceUpdate
 # --group_prices item shape: {group_id?: string, id?: int, price?: float}
-export def "productvariantpriceupdatejson ProductVariantPriceUpdate" [
+export def "product-variant-price-update-json update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4655,6 +4802,7 @@ export def "productvariantpriceupdatejson ProductVariantPriceUpdate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --group-prices: list # Defines variants's group prices — item shape: {group_id?: string, id?: int, price?: float}
   --id: string # Defines the variant where the price has to be updated
@@ -4663,18 +4811,18 @@ export def "productvariantpriceupdatejson ProductVariantPriceUpdate" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/product.variant.price.update.json")
-  let body = {group_prices: $group_prices, id: $id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"group_prices": $group_prices, "id": $id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Update variant.
 #
 # PUT /product.variant.update.json
 # operationId: ProductVariantUpdate
-export def "productvariantupdatejson ProductVariantUpdate" [
+export def "product-variant-update-json update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4682,6 +4830,7 @@ export def "productvariantupdatejson ProductVariantUpdate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --store-id: string # Defines store id where the variant should be found
   --id: string # Defines variant update specified by variant id
@@ -4714,7 +4863,7 @@ export def "productvariantupdatejson ProductVariantUpdate" [
   --barcode: string # A barcode is a unique code composed of numbers used as a product identifier.
   --reindex: oneof<nothing, bool> # Is reindex required (default: true)
   --taxable: oneof<nothing, bool> # Specifies whether a tax is charged (default: true)
-  --options: list # Defines variant's options list
+  --options: list<string> # Defines variant's options list
   --harmonized-system-code: string # Harmonized System Code. An HSC is a 6-digit identifier that allows participating countries to classify traded goods on a common basis for customs purposes
   --country-of-origin: string # The country where the inventory item was made
   --width: float # Defines product's width
@@ -4732,14 +4881,14 @@ export def "productvariantupdatejson ProductVariantUpdate" [
   let full_url = (build-url $base "/product.variant.update.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get subscribers list
 #
 # GET /subscriber.list.json
 # operationId: SubscriberList
-export def "subscriberlistjson SubscriberList" [
+export def "subscriber-list-json list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4747,6 +4896,7 @@ export def "subscriberlistjson SubscriberList" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --start: int # This parameter sets the number from which you want to get entities (default: 0)
   --count: int # This parameter sets the entity amount that has to be retrieved. Max allowed count=250 (default: 10)
@@ -4768,14 +4918,14 @@ export def "subscriberlistjson SubscriberList" [
   let full_url = (build-url $base "/subscriber.list.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get info about tax
 #
 # GET /tax.class.info.json
 # operationId: TaxClassInfo
-export def "taxclassinfojson TaxClassInfo" [
+export def "tax-class-info-json get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4783,6 +4933,7 @@ export def "taxclassinfojson TaxClassInfo" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --tax-class-id: string # Retrieves taxes specified by class id
   --store-id: string # Store Id
@@ -4797,14 +4948,14 @@ export def "taxclassinfojson TaxClassInfo" [
   let full_url = (build-url $base "/tax.class.info.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Count registered webhooks on the store.
 #
 # GET /webhook.count.json
 # operationId: WebhookCount
-export def "webhookcountjson WebhookCount" [
+export def "webhook-count-json get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4812,6 +4963,7 @@ export def "webhookcountjson WebhookCount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --entity: string # The entity you want to filter webhooks by (e.g. order or product)
   --action: string # The action you want to filter webhooks by (e.g. order or product)
@@ -4823,14 +4975,14 @@ export def "webhookcountjson WebhookCount" [
   let full_url = (build-url $base "/webhook.count.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Create webhook on the store and subscribe to it.
 #
 # POST /webhook.create.json
 # operationId: WebhookCreate
-export def "webhookcreatejson WebhookCreate" [
+export def "webhook-create-json create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4838,6 +4990,7 @@ export def "webhookcreatejson WebhookCreate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --entity: string # Specify the entity that you want to enable webhooks for (e.g product, order, customer, category)
   --action: string # Specify what action (event) will trigger the webhook (e.g add, delete, or update)
@@ -4853,14 +5006,14 @@ export def "webhookcreatejson WebhookCreate" [
   let full_url = (build-url $base "/webhook.create.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Delete registered webhook on the store.
 #
 # DELETE /webhook.delete.json
 # operationId: WebhookDelete
-export def "webhookdeletejson WebhookDelete" [
+export def "webhook-delete-json delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4868,6 +5021,7 @@ export def "webhookdeletejson WebhookDelete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # Webhook id
 ]: nothing -> record<result: record<deleted: string>, return_code: int, return_message: string> {
@@ -4877,14 +5031,14 @@ export def "webhookdeletejson WebhookDelete" [
   let full_url = (build-url $base "/webhook.delete.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # List all Webhooks that are available on this store.
 #
 # GET /webhook.events.json
 # operationId: WebhookEvents
-export def "webhookeventsjson WebhookEvents" [
+export def "webhook-events-json get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4892,6 +5046,7 @@ export def "webhookeventsjson WebhookEvents" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<result: record<events: list<record>>, return_code: int, return_message: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -4899,14 +5054,14 @@ export def "webhookeventsjson WebhookEvents" [
   let full_url = (build-url $base "/webhook.events.json")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # List registered webhook on the store.
 #
 # GET /webhook.list.json
 # operationId: WebhookList
-export def "webhooklistjson WebhookList" [
+export def "webhook-list-json list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4914,6 +5069,7 @@ export def "webhooklistjson WebhookList" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --params: string # Set this parameter in order to choose which entity fields you want to retrieve (default: id,entity,action,callback)
   --start: int # This parameter sets the number from which you want to get entities (default: 0)
@@ -4929,14 +5085,14 @@ export def "webhooklistjson WebhookList" [
   let full_url = (build-url $base "/webhook.list.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Update Webhooks parameters.
 #
 # PUT /webhook.update.json
 # operationId: WebhookUpdate
-export def "webhookupdatejson WebhookUpdate" [
+export def "webhook-update-json update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4944,6 +5100,7 @@ export def "webhookupdatejson WebhookUpdate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # Webhook id
   --callback: string # Callback url that returns shipping rates. It should be able to accept POST requests with json data.
@@ -4957,5 +5114,5 @@ export def "webhookupdatejson WebhookUpdate" [
   let full_url = (build-url $base "/webhook.update.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }

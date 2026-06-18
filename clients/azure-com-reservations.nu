@@ -18,21 +18,32 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 }
 
 # Serialize a single query parameter based on collection style
+# Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
+# ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = ($name | url encode)
+  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
-  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
-    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
-    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
+    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
+    _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
+}
+
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Build URL from base, path, and optional query string
@@ -44,7 +55,7 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
@@ -53,13 +64,13 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
     "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "put" => { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "patch" => { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
   if ($method in ["head" "options"]) { return $resp }
-  if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
+  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
 def base-url-completer [] { ["https://management.azure.com"] }
@@ -68,8 +79,8 @@ def auth-scheme-completer [] { ["bearer"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-capacity-calculate-price Calculate" } } | get name | first)
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-capacity-calculate-price create-reservation-order" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -93,7 +104,7 @@ export def commands []: nothing -> table {
 #
 # POST /providers/Microsoft.Capacity/calculatePrice
 # operationId: ReservationOrder_Calculate
-export def "providers-microsoft-capacity-calculate-price Calculate" [
+export def "providers-microsoft-capacity-calculate-price create-reservation-order" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -101,6 +112,7 @@ export def "providers-microsoft-capacity-calculate-price Calculate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Supported version for this document is 2019-04-01
 ]: nothing -> record<properties: record<billingCurrencyTotal: record<amount: float, currencyCode: string>, isBillingPartnerManaged: bool, paymentSchedule: list<record>, pricingCurrencyTotal: record<amount: float, currencyCode: string>, reservationOrderId: string, skuDescription: string, skuTitle: string>> {
@@ -110,14 +122,14 @@ export def "providers-microsoft-capacity-calculate-price Calculate" [
   let full_url = (build-url $base "/providers/Microsoft.Capacity/calculatePrice" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get operations.
 #
 # GET /providers/Microsoft.Capacity/operations
 # operationId: Operation_List
-export def "providers-microsoft-capacity-operations List" [
+export def "providers-microsoft-capacity-operations list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -125,6 +137,7 @@ export def "providers-microsoft-capacity-operations List" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Supported version for this document is 2019-04-01
 ]: nothing -> record<nextLink: string, value: table<display: record, name: string, origin: string>> {
@@ -134,14 +147,14 @@ export def "providers-microsoft-capacity-operations List" [
   let full_url = (build-url $base "/providers/Microsoft.Capacity/operations" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get all `ReservationOrder`s.
 #
 # GET /providers/Microsoft.Capacity/reservationOrders
 # operationId: ReservationOrder_List
-export def "providers-microsoft-capacity-reservation-orders List" [
+export def "providers-microsoft-capacity-reservation-orders list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -149,6 +162,7 @@ export def "providers-microsoft-capacity-reservation-orders List" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Supported version for this document is 2019-04-01
 ]: nothing -> record<nextLink: string, value: table<etag: int, id: string, name: string, properties: record, type: string>> {
@@ -158,15 +172,15 @@ export def "providers-microsoft-capacity-reservation-orders List" [
   let full_url = (build-url $base "/providers/Microsoft.Capacity/reservationOrders" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get a specific `ReservationOrder`.
 #
 # GET /providers/Microsoft.Capacity/reservationOrders/{reservationOrderId}
 # operationId: ReservationOrder_Get
-export def "providers-microsoft-capacity-reservation-orders Get" [
-  reservationOrderId: string
+export def "providers-microsoft-capacity-reservation-orders get" [
+  reservation_order_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -174,6 +188,7 @@ export def "providers-microsoft-capacity-reservation-orders Get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Supported version for this document is 2019-04-01
   --expand: string # May be used to expand the planInformation.
@@ -181,18 +196,18 @@ export def "providers-microsoft-capacity-reservation-orders Get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/providers/Microsoft.Capacity/reservationOrders/($reservationOrderId)" $qp)
+  let full_url = (build-url $base ({reservation_order_id: (encode-path-segment $reservation_order_id)} | format pattern "/providers/Microsoft.Capacity/reservationOrders/{reservation_order_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Purchase `ReservationOrder`
 #
 # PUT /providers/Microsoft.Capacity/reservationOrders/{reservationOrderId}
 # operationId: ReservationOrder_Purchase
-export def "providers-microsoft-capacity-reservation-orders Purchase" [
-  reservationOrderId: string
+export def "providers-microsoft-capacity-reservation-orders update-purchase" [
+  reservation_order_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -200,24 +215,25 @@ export def "providers-microsoft-capacity-reservation-orders Purchase" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Supported version for this document is 2019-04-01
 ]: nothing -> record<etag: int, id: string, name: string, properties: record<billingPlan: string, createdDateTime: string, displayName: string, expiryDate: string, originalQuantity: int, planInformation: record<nextPaymentDueDate: string, pricingCurrencyTotal: record, startDate: string, transactions: list>, provisioningState: string, requestDateTime: string, reservations: list<record>, term: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/providers/Microsoft.Capacity/reservationOrders/($reservationOrderId)" $qp)
+  let full_url = (build-url $base ({reservation_order_id: (encode-path-segment $reservation_order_id)} | format pattern "/providers/Microsoft.Capacity/reservationOrders/{reservation_order_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Merges two `Reservation`s.
 #
 # POST /providers/Microsoft.Capacity/reservationOrders/{reservationOrderId}/merge
 # operationId: Reservation_Merge
-export def "providers-microsoft-capacity-reservation-orders-merge Merge" [
-  reservationOrderId: string
+export def "providers-microsoft-capacity-reservation-orders-merge create" [
+  reservation_order_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -225,24 +241,25 @@ export def "providers-microsoft-capacity-reservation-orders-merge Merge" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Supported version for this document is 2019-04-01
 ]: nothing -> table<etag: int, id: string, location: string, name: string, properties: record<appliedScopeType: string, appliedScopes: list, billingPlan: string, billingScopeId: string, displayName: string, effectiveDateTime: string, expiryDate: string, extendedStatusInfo: record, instanceFlexibility: string, lastUpdatedDateTime: string, mergeProperties: record, provisioningState: string, quantity: int, renew: bool, renewDestination: string, renewProperties: record, renewSource: string, reservedResourceType: string, skuDescription: string, splitProperties: record, term: string>, sku: record<name: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/providers/Microsoft.Capacity/reservationOrders/($reservationOrderId)/merge" $qp)
+  let full_url = (build-url $base ({reservation_order_id: (encode-path-segment $reservation_order_id)} | format pattern "/providers/Microsoft.Capacity/reservationOrders/{reservation_order_id}/merge") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get `Reservation`s in a given reservation Order
 #
 # GET /providers/Microsoft.Capacity/reservationOrders/{reservationOrderId}/reservations
 # operationId: Reservation_List
-export def "providers-microsoft-capacity-reservation-orders-reservations List" [
-  reservationOrderId: string
+export def "providers-microsoft-capacity-reservation-orders-reservations list" [
+  reservation_order_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -250,25 +267,26 @@ export def "providers-microsoft-capacity-reservation-orders-reservations List" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Supported version for this document is 2019-04-01
 ]: nothing -> record<nextLink: string, value: table<etag: int, id: string, location: string, name: string, properties: record, sku: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/providers/Microsoft.Capacity/reservationOrders/($reservationOrderId)/reservations" $qp)
+  let full_url = (build-url $base ({reservation_order_id: (encode-path-segment $reservation_order_id)} | format pattern "/providers/Microsoft.Capacity/reservationOrders/{reservation_order_id}/reservations") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get `Reservation` details.
 #
 # GET /providers/Microsoft.Capacity/reservationOrders/{reservationOrderId}/reservations/{reservationId}
 # operationId: Reservation_Get
-export def "providers-microsoft-capacity-reservation-orders-reservations Get" [
-  reservationId: string
-  reservationOrderId: string
+export def "providers-microsoft-capacity-reservation-orders-reservations get" [
+  reservation_order_id: string
+  reservation_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -276,6 +294,7 @@ export def "providers-microsoft-capacity-reservation-orders-reservations Get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Supported version for this document is 2019-04-01
   --expand: string # Supported value of this query is renewProperties
@@ -283,19 +302,19 @@ export def "providers-microsoft-capacity-reservation-orders-reservations Get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/providers/Microsoft.Capacity/reservationOrders/($reservationOrderId)/reservations/($reservationId)" $qp)
+  let full_url = (build-url $base ({reservation_order_id: (encode-path-segment $reservation_order_id), reservation_id: (encode-path-segment $reservation_id)} | format pattern "/providers/Microsoft.Capacity/reservationOrders/{reservation_order_id}/reservations/{reservation_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Updates a `Reservation`.
 #
 # PATCH /providers/Microsoft.Capacity/reservationOrders/{reservationOrderId}/reservations/{reservationId}
 # operationId: Reservation_Update
-export def "providers-microsoft-capacity-reservation-orders-reservations Update" [
-  reservationOrderId: string
-  reservationId: string
+export def "providers-microsoft-capacity-reservation-orders-reservations update" [
+  reservation_order_id: string
+  reservation_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -303,25 +322,26 @@ export def "providers-microsoft-capacity-reservation-orders-reservations Update"
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Supported version for this document is 2019-04-01
 ]: nothing -> record<etag: int, id: string, location: string, name: string, properties: record<appliedScopeType: string, appliedScopes: list<string>, billingPlan: string, billingScopeId: string, displayName: string, effectiveDateTime: string, expiryDate: string, extendedStatusInfo: record<message: string, statusCode: string>, instanceFlexibility: string, lastUpdatedDateTime: string, mergeProperties: record<mergeDestination: string, mergeSources: list>, provisioningState: string, quantity: int, renew: bool, renewDestination: string, renewProperties: record<billingCurrencyTotal: record, pricingCurrencyTotal: record, purchaseProperties: record>, renewSource: string, reservedResourceType: string, skuDescription: string, splitProperties: record<splitDestinations: list, splitSource: string>, term: string>, sku: record<name: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/providers/Microsoft.Capacity/reservationOrders/($reservationOrderId)/reservations/($reservationId)" $qp)
+  let full_url = (build-url $base ({reservation_order_id: (encode-path-segment $reservation_order_id), reservation_id: (encode-path-segment $reservation_id)} | format pattern "/providers/Microsoft.Capacity/reservationOrders/{reservation_order_id}/reservations/{reservation_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get Available Scopes for `Reservation`.
 #
 # POST /providers/Microsoft.Capacity/reservationOrders/{reservationOrderId}/reservations/{reservationId}/availableScopes
 # operationId: Reservation_AvailableScopes
-export def "providers-microsoft-capacity-reservation-orders-reservations-available-scopes AvailableScopes" [
-  reservationOrderId: string
-  reservationId: string
+export def "providers-microsoft-capacity-reservation-orders-reservations-available-scopes create" [
+  reservation_order_id: string
+  reservation_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -329,25 +349,26 @@ export def "providers-microsoft-capacity-reservation-orders-reservations-availab
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Supported version for this document is 2019-04-01
 ]: nothing -> record<properties: record<scopes: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/providers/Microsoft.Capacity/reservationOrders/($reservationOrderId)/reservations/($reservationId)/availableScopes" $qp)
+  let full_url = (build-url $base ({reservation_order_id: (encode-path-segment $reservation_order_id), reservation_id: (encode-path-segment $reservation_id)} | format pattern "/providers/Microsoft.Capacity/reservationOrders/{reservation_order_id}/reservations/{reservation_id}/availableScopes") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get `Reservation` revisions.
 #
 # GET /providers/Microsoft.Capacity/reservationOrders/{reservationOrderId}/reservations/{reservationId}/revisions
 # operationId: Reservation_ListRevisions
-export def "providers-microsoft-capacity-reservation-orders-reservations-revisions ListRevisions" [
-  reservationId: string
-  reservationOrderId: string
+export def "providers-microsoft-capacity-reservation-orders-reservations-revisions list" [
+  reservation_order_id: string
+  reservation_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -355,24 +376,25 @@ export def "providers-microsoft-capacity-reservation-orders-reservations-revisio
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Supported version for this document is 2019-04-01
 ]: nothing -> record<nextLink: string, value: table<etag: int, id: string, location: string, name: string, properties: record, sku: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/providers/Microsoft.Capacity/reservationOrders/($reservationOrderId)/reservations/($reservationId)/revisions" $qp)
+  let full_url = (build-url $base ({reservation_order_id: (encode-path-segment $reservation_order_id), reservation_id: (encode-path-segment $reservation_id)} | format pattern "/providers/Microsoft.Capacity/reservationOrders/{reservation_order_id}/reservations/{reservation_id}/revisions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Split the `Reservation`.
 #
 # POST /providers/Microsoft.Capacity/reservationOrders/{reservationOrderId}/split
 # operationId: Reservation_Split
-export def "providers-microsoft-capacity-reservation-orders-split Split" [
-  reservationOrderId: string
+export def "providers-microsoft-capacity-reservation-orders-split create" [
+  reservation_order_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -380,24 +402,25 @@ export def "providers-microsoft-capacity-reservation-orders-split Split" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Supported version for this document is 2019-04-01
 ]: nothing -> table<etag: int, id: string, location: string, name: string, properties: record<appliedScopeType: string, appliedScopes: list, billingPlan: string, billingScopeId: string, displayName: string, effectiveDateTime: string, expiryDate: string, extendedStatusInfo: record, instanceFlexibility: string, lastUpdatedDateTime: string, mergeProperties: record, provisioningState: string, quantity: int, renew: bool, renewDestination: string, renewProperties: record, renewSource: string, reservedResourceType: string, skuDescription: string, splitProperties: record, term: string>, sku: record<name: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/providers/Microsoft.Capacity/reservationOrders/($reservationOrderId)/split" $qp)
+  let full_url = (build-url $base ({reservation_order_id: (encode-path-segment $reservation_order_id)} | format pattern "/providers/Microsoft.Capacity/reservationOrders/{reservation_order_id}/split") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get list of applicable `Reservation`s.
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Capacity/appliedReservations
 # operationId: GetAppliedReservationList
-export def "subscriptions-providers-microsoft-capacity-applied-reservations GetAppliedReservationList" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-capacity-applied-reservations get-list" [
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -405,24 +428,25 @@ export def "subscriptions-providers-microsoft-capacity-applied-reservations GetA
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Supported version for this document is 2019-04-01
 ]: nothing -> record<id: string, name: string, properties: record<reservationOrderIds: record<nextLink: string, value: list>>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Capacity/appliedReservations" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Capacity/appliedReservations") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get the regions and skus that are available for RI purchase for the specified Azure subscription.
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Capacity/catalogs
 # operationId: GetCatalog
-export def "subscriptions-providers-microsoft-capacity-catalogs GetCatalog" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-capacity-catalogs get" [
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -430,16 +454,17 @@ export def "subscriptions-providers-microsoft-capacity-catalogs GetCatalog" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Supported version for this document is 2019-04-01
-  --reservedResourceType: string # The type of the resource for which the skus should be provided.
+  --reserved-resource-type: string # The type of the resource for which the skus should be provided.
   --location: string # Filters the skus based on the location specified in this parameter. This can be an azure region or global
 ]: nothing -> table<billingPlans: record, locations: list<string>, name: string, resourceType: string, restrictions: list<record>, skuProperties: list<record>, terms: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "reservedResourceType" $reservedResourceType "scalar") (serialize-qp "location" $location "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Capacity/catalogs" $qp)
+  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "reservedResourceType" $reserved_resource_type "scalar") (serialize-qp "location" $location "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Capacity/catalogs") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }

@@ -18,21 +18,32 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 }
 
 # Serialize a single query parameter based on collection style
+# Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
+# ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = ($name | url encode)
+  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
-  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
-    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
-    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
+    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
+    _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
+}
+
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Build URL from base, path, and optional query string
@@ -44,7 +55,7 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
@@ -53,13 +64,13 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
     "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "put" => { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "patch" => { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
   if ($method in ["head" "options"]) { return $resp }
-  if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
+  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
 def base-url-completer [] { ["https://localhost" "http://localhost"] }
@@ -68,7 +79,7 @@ def auth-scheme-completer [] { ["jwt"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "episodes get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -101,17 +112,18 @@ export def "episodes get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept-Language: string # Records are returned with the some fields in the desired language, if it exists. If there is no translation for the given language, then the record is still returned but with empty values for the translated fields.
+  --accept-language: string # Records are returned with the some fields in the desired language, if it exists. If there is no translation for the given language, then the record is still returned but with empty values for the translated fields.
 ]: nothing -> record<data: record<absoluteNumber: int, airedEpisodeNumber: int, airedSeason: int, airsAfterSeason: int, airsBeforeEpisode: int, airsBeforeSeason: int, director: string, directors: list<string>, dvdChapter: float, dvdDiscid: string, dvdEpisodeNumber: float, dvdSeason: int, episodeName: string, filename: string, firstAired: string, guestStars: list<string>, id: int, imdbId: string, lastUpdated: int, lastUpdatedBy: string, overview: string, productionCode: string, seriesId: string, showUrl: string, siteRating: float, siteRatingCount: int, thumbAdded: string, thumbAuthor: int, thumbHeight: string, thumbWidth: string, writers: list<string>>, errors: record<invalidFilters: list<string>, invalidLanguage: string, invalidQueryParams: list<string>>> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/episodes/($id)")
-  let extra_headers = {"Accept-Language": $Accept_Language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/episodes/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"Accept-Language": $accept_language} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # All available languages. These language abbreviations can be used in the `Accept-Language` header for routes that return translation records.
@@ -125,6 +137,7 @@ export def "languages list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: table<abbreviation: string, englishName: string, id: int, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
@@ -132,7 +145,7 @@ export def "languages list" [
   let full_url = (build-url $base "/languages")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Information about a particular language, given the language ID.
@@ -147,20 +160,21 @@ export def "languages get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<abbreviation: string, englishName: string, id: int, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/languages/($id)")
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/languages/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Returns a session token to be included in the rest of the requests. Note that API key authentication is required for all subsequent requests and user auth is required for routes in the `User` section
 #
 # POST /login
-export def "login post" [
+export def "login create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -168,6 +182,7 @@ export def "login post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --apikey: string
   --userkey: string
@@ -177,11 +192,11 @@ export def "login post" [
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/login")
-  let body = {apikey: $apikey, userkey: $userkey, username: $username} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"apikey": $apikey, "userkey": $userkey, "username": $username} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Returns a movies records that contains all information known about a particular movies id.
@@ -196,17 +211,18 @@ export def "movies get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept-Language: string # Records are returned with the some fields in the desired language, if it exists. If there is no translation for the given language, then the record is still returned but with empty values for the translated fields.
+  --accept-language: string # Records are returned with the some fields in the desired language, if it exists. If there is no translation for the given language, then the record is still returned but with empty values for the translated fields.
 ]: nothing -> record<artworks: table<artwork_type: string, height: int, id: string, is_primary: bool, tags: string, thumb_url: string, url: string, width: int>, genres: table<id: int, name: string, url: string>, id: int, people: record<actors: list<record>, directors: list<record>, producers: list<record>, writers: list<record>>, release_dates: table<country: string, date: string, type: string>, remoteids: table<id: string, source_id: int, source_name: string, source_url: string, url: string>, runtime: int, trailers: table<name: string, url: string>, translations: table<is_primary: bool, language_code: string, name: string, overview: string, tagline: string>, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/movies/($id)")
-  let extra_headers = {"Accept-Language": $Accept_Language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/movies/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"Accept-Language": $accept_language} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Returns all movies ids updated since a given timestamp.
@@ -220,6 +236,7 @@ export def "movieupdates get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --since: string # Epoch time to start your date range.
 ]: nothing -> record<movies: list<int>> {
@@ -229,7 +246,7 @@ export def "movieupdates get" [
   let full_url = (build-url $base "/movieupdates" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Refreshes your current, valid JWT token and returns a new token. Hit this route so that you do not have to post to `/login` with your API key and credentials once you have already been authenticated.
@@ -243,6 +260,7 @@ export def "refresh-token get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<token: string> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
@@ -250,7 +268,7 @@ export def "refresh-token get" [
   let full_url = (build-url $base "/refresh_token")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Allows the user to search for a series based on the following parameters.
@@ -264,22 +282,23 @@ export def "search-series get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # Name of the series to search for.
-  --imdbId: string # IMDB id of the series
-  --zap2itId: string # Zap2it ID of the series to search for.
+  --imdb-id: string # IMDB id of the series
+  --zap2it-id: string # Zap2it ID of the series to search for.
   --slug: string # Slug from site URL of series (https://www.thetvdb.com/series/$SLUG)
-  --Accept-Language: string # Records are returned with the some fields in the desired language, if it exists. If there is no translation for the given language, then the record is still returned but with empty values for the translated fields.
+  --accept-language: string # Records are returned with the some fields in the desired language, if it exists. If there is no translation for the given language, then the record is still returned but with empty values for the translated fields.
 ]: nothing -> record<data: table<aliases: list, banner: string, firstAired: string, id: int, image: string, network: string, overview: string, poster: string, seriesName: string, slug: string, status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "imdbId" $imdbId "scalar") (serialize-qp "zap2itId" $zap2itId "scalar") (serialize-qp "slug" $slug "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "imdbId" $imdb_id "scalar") (serialize-qp "zap2itId" $zap2it_id "scalar") (serialize-qp "slug" $slug "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/search/series" $qp)
-  let extra_headers = {"Accept-Language": $Accept_Language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"Accept-Language": $accept_language} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Returns an array of parameters to query by in the `/search/series` route.
@@ -293,6 +312,7 @@ export def "search-series-params get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
@@ -300,7 +320,7 @@ export def "search-series-params get" [
   let full_url = (build-url $base "/search/series/params")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Returns a series records that contains all information known about a particular series id.
@@ -315,23 +335,24 @@ export def "series get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept-Language: string # Records are returned with the some fields in the desired language, if it exists. If there is no translation for the given language, then the record is still returned but with empty values for the translated fields.
+  --accept-language: string # Records are returned with the some fields in the desired language, if it exists. If there is no translation for the given language, then the record is still returned but with empty values for the translated fields.
 ]: nothing -> record<data: record<added: string, airsDayOfWeek: string, airsTime: string, aliases: list<string>, banner: string, firstAired: string, genre: list<string>, id: int, imdbId: string, lastUpdated: int, network: string, networkId: string, overview: string, rating: string, runtime: string, seriesId: string, seriesName: string, siteRating: float, siteRatingCount: int, slug: string, status: string, zap2itId: string>, errors: record<invalidFilters: list<string>, invalidLanguage: string, invalidQueryParams: list<string>>> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/series/($id)")
-  let extra_headers = {"Accept-Language": $Accept_Language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/series/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"Accept-Language": $accept_language} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Returns header information only about the given series ID.
 #
 # HEAD /series/{id}
-export def "series head" [
+export def "series head-head" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -340,17 +361,18 @@ export def "series head" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept-Language: string # Records are returned with the some fields in the desired language, if it exists. If there is no translation for the given language, then the record is still returned but with empty values for the translated fields.
+  --accept-language: string # Records are returned with the some fields in the desired language, if it exists. If there is no translation for the given language, then the record is still returned but with empty values for the translated fields.
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/series/($id)")
-  let extra_headers = {"Accept-Language": $Accept_Language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/series/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "head" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"Accept-Language": $accept_language} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "head" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Returns actors for the given series id
@@ -365,14 +387,15 @@ export def "series-actors get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: table<id: int, image: string, imageAdded: string, imageAuthor: int, lastUpdated: string, name: string, role: string, seriesId: int, sortOrder: int>, errors: record<invalidFilters: list<string>, invalidLanguage: string, invalidQueryParams: list<string>>> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/series/($id)/actors")
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/series/{id}/actors"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # All episodes for a given series. Paginated with 100 results per page.
@@ -387,16 +410,17 @@ export def "series-episodes get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: string # Page of results to fetch. Defaults to page 1 if not provided.
 ]: nothing -> record<data: table<absoluteNumber: int, airedEpisodeNumber: int, airedSeason: int, airsAfterSeason: int, airsBeforeEpisode: int, airsBeforeSeason: int, director: string, directors: list, dvdChapter: float, dvdDiscid: string, dvdEpisodeNumber: float, dvdSeason: int, episodeName: string, filename: string, firstAired: string, guestStars: list, id: int, imdbId: string, lastUpdated: int, lastUpdatedBy: string, overview: string, productionCode: string, seriesId: string, showUrl: string, siteRating: float, siteRatingCount: int, thumbAdded: string, thumbAuthor: int, thumbHeight: string, thumbWidth: string, writers: list>, errors: record<invalidFilters: list<string>, invalidLanguage: string, invalidQueryParams: list<string>>, links: record<first: int, last: int, next: int, previous: int>> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/series/($id)/episodes" $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/series/{id}/episodes") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # This route allows the user to query against episodes for the given series. The response is a paginated array of episode records.
@@ -411,25 +435,26 @@ export def "series-episodes-query get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --absoluteNumber: string # Absolute number of the episode
-  --airedSeason: string # Aired season number
-  --airedEpisode: string # Aired episode number
-  --dvdSeason: string # DVD season number
-  --dvdEpisode: string # DVD episode number
-  --imdbId: string # IMDB id of the series
+  --absolute-number: string # Absolute number of the episode
+  --aired-season: string # Aired season number
+  --aired-episode: string # Aired episode number
+  --dvd-season: string # DVD season number
+  --dvd-episode: string # DVD episode number
+  --imdb-id: string # IMDB id of the series
   --page: string # Page of results to fetch. Defaults to page 1 if not provided.
-  --Accept-Language: string # Records are returned with the some fields in the desired language, if it exists. If there is no translation for the given language, then the record is still returned but with empty values for the translated fields.
+  --accept-language: string # Records are returned with the some fields in the desired language, if it exists. If there is no translation for the given language, then the record is still returned but with empty values for the translated fields.
 ]: nothing -> record<data: table<absoluteNumber: int, airedEpisodeNumber: int, airedSeason: int, airsAfterSeason: int, airsBeforeEpisode: int, airsBeforeSeason: int, director: string, directors: list, dvdChapter: float, dvdDiscid: string, dvdEpisodeNumber: float, dvdSeason: int, episodeName: string, filename: string, firstAired: string, guestStars: list, id: int, imdbId: string, lastUpdated: int, lastUpdatedBy: string, overview: string, productionCode: string, seriesId: string, showUrl: string, siteRating: float, siteRatingCount: int, thumbAdded: string, thumbAuthor: int, thumbHeight: string, thumbWidth: string, writers: list>, errors: record<invalidFilters: list<string>, invalidLanguage: string, invalidQueryParams: list<string>>, links: record<first: int, last: int, next: int, previous: int>> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "absoluteNumber" $absoluteNumber "scalar") (serialize-qp "airedSeason" $airedSeason "scalar") (serialize-qp "airedEpisode" $airedEpisode "scalar") (serialize-qp "dvdSeason" $dvdSeason "scalar") (serialize-qp "dvdEpisode" $dvdEpisode "scalar") (serialize-qp "imdbId" $imdbId "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/series/($id)/episodes/query" $qp)
-  let extra_headers = {"Accept-Language": $Accept_Language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let qp = [(serialize-qp "absoluteNumber" $absolute_number "scalar") (serialize-qp "airedSeason" $aired_season "scalar") (serialize-qp "airedEpisode" $aired_episode "scalar") (serialize-qp "dvdSeason" $dvd_season "scalar") (serialize-qp "dvdEpisode" $dvd_episode "scalar") (serialize-qp "imdbId" $imdb_id "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/series/{id}/episodes/query") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"Accept-Language": $accept_language} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Returns the allowed query keys for the `/series/{id}/episodes/query` route
@@ -444,17 +469,18 @@ export def "series-episodes-query-params get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/series/($id)/episodes/query/params")
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/series/{id}/episodes/query/params"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
-# Returns a summary of the episodes and seasons available for the series.  __Note__: Season "0" is for all episodes that are considered to be specials.
+# Returns a summary of the episodes and seasons available for the series. __Note__: Season "0" is for all episodes that are considered to be specials.
 #
 # GET /series/{id}/episodes/summary
 export def "series-episodes-summary get" [
@@ -466,14 +492,15 @@ export def "series-episodes-summary get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<airedEpisodes: string, airedSeasons: list<string>, dvdEpisodes: string, dvdSeasons: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/series/($id)/episodes/summary")
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/series/{id}/episodes/summary"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Returns a series records, filtered by the supplied comma-separated list of keys. Query keys can be found at the `/series/{id}/filter/params` route.
@@ -488,19 +515,20 @@ export def "series-filter get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --keys: string # Comma-separated list of keys to filter by
-  --Accept-Language: string # Records are returned with the some fields in the desired language, if it exists. If there is no translation for the given language, then the record is still returned but with empty values for the translated fields.
+  --accept-language: string # Records are returned with the some fields in the desired language, if it exists. If there is no translation for the given language, then the record is still returned but with empty values for the translated fields.
 ]: nothing -> record<data: record<added: string, airsDayOfWeek: string, airsTime: string, aliases: list<string>, banner: string, firstAired: string, genre: list<string>, id: int, imdbId: string, lastUpdated: int, network: string, networkId: string, overview: string, rating: string, runtime: string, seriesId: string, seriesName: string, siteRating: float, siteRatingCount: int, slug: string, status: string, zap2itId: string>, errors: record<invalidFilters: list<string>, invalidLanguage: string, invalidQueryParams: list<string>>> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "keys" $keys "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/series/($id)/filter" $qp)
-  let extra_headers = {"Accept-Language": $Accept_Language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/series/{id}/filter") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"Accept-Language": $accept_language} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Returns the list of keys available for the `/series/{id}/filter` route
@@ -515,17 +543,18 @@ export def "series-filter-params get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept-Language: string # Records are returned with the some fields in the desired language, if it exists. If there is no translation for the given language, then the record is still returned but with empty values for the translated fields.
+  --accept-language: string # Records are returned with the some fields in the desired language, if it exists. If there is no translation for the given language, then the record is still returned but with empty values for the translated fields.
 ]: nothing -> record<data: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/series/($id)/filter/params")
-  let extra_headers = {"Accept-Language": $Accept_Language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/series/{id}/filter/params"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"Accept-Language": $accept_language} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Returns a summary of the images for a particular series
@@ -540,17 +569,18 @@ export def "series-images get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept-Language: string # Records are returned with the some fields in the desired language, if it exists. If there is no translation for the given language, then the record is still returned but with empty values for the translated fields.
+  --accept-language: string # Records are returned with the some fields in the desired language, if it exists. If there is no translation for the given language, then the record is still returned but with empty values for the translated fields.
 ]: nothing -> record<data: record<fanart: int, poster: int, season: int, seasonwide: int, series: int>> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/series/($id)/images")
-  let extra_headers = {"Accept-Language": $Accept_Language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/series/{id}/images"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"Accept-Language": $accept_language} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Query images for the given series ID.
@@ -565,21 +595,22 @@ export def "series-images-query get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --keyType: string # Type of image you're querying for (fanart, poster, etc. See ../images/query/params for more details).
+  --key-type: string # Type of image you're querying for (fanart, poster, etc. See ../images/query/params for more details).
   --resolution: string # Resolution to filter by (1280x1024, for example)
-  --subKey: string # Subkey for the above query keys. See /series/{id}/images/query/params for more information
-  --Accept-Language: string # Records are returned with the some fields in the desired language, if it exists. If there is no translation for the given language, then the record is still returned but with empty values for the translated fields.
+  --sub-key: string # Subkey for the above query keys. See /series/{id}/images/query/params for more information
+  --accept-language: string # Records are returned with the some fields in the desired language, if it exists. If there is no translation for the given language, then the record is still returned but with empty values for the translated fields.
 ]: nothing -> record<data: table<fileName: string, id: int, keyType: string, languageId: int, ratingsInfo: record, resolution: string, subKey: string, thumbnail: string>, errors: record<invalidFilters: list<string>, invalidLanguage: string, invalidQueryParams: list<string>>> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "keyType" $keyType "scalar") (serialize-qp "resolution" $resolution "scalar") (serialize-qp "subKey" $subKey "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/series/($id)/images/query" $qp)
-  let extra_headers = {"Accept-Language": $Accept_Language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let qp = [(serialize-qp "keyType" $key_type "scalar") (serialize-qp "resolution" $resolution "scalar") (serialize-qp "subKey" $sub_key "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/series/{id}/images/query") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"Accept-Language": $accept_language} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Returns the allowed query keys for the `/series/{id}/images/query` route. Contains a parameter record for each unique `keyType`, listing values that will return results.
@@ -594,20 +625,21 @@ export def "series-images-query-params get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept-Language: string # Records are returned with the some fields in the desired language, if it exists. If there is no translation for the given language, then the record is still returned but with empty values for the translated fields.
+  --accept-language: string # Records are returned with the some fields in the desired language, if it exists. If there is no translation for the given language, then the record is still returned but with empty values for the translated fields.
 ]: nothing -> record<data: table<keyType: string, languageId: string, resolution: list, subKey: list>> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/series/($id)/images/query/params")
-  let extra_headers = {"Accept-Language": $Accept_Language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/series/{id}/images/query/params"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"Accept-Language": $accept_language} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
-# Returns an array of series that have changed in a maximum of one week blocks since the provided `fromTime`.   The user may specify a `toTime` to grab results for less than a week. Any timespan larger than a week will be reduced down to one week automatically.
+# Returns an array of series that have changed in a maximum of one week blocks since the provided `fromTime`. The user may specify a `toTime` to grab results for less than a week. Any timespan larger than a week will be reduced down to one week automatically.
 #
 # GET /updated/query
 export def "updated-query get" [
@@ -618,20 +650,21 @@ export def "updated-query get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fromTime: string # Epoch time to start your date range.
-  --toTime: string # Epoch time to end your date range. Must be one week from `fromTime`.
-  --Accept-Language: string # Records are returned with the some fields in the desired language, if it exists. If there is no translation for the given language, then the record is still returned but with empty values for the translated fields.
+  --from-time: string # Epoch time to start your date range.
+  --to-time: string # Epoch time to end your date range. Must be one week from `fromTime`.
+  --accept-language: string # Records are returned with the some fields in the desired language, if it exists. If there is no translation for the given language, then the record is still returned but with empty values for the translated fields.
 ]: nothing -> record<data: table<id: int, lastUpdated: int>, errors: record<invalidFilters: list<string>, invalidLanguage: string, invalidQueryParams: list<string>>> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fromTime" $fromTime "scalar") (serialize-qp "toTime" $toTime "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fromTime" $from_time "scalar") (serialize-qp "toTime" $to_time "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/updated/query" $qp)
-  let extra_headers = {"Accept-Language": $Accept_Language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"Accept-Language": $accept_language} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Returns an array of valid query keys for the `/updated/query/params` route.
@@ -645,6 +678,7 @@ export def "updated-query-params get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
@@ -652,7 +686,7 @@ export def "updated-query-params get" [
   let full_url = (build-url $base "/updated/query/params")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Returns basic information about the currently authenticated user.
@@ -666,6 +700,7 @@ export def "user get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: record<favoritesDisplaymode: string, language: string, userName: string>> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
@@ -673,7 +708,7 @@ export def "user get" [
   let full_url = (build-url $base "/user")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Returns an array of favorite series for a given user, will be a blank array if no favorites exist.
@@ -687,6 +722,7 @@ export def "user-favorites get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: record<favorites: list<string>>, errors: record<invalidFilters: list<string>, invalidLanguage: string, invalidQueryParams: list<string>>> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
@@ -694,7 +730,7 @@ export def "user-favorites get" [
   let full_url = (build-url $base "/user/favorites")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Deletes the given series ID from the user’s favorite’s list and returns the updated list.
@@ -709,20 +745,21 @@ export def "user-favorites delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: record<favorites: list<string>>, errors: record<invalidFilters: list<string>, invalidLanguage: string, invalidQueryParams: list<string>>> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/user/favorites/($id)")
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/user/favorites/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Adds the supplied series ID to the user’s favorite’s list and returns the updated list.
 #
 # PUT /user/favorites/{id}
-export def "user-favorites put" [
+export def "user-favorites update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -731,14 +768,15 @@ export def "user-favorites put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: record<favorites: list<string>>, errors: record<invalidFilters: list<string>, invalidLanguage: string, invalidQueryParams: list<string>>> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/user/favorites/($id)")
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/user/favorites/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Returns an array of ratings for the given user.
@@ -752,6 +790,7 @@ export def "user-ratings get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: table<rating: int, ratingItemId: int, ratingType: string>, errors: record<invalidFilters: list<string>, invalidLanguage: string, invalidQueryParams: list<string>>, links: record<first: int, last: int, next: int, previous: int>> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
@@ -759,7 +798,7 @@ export def "user-ratings get" [
   let full_url = (build-url $base "/user/ratings")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Returns an array of ratings for a given user that match the query.
@@ -773,16 +812,17 @@ export def "user-ratings-query get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --itemType: string # Item to query. Can be either 'series', 'episode', or 'banner' (format: string)
+  --item-type: string # Item to query. Can be either 'series', 'episode', or 'banner' (format: string)
 ]: nothing -> record<data: table<rating: int, ratingItemId: int, ratingType: string>, errors: record<invalidFilters: list<string>, invalidLanguage: string, invalidQueryParams: list<string>>, links: record<first: int, last: int, next: int, previous: int>> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "itemType" $itemType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "itemType" $item_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/user/ratings/query" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Returns a list of query params for use in the `/user/ratings/query` route.
@@ -796,6 +836,7 @@ export def "user-ratings-query-params get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
@@ -803,15 +844,15 @@ export def "user-ratings-query-params get" [
   let full_url = (build-url $base "/user/ratings/query/params")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # This route deletes a given rating of a given type.
 #
 # DELETE /user/ratings/{itemType}/{itemId}
 export def "user-ratings delete" [
-  itemType: string
-  itemId: int
+  item_type: string
+  item_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -819,23 +860,24 @@ export def "user-ratings delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: list<any>> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/user/ratings/($itemType)/($itemId)")
+  let full_url = (build-url $base ({item_type: (encode-path-segment $item_type), item_id: (encode-path-segment $item_id)} | format pattern "/user/ratings/{item_type}/{item_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # This route updates a given rating of a given type.
 #
 # PUT /user/ratings/{itemType}/{itemId}/{itemRating}
-export def "user-ratings put" [
-  itemType: string
-  itemId: int
-  itemRating: int
+export def "user-ratings update" [
+  item_type: string
+  item_id: int
+  item_rating: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -843,12 +885,13 @@ export def "user-ratings put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: table<rating: int, ratingItemId: int, ratingType: string>> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/user/ratings/($itemType)/($itemId)/($itemRating)")
+  let full_url = (build-url $base ({item_type: (encode-path-segment $item_type), item_id: (encode-path-segment $item_id), item_rating: (encode-path-segment $item_rating)} | format pattern "/user/ratings/{item_type}/{item_id}/{item_rating}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }

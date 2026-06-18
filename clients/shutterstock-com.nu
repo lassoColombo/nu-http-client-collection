@@ -13,27 +13,39 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   match $scheme {
     "basic" => { {headers: {Authorization: $"Basic ($token_val)"}, query: ""} }
     "bearer" => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
+    "basic-credentials" => { {headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: ""} }
     "none" => { {headers: {}, query: ""} }
     _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
   }
 }
 
 # Serialize a single query parameter based on collection style
+# Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
+# ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = ($name | url encode)
+  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
-  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
-    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
-    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
+    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
+    _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
+}
+
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Build URL from base, path, and optional query string
@@ -45,7 +57,7 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
@@ -54,17 +66,17 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
     "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "put" => { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "patch" => { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
   if ($method in ["head" "options"]) { return $resp }
-  if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
+  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
 def base-url-completer [] { ["https://api.shutterstock.com" "https://api-sandbox.shutterstock.com"] }
-def auth-scheme-completer [] { ["basic" "bearer"] }
+def auth-scheme-completer [] { ["basic" "bearer" "basic-credentials"] }
 
 # Completers for enum parameters
 def view-completer [] { ["full" "minimal"] }
@@ -101,8 +113,8 @@ def aspect-ratio-completer [] { ["16_9" "4_3" "nonstandard"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "ai-audio-descriptors listCustomDescriptors" } } | get name | first)
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "ai-audio-descriptors list-custom" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -126,7 +138,7 @@ export def commands []: nothing -> table {
 #
 # GET /v2/ai/audio/descriptors
 # operationId: listCustomDescriptors
-export def "ai-audio-descriptors listCustomDescriptors" [
+export def "ai-audio-descriptors list-custom" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -134,13 +146,14 @@ export def "ai-audio-descriptors listCustomDescriptors" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --render-speed-over: float # Show descriptors with an average render speed that is greater than or equal to the specified value (e.g. 5)
   --band-id: string # Show descriptors that contain the specified band (case-sentsitive) (e.g. Corporate Folk Bonfire Band 1)
   --band-name: string # Show descriptors with the specified band name (case-sensitive) (e.g. Documentary Underscore Heartfelt Band 1)
   --page: int # Page number (default: 1, e.g. 1)
   --per-page: int # Number of results per page (default: 20, e.g. 1)
-  --id: list # Show descriptors with the specified IDs (case-sensitive) (e.g. documentary_underscore_heartfelt)
+  --id: list<string> # Show descriptors with the specified IDs (case-sensitive) (e.g. documentary_underscore_heartfelt)
   --instrument-name: string # Show descriptors with the specified instrument name (case-sensitive) (e.g. Precision Bass - Full)
   --instrument-id: string # Show descriptors with the specified instrument ID (case-sensitive) (e.g. direct_fluorescent_synth_lead)
   --tempo: float # Show descriptors whose tempo range includes the specified tempo in beats per minute (e.g. 90)
@@ -155,14 +168,14 @@ export def "ai-audio-descriptors listCustomDescriptors" [
   let full_url = (build-url $base "/v2/ai/audio/descriptors" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # List computer audio instruments
 #
 # GET /v2/ai/audio/instruments
 # operationId: listCustomInstruments
-export def "ai-audio-instruments listCustomInstruments" [
+export def "ai-audio-instruments list-custom" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -170,8 +183,9 @@ export def "ai-audio-instruments listCustomInstruments" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --id: list # Show instruments with the specified ID (e.g. wood_blocks)
+  --id: list<string> # Show instruments with the specified ID (e.g. wood_blocks)
   --per-page: int # Number of results per page (default: 20, e.g. 1)
   --page: int # Page number (default: 1, e.g. 1)
   --name: string # Show instruments with the specified name (case-sensitive) (e.g. Precision Bass - Full)
@@ -183,14 +197,14 @@ export def "ai-audio-instruments listCustomInstruments" [
   let full_url = (build-url $base "/v2/ai/audio/instruments" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get details about audio renders
 #
 # GET /v2/ai/audio/renders
 # operationId: fetchRenders
-export def "ai-audio-renders fetchRenders" [
+export def "ai-audio-renders get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -198,8 +212,9 @@ export def "ai-audio-renders fetchRenders" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --id: list # One or more render IDs (e.g. [L2w7h9VNFlkzpllSUunSYayenKjN, BeHx3UNXzMBB4dGsC9aa6VxnpcWl])
+  --id: list<string> # One or more render IDs (e.g. [L2w7h9VNFlkzpllSUunSYayenKjN, BeHx3UNXzMBB4dGsC9aa6VxnpcWl])
 ]: nothing -> record<audio_renders: table<created_date: string, files: list, id: string, preset: string, progress_percent: int, status: string, timeline: record, updated_date: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -207,7 +222,7 @@ export def "ai-audio-renders fetchRenders" [
   let full_url = (build-url $base "/v2/ai/audio/renders" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Create rendered audio
@@ -215,7 +230,7 @@ export def "ai-audio-renders fetchRenders" [
 # POST /v2/ai/audio/renders
 # operationId: createAudioRenders
 # --audio_renders item shape: {filename: string, preset: "MASTER_MP3"|"MASTER_WAV"|"STEMS_WAV", timeline: record}
-export def "ai-audio-renders createAudioRenders" [
+export def "ai-audio-renders create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -223,6 +238,7 @@ export def "ai-audio-renders createAudioRenders" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   audio_renders: list # Parameters to create computer audio renders — item shape: {filename: string, preset: "MASTER_MP3"|"MASTER_WAV"|"STEMS_WAV", timeline: record}
 ]: any -> record<audio_renders: table<created_date: string, files: list, id: string, preset: string, progress_percent: int, status: string, timeline: record, updated_date: string>> {
@@ -230,18 +246,18 @@ export def "ai-audio-renders createAudioRenders" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/ai/audio/renders")
-  let body = {audio_renders: $audio_renders} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"audio_renders": $audio_renders} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # List audio tracks
 #
 # GET /v2/audio
 # operationId: getTrackList
-export def "audio list" [
+export def "audio get-track-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -249,8 +265,9 @@ export def "audio list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --id: list # One or more audio IDs (e.g. [442583, 434750])
+  --id: list<string> # One or more audio IDs (e.g. [442583, 434750])
   --view: string@view-completer # Amount of detail to render in the response (default: minimal, e.g. full)
   --search-id: string # The ID of the search that is related to this request (e.g. 00000000-0000-0000-0000-000000000000)
 ]: nothing -> record<data: table<added_date: string, affiliate_url: string, album: record, artists: list, assets: record, bpm: int, contributor: record, deleted_time: string, description: string, duration: float, genres: list, id: string, instruments: list, is_adult: bool, is_instrumental: bool, isrc: string, keywords: list, language: string, lyrics: string, media_type: string, model_releases: list, moods: list, published_time: string, recording_version: string, releases: list, similar_artists: list, submitted_time: string, title: string, updated_time: string, url: string, vocal_description: string>, errors: table<code: string, data: string, items: list, message: string, path: string>, message: string, page: int, per_page: int, total_count: int> {
@@ -260,14 +277,14 @@ export def "audio list" [
   let full_url = (build-url $base "/v2/audio" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # List audio collections
 #
 # GET /v2/audio/collections
 # operationId: getTrackCollectionList
-export def "audio-collections list" [
+export def "audio-collections get-track-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -275,10 +292,11 @@ export def "audio-collections list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Page number (default: 1, e.g. 1)
   --per-page: int # Number of results per page (default: 100, e.g. 100)
-  --embed: list # Which sharing information to include in the response, such as a URL to the collection (e.g. share_code)
+  --embed: list<string> # Which sharing information to include in the response, such as a URL to the collection (e.g. share_code)
 ]: nothing -> record<data: table<cover_item: record, created_time: string, id: string, items_updated_time: string, name: string, share_code: string, share_url: string, total_item_count: int, updated_time: string>, errors: table<code: string, data: string, items: list, message: string, path: string>, message: string, page: int, per_page: int, total_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -286,14 +304,14 @@ export def "audio-collections list" [
   let full_url = (build-url $base "/v2/audio/collections" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Create audio collections
 #
 # POST /v2/audio/collections
 # operationId: createTrackCollection
-export def "audio-collections createTrackCollection" [
+export def "audio-collections create-track" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -301,6 +319,7 @@ export def "audio-collections createTrackCollection" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   name: string # The name of the collection
 ]: any -> record<id: string> {
@@ -308,18 +327,18 @@ export def "audio-collections createTrackCollection" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/audio/collections")
-  let body = {name: $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Delete audio collections
 #
 # DELETE /v2/audio/collections/{id}
 # operationId: deleteTrackCollection
-export def "audio-collections delete" [
+export def "audio-collections delete-track" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -328,21 +347,22 @@ export def "audio-collections delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/audio/collections/($id)")
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/audio/collections/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get the details of audio collections
 #
 # GET /v2/audio/collections/{id}
 # operationId: getTrackCollection
-export def "audio-collections get" [
+export def "audio-collections get-track" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -351,24 +371,25 @@ export def "audio-collections get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --embed: list # Which sharing information to include in the response, such as a URL to the collection
+  --embed: list<string> # Which sharing information to include in the response, such as a URL to the collection
   --share-code: string # Code to retrieve a shared collection
 ]: nothing -> record<cover_item: record<added_time: string, id: string, media_type: string>, created_time: string, id: string, items_updated_time: string, name: string, share_code: string, share_url: string, total_item_count: int, updated_time: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "embed" $embed "multi") (serialize-qp "share_code" $share_code "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v2/audio/collections/($id)" $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/audio/collections/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Rename audio collections
 #
 # POST /v2/audio/collections/{id}
 # operationId: renameTrackCollection
-export def "audio-collections renameTrackCollection" [
+export def "audio-collections rename-track" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -377,25 +398,26 @@ export def "audio-collections renameTrackCollection" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   name: string # The new name of the collection
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/audio/collections/($id)")
-  let body = {name: $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/audio/collections/{id}"))
+  let req_body = {"name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Remove audio tracks from collections
 #
 # DELETE /v2/audio/collections/{id}/items
 # operationId: deleteTrackCollectionItems
-export def "audio-collections-items delete" [
+export def "audio-collections-items delete-track" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -404,23 +426,24 @@ export def "audio-collections-items delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --item-id: list # One or more item IDs to remove from the collection (e.g. [76688182, 40005859])
+  --item-id: list<string> # One or more item IDs to remove from the collection (e.g. [76688182, 40005859])
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "item_id" $item_id "multi")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v2/audio/collections/($id)/items" $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/audio/collections/{id}/items") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get the contents of audio collections
 #
 # GET /v2/audio/collections/{id}/items
 # operationId: getTrackCollectionItems
-export def "audio-collections-items get" [
+export def "audio-collections-items get-track" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -429,6 +452,7 @@ export def "audio-collections-items get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Page number (default: 1)
   --per-page: int # Number of results per page (default: 100)
@@ -438,10 +462,10 @@ export def "audio-collections-items get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "share_code" $share_code "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v2/audio/collections/($id)/items" $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/audio/collections/{id}/items") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Add audio tracks to collections
@@ -449,7 +473,7 @@ export def "audio-collections-items get" [
 # POST /v2/audio/collections/{id}/items
 # operationId: addTrackCollectionItems
 # --items item shape: {added_time?: string, id: string, media_type?: string}
-export def "audio-collections-items addTrackCollectionItems" [
+export def "audio-collections-items create-track" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -458,25 +482,26 @@ export def "audio-collections-items addTrackCollectionItems" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   items: list # List of items — item shape: {added_time?: string, id: string, media_type?: string}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/audio/collections/($id)/items")
-  let body = {items: $items} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/audio/collections/{id}/items"))
+  let req_body = {"items": $items} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # List audio genres
 #
 # GET /v2/audio/genres
 # operationId: listGenres
-export def "audio-genres listGenres" [
+export def "audio-genres list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -484,6 +509,7 @@ export def "audio-genres listGenres" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --language: string # Which language the genres will be returned
 ]: nothing -> record<data: list<string>> {
@@ -493,14 +519,14 @@ export def "audio-genres listGenres" [
   let full_url = (build-url $base "/v2/audio/genres" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # List audio instruments
 #
 # GET /v2/audio/instruments
 # operationId: listInstruments
-export def "audio-instruments listInstruments" [
+export def "audio-instruments list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -508,6 +534,7 @@ export def "audio-instruments listInstruments" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --language: string # Which language the instruments will be returned in
 ]: nothing -> record<data: list<string>> {
@@ -517,14 +544,14 @@ export def "audio-instruments listInstruments" [
   let full_url = (build-url $base "/v2/audio/instruments" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # List audio licenses
 #
 # GET /v2/audio/licenses
 # operationId: getTrackLicenseList
-export def "audio-licenses get" [
+export def "audio-licenses get-track-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -532,6 +559,7 @@ export def "audio-licenses get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --audio-id: string # Show licenses for the specified track ID (e.g. 1)
   --license: string # Restrict results by license. Prepending a `-` sign will exclude results by license (e.g. 48433107)
@@ -550,7 +578,7 @@ export def "audio-licenses get" [
   let full_url = (build-url $base "/v2/audio/licenses" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # License audio tracks
@@ -558,7 +586,7 @@ export def "audio-licenses get" [
 # POST /v2/audio/licenses
 # operationId: licenseTrack
 # --audio item shape: {audio_id: string, license?: "audio_platform"|"premier_music_basic"|"premier_music_extended"|"premier_music_pro"|"premier_music_comp"|"asset_all_music", search_id?: string}
-export def "audio-licenses licenseTrack" [
+export def "audio-licenses create-track" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -566,6 +594,7 @@ export def "audio-licenses licenseTrack" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --license: string@license-completer # License type (e.g. audio_platform)
   --search-id: string # The ID of the search that led to licensing this track (e.g. p5S6QwRikdFJTHXwsoiqTg)
@@ -576,18 +605,18 @@ export def "audio-licenses licenseTrack" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "license" $license "scalar") (serialize-qp "search_id" $search_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/audio/licenses" $qp)
-  let body = {audio: $audio} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"audio": $audio} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Download audio tracks
 #
 # POST /v2/audio/licenses/{id}/downloads
 # operationId: downloadTracks
-export def "audio-licenses-downloads downloadTracks" [
+export def "audio-licenses-downloads download-tracks" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -596,21 +625,22 @@ export def "audio-licenses-downloads downloadTracks" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<shorts_loops_stems: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/audio/licenses/($id)/downloads")
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/audio/licenses/{id}/downloads"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # List audio moods
 #
 # GET /v2/audio/moods
 # operationId: listMoods
-export def "audio-moods listMoods" [
+export def "audio-moods list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -618,6 +648,7 @@ export def "audio-moods listMoods" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --language: string # Which language the moods will be returned in
 ]: nothing -> record<data: list<string>> {
@@ -627,7 +658,7 @@ export def "audio-moods listMoods" [
   let full_url = (build-url $base "/v2/audio/moods" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Search for tracks
@@ -635,7 +666,7 @@ export def "audio-moods listMoods" [
 # GET /v2/audio/search
 # operationId: searchTracks
 @deprecated --flag bpm
-export def "audio-search searchTracks" [
+export def "audio-search list-tracks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -643,18 +674,19 @@ export def "audio-search searchTracks" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --artists: list # Show tracks with one of the specified artist names or IDs
+  --artists: list<string> # Show tracks with one of the specified artist names or IDs
   --bpm: int # (Deprecated; use bpm_from and bpm_to instead) Show tracks with the specified beats per minute (DEPRECATED)
   --bpm-from: int # Show tracks with the specified beats per minute or faster (e.g. 80)
   --bpm-to: int # Show tracks with the specified beats per minute or slower (e.g. 120)
   --duration: int # Show tracks with the specified duration in seconds (e.g. 180)
   --duration-from: int # Show tracks with the specified duration or longer in seconds (e.g. 30)
   --duration-to: int # Show tracks with the specified duration or shorter in seconds (e.g. 180)
-  --genre: list # Show tracks with each of the specified genres; to get the list of genres, use `GET /v2/audio/genres` (e.g. [Classical, Holiday])
+  --genre: list<string> # Show tracks with each of the specified genres; to get the list of genres, use `GET /v2/audio/genres` (e.g. [Classical, Holiday])
   --is-instrumental: oneof<nothing, bool> # Show instrumental music only (e.g. true)
-  --instruments: list # Show tracks with each of the specified instruments; to get the list of instruments, use `GET /v2/audio/instruments` (e.g. [Trumpet, Percussion])
-  --moods: list # Show tracks with each of the specified moods; to get the list of moods, use `GET /v2/audio/moods` (e.g. [Confident, Playful])
+  --instruments: list<string> # Show tracks with each of the specified instruments; to get the list of instruments, use `GET /v2/audio/instruments` (e.g. [Trumpet, Percussion])
+  --moods: list<string> # Show tracks with each of the specified moods; to get the list of moods, use `GET /v2/audio/moods` (e.g. [Confident, Playful])
   --page: int # Page number (default: 1)
   --per-page: int # Number of results per page (default: 20, e.g. 1)
   --query: string # One or more search terms separated by spaces (e.g. drum)
@@ -672,14 +704,14 @@ export def "audio-search searchTracks" [
   let full_url = (build-url $base "/v2/audio/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get details about audio tracks
 #
 # GET /v2/audio/{id}
 # operationId: getTrack
-export def "audio get" [
+export def "audio get-track" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -688,6 +720,7 @@ export def "audio get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --view: string@view-completer # Amount of detail to render in the response (default: full, e.g. full)
   --search-id: string # The ID of the search that is related to this request (e.g. 00000000-0000-0000-0000-000000000000)
@@ -695,10 +728,10 @@ export def "audio get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "view" $view "scalar") (serialize-qp "search_id" $search_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v2/audio/($id)" $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/audio/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Run multiple image searches
@@ -707,7 +740,7 @@ export def "audio get" [
 # operationId: bulkSearchImages
 @deprecated --flag height
 @deprecated --flag width
-export def "bulk-search-images bulkSearchImages" [
+export def "bulk-search-images list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -715,6 +748,7 @@ export def "bulk-search-images bulkSearchImages" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --added-date: string # Show images added on the specified date (format: date, e.g. 2021-03-29)
   --added-date-start: string # Show images added on or after the specified date (format: date, e.g. 2021-03-29)
@@ -724,23 +758,23 @@ export def "bulk-search-images bulkSearchImages" [
   --added-date-end: string # Show images added before the specified date (format: date, e.g. 2021-03-29)
   --category: string # Show images with the specified Shutterstock-defined category; specify a category name or ID
   --color: string # Specify either a hexadecimal color in the format '4F21EA' or 'grayscale'; the API returns images that use similar colors (e.g. 4F21EA)
-  --contributor: list # Show images with the specified contributor names or IDs, allows multiple (e.g. [123456])
+  --contributor: list<string> # Show images with the specified contributor names or IDs, allows multiple (e.g. [123456])
   --contributor-country: string # Show images from contributors in one or more specified countries, or start with NOT to exclude a country from the search (e.g. US)
   --fields: string # Fields to display in the response; see the documentation for the fields parameter in the overview section
   --height: int # (Deprecated; use height_from and height_to instead) Show images with the specified height (DEPRECATED)
   --height-from: int # Show images with the specified height or larger, in pixels (e.g. 1080)
   --height-to: int # Show images with the specified height or smaller, in pixels (e.g. 1080)
-  --image-type: list # Show images of the specified type (e.g. photo)
+  --image-type: list<string> # Show images of the specified type (e.g. photo)
   --keyword-safe-search: oneof<nothing, bool> # Hide results with potentially unsafe keywords (default: true)
   --language: string@language-completer # Set query and result language (uses Accept-Language header if not set) (e.g. cs)
-  --license: list # Show only images with the specified license
-  --model: list # Show image results with the specified model IDs (e.g. [12345, 67890])
+  --license: list<string> # Show only images with the specified license
+  --model: list<string> # Show image results with the specified model IDs (e.g. [12345, 67890])
   --orientation: string@orientation-completer # Show image results with horizontal or vertical orientation (e.g. vertical)
   --page: int # Page number (default: 1, e.g. 1)
   --per-page: int # Number of results per page (default: 20, e.g. 10)
   --people-model-released: oneof<nothing, bool> # Show images of people with a signed model release (e.g. true)
   --people-age: string@people-age-completer # Show images that feature people of the specified age category (e.g. 20s)
-  --people-ethnicity: list # Show images with people of the specified ethnicities, or start with NOT to show images without those ethnicities (e.g. hispanic)
+  --people-ethnicity: list<string> # Show images with people of the specified ethnicities, or start with NOT to show images without those ethnicities (e.g. hispanic)
   --people-gender: string@people-gender-completer # Show images with people of the specified gender (e.g. both)
   --people-number: int # Show images with the specified number of people (e.g. 2)
   --region: string # Raise or lower search result rankings based on the result's relevance to a specified region; you can provide a country code or an IP address from which the API infers a country (e.g. US)
@@ -751,17 +785,18 @@ export def "bulk-search-images bulkSearchImages" [
   --width: int # (Deprecated; use width_from and width_to instead) Show images with the specified width (DEPRECATED)
   --width-from: int # Show images with the specified width or larger, in pixels (e.g. 1920)
   --width-to: int # Show images with the specified width or smaller, in pixels (e.g. 1920)
-  --body: record
+  --body: list
 ]: any -> record<bulk_search_id: string, results: table<data: list, insights: record, message: string, page: int, per_page: int, search_id: string, spellcheck_info: record, total_count: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "added_date" $added_date "scalar") (serialize-qp "added_date_start" $added_date_start "scalar") (serialize-qp "aspect_ratio_min" $aspect_ratio_min "scalar") (serialize-qp "aspect_ratio_max" $aspect_ratio_max "scalar") (serialize-qp "aspect_ratio" $aspect_ratio "scalar") (serialize-qp "added_date_end" $added_date_end "scalar") (serialize-qp "category" $category "scalar") (serialize-qp "color" $color "scalar") (serialize-qp "contributor" $contributor "multi") (serialize-qp "contributor_country" $contributor_country "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "height" $height "scalar") (serialize-qp "height_from" $height_from "scalar") (serialize-qp "height_to" $height_to "scalar") (serialize-qp "image_type" $image_type "multi") (serialize-qp "keyword_safe_search" $keyword_safe_search "scalar") (serialize-qp "language" $language "scalar") (serialize-qp "license" $license "multi") (serialize-qp "model" $model "multi") (serialize-qp "orientation" $orientation "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "people_model_released" $people_model_released "scalar") (serialize-qp "people_age" $people_age "scalar") (serialize-qp "people_ethnicity" $people_ethnicity "multi") (serialize-qp "people_gender" $people_gender "scalar") (serialize-qp "people_number" $people_number "scalar") (serialize-qp "region" $region "scalar") (serialize-qp "safe" $safe "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "spellcheck_query" $spellcheck_query "scalar") (serialize-qp "view" $view "scalar") (serialize-qp "width" $width "scalar") (serialize-qp "width_from" $width_from "scalar") (serialize-qp "width_to" $width_to "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/bulk_search/images" $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # List catalog collections
@@ -776,11 +811,12 @@ export def "catalog-collections get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Page number (default: 1, e.g. 1)
   --per-page: int # Number of results per page (default: 20, e.g. 20)
   --qp-sort: string@sort-completer # Sort by (default: newest)
-  --shared: oneof<nothing, bool> # Set to true to omit collections that you own and return only collections  that are shared with you (default: false)
+  --shared: oneof<nothing, bool> # Set to true to omit collections that you own and return only collections that are shared with you (default: false)
 ]: nothing -> record<data: table<cover_asset: record, created_time: string, id: string, name: string, role_assignments: record, total_item_count: float, updated_time: string, visibility: string>, page: float, per_page: float, total_count: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -788,7 +824,7 @@ export def "catalog-collections get" [
   let full_url = (build-url $base "/v2/catalog/collections" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Create catalog collections
@@ -796,7 +832,7 @@ export def "catalog-collections get" [
 # POST /v2/catalog/collections
 # operationId: createCollection
 # --items item shape: {asset: record}
-export def "catalog-collections createCollection" [
+export def "catalog-collections create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -804,6 +840,7 @@ export def "catalog-collections createCollection" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --items: list # item shape: {asset: record}
   name: string
@@ -813,11 +850,11 @@ export def "catalog-collections createCollection" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/catalog/collections")
-  let body = {items: $items, name: $name, visibility: $visibility} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"items": $items, "name": $name, "visibility": $visibility} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Delete catalog collections
@@ -833,14 +870,15 @@ export def "catalog-collections delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/catalog/collections/($collection_id)")
+  let full_url = (build-url $base ({collection_id: (encode-path-segment $collection_id)} | format pattern "/v2/catalog/collections/{collection_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Update collection metadata
@@ -848,7 +886,7 @@ export def "catalog-collections delete" [
 # PATCH /v2/catalog/collections/{collection_id}
 # operationId: updateCollection
 # --cover_asset shape: {id: string}
-export def "catalog-collections updateCollection" [
+export def "catalog-collections update" [
   collection_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -857,6 +895,7 @@ export def "catalog-collections updateCollection" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --cover-asset: record # shape: {id: string}
   --name: string
@@ -865,12 +904,12 @@ export def "catalog-collections updateCollection" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/catalog/collections/($collection_id)")
-  let body = {cover_asset: $cover_asset, name: $name, visibility: $visibility} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({collection_id: (encode-path-segment $collection_id)} | format pattern "/v2/catalog/collections/{collection_id}"))
+  let req_body = {"cover_asset": $cover_asset, "name": $name, "visibility": $visibility} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Remove items from catalog collection
@@ -887,18 +926,19 @@ export def "catalog-collections-items delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   items: list # item shape: {id: string}
 ]: any -> record<cover_asset: record<asset: record<id: string, name: string, type: string>, collection_ids: list<string>, created_time: string, id: string>, created_time: string, id: string, name: string, role_assignments: record<collection_id: string, roles: record<editors: list, owners: list, viewers: list>>, total_item_count: float, updated_time: string, visibility: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/catalog/collections/($collection_id)/items")
-  let body = {items: $items} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({collection_id: (encode-path-segment $collection_id)} | format pattern "/v2/catalog/collections/{collection_id}/items"))
+  let req_body = {"items": $items} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Add items to catalog collections
@@ -906,7 +946,7 @@ export def "catalog-collections-items delete" [
 # POST /v2/catalog/collections/{collection_id}/items
 # operationId: addToCollection
 # --items item shape: {asset: record}
-export def "catalog-collections-items addToCollection" [
+export def "catalog-collections-items create" [
   collection_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -915,25 +955,26 @@ export def "catalog-collections-items addToCollection" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   items: list # item shape: {asset: record}
 ]: any -> record<cover_asset: record<asset: record<id: string, name: string, type: string>, collection_ids: list<string>, created_time: string, id: string>, created_time: string, id: string, name: string, role_assignments: record<collection_id: string, roles: record<editors: list, owners: list, viewers: list>>, total_item_count: float, updated_time: string, visibility: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/catalog/collections/($collection_id)/items")
-  let body = {items: $items} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({collection_id: (encode-path-segment $collection_id)} | format pattern "/v2/catalog/collections/{collection_id}/items"))
+  let req_body = {"items": $items} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Search catalogs for assets
 #
 # GET /v2/catalog/search
 # operationId: searchCatalog
-export def "catalog-search searchCatalog" [
+export def "catalog-search list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -941,13 +982,14 @@ export def "catalog-search searchCatalog" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --qp-sort: string@sort-completer # Sort by (default: newest)
   --page: int # Page number (default: 1, e.g. 1)
   --per-page: int # Number of results per page (default: 20, e.g. 50)
   --query: string # One or more search terms separated by spaces (e.g. dogs on the beach)
-  --collection-id: list # Filter by collection id (e.g. [123456, 456789, 13579])
-  --asset-type: list # Filter by asset type (e.g. [image, editorial-image])
+  --collection-id: list<string> # Filter by collection id (e.g. [123456, 456789, 13579])
+  --asset-type: list<string> # Filter by asset type (e.g. [image, editorial-image])
 ]: nothing -> record<data: table<asset: record, collection_ids: list, created_time: string, id: string>, page: float, per_page: float, total_count: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -955,14 +997,14 @@ export def "catalog-search searchCatalog" [
   let full_url = (build-url $base "/v2/catalog/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get details about multiple contributors
 #
 # GET /v2/contributors
 # operationId: getContributorList
-export def "contributors list" [
+export def "contributors get-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -970,8 +1012,9 @@ export def "contributors list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --id: list # One or more contributor IDs (e.g. [800506, 1653538])
+  --id: list<string> # One or more contributor IDs (e.g. [800506, 1653538])
 ]: nothing -> record<data: table<about: string, contributor_type: list, display_name: string, equipment: list, id: string, location: string, portfolio_url: string, social_media: record, styles: list, subjects: list, website: string>, errors: table<code: string, data: string, items: list, message: string, path: string>, message: string, page: int, per_page: int, total_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -979,7 +1022,7 @@ export def "contributors list" [
   let full_url = (build-url $base "/v2/contributors" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get details about a single contributor
@@ -995,21 +1038,22 @@ export def "contributors get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<about: string, contributor_type: list<string>, display_name: string, equipment: list<string>, id: string, location: string, portfolio_url: string, social_media: record<facebook: string, google_plus: string, linkedin: string, pinterest: string, tumblr: string, twitter: string>, styles: list<string>, subjects: list<string>, website: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/contributors/($contributor_id)")
+  let full_url = (build-url $base ({contributor_id: (encode-path-segment $contributor_id)} | format pattern "/v2/contributors/{contributor_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # List contributors' collections
 #
 # GET /v2/contributors/{contributor_id}/collections
 # operationId: getContributorCollectionsList
-export def "contributors-collections list" [
+export def "contributors-collections get-list" [
   contributor_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1018,16 +1062,17 @@ export def "contributors-collections list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --qp-sort: string@sort-completer-3 # Sort order
 ]: nothing -> record<data: table<cover_item: record, created_time: string, id: string, items_updated_time: string, name: string, share_code: string, share_url: string, total_item_count: int, updated_time: string>, errors: table<code: string, data: string, items: list, message: string, path: string>, message: string, page: int, per_page: int, total_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v2/contributors/($contributor_id)/collections" $qp)
+  let full_url = (build-url $base ({contributor_id: (encode-path-segment $contributor_id)} | format pattern "/v2/contributors/{contributor_id}/collections") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get details about contributors' collections
@@ -1044,14 +1089,15 @@ export def "contributors-collections get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<cover_item: record<added_time: string, id: string, media_type: string>, created_time: string, id: string, items_updated_time: string, name: string, share_code: string, share_url: string, total_item_count: int, updated_time: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/contributors/($contributor_id)/collections/($id)")
+  let full_url = (build-url $base ({contributor_id: (encode-path-segment $contributor_id), id: (encode-path-segment $id)} | format pattern "/v2/contributors/{contributor_id}/collections/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get the items in contributors' collections
@@ -1068,6 +1114,7 @@ export def "contributors-collections-items get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Page number (default: 1)
   --per-page: int # Number of results per page (default: 20)
@@ -1076,17 +1123,17 @@ export def "contributors-collections-items get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v2/contributors/($contributor_id)/collections/($id)/items" $qp)
+  let full_url = (build-url $base ({contributor_id: (encode-path-segment $contributor_id), id: (encode-path-segment $id)} | format pattern "/v2/contributors/{contributor_id}/collections/{id}/items") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Upload images
 #
 # POST /v2/cv/images
 # operationId: uploadImage
-export def "cv-images uploadImage" [
+export def "cv-images upload" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1094,6 +1141,7 @@ export def "cv-images uploadImage" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   base64_image: string # A Base 64 encoded jpeg or png; images can be no larger than 10mb and can be no larger than 10,000 pixels in width or height
 ]: any -> record<upload_id: string> {
@@ -1101,11 +1149,11 @@ export def "cv-images uploadImage" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/cv/images")
-  let body = {base64_image: $base64_image} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"base64_image": $base64_image} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # List suggested keywords
@@ -1120,6 +1168,7 @@ export def "cv-keywords get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --asset-id: string # The asset ID or upload ID to suggest keywords for (e.g. U6ba16262e3bc2db470b8e3cfa8aaab25)
 ]: nothing -> record<data: list<string>, errors: table<code: string, data: string, items: list, message: string, path: string>, message: string> {
@@ -1129,7 +1178,7 @@ export def "cv-keywords get" [
   let full_url = (build-url $base "/v2/cv/keywords" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # List similar images
@@ -1144,9 +1193,10 @@ export def "cv-similar-images get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --asset-id: string # The asset ID or upload ID to find similar images for (e.g. U6ba16262e3bc2db470b8e3cfa8aaab25)
-  --license: list # Show only images with the specified license (default: [commercial])
+  --license: list<string> # Show only images with the specified license (default: [commercial])
   --safe: oneof<nothing, bool> # Enable or disable safe search (default: true)
   --language: string@language-completer # Language for the keywords and categories in the response (e.g. cs)
   --page: int # Page number (default: 1)
@@ -1159,7 +1209,7 @@ export def "cv-similar-images get" [
   let full_url = (build-url $base "/v2/cv/similar/images" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # List similar videos
@@ -1174,9 +1224,10 @@ export def "cv-similar-videos get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --asset-id: string # The asset ID or upload ID to find similar videos for (e.g. U6ba16262e3bc2db470b8e3cfa8aaab25)
-  --license: list # Show only videos with the specified license (default: [commercial])
+  --license: list<string> # Show only videos with the specified license (default: [commercial])
   --safe: oneof<nothing, bool> # Enable or disable safe search (default: true)
   --language: string@language-completer # Language for the keywords and categories in the response (e.g. cs)
   --page: int # Page number (default: 1)
@@ -1189,7 +1240,7 @@ export def "cv-similar-videos get" [
   let full_url = (build-url $base "/v2/cv/similar/videos" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # (Deprecated) List editorial categories
@@ -1206,6 +1257,7 @@ export def "editorial-categories get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: table<name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -1213,14 +1265,14 @@ export def "editorial-categories get" [
   let full_url = (build-url $base "/v2/editorial/categories")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # List editorial categories
 #
 # GET /v2/editorial/images/categories
 # operationId: listEditorialImageCategories
-export def "editorial-images-categories listEditorialImageCategories" [
+export def "editorial-images-categories list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1228,6 +1280,7 @@ export def "editorial-images-categories listEditorialImageCategories" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: table<name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -1235,14 +1288,14 @@ export def "editorial-images-categories listEditorialImageCategories" [
   let full_url = (build-url $base "/v2/editorial/images/categories")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # List editorial image licenses
 #
 # GET /v2/editorial/images/licenses
 # operationId: getEditorialImageLicenseList
-export def "editorial-images-licenses get" [
+export def "editorial-images-licenses get-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1250,6 +1303,7 @@ export def "editorial-images-licenses get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --image-id: string # Show licenses for the specified editorial image ID (e.g. 12345678)
   --license: string # Show editorial images that are available with the specified license name (e.g. premier_editorial_all_digital)
@@ -1268,7 +1322,7 @@ export def "editorial-images-licenses get" [
   let full_url = (build-url $base "/v2/editorial/images/licenses" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # License editorial content
@@ -1276,7 +1330,7 @@ export def "editorial-images-licenses get" [
 # POST /v2/editorial/images/licenses
 # operationId: licenseEditorialImages
 # --editorial item shape: {editorial_id: string, license: string, metadata?: record, size?: "small"|"medium"|"original"}
-export def "editorial-images-licenses licenseEditorialImages" [
+export def "editorial-images-licenses create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1284,6 +1338,7 @@ export def "editorial-images-licenses licenseEditorialImages" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   country: any # A valid ISO 3166-1 Alpha-2 or ISO 3166-1 Alpha-3 code. (e.g. USA)
   editorial: list # Editorial content to license — item shape: {editorial_id: string, license: string, metadata?: record, size?: "small"|"medium"|"original"}
@@ -1292,18 +1347,18 @@ export def "editorial-images-licenses licenseEditorialImages" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/editorial/images/licenses")
-  let body = {country: $country, editorial: $editorial} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"country": $country, "editorial": $editorial} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Get editorial livefeed list
 #
 # GET /v2/editorial/images/livefeeds
 # operationId: getEditorialImageLivefeedList
-export def "editorial-images-livefeeds list" [
+export def "editorial-images-livefeeds get-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1311,6 +1366,7 @@ export def "editorial-images-livefeeds list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --country: string # Returns only livefeeds that are available for distribution in a certain country (format: country-code-3, e.g. USA)
   --page: int # Page number (default: 1)
@@ -1322,7 +1378,7 @@ export def "editorial-images-livefeeds list" [
   let full_url = (build-url $base "/v2/editorial/images/livefeeds" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get editorial livefeed
@@ -1338,16 +1394,17 @@ export def "editorial-images-livefeeds get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --country: string # Returns only if the livefeed is available for distribution in a certain country (format: country-code-3, e.g. USA)
 ]: nothing -> record<cover_item: record<height: int, id: string, url: string, width: int>, created_time: string, id: string, name: string, total_item_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "country" $country "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v2/editorial/images/livefeeds/($id)" $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/editorial/images/livefeeds/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get editorial livefeed items
@@ -1363,23 +1420,24 @@ export def "editorial-images-livefeeds-items get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --country: string # Returns only if the livefeed items are available for distribution in a certain country (format: country-code-3, e.g. USA)
 ]: nothing -> record<data: table<aspect: float, assets: record, byline: string, caption: string, categories: list, date_taken: string, description: string, id: string, keywords: list, special_instructions: string, title: string>, errors: table<code: string, data: string, items: list, message: string, path: string>, message: string, page: int, per_page: int, total_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "country" $country "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v2/editorial/images/livefeeds/($id)/items" $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/editorial/images/livefeeds/{id}/items") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Search editorial images
 #
 # GET /v2/editorial/images/search
 # operationId: searchEditorialImages
-export def "editorial-images-search searchEditorialImages" [
+export def "editorial-images-search list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1387,12 +1445,13 @@ export def "editorial-images-search searchEditorialImages" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --query: string # One or more search terms separated by spaces (e.g. The Academy Awards)
   --qp-sort: string@sort-completer-4 # Sort by (default: relevant)
   --category: string # Show editorial content with each of the specified editorial categories; specify category names in a comma-separated list (e.g. Alone,Performing)
   --country: string # Show only editorial content that is available for distribution in a certain country (format: country-code-3, e.g. USA)
-  --supplier-code: list # Show only editorial content from certain suppliers
+  --supplier-code: list<string> # Show only editorial content from certain suppliers
   --date-start: string # Show only editorial content generated on or after a specific date (format: date, e.g. 2020-05-29)
   --date-end: string # Show only editorial content generated on or before a specific date (format: date, e.g. 2021-05-29)
   --per-page: int # Number of results per page (default: 20)
@@ -1404,7 +1463,7 @@ export def "editorial-images-search searchEditorialImages" [
   let full_url = (build-url $base "/v2/editorial/images/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # List updated content
@@ -1419,6 +1478,7 @@ export def "editorial-images-updated get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --type: string@type-completer # Specify `addition` to return only images that were added or `edit` to return only images that were edited or deleted (e.g. edit)
   --date-updated-start: string # Show images images added, edited, or deleted after the specified date. Acceptable range is 1970-01-01T00:00:01 to 2038-01-19T00:00:00. (format: date-time, e.g. 2021-03-29T13:25:13.521Z)
@@ -1427,7 +1487,7 @@ export def "editorial-images-updated get" [
   --date-taken-end: string # Show images that were taken before the specified date (format: date, e.g. 2020-02-05)
   --cursor: string # The cursor of the page with which to start fetching results; this cursor is returned from previous requests (e.g. eyJ2IjoxLCJzIjoyfQ==)
   --qp-sort: string@sort-completer # Sort by (default: newest, e.g. newest)
-  --supplier-code: list # Show only editorial content from certain suppliers (e.g. ABC)
+  --supplier-code: list<string> # Show only editorial content from certain suppliers (e.g. ABC)
   --country: string # Show only editorial content that is available for distribution in a certain country (format: country-code-3, e.g. USA)
   --per-page: int # Number of results per page (default: 500, e.g. 200)
 ]: nothing -> record<data: table<aspect: float, assets: record, byline: string, caption: string, categories: list, commercial_status: record, created_time: string, date_taken: string, description: string, id: string, keywords: list, rights: record, special_instructions: string, supplier_code: string, title: string, updated_time: string, updates: list>, message: string, next: string, per_page: int, prev: string> {
@@ -1437,7 +1497,7 @@ export def "editorial-images-updated get" [
   let full_url = (build-url $base "/v2/editorial/images/updated" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get editorial content details
@@ -1453,16 +1513,17 @@ export def "editorial-images get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --country: string # Returns only if the content is available for distribution in a certain country (format: country-code-3, e.g. USA)
 ]: nothing -> record<aspect: float, assets: record<medium_jpg: record<display_name: string, dpi: int, file_size: int, format: string, height: int, is_licensable: bool, width: int>, original: record<display_name: string, dpi: int, file_size: int, format: string, height: int, is_licensable: bool, width: int>, small_jpg: record<display_name: string, dpi: int, file_size: int, format: string, height: int, is_licensable: bool, width: int>, thumb_170: record<height: int, url: string, width: int>, thumb_220: record<height: int, url: string, width: int>, watermark_1500: record<height: int, url: string, width: int>, watermark_450: record<height: int, url: string, width: int>>, byline: string, caption: string, categories: table<name: string>, date_taken: string, description: string, id: string, keywords: list<string>, special_instructions: string, title: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "country" $country "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v2/editorial/images/($id)" $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/editorial/images/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # (Deprecated) License editorial content
@@ -1472,7 +1533,7 @@ export def "editorial-images get" [
 # operationId: licenseEditorialImage
 # --editorial item shape: {editorial_id: string, license: string, metadata?: record, size?: "small"|"medium"|"original"}
 @deprecated
-export def "editorial-licenses licenseEditorialImage" [
+export def "editorial-licenses create-image" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1480,6 +1541,7 @@ export def "editorial-licenses licenseEditorialImage" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   country: any # A valid ISO 3166-1 Alpha-2 or ISO 3166-1 Alpha-3 code. (e.g. USA)
   editorial: list # Editorial content to license — item shape: {editorial_id: string, license: string, metadata?: record, size?: "small"|"medium"|"original"}
@@ -1488,11 +1550,11 @@ export def "editorial-licenses licenseEditorialImage" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/editorial/licenses")
-  let body = {country: $country, editorial: $editorial} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"country": $country, "editorial": $editorial} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # (Deprecated) Get editorial livefeed list
@@ -1501,7 +1563,7 @@ export def "editorial-licenses licenseEditorialImage" [
 # DEPRECATED
 # operationId: getEditorialLivefeedList
 @deprecated
-export def "editorial-livefeeds list" [
+export def "editorial-livefeeds get-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1509,6 +1571,7 @@ export def "editorial-livefeeds list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --country: string # Returns only livefeeds that are available for distribution in a certain country (format: country-code-3, e.g. USA)
   --page: int # Page number (default: 1)
@@ -1520,7 +1583,7 @@ export def "editorial-livefeeds list" [
   let full_url = (build-url $base "/v2/editorial/livefeeds" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # (Deprecated) Get editorial livefeed
@@ -1538,16 +1601,17 @@ export def "editorial-livefeeds get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --country: string # Returns only if the livefeed is available for distribution in a certain country (format: country-code-3, e.g. USA)
 ]: nothing -> record<cover_item: record<height: int, id: string, url: string, width: int>, created_time: string, id: string, name: string, total_item_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "country" $country "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v2/editorial/livefeeds/($id)" $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/editorial/livefeeds/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # (Deprecated) Get editorial livefeed items
@@ -1565,16 +1629,17 @@ export def "editorial-livefeeds-items get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --country: string # Returns only if the livefeed items are available for distribution in a certain country (format: country-code-3, e.g. USA)
 ]: nothing -> record<data: table<aspect: float, assets: record, byline: string, caption: string, categories: list, date_taken: string, description: string, id: string, keywords: list, special_instructions: string, title: string>, errors: table<code: string, data: string, items: list, message: string, path: string>, message: string, page: int, per_page: int, total_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "country" $country "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v2/editorial/livefeeds/($id)/items" $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/editorial/livefeeds/{id}/items") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # (Deprecated) Search editorial content
@@ -1583,7 +1648,7 @@ export def "editorial-livefeeds-items get" [
 # DEPRECATED
 # operationId: searchEditorial
 @deprecated
-export def "editorial-search searchEditorial" [
+export def "editorial-search list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1591,12 +1656,13 @@ export def "editorial-search searchEditorial" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --query: string # One or more search terms separated by spaces
   --qp-sort: string@sort-completer-4 # Sort by (default: relevant)
   --category: string # Show editorial content within a certain editorial category; specify by category name
   --country: string # Show only editorial content that is available for distribution in a certain country (format: country-code-3, e.g. USA)
-  --supplier-code: list # Show only editorial content from certain suppliers
+  --supplier-code: list<string> # Show only editorial content from certain suppliers
   --date-start: string # Show only editorial content generated on or after a specific date (format: date)
   --date-end: string # Show only editorial content generated on or before a specific date (format: date)
   --per-page: int # Number of results per page (default: 20)
@@ -1608,7 +1674,7 @@ export def "editorial-search searchEditorial" [
   let full_url = (build-url $base "/v2/editorial/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # (Deprecated) List updated content
@@ -1617,7 +1683,7 @@ export def "editorial-search searchEditorial" [
 # DEPRECATED
 # operationId: getUpdatedEditorialImage
 @deprecated
-export def "editorial-updated get" [
+export def "editorial-updated get-image" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1625,6 +1691,7 @@ export def "editorial-updated get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --type: string@type-completer # Specify `addition` to return only images that were added or `edit` to return only images that were edited or deleted (e.g. edit)
   --date-updated-start: string # Show images images added, edited, or deleted after the specified date. Acceptable range is 1970-01-01T00:00:01 to 2038-01-19T00:00:00. (format: date-time, e.g. 2021-03-29T13:25:13.521Z)
@@ -1633,7 +1700,7 @@ export def "editorial-updated get" [
   --date-taken-end: string # Show images that were taken before the specified date (format: date, e.g. 2020-02-05)
   --cursor: string # The cursor of the page with which to start fetching results; this cursor is returned from previous requests (e.g. eyJ2IjoxLCJzIjoyfQ==)
   --qp-sort: string@sort-completer # Sort by (default: newest, e.g. newest)
-  --supplier-code: list # Show only editorial content from certain suppliers (e.g. ABC)
+  --supplier-code: list<string> # Show only editorial content from certain suppliers (e.g. ABC)
   --country: string # Show only editorial content that is available for distribution in a certain country (format: country-code-3, e.g. USA)
   --per-page: int # Number of results per page (default: 500, e.g. 200)
 ]: nothing -> record<data: table<aspect: float, assets: record, byline: string, caption: string, categories: list, commercial_status: record, created_time: string, date_taken: string, description: string, id: string, keywords: list, rights: record, special_instructions: string, supplier_code: string, title: string, updated_time: string, updates: list>, message: string, next: string, per_page: int, prev: string> {
@@ -1643,14 +1710,14 @@ export def "editorial-updated get" [
   let full_url = (build-url $base "/v2/editorial/updated" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # List editorial video categories
 #
 # GET /v2/editorial/videos/categories
 # operationId: listEditorialVideoCategories
-export def "editorial-videos-categories listEditorialVideoCategories" [
+export def "editorial-videos-categories list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1658,6 +1725,7 @@ export def "editorial-videos-categories listEditorialVideoCategories" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: table<name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -1665,14 +1733,14 @@ export def "editorial-videos-categories listEditorialVideoCategories" [
   let full_url = (build-url $base "/v2/editorial/videos/categories")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # List editorial video licenses
 #
 # GET /v2/editorial/videos/licenses
 # operationId: getEditorialVideoLicenseList
-export def "editorial-videos-licenses get" [
+export def "editorial-videos-licenses get-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1680,6 +1748,7 @@ export def "editorial-videos-licenses get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --video-id: string # Show licenses for the specified editorial video ID (e.g. 12345678)
   --license: string # Show editorial videos that are available with the specified license name (e.g. premier_editorial_all_media)
@@ -1698,7 +1767,7 @@ export def "editorial-videos-licenses get" [
   let full_url = (build-url $base "/v2/editorial/videos/licenses" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # License editorial video content
@@ -1706,7 +1775,7 @@ export def "editorial-videos-licenses get" [
 # POST /v2/editorial/videos/licenses
 # operationId: licenseEditorialVideo
 # --editorial item shape: {editorial_id: string, license: "premier_editorial_video_digital_only"|"premier_editorial_video_all_media"|"premier_editorial_video_all_media_single_territory"|"premier_editorial_video_comp", metadata?: record, size?: "original"}
-export def "editorial-videos-licenses licenseEditorialVideo" [
+export def "editorial-videos-licenses create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1714,6 +1783,7 @@ export def "editorial-videos-licenses licenseEditorialVideo" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   country: any # A valid ISO 3166-1 Alpha-2 or ISO 3166-1 Alpha-3 code. (e.g. USA)
   editorial: list # Editorial content to license — item shape: {editorial_id: string, license: "premier_editorial_video_digital_only"|"premier_editorial_video_all_media"|"premier_editorial_video_all_media_single_territory"|"premier_editorial_video_comp", metadata?: record, size?: "original"}
@@ -1722,18 +1792,18 @@ export def "editorial-videos-licenses licenseEditorialVideo" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/editorial/videos/licenses")
-  let body = {country: $country, editorial: $editorial} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"country": $country, "editorial": $editorial} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Search editorial video content
 #
 # GET /v2/editorial/videos/search
 # operationId: searchEditorialVideos
-export def "editorial-videos-search searchEditorialVideos" [
+export def "editorial-videos-search list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1741,12 +1811,13 @@ export def "editorial-videos-search searchEditorialVideos" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --query: string # One or more search terms separated by spaces (e.g. The Academy Awards)
   --qp-sort: string@sort-completer-4 # Sort by (default: relevant)
   --category: string # Show editorial content with each of the specified editorial categories; specify category names in a comma-separated list (e.g. Alone,Performing)
   --country: string # Show only editorial video content that is available for distribution in a certain country (format: country-code-3, e.g. USA)
-  --supplier-code: list # Show only editorial video content from certain suppliers
+  --supplier-code: list<string> # Show only editorial video content from certain suppliers
   --date-start: string # Show only editorial video content generated on or after a specific date (format: date, e.g. 2020-05-29)
   --date-end: string # Show only editorial video content generated on or before a specific date (format: date, e.g. 2021-05-29)
   --resolution: string@resolution-completer # Show only editorial video content with specific resolution (e.g. 4k)
@@ -1760,7 +1831,7 @@ export def "editorial-videos-search searchEditorialVideos" [
   let full_url = (build-url $base "/v2/editorial/videos/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get editorial video content details
@@ -1776,6 +1847,7 @@ export def "editorial-videos get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --country: string # Returns only if the content is available for distribution in a certain country (format: country-code-3, e.g. USA)
   --search-id: string # The ID of the search that is related to this request (e.g. 00000000-0000-0000-0000-000000000000)
@@ -1783,10 +1855,10 @@ export def "editorial-videos get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "country" $country "scalar") (serialize-qp "search_id" $search_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v2/editorial/videos/($id)" $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/editorial/videos/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # (Deprecated) Get editorial content details
@@ -1803,6 +1875,7 @@ export def "editorial get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --country: string # Returns only if the content is available for distribution in a certain country (format: country-code-3, e.g. USA)
   --search-id: string # The ID of the search that is related to this request (e.g. 00000000-0000-0000-0000-000000000000)
@@ -1810,17 +1883,17 @@ export def "editorial get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "country" $country "scalar") (serialize-qp "search_id" $search_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v2/editorial/($id)" $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/editorial/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # List images
 #
 # GET /v2/images
 # operationId: getImageList
-export def "images list" [
+export def "images get-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1828,8 +1901,9 @@ export def "images list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --id: list # One or more image IDs (e.g. [1110335168, 465011609])
+  --id: list<string> # One or more image IDs (e.g. [1110335168, 465011609])
   --view: string@view-completer # Amount of detail to render in the response (default: minimal, e.g. minimal)
   --search-id: string # The ID of the search that is related to this request (e.g. 00000000-0000-0000-0000-000000000000)
 ]: nothing -> record<data: table<added_date: string, affiliate_url: string, aspect: float, assets: record, categories: list, contributor: record, description: string, has_model_release: bool, has_property_release: bool, id: string, image_type: string, insights: record, is_adult: bool, is_editorial: bool, is_illustration: bool, keywords: list, media_type: string, model_releases: list, models: list, releases: list, url: string>, errors: table<code: string, data: string, items: list, message: string, path: string>, message: string, page: int, per_page: int, total_count: int> {
@@ -1839,7 +1913,7 @@ export def "images list" [
   let full_url = (build-url $base "/v2/images" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Upload ephemeral images
@@ -1848,7 +1922,7 @@ export def "images list" [
 # DEPRECATED
 # operationId: uploadEphemeralImage
 @deprecated
-export def "images uploadEphemeralImage" [
+export def "images upload-ephemeral" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1856,6 +1930,7 @@ export def "images uploadEphemeralImage" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   base64_image: string # A Base 64 encoded jpeg or png; images can be no larger than 10mb and can be no larger than 10,000 pixels in width or height
 ]: any -> record<id: string> {
@@ -1863,18 +1938,18 @@ export def "images uploadEphemeralImage" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/images")
-  let body = {base64_image: $base64_image} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"base64_image": $base64_image} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # List image categories
 #
 # GET /v2/images/categories
 # operationId: listImageCategories
-export def "images-categories listImageCategories" [
+export def "images-categories list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1882,6 +1957,7 @@ export def "images-categories listImageCategories" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --language: string@language-completer # Language for the keywords and categories in the response (e.g. cs)
 ]: nothing -> record<data: table<id: string, name: string>, errors: table<code: string, data: string, items: list, message: string, path: string>, message: string, page: int, per_page: int, total_count: int> {
@@ -1891,14 +1967,14 @@ export def "images-categories listImageCategories" [
   let full_url = (build-url $base "/v2/images/categories" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # List image collections
 #
 # GET /v2/images/collections
 # operationId: getImageCollectionList
-export def "images-collections list" [
+export def "images-collections get-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1906,8 +1982,9 @@ export def "images-collections list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --embed: list # Which sharing information to include in the response, such as a URL to the collection (e.g. share_code)
+  --embed: list<string> # Which sharing information to include in the response, such as a URL to the collection (e.g. share_code)
   --page: int # Page number (default: 1, e.g. 1)
   --per-page: int # Number of results per page (default: 100, e.g. 2)
 ]: nothing -> record<data: table<cover_item: record, created_time: string, id: string, items_updated_time: string, name: string, share_code: string, share_url: string, total_item_count: int, updated_time: string>, errors: table<code: string, data: string, items: list, message: string, path: string>, message: string, page: int, per_page: int, total_count: int> {
@@ -1917,14 +1994,14 @@ export def "images-collections list" [
   let full_url = (build-url $base "/v2/images/collections" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Create image collections
 #
 # POST /v2/images/collections
 # operationId: createImageCollection
-export def "images-collections createImageCollection" [
+export def "images-collections create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1932,6 +2009,7 @@ export def "images-collections createImageCollection" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   name: string # The name of the collection
 ]: any -> record<id: string> {
@@ -1939,18 +2017,18 @@ export def "images-collections createImageCollection" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/images/collections")
-  let body = {name: $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # List featured image collections
 #
 # GET /v2/images/collections/featured
 # operationId: getFeaturedImageCollectionList
-export def "images-collections-featured list" [
+export def "images-collections-featured get-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1958,9 +2036,10 @@ export def "images-collections-featured list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --embed: string@embed-completer # Which sharing information to include in the response, such as a URL to the collection (e.g. share_url)
-  --type: list # The types of collections to return (e.g. [photo])
+  --type: list<string> # The types of collections to return (e.g. [photo])
   --asset-hint: string@asset-hint-completer # Cover image size (default: 1x, e.g. 1x)
 ]: nothing -> record<data: table<cover_item: record, created_time: string, hero_item: record, id: string, items_updated_time: string, name: string, share_url: string, total_item_count: int, updated_time: string>, errors: table<code: string, data: string, items: list, message: string, path: string>, message: string, page: int, per_page: int, total_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -1969,7 +2048,7 @@ export def "images-collections-featured list" [
   let full_url = (build-url $base "/v2/images/collections/featured" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get the details of featured image collections
@@ -1985,6 +2064,7 @@ export def "images-collections-featured get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --embed: string@embed-completer # Which sharing information to include in the response, such as a URL to the collection
   --asset-hint: string@asset-hint-completer # Cover image size (default: 1x)
@@ -1992,10 +2072,10 @@ export def "images-collections-featured get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "embed" $embed "scalar") (serialize-qp "asset_hint" $asset_hint "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v2/images/collections/featured/($id)" $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/images/collections/featured/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get the contents of featured image collections
@@ -2011,6 +2091,7 @@ export def "images-collections-featured-items get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Page number (default: 1)
   --per-page: int # Number of results per page (default: 100)
@@ -2018,10 +2099,10 @@ export def "images-collections-featured-items get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v2/images/collections/featured/($id)/items" $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/images/collections/featured/{id}/items") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Delete image collections
@@ -2037,14 +2118,15 @@ export def "images-collections delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/images/collections/($id)")
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/images/collections/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get the details of image collections
@@ -2060,24 +2142,25 @@ export def "images-collections get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --embed: list # Which sharing information to include in the response, such as a URL to the collection
+  --embed: list<string> # Which sharing information to include in the response, such as a URL to the collection
   --share-code: string # Code to retrieve a shared collection
 ]: nothing -> record<cover_item: record<added_time: string, id: string, media_type: string>, created_time: string, id: string, items_updated_time: string, name: string, share_code: string, share_url: string, total_item_count: int, updated_time: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "embed" $embed "multi") (serialize-qp "share_code" $share_code "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v2/images/collections/($id)" $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/images/collections/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Rename image collections
 #
 # POST /v2/images/collections/{id}
 # operationId: renameImageCollection
-export def "images-collections renameImageCollection" [
+export def "images-collections rename" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2086,18 +2169,19 @@ export def "images-collections renameImageCollection" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   name: string # The new name of the collection
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/images/collections/($id)")
-  let body = {name: $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/images/collections/{id}"))
+  let req_body = {"name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Remove images from collections
@@ -2113,16 +2197,17 @@ export def "images-collections-items delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --item-id: list # One or more image IDs to remove from the collection
+  --item-id: list<string> # One or more image IDs to remove from the collection
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "item_id" $item_id "multi")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v2/images/collections/($id)/items" $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/images/collections/{id}/items") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get the contents of image collections
@@ -2138,6 +2223,7 @@ export def "images-collections-items get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Page number (default: 1)
   --per-page: int # Number of results per page (default: 100)
@@ -2147,10 +2233,10 @@ export def "images-collections-items get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "share_code" $share_code "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v2/images/collections/($id)/items" $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/images/collections/{id}/items") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Add images to collections
@@ -2158,7 +2244,7 @@ export def "images-collections-items get" [
 # POST /v2/images/collections/{id}/items
 # operationId: addImageCollectionItems
 # --items item shape: {added_time?: string, id: string, media_type?: string}
-export def "images-collections-items addImageCollectionItems" [
+export def "images-collections-items create" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2167,25 +2253,26 @@ export def "images-collections-items addImageCollectionItems" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   items: list # List of items — item shape: {added_time?: string, id: string, media_type?: string}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/images/collections/($id)/items")
-  let body = {items: $items} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/images/collections/{id}/items"))
+  let req_body = {"items": $items} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # List image licenses
 #
 # GET /v2/images/licenses
 # operationId: getImageLicenseList
-export def "images-licenses get" [
+export def "images-licenses get-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2193,6 +2280,7 @@ export def "images-licenses get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --image-id: string # Show licenses for the specified image ID (e.g. 12345678)
   --license: string # Show images that are available with the specified license, such as `standard` or `enhanced`; prepending a `-` sign excludes results from that license (e.g. standard)
@@ -2211,7 +2299,7 @@ export def "images-licenses get" [
   let full_url = (build-url $base "/v2/images/licenses" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # License images
@@ -2219,7 +2307,7 @@ export def "images-licenses get" [
 # POST /v2/images/licenses
 # operationId: licenseImages
 @deprecated --flag format
-export def "images-licenses licenseImages" [
+export def "images-licenses create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2227,6 +2315,7 @@ export def "images-licenses licenseImages" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --subscription-id: string # Subscription ID to use to license the image
   --format: string@format-completer # (Deprecated) Image format (DEPRECATED)
@@ -2239,11 +2328,11 @@ export def "images-licenses licenseImages" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "subscription_id" $subscription_id "scalar") (serialize-qp "format" $format "scalar") (serialize-qp "size" $size "scalar") (serialize-qp "search_id" $search_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/images/licenses" $qp)
-  let body = {images: $images} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"images": $images} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Download images
@@ -2253,7 +2342,7 @@ export def "images-licenses licenseImages" [
 # --auth_cookie shape: {name: string, value: string}
 @deprecated --flag show-modal
 @deprecated --flag verification-code
-export def "images-licenses-downloads downloadImage" [
+export def "images-licenses-downloads download" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2262,6 +2351,7 @@ export def "images-licenses-downloads downloadImage" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --auth-cookie: record # Cookie object (e.g. {name: The name of the cookie, value: The value of the cookie}) — shape: {name: string, value: string}
   --show-modal: oneof<nothing, bool> # (Deprecated) (DEPRECATED)
@@ -2271,12 +2361,12 @@ export def "images-licenses-downloads downloadImage" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/images/licenses/($id)/downloads")
-  let body = {auth_cookie: $auth_cookie, show_modal: $show_modal, size: $size, verification_code: $verification_code} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/images/licenses/{id}/downloads"))
+  let req_body = {"auth_cookie": $auth_cookie, "show_modal": $show_modal, "size": $size, "verification_code": $verification_code} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # List recommended images
@@ -2291,8 +2381,9 @@ export def "images-recommendations get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --id: list # Image IDs (e.g. [465011609])
+  --id: list<string> # Image IDs (e.g. [465011609])
   --max-items: int # Maximum number of results returned in the response (default: 20)
   --safe: oneof<nothing, bool> # Restrict results to safe images (default: true)
 ]: nothing -> record<data: table<id: string>, errors: table<code: string, data: string, items: list, message: string, path: string>, message: string, page: int, per_page: int, total_count: int> {
@@ -2302,7 +2393,7 @@ export def "images-recommendations get" [
   let full_url = (build-url $base "/v2/images/recommendations" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Search for images
@@ -2311,7 +2402,7 @@ export def "images-recommendations get" [
 # operationId: searchImages
 @deprecated --flag height
 @deprecated --flag width
-export def "images-search searchImages" [
+export def "images-search list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2319,36 +2410,37 @@ export def "images-search searchImages" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --added-date: string # Show images added on the specified date (format: date, e.g. 2021-03-29)
   --added-date-start: string # Show images added on or after the specified date (format: date, e.g. 2021-03-29)
   --aspect-ratio-min: float # Show images with the specified aspect ratio or higher, using a positive decimal of the width divided by the height, such as 1.7778 for a 16:9 image (e.g. 1.7778)
   --aspect-ratio-max: float # Show images with the specified aspect ratio or lower, using a positive decimal of the width divided by the height, such as 1.7778 for a 16:9 image (e.g. 1.7778)
   --aspect-ratio: float # Show images with the specified aspect ratio, using a positive decimal of the width divided by the height, such as 1.7778 for a 16:9 image (e.g. 1.7778)
-  --ai-search: oneof<nothing, bool> # Set to true and specify the `ai_objective` and `ai_industry` parameters to use AI-powered search; the API returns information about how well images meet the objective for the industry 
+  --ai-search: oneof<nothing, bool> # Set to true and specify the `ai_objective` and `ai_industry` parameters to use AI-powered search; the API returns information about how well images meet the objective for the industry
   --ai-labels-limit: int # For AI-powered search, specify the maximum number of labels to return (default: 20)
   --ai-industry: string@ai-industry-completer # For AI-powered search, specify the industry to target; requires that the `ai_search` parameter is set to true
   --ai-objective: string@ai-objective-completer # For AI-powered search, specify the goal of the media; requires that the `ai_search` parameter is set to true
   --added-date-end: string # Show images added before the specified date (format: date, e.g. 2021-03-29)
   --category: string # Show images with the specified Shutterstock-defined category; specify a category name or ID
   --color: string # Specify either a hexadecimal color in the format '4F21EA' or 'grayscale'; the API returns images that use similar colors (e.g. 4F21EA)
-  --contributor: list # Show images with the specified contributor names or IDs, allows multiple (e.g. [123456])
+  --contributor: list<string> # Show images with the specified contributor names or IDs, allows multiple (e.g. [123456])
   --contributor-country: string # Show images from contributors in one or more specified countries, or start with NOT to exclude a country from the search (e.g. US)
   --fields: string # Fields to display in the response; see the documentation for the fields parameter in the overview section
   --height: int # (Deprecated; use height_from and height_to instead) Show images with the specified height (DEPRECATED)
   --height-from: int # Show images with the specified height or larger, in pixels (e.g. 1080)
   --height-to: int # Show images with the specified height or smaller, in pixels (e.g. 1080)
-  --image-type: list # Show images of the specified type (e.g. photo)
+  --image-type: list<string> # Show images of the specified type (e.g. photo)
   --keyword-safe-search: oneof<nothing, bool> # Hide results with potentially unsafe keywords (default: true)
   --language: string@language-completer # Set query and result language (uses Accept-Language header if not set) (e.g. cs)
-  --license: list # Show only images with the specified license
-  --model: list # Show image results with the specified model IDs (e.g. [12345, 67890])
+  --license: list<string> # Show only images with the specified license
+  --model: list<string> # Show image results with the specified model IDs (e.g. [12345, 67890])
   --orientation: string@orientation-completer # Show image results with horizontal or vertical orientation (e.g. vertical)
   --page: int # Page number (default: 1, e.g. 1)
   --per-page: int # Number of results per page (default: 20, e.g. 50)
   --people-model-released: oneof<nothing, bool> # Show images of people with a signed model release (e.g. true)
   --people-age: string@people-age-completer # Show images that feature people of the specified age category (e.g. 20s)
-  --people-ethnicity: list # Show images with people of the specified ethnicities, or start with NOT to show images without those ethnicities (e.g. hispanic)
+  --people-ethnicity: list<string> # Show images with people of the specified ethnicities, or start with NOT to show images without those ethnicities (e.g. hispanic)
   --people-gender: string@people-gender-completer # Show images with people of the specified gender (e.g. both)
   --people-number: int # Show images with the specified number of people (e.g. 2)
   --query: string # One or more search terms separated by spaces; you can use NOT to filter out images that match a term (e.g. dogs on the beach)
@@ -2367,7 +2459,7 @@ export def "images-search searchImages" [
   let full_url = (build-url $base "/v2/images/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get suggestions for a search term
@@ -2382,6 +2474,7 @@ export def "images-search-suggestions get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --query: string # Search term for which you want keyword suggestions (e.g. cats)
   --limit: int # Limit the number of suggestions (default: 10)
@@ -2392,14 +2485,14 @@ export def "images-search-suggestions get" [
   let full_url = (build-url $base "/v2/images/search/suggestions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get keywords from text
 #
 # POST /v2/images/search/suggestions
 # operationId: getImageKeywordSuggestions
-export def "images-search-suggestions post" [
+export def "images-search-suggestions get-keyword" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2407,6 +2500,7 @@ export def "images-search-suggestions post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   text: string # Plain text to extract keywords from
 ]: any -> record<keywords: list<string>> {
@@ -2414,11 +2508,11 @@ export def "images-search-suggestions post" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/images/search/suggestions")
-  let body = {text: $text} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"text": $text} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # List updated images
@@ -2433,8 +2527,9 @@ export def "images-updated get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --type: list # Show images that were added, deleted, or edited; by default, the endpoint returns images that were updated in any of these ways (e.g. addition)
+  --type: list<string> # Show images that were added, deleted, or edited; by default, the endpoint returns images that were updated in any of these ways (e.g. addition)
   --start-date: string # Show images updated on or after the specified date (format: date, e.g. 2021-03-29)
   --end-date: string # Show images updated before the specified date (format: date, e.g. 2021-03-29)
   --interval: string # Show images updated in the specified time period, where the time period is an interval (like SQL INTERVAL) such as 1 DAY, 6 HOUR, or 30 MINUTE; the default is 1 HOUR, which shows images that were updated in the hour preceding the request (default: 1 HOUR)
@@ -2448,7 +2543,7 @@ export def "images-updated get" [
   let full_url = (build-url $base "/v2/images/updated" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get details about images
@@ -2464,6 +2559,7 @@ export def "images get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --language: string@language-completer # Language for the keywords and categories in the response (e.g. cs)
   --view: string@view-completer # Amount of detail to render in the response (default: full)
@@ -2472,17 +2568,17 @@ export def "images get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "language" $language "scalar") (serialize-qp "view" $view "scalar") (serialize-qp "search_id" $search_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v2/images/($id)" $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/images/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # List similar images
 #
 # GET /v2/images/{id}/similar
 # operationId: listSimilarImages
-export def "images-similar listSimilarImages" [
+export def "images-similar list" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2491,6 +2587,7 @@ export def "images-similar listSimilarImages" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --language: string@language-completer # Language for the keywords and categories in the response (e.g. cs)
   --page: int # Page number (default: 1)
@@ -2500,17 +2597,17 @@ export def "images-similar listSimilarImages" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "language" $language "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "view" $view "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v2/images/($id)/similar" $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/images/{id}/similar") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get access tokens
 #
 # POST /v2/oauth/access_token
 # operationId: createAccessToken
-export def "oauth-access-token createAccessToken" [
+export def "oauth-access-token create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2518,6 +2615,7 @@ export def "oauth-access-token createAccessToken" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   client_id: string # Client ID (Consumer Key) of your application
   --client-secret: string # Client Secret (Consumer Secret) of your application
@@ -2531,18 +2629,18 @@ export def "oauth-access-token createAccessToken" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/oauth/access_token")
-  let body = {client_id: $client_id, client_secret: $client_secret, code: $code, expires: $expires, grant_type: $grant_type, realm: $realm, refresh_token: $refresh_token} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"client_id": $client_id, "client_secret": $client_secret, "code": $code, "expires": $expires, "grant_type": $grant_type, "realm": $realm, "refresh_token": $refresh_token} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Authorize applications
 #
 # GET /v2/oauth/authorize
 # operationId: authorize
-export def "oauth-authorize authorize" [
+export def "oauth-authorize get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2550,6 +2648,7 @@ export def "oauth-authorize authorize" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --client-id: string # Client ID (Consumer Key) of your application (e.g. 6d097450b209c6dcd859)
   --realm: string@realm-completer # User type to be authorized (usually 'customer') (default: customer, e.g. customer)
@@ -2564,14 +2663,14 @@ export def "oauth-authorize authorize" [
   let full_url = (build-url $base "/v2/oauth/authorize" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # List details about sound effects
 #
 # GET /v2/sfx
 # operationId: getSfxListDetails
-export def "sfx list" [
+export def "sfx get-list-details" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2579,8 +2678,9 @@ export def "sfx list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --id: list # One or more sound effect IDs (e.g. [1110335168, 465011609])
+  --id: list<string> # One or more sound effect IDs (e.g. [1110335168, 465011609])
   --view: string@view-completer # Amount of detail to render in the response (default: minimal, e.g. minimal)
   --language: string@language-completer # Language for the keywords and categories in the response (e.g. cs)
   --library: string@library-completer-1 # Which library to fetch from (e.g. shutterstock)
@@ -2592,14 +2692,14 @@ export def "sfx list" [
   let full_url = (build-url $base "/v2/sfx" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # List sound effects licenses
 #
 # GET /v2/sfx/licenses
 # operationId: getSfxLicenseList
-export def "sfx-licenses get" [
+export def "sfx-licenses get-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2607,6 +2707,7 @@ export def "sfx-licenses get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --sfx-id: string # Show licenses for the specified sound effects ID (e.g. 12345678)
   --license: string # Show sound effects that are available with the specified license, such as `standard` or `enhanced`; prepending a `-` sign excludes results from that license (e.g. standard)
@@ -2626,7 +2727,7 @@ export def "sfx-licenses get" [
   let full_url = (build-url $base "/v2/sfx/licenses" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # License sound effects
@@ -2634,7 +2735,7 @@ export def "sfx-licenses get" [
 # POST /v2/sfx/licenses
 # operationId: licensesSFX
 # --sound_effects item shape: {audio_layout?: "ambisonic"|"5.1"|"stereo", format?: "wav"|"mp3", search_id?: string, sfx_id: string, subscription_id: string}
-export def "sfx-licenses licensesSFX" [
+export def "sfx-licenses create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2642,6 +2743,7 @@ export def "sfx-licenses licensesSFX" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   sound_effects: list # Sound effects to license for — item shape: {audio_layout?: "ambisonic"|"5.1"|"stereo", format?: "wav"|"mp3", search_id?: string, sfx_id: string, subscription_id: string}
 ]: any -> record<data: table<allotment_charge: int, download: record, error: string, license_id: string, sfx_id: string>, errors: table<code: string, data: string, items: list, message: string, path: string>, message: string> {
@@ -2649,18 +2751,18 @@ export def "sfx-licenses licensesSFX" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/sfx/licenses")
-  let body = {sound_effects: $sound_effects} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"sound_effects": $sound_effects} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Download sound effects
 #
 # POST /v2/sfx/licenses/{id}/downloads
 # operationId: downloadSfx
-export def "sfx-licenses-downloads downloadSfx" [
+export def "sfx-licenses-downloads download" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2669,21 +2771,22 @@ export def "sfx-licenses-downloads downloadSfx" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/sfx/licenses/($id)/downloads")
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/sfx/licenses/{id}/downloads"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Search for sound effects
 #
 # GET /v2/sfx/search
 # operationId: searchSFX
-export def "sfx-search searchSFX" [
+export def "sfx-search list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2691,6 +2794,7 @@ export def "sfx-search searchSFX" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --added-date: string # Show sound effects added on the specified date (format: date, e.g. 2022-09-23)
   --added-date-start: string # Show sound effects added on or after the specified date (format: date, e.g. 2021-03-29)
@@ -2712,14 +2816,14 @@ export def "sfx-search searchSFX" [
   let full_url = (build-url $base "/v2/sfx/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get details about sound effects
 #
 # GET /v2/sfx/{id}
 # operationId: getSfxDetails
-export def "sfx get" [
+export def "sfx get-details" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2728,6 +2832,7 @@ export def "sfx get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --language: string@language-completer # Language for the keywords and categories in the response (e.g. cs)
   --view: string@view-completer # Amount of detail to render in the response (default: minimal, e.g. full)
@@ -2737,17 +2842,17 @@ export def "sfx get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "language" $language "scalar") (serialize-qp "view" $view "scalar") (serialize-qp "library" $library "scalar") (serialize-qp "search_id" $search_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v2/sfx/($id)" $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/sfx/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Echo text
 #
 # GET /v2/test
 # operationId: echo
-export def "test echo" [
+export def "test get-echo" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2755,6 +2860,7 @@ export def "test echo" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --text: string # Text to echo (default: ok)
 ]: nothing -> record<text: string> {
@@ -2764,7 +2870,7 @@ export def "test echo" [
   let full_url = (build-url $base "/v2/test" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Validate input
@@ -2779,20 +2885,21 @@ export def "test-validate validate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --id: int # Integer ID (e.g. 123)
-  --tag: list # List of tags
+  --tag: list<string> # List of tags
   --user-agent: string # User agent
 ]: nothing -> record<header: record<user_agent: string>, query: record<id: int, tag: list<string>>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "tag" $tag "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/test/validate" $qp)
-  let extra_headers = {"user-agent": $user_agent} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"user-agent": $user_agent} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get user details
@@ -2807,6 +2914,7 @@ export def "user get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<contributor_id: string, customer_id: string, email: string, first_name: string, full_name: string, id: string, is_premier: bool, is_premier_parent: bool, language: string, last_name: string, only_enhanced_license: bool, only_sensitive_use: bool, organization_id: string, premier_permissions: list<string>, username: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2814,7 +2922,7 @@ export def "user get" [
   let full_url = (build-url $base "/v2/user")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get access token details
@@ -2829,6 +2937,7 @@ export def "user-access-token get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<client_id: string, contributor_id: string, customer_id: string, expires_in: int, organization_id: string, realm: string, scopes: list<string>, user_id: string, username: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2836,14 +2945,14 @@ export def "user-access-token get" [
   let full_url = (build-url $base "/v2/user/access_token")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # List user subscriptions
 #
 # GET /v2/user/subscriptions
 # operationId: getUserSubscriptionList
-export def "user-subscriptions get" [
+export def "user-subscriptions get-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2851,6 +2960,7 @@ export def "user-subscriptions get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: table<allotment: record, asset_type: string, description: string, expiration_time: string, formats: list, id: string, license: string, metadata: record, price_per_download: record>, errors: table<code: string, data: string, items: list, message: string, path: string>, message: string, page: int, per_page: int, total_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2858,14 +2968,14 @@ export def "user-subscriptions get" [
   let full_url = (build-url $base "/v2/user/subscriptions")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # List videos
 #
 # GET /v2/videos
 # operationId: getVideoList
-export def "videos list" [
+export def "videos get-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2873,8 +2983,9 @@ export def "videos list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --id: list # One or more video IDs (e.g. [639703, 993721])
+  --id: list<string> # One or more video IDs (e.g. [639703, 993721])
   --view: string@view-completer # Amount of detail to render in the response (default: minimal)
   --search-id: string # The ID of the search that is related to this request (e.g. 00000000-0000-0000-0000-000000000000)
 ]: nothing -> record<data: table<added_date: string, affiliate_url: string, aspect: float, aspect_ratio: string, assets: record, categories: list, contributor: record, description: string, duration: float, has_model_release: bool, has_property_release: bool, id: string, is_adult: bool, is_editorial: bool, keywords: list, media_type: string, models: list, url: string>, errors: table<code: string, data: string, items: list, message: string, path: string>, message: string, page: int, per_page: int, total_count: int> {
@@ -2884,14 +2995,14 @@ export def "videos list" [
   let full_url = (build-url $base "/v2/videos" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # List video categories
 #
 # GET /v2/videos/categories
 # operationId: listVideoCategories
-export def "videos-categories listVideoCategories" [
+export def "videos-categories list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2899,6 +3010,7 @@ export def "videos-categories listVideoCategories" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --language: string@language-completer # Language for the keywords and categories in the response (e.g. cs)
 ]: nothing -> record<data: table<id: string, name: string>, errors: table<code: string, data: string, items: list, message: string, path: string>, message: string, page: int, per_page: int, total_count: int> {
@@ -2908,14 +3020,14 @@ export def "videos-categories listVideoCategories" [
   let full_url = (build-url $base "/v2/videos/categories" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # List video collections
 #
 # GET /v2/videos/collections
 # operationId: getVideoCollectionList
-export def "videos-collections list" [
+export def "videos-collections get-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2923,10 +3035,11 @@ export def "videos-collections list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Page number (default: 1)
   --per-page: int # Number of results per page (default: 100)
-  --embed: list # Which sharing information to include in the response, such as a URL to the collection (e.g. share_code)
+  --embed: list<string> # Which sharing information to include in the response, such as a URL to the collection (e.g. share_code)
 ]: nothing -> record<data: table<cover_item: record, created_time: string, id: string, items_updated_time: string, name: string, share_code: string, share_url: string, total_item_count: int, updated_time: string>, errors: table<code: string, data: string, items: list, message: string, path: string>, message: string, page: int, per_page: int, total_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2934,14 +3047,14 @@ export def "videos-collections list" [
   let full_url = (build-url $base "/v2/videos/collections" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Create video collections
 #
 # POST /v2/videos/collections
 # operationId: createVideoCollection
-export def "videos-collections createVideoCollection" [
+export def "videos-collections create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2949,6 +3062,7 @@ export def "videos-collections createVideoCollection" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   name: string # The name of the collection
 ]: any -> record<id: string> {
@@ -2956,18 +3070,18 @@ export def "videos-collections createVideoCollection" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/videos/collections")
-  let body = {name: $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # List featured video collections
 #
 # GET /v2/videos/collections/featured
 # operationId: getFeaturedVideoCollectionList
-export def "videos-collections-featured list" [
+export def "videos-collections-featured get-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2975,6 +3089,7 @@ export def "videos-collections-featured list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --embed: string@embed-completer # What information to include in the response, such as a URL to the collection (e.g. share_url)
 ]: nothing -> record<data: table<cover_item: record, created_time: string, hero_item: record, id: string, items_updated_time: string, name: string, share_url: string, total_item_count: int, updated_time: string>, errors: table<code: string, data: string, items: list, message: string, path: string>, message: string, page: int, per_page: int, total_count: int> {
@@ -2984,7 +3099,7 @@ export def "videos-collections-featured list" [
   let full_url = (build-url $base "/v2/videos/collections/featured" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get the details of featured video collections
@@ -3000,16 +3115,17 @@ export def "videos-collections-featured get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --embed: string@embed-completer # What information to include in the response, such as a URL to the collection
 ]: nothing -> record<cover_item: record<url: string>, created_time: string, hero_item: record<url: string>, id: string, items_updated_time: string, name: string, share_url: string, total_item_count: int, updated_time: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "embed" $embed "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v2/videos/collections/featured/($id)" $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/videos/collections/featured/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get the contents of featured video collections
@@ -3025,6 +3141,7 @@ export def "videos-collections-featured-items get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Page number (default: 1)
   --per-page: int # Number of results per page (default: 100)
@@ -3032,10 +3149,10 @@ export def "videos-collections-featured-items get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v2/videos/collections/featured/($id)/items" $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/videos/collections/featured/{id}/items") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Delete video collections
@@ -3051,14 +3168,15 @@ export def "videos-collections delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/videos/collections/($id)")
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/videos/collections/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get the details of video collections
@@ -3074,24 +3192,25 @@ export def "videos-collections get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --embed: list # Which sharing information to include in the response, such as a URL to the collection
+  --embed: list<string> # Which sharing information to include in the response, such as a URL to the collection
   --share-code: string # Code to retrieve a shared collection
 ]: nothing -> record<cover_item: record<added_time: string, id: string, media_type: string>, created_time: string, id: string, items_updated_time: string, name: string, share_code: string, share_url: string, total_item_count: int, updated_time: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "embed" $embed "multi") (serialize-qp "share_code" $share_code "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v2/videos/collections/($id)" $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/videos/collections/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Rename video collections
 #
 # POST /v2/videos/collections/{id}
 # operationId: renameVideoCollection
-export def "videos-collections renameVideoCollection" [
+export def "videos-collections rename" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3100,18 +3219,19 @@ export def "videos-collections renameVideoCollection" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   name: string # The new name of the collection
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/videos/collections/($id)")
-  let body = {name: $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/videos/collections/{id}"))
+  let req_body = {"name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Remove videos from collections
@@ -3127,16 +3247,17 @@ export def "videos-collections-items delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --item-id: list # One or more video IDs to remove from the collection
+  --item-id: list<string> # One or more video IDs to remove from the collection
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "item_id" $item_id "multi")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v2/videos/collections/($id)/items" $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/videos/collections/{id}/items") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get the contents of video collections
@@ -3152,6 +3273,7 @@ export def "videos-collections-items get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Page number (default: 1)
   --per-page: int # Number of results per page (default: 100)
@@ -3161,10 +3283,10 @@ export def "videos-collections-items get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "share_code" $share_code "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v2/videos/collections/($id)/items" $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/videos/collections/{id}/items") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Add videos to collections
@@ -3172,7 +3294,7 @@ export def "videos-collections-items get" [
 # POST /v2/videos/collections/{id}/items
 # operationId: addVideoCollectionItems
 # --items item shape: {added_time?: string, id: string, media_type?: string}
-export def "videos-collections-items addVideoCollectionItems" [
+export def "videos-collections-items create" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3181,25 +3303,26 @@ export def "videos-collections-items addVideoCollectionItems" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   items: list # List of items — item shape: {added_time?: string, id: string, media_type?: string}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/videos/collections/($id)/items")
-  let body = {items: $items} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/videos/collections/{id}/items"))
+  let req_body = {"items": $items} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # List video licenses
 #
 # GET /v2/videos/licenses
 # operationId: getVideoLicenseList
-export def "videos-licenses get" [
+export def "videos-licenses get-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3207,6 +3330,7 @@ export def "videos-licenses get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --video-id: string # Show licenses for the specified video ID (e.g. 12345678)
   --license: string # Show videos that are available with the specified license, such as `standard` or `enhanced`; prepending a `-` sign excludes results from that license (e.g. standard)
@@ -3225,7 +3349,7 @@ export def "videos-licenses get" [
   let full_url = (build-url $base "/v2/videos/licenses" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # License videos
@@ -3233,7 +3357,7 @@ export def "videos-licenses get" [
 # POST /v2/videos/licenses
 # operationId: licenseVideos
 # --videos item shape: {auth_cookie?: record, editorial_acknowledgement?: bool, metadata?: record, price?: float, search_id?: string, show_modal?: bool, size?: "web"|"sd"|"hd"|"4k", subscription_id?: string, video_id: string}
-export def "videos-licenses licenseVideos" [
+export def "videos-licenses create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3241,6 +3365,7 @@ export def "videos-licenses licenseVideos" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --subscription-id: string # The subscription ID to use for licensing (e.g. s12345678)
   --size: string@size-completer-2 # The size of the video to license (default: web)
@@ -3252,11 +3377,11 @@ export def "videos-licenses licenseVideos" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "subscription_id" $subscription_id "scalar") (serialize-qp "size" $size "scalar") (serialize-qp "search_id" $search_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/videos/licenses" $qp)
-  let body = {videos: $videos} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"videos": $videos} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Download videos
@@ -3266,7 +3391,7 @@ export def "videos-licenses licenseVideos" [
 # --auth_cookie shape: {name: string, value: string}
 @deprecated --flag show-modal
 @deprecated --flag verification-code
-export def "videos-licenses-downloads downloadVideos" [
+export def "videos-licenses-downloads download" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3275,6 +3400,7 @@ export def "videos-licenses-downloads downloadVideos" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --auth-cookie: record # Cookie object (e.g. {name: The name of the cookie, value: The value of the cookie}) — shape: {name: string, value: string}
   --show-modal: oneof<nothing, bool> # (Deprecated) (DEPRECATED)
@@ -3284,12 +3410,12 @@ export def "videos-licenses-downloads downloadVideos" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/videos/licenses/($id)/downloads")
-  let body = {auth_cookie: $auth_cookie, show_modal: $show_modal, size: $size, verification_code: $verification_code} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/videos/licenses/{id}/downloads"))
+  let req_body = {"auth_cookie": $auth_cookie, "show_modal": $show_modal, "size": $size, "verification_code": $verification_code} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Search for videos
@@ -3298,7 +3424,7 @@ export def "videos-licenses-downloads downloadVideos" [
 # operationId: searchVideos
 @deprecated --flag duration
 @deprecated --flag fps
-export def "videos-search searchVideos" [
+export def "videos-search list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3306,14 +3432,15 @@ export def "videos-search searchVideos" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --added-date: string # Show videos added on the specified date (format: date, e.g. 2020-05-29)
   --added-date-start: string # Show videos added on or after the specified date (format: date, e.g. 2020-05-29)
   --added-date-end: string # Show videos added before the specified date (format: date, e.g. 2020-05-29)
   --aspect-ratio: string@aspect-ratio-completer # Show videos with the specified aspect ratio (e.g. 4_3)
   --category: string # Show videos with the specified Shutterstock-defined category; specify a category name or ID
-  --contributor: list # Show videos with the specified artist names or IDs (e.g. [12345678])
-  --contributor-country: list # Show videos from contributors in one or more specified countries (e.g. US)
+  --contributor: list<string> # Show videos with the specified artist names or IDs (e.g. [12345678])
+  --contributor-country: list<string> # Show videos from contributors in one or more specified countries (e.g. US)
   --duration: int # (Deprecated; use duration_from and duration_to instead) Show videos with the specified duration in seconds (DEPRECATED)
   --duration-from: int # Show videos with the specified duration or longer in seconds (e.g. 60)
   --duration-to: int # Show videos with the specified duration or shorter in seconds (e.g. 180)
@@ -3322,12 +3449,12 @@ export def "videos-search searchVideos" [
   --fps-to: float # Show videos with the specified frames per second or fewer (e.g. 60)
   --keyword-safe-search: oneof<nothing, bool> # Hide results with potentially unsafe keywords (default: true)
   --language: string@language-completer # Set query and result language (uses Accept-Language header if not set) (e.g. cs)
-  --license: list # Show only videos with the specified license or licenses (e.g. [commercial, editorial])
-  --model: list # Show videos with each of the specified models (e.g. [442583, 434750])
+  --license: list<string> # Show only videos with the specified license or licenses (e.g. [commercial, editorial])
+  --model: list<string> # Show videos with each of the specified models (e.g. [442583, 434750])
   --page: int # Page number (default: 1)
   --per-page: int # Number of results per page (default: 20)
   --people-age: string@people-age-completer # Show videos that feature people of the specified age range (e.g. 20s)
-  --people-ethnicity: list # Show videos with people of the specified ethnicities (e.g. hispanic)
+  --people-ethnicity: list<string> # Show videos with people of the specified ethnicities (e.g. hispanic)
   --people-gender: string@people-gender-completer # Show videos with people with the specified gender (e.g. female)
   --people-number: int # Show videos with the specified number of people (e.g. 2)
   --people-model-released: oneof<nothing, bool> # Show only videos of people with a signed model release (e.g. true)
@@ -3343,7 +3470,7 @@ export def "videos-search searchVideos" [
   let full_url = (build-url $base "/v2/videos/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get suggestions for a search term
@@ -3358,6 +3485,7 @@ export def "videos-search-suggestions get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --query: string # Search term for which you want keyword suggestions (e.g. cats)
   --limit: int # Limit the number of the suggestions (default: 10)
@@ -3368,7 +3496,7 @@ export def "videos-search-suggestions get" [
   let full_url = (build-url $base "/v2/videos/search/suggestions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # List updated videos
@@ -3383,6 +3511,7 @@ export def "videos-updated get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --start-date: string # Show videos updated on or after the specified date (format: date, e.g. 2020-05-29)
   --end-date: string # Show videos updated before the specified date (format: date, e.g. 2021-05-29)
@@ -3397,7 +3526,7 @@ export def "videos-updated get" [
   let full_url = (build-url $base "/v2/videos/updated" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get details about videos
@@ -3413,6 +3542,7 @@ export def "videos get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --language: string@language-completer # Language for the keywords and categories in the response (e.g. cs)
   --view: string@view-completer # Amount of detail to render in the response (default: full)
@@ -3421,17 +3551,17 @@ export def "videos get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "language" $language "scalar") (serialize-qp "view" $view "scalar") (serialize-qp "search_id" $search_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v2/videos/($id)" $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/videos/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # List similar videos
 #
 # GET /v2/videos/{id}/similar
 # operationId: findSimilarVideos
-export def "videos-similar findSimilarVideos" [
+export def "videos-similar find" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3440,6 +3570,7 @@ export def "videos-similar findSimilarVideos" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --language: string@language-completer # Language for the keywords and categories in the response (e.g. cs)
   --page: int # Page number (default: 1)
@@ -3449,8 +3580,8 @@ export def "videos-similar findSimilarVideos" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "language" $language "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "view" $view "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v2/videos/($id)/similar" $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/videos/{id}/similar") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }

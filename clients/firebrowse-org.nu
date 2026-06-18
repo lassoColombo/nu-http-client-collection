@@ -17,21 +17,32 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 }
 
 # Serialize a single query parameter based on collection style
+# Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
+# ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = ($name | url encode)
+  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
-  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
-    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
-    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
+    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
+    _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
+}
+
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Build URL from base, path, and optional query string
@@ -43,7 +54,7 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
@@ -52,13 +63,13 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
     "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "put" => { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "patch" => { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
   if ($method in ["head" "options"]) { return $resp }
-  if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
+  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
 def base-url-completer [] { ["http://firebrowse.org/api/v1"] }
@@ -82,8 +93,8 @@ def sort-by-completer-10 [] { ["cohort" "mir" "sample_type" "tcga_participant_ba
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "analyses-copy-number-genes-all All" } } | get name | first)
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "analyses-copy-number-genes-all list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -107,7 +118,7 @@ export def commands []: nothing -> table {
 #
 # GET /Analyses/CopyNumber/Genes/All
 # operationId: All
-export def "analyses-copy-number-genes-all All" [
+export def "analyses-copy-number-genes-all list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -115,14 +126,15 @@ export def "analyses-copy-number-genes-all All" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --format: string@format-completer # Format of result. (default: json)
-  --cohort: list # Narrow search to one or more TCGA disease cohorts from the scrollable list.
-  --gene: list # Comma separated list of gene name(s).
-  --tcga-participant-barcode: list # Comma separated list of TCGA participant barcodes (e.g. TCGA-GF-A4EO).
-  --page: list # Which page (slice) of entire results set should be returned. 
-  --page-size: list # Number of records per page of results.  Max is 2000.
+  --cohort: list<string> # Narrow search to one or more TCGA disease cohorts from the scrollable list.
+  --gene: list<string> # Comma separated list of gene name(s).
+  --tcga-participant-barcode: list<string> # Comma separated list of TCGA participant barcodes (e.g. TCGA-GF-A4EO).
+  --page: list<int> # Which page (slice) of entire results set should be returned.
+  --page-size: list<int> # Number of records per page of results. Max is 2000.
   --sort-by: string@sort-by-completer # Which column in the results should be used for sorting paginated results? (default: cohort)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -131,14 +143,14 @@ export def "analyses-copy-number-genes-all All" [
   let full_url = (build-url $base "/Analyses/CopyNumber/Genes/All" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Retrieve Gistic2 significantly amplified genes results.
 #
 # GET /Analyses/CopyNumber/Genes/Amplified
 # operationId: Amplified
-export def "analyses-copy-number-genes-amplified Amplified" [
+export def "analyses-copy-number-genes-amplified get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -146,14 +158,15 @@ export def "analyses-copy-number-genes-amplified Amplified" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --format: string@format-completer # Format of result. (default: json)
-  --cohort: list # Narrow search to one or more TCGA disease cohorts from the scrollable list.
-  --gene: list # Comma separated list of gene name(s).
+  --cohort: list<string> # Narrow search to one or more TCGA disease cohorts from the scrollable list.
+  --gene: list<string> # Comma separated list of gene name(s).
   --q: float # Only return results with Q-value <= given threshold.
-  --page: list # Which page (slice) of entire results set should be returned. 
-  --page-size: list # Number of records per page of results.  Max is 2000.
+  --page: list<int> # Which page (slice) of entire results set should be returned.
+  --page-size: list<int> # Number of records per page of results. Max is 2000.
   --sort-by: string@sort-by-completer-1 # Which column in the results should be used for sorting paginated results? (default: cohort)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -162,14 +175,14 @@ export def "analyses-copy-number-genes-amplified Amplified" [
   let full_url = (build-url $base "/Analyses/CopyNumber/Genes/Amplified" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Retrieve Gistic2 significantly deleted genes results.
 #
 # GET /Analyses/CopyNumber/Genes/Deleted
 # operationId: Deleted
-export def "analyses-copy-number-genes-deleted Deleted" [
+export def "analyses-copy-number-genes-deleted get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -177,14 +190,15 @@ export def "analyses-copy-number-genes-deleted Deleted" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --format: string@format-completer # Format of result. (default: json)
-  --cohort: list # Narrow search to one or more TCGA disease cohorts from the scrollable list.
-  --gene: list # Comma separated list of gene name(s).
+  --cohort: list<string> # Narrow search to one or more TCGA disease cohorts from the scrollable list.
+  --gene: list<string> # Comma separated list of gene name(s).
   --q: float # Only return results with Q-value <= given threshold.
-  --page: list # Which page (slice) of entire results set should be returned. 
-  --page-size: list # Number of records per page of results.  Max is 2000.
+  --page: list<int> # Which page (slice) of entire results set should be returned.
+  --page-size: list<int> # Number of records per page of results. Max is 2000.
   --sort-by: string@sort-by-completer-1 # Which column in the results should be used for sorting paginated results? (default: cohort)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -193,14 +207,14 @@ export def "analyses-copy-number-genes-deleted Deleted" [
   let full_url = (build-url $base "/Analyses/CopyNumber/Genes/Deleted" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Retrieve focal data by genes Gistic2 results.
 #
 # GET /Analyses/CopyNumber/Genes/Focal
 # operationId: Focal
-export def "analyses-copy-number-genes-focal Focal" [
+export def "analyses-copy-number-genes-focal get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -208,14 +222,15 @@ export def "analyses-copy-number-genes-focal Focal" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --format: string@format-completer # Format of result. (default: json)
-  --cohort: list # Narrow search to one or more TCGA disease cohorts from the scrollable list.
-  --gene: list # Comma separated list of gene name(s).
-  --tcga-participant-barcode: list # Comma separated list of TCGA participant barcodes (e.g. TCGA-GF-A4EO).
-  --page: list # Which page (slice) of entire results set should be returned. 
-  --page-size: list # Number of records per page of results.  Max is 2000.
+  --cohort: list<string> # Narrow search to one or more TCGA disease cohorts from the scrollable list.
+  --gene: list<string> # Comma separated list of gene name(s).
+  --tcga-participant-barcode: list<string> # Comma separated list of TCGA participant barcodes (e.g. TCGA-GF-A4EO).
+  --page: list<int> # Which page (slice) of entire results set should be returned.
+  --page-size: list<int> # Number of records per page of results. Max is 2000.
   --sort-by: string@sort-by-completer # Which column in the results should be used for sorting paginated results? (default: cohort)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -224,14 +239,14 @@ export def "analyses-copy-number-genes-focal Focal" [
   let full_url = (build-url $base "/Analyses/CopyNumber/Genes/Focal" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Retrieve all thresholded by genes Gistic2 results.
 #
 # GET /Analyses/CopyNumber/Genes/Thresholded
 # operationId: Thresholded
-export def "analyses-copy-number-genes-thresholded Thresholded" [
+export def "analyses-copy-number-genes-thresholded get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -239,14 +254,15 @@ export def "analyses-copy-number-genes-thresholded Thresholded" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --format: string@format-completer # Format of result. (default: json)
-  --cohort: list # Narrow search to one or more TCGA disease cohorts from the scrollable list.
-  --gene: list # Comma separated list of gene name(s).
-  --tcga-participant-barcode: list # Comma separated list of TCGA participant barcodes (e.g. TCGA-GF-A4EO).
-  --page: list # Which page (slice) of entire results set should be returned. 
-  --page-size: list # Number of records per page of results.  Max is 2000.
+  --cohort: list<string> # Narrow search to one or more TCGA disease cohorts from the scrollable list.
+  --gene: list<string> # Comma separated list of gene name(s).
+  --tcga-participant-barcode: list<string> # Comma separated list of TCGA participant barcodes (e.g. TCGA-GF-A4EO).
+  --page: list<int> # Which page (slice) of entire results set should be returned.
+  --page-size: list<int> # Number of records per page of results. Max is 2000.
   --sort-by: string@sort-by-completer # Which column in the results should be used for sorting paginated results? (default: cohort)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -255,14 +271,14 @@ export def "analyses-copy-number-genes-thresholded Thresholded" [
   let full_url = (build-url $base "/Analyses/CopyNumber/Genes/Thresholded" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Retrieve aggregated analysis features table.
 #
 # GET /Analyses/FeatureTable
 # operationId: FeatureTable
-export def "analyses-feature-table FeatureTable" [
+export def "analyses-feature-table get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -270,14 +286,15 @@ export def "analyses-feature-table FeatureTable" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --format: string@format-completer-1 # Format of result. (default: tsv)
-  --cohort: list # Narrow search to one or more TCGA disease cohorts from the scrollable list.
-  --date: list # Select one or more date stamps.
-  --column: list # Comma separated list of which data columns/fields to return.
-  --page: list # Which page (slice) of entire results set should be returned. 
-  --page-size: list # Number of records per page of results.  Max is 2000.
+  --cohort: list<string> # Narrow search to one or more TCGA disease cohorts from the scrollable list.
+  --date: list<string> # Select one or more date stamps.
+  --column: list<string> # Comma separated list of which data columns/fields to return.
+  --page: list<int> # Which page (slice) of entire results set should be returned.
+  --page-size: list<int> # Number of records per page of results. Max is 2000.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -285,14 +302,14 @@ export def "analyses-feature-table FeatureTable" [
   let full_url = (build-url $base "/Analyses/FeatureTable" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Retrieve MutSig final analysis MAF.
 #
 # GET /Analyses/Mutation/MAF
 # operationId: MAF
-export def "analyses-mutation-maf MAF" [
+export def "analyses-mutation-maf get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -300,16 +317,17 @@ export def "analyses-mutation-maf MAF" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --format: string@format-completer # Format of result. (default: json)
-  --cohort: list # Narrow search to one or more TCGA disease cohorts from the scrollable list.
-  --tool: list # Narrow search to include only data/results produced by the selected Firehose tool.
-  --gene: list # Comma separated list of gene name(s).
-  --tcga-participant-barcode: list # Comma separated list of TCGA participant barcodes (e.g. TCGA-GF-A4EO).
-  --column: list # Comma separated list of which data columns/fields to return.
-  --page: list # Which page (slice) of entire results set should be returned. 
-  --page-size: list # Number of records per page of results.  Max is 2000.
+  --cohort: list<string> # Narrow search to one or more TCGA disease cohorts from the scrollable list.
+  --tool: list<string> # Narrow search to include only data/results produced by the selected Firehose tool.
+  --gene: list<string> # Comma separated list of gene name(s).
+  --tcga-participant-barcode: list<string> # Comma separated list of TCGA participant barcodes (e.g. TCGA-GF-A4EO).
+  --column: list<string> # Comma separated list of which data columns/fields to return.
+  --page: list<int> # Which page (slice) of entire results set should be returned.
+  --page-size: list<int> # Number of records per page of results. Max is 2000.
   --sort-by: string@sort-by-completer-2 # Which column in the results should be used for sorting paginated results? (default: cohort)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -318,14 +336,14 @@ export def "analyses-mutation-maf MAF" [
   let full_url = (build-url $base "/Analyses/Mutation/MAF" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Retrieve Significantly Mutated Genes (SMG).
 #
 # GET /Analyses/Mutation/SMG
 # operationId: SMG
-export def "analyses-mutation-smg SMG" [
+export def "analyses-mutation-smg get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -333,16 +351,17 @@ export def "analyses-mutation-smg SMG" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --format: string@format-completer # Format of result. (default: json)
-  --cohort: list # Narrow search to one or more TCGA disease cohorts from the scrollable list.
-  --tool: list # Narrow search to include only data/results produced by the selected Firehose tool.
+  --cohort: list<string> # Narrow search to one or more TCGA disease cohorts from the scrollable list.
+  --tool: list<string> # Narrow search to include only data/results produced by the selected Firehose tool.
   --rank: int # Number of significant genes to return. (format: int32)
-  --gene: list # Comma separated list of gene name(s).
+  --gene: list<string> # Comma separated list of gene name(s).
   --q: float # Only return results with Q-value <= given threshold.
-  --page: list # Which page (slice) of entire results set should be returned. 
-  --page-size: list # Number of records per page of results.  Max is 2000.
+  --page: list<int> # Which page (slice) of entire results set should be returned.
+  --page-size: list<int> # Number of records per page of results. Max is 2000.
   --sort-by: string@sort-by-completer-3 # Which column in the results should be used for sorting paginated results? (default: rank)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -351,14 +370,14 @@ export def "analyses-mutation-smg SMG" [
   let full_url = (build-url $base "/Analyses/Mutation/SMG" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Retrieve links to summary reports from Firehose analysis runs.
 #
 # GET /Analyses/Reports
 # operationId: Reports
-export def "analyses-reports Reports" [
+export def "analyses-reports get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -366,15 +385,16 @@ export def "analyses-reports Reports" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --format: string@format-completer # Format of result. (default: json)
-  --date: list # Select one or more date stamps.
-  --cohort: list # Narrow search to one or more TCGA disease cohorts from the scrollable list.
-  --name: list # Narrow search to one or more report names.
-  --type: list # Narrow search to one or more report types.
-  --page: list # Which page (slice) of entire results set should be returned. 
-  --page-size: list # Number of records per page of results.  Max is 2000.
+  --date: list<string> # Select one or more date stamps.
+  --cohort: list<string> # Narrow search to one or more TCGA disease cohorts from the scrollable list.
+  --name: list<string> # Narrow search to one or more report names.
+  --type: list<string> # Narrow search to one or more report types.
+  --page: list<int> # Which page (slice) of entire results set should be returned.
+  --page-size: list<int> # Number of records per page of results. Max is 2000.
   --sort-by: string@sort-by-completer-4 # Which column in the results should be used for sorting paginated results? (default: date)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -383,14 +403,14 @@ export def "analyses-reports Reports" [
   let full_url = (build-url $base "/Analyses/Reports" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Returns RNASeq expression quartiles, e.g. suitable for drawing a boxplot.
 #
 # GET /Analyses/mRNASeq/Quartiles
 # operationId: mRNASeq/Quartiles
-export def "analyses-m-rna-seq-quartiles mRNASeq/Quartiles" [
+export def "analyses-m-rna-seq-quartiles get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -398,29 +418,30 @@ export def "analyses-m-rna-seq-quartiles mRNASeq/Quartiles" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --format: string@format-completer # Format of result. (default: json)
   --gene: string # Enter a single gene name.
-  --cohort: list # Narrow search to one or more TCGA disease cohorts from the scrollable list.
-  --protocol: list # Narrow search to one or more sample characterization protocols from the scrollable list.
-  --sample-type: list # For which type of sample(s) should quartiles be computed?
-  --Exclude: list # Comma separated list of TCGA participants, identified by barcodes such as TCGA-GF-A4EO, denoting samples to exclude from computation.
+  --cohort: list<string> # Narrow search to one or more TCGA disease cohorts from the scrollable list.
+  --protocol: list<string> # Narrow search to one or more sample characterization protocols from the scrollable list.
+  --sample-type: list<string> # For which type of sample(s) should quartiles be computed?
+  --exclude: list<string> # Comma separated list of TCGA participants, identified by barcodes such as TCGA-GF-A4EO, denoting samples to exclude from computation.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "format" $format "scalar") (serialize-qp "gene" $gene "scalar") (serialize-qp "cohort" $cohort "csv") (serialize-qp "protocol" $protocol "csv") (serialize-qp "sample_type" $sample_type "csv") (serialize-qp "Exclude" $Exclude "csv")] | flatten | str join "&"
+  let qp = [(serialize-qp "format" $format "scalar") (serialize-qp "gene" $gene "scalar") (serialize-qp "cohort" $cohort "csv") (serialize-qp "protocol" $protocol "csv") (serialize-qp "sample_type" $sample_type "csv") (serialize-qp "Exclude" $exclude "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/Analyses/mRNASeq/Quartiles" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Retrieve standard data archives.
 #
 # GET /Archives/StandardData
 # operationId: StandardData
-export def "archives-standard-data StandardData" [
+export def "archives-standard-data get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -428,19 +449,20 @@ export def "archives-standard-data StandardData" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --format: string@format-completer # Format of result. (default: json)
-  --date: list # Select one or more date stamps.
-  --cohort: list # Narrow search to one or more TCGA disease cohorts from the scrollable list.
-  --data-type: list # Narrow search to one or more TCGA data types from the scrollable list.
-  --tool: list # Narrow search to include only data/results produced by the selected Firehose tool.
-  --platform: list # Narrow search to one or more TCGA data generation platforms from the scrollable list.
-  --center: list # Narrow search to one or more TCGA centers from the scrollable list.
-  --level: list # Narrow search to one or more TCGA data levels.
-  --protocol: list # Narrow search to one or more sample characterization protocols from the scrollable list.
-  --page: list # Which page (slice) of entire results set should be returned. 
-  --page-size: list # Number of records per page of results.  Max is 2000.
+  --date: list<string> # Select one or more date stamps.
+  --cohort: list<string> # Narrow search to one or more TCGA disease cohorts from the scrollable list.
+  --data-type: list<string> # Narrow search to one or more TCGA data types from the scrollable list.
+  --tool: list<string> # Narrow search to include only data/results produced by the selected Firehose tool.
+  --platform: list<string> # Narrow search to one or more TCGA data generation platforms from the scrollable list.
+  --center: list<string> # Narrow search to one or more TCGA centers from the scrollable list.
+  --level: list<int> # Narrow search to one or more TCGA data levels.
+  --protocol: list<string> # Narrow search to one or more sample characterization protocols from the scrollable list.
+  --page: list<int> # Which page (slice) of entire results set should be returned.
+  --page-size: list<int> # Number of records per page of results. Max is 2000.
   --sort-by: string@sort-by-completer-5 # Which column in the results should be used for sorting paginated results? (default: cohort)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -449,14 +471,14 @@ export def "archives-standard-data StandardData" [
   let full_url = (build-url $base "/Archives/StandardData" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Obtain identities of TCGA consortium member centers.
 #
 # GET /Metadata/Centers
 # operationId: Centers
-export def "metadata-centers Centers" [
+export def "metadata-centers get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -464,10 +486,11 @@ export def "metadata-centers Centers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --format: string@format-completer # Format of result. (default: json)
-  --center: list # Narrow search to one or more TCGA centers from the scrollable list.
+  --center: list<string> # Narrow search to one or more TCGA centers from the scrollable list.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -475,14 +498,14 @@ export def "metadata-centers Centers" [
   let full_url = (build-url $base "/Metadata/Centers" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Retrieve names of all TCGA clinical data elements (CDEs).
 #
 # GET /Metadata/ClinicalNames
 # operationId: ClinicalNames
-export def "metadata-clinical-names ClinicalNames" [
+export def "metadata-clinical-names get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -490,6 +513,7 @@ export def "metadata-clinical-names ClinicalNames" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --format: string@format-completer # Format of result. (default: json)
@@ -500,14 +524,14 @@ export def "metadata-clinical-names ClinicalNames" [
   let full_url = (build-url $base "/Metadata/ClinicalNames" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Retrieve names of CDEs normalized by Firehose and selected for analyses.
 #
 # GET /Metadata/ClinicalNames_FH
 # operationId: ClinicalNames_FH
-export def "metadata-clinical-names-fh FH" [
+export def "metadata-clinical-names-fh get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -515,6 +539,7 @@ export def "metadata-clinical-names-fh FH" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --format: string@format-completer # Format of result. (default: json)
@@ -525,14 +550,14 @@ export def "metadata-clinical-names-fh FH" [
   let full_url = (build-url $base "/Metadata/ClinicalNames_FH" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Translate TCGA cohort abbreviations to full disease names.
 #
 # GET /Metadata/Cohorts
 # operationId: Cohorts
-export def "metadata-cohorts Cohorts" [
+export def "metadata-cohorts get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -540,10 +565,11 @@ export def "metadata-cohorts Cohorts" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --format: string@format-completer # Format of result. (default: json)
-  --cohort: list # Narrow search to one or more TCGA disease cohorts from the scrollable list.
+  --cohort: list<string> # Narrow search to one or more TCGA disease cohorts from the scrollable list.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -551,14 +577,14 @@ export def "metadata-cohorts Cohorts" [
   let full_url = (build-url $base "/Metadata/Cohorts" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Retrieve sample counts.
 #
 # GET /Metadata/Counts
 # operationId: Counts
-export def "metadata-counts Counts" [
+export def "metadata-counts get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -566,13 +592,14 @@ export def "metadata-counts Counts" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --format: string@format-completer # Format of result. (default: json)
-  --date: list # Select one or more date stamps.
-  --cohort: list # Narrow search to one or more TCGA disease cohorts from the scrollable list.
-  --sample-type: list # Narrow search to one or more TCGA sample types from the scrollable list.
-  --data-type: list # Narrow search to one or more TCGA data types from the scrollable list.
+  --date: list<string> # Select one or more date stamps.
+  --cohort: list<string> # Narrow search to one or more TCGA disease cohorts from the scrollable list.
+  --sample-type: list<string> # Narrow search to one or more TCGA sample types from the scrollable list.
+  --data-type: list<string> # Narrow search to one or more TCGA data types from the scrollable list.
   --totals: oneof<nothing, bool> # Output an entry providing the totals for each data type. (default: true)
   --sort-by: string@sort-by-completer-6 # Which column in the results should be used for sorting paginated results? (default: cohort)
 ]: nothing -> any {
@@ -582,14 +609,14 @@ export def "metadata-counts Counts" [
   let full_url = (build-url $base "/Metadata/Counts" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Retrieve dates of all GDAC Firehose stddata & analyses runs that have been ingested into FireBrowse.
 #
 # GET /Metadata/Dates
 # operationId: Dates
-export def "metadata-dates Dates" [
+export def "metadata-dates get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -597,6 +624,7 @@ export def "metadata-dates Dates" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --format: string@format-completer # Format of result. (default: json)
@@ -607,14 +635,14 @@ export def "metadata-dates Dates" [
   let full_url = (build-url $base "/Metadata/Dates" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Simple way to discern whether API server is up and running
 #
 # GET /Metadata/HeartBeat
 # operationId: HeartBeat
-export def "metadata-heart-beat HeartBeat" [
+export def "metadata-heart-beat get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -622,6 +650,7 @@ export def "metadata-heart-beat HeartBeat" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --format: string@format-completer # Format of result. (default: json)
@@ -632,14 +661,14 @@ export def "metadata-heart-beat HeartBeat" [
   let full_url = (build-url $base "/Metadata/HeartBeat" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Retrieve names of all columns in the mutation annotation files (MAFs) served by FireBrowse.
 #
 # GET /Metadata/MAFColNames
 # operationId: MAFColNames
-export def "metadata-maf-col-names MAFColNames" [
+export def "metadata-maf-col-names get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -647,6 +676,7 @@ export def "metadata-maf-col-names MAFColNames" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --format: string@format-completer # Format of result. (default: json)
@@ -657,14 +687,14 @@ export def "metadata-maf-col-names MAFColNames" [
   let full_url = (build-url $base "/Metadata/MAFColNames" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Retrieve list of all TCGA patients.
 #
 # GET /Metadata/Patients
 # operationId: Patients
-export def "metadata-patients Patients" [
+export def "metadata-patients get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -672,12 +702,13 @@ export def "metadata-patients Patients" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --format: string@format-completer # Format of result. (default: json)
-  --cohort: list # Narrow search to one or more TCGA disease cohorts from the scrollable list.
-  --page: list # Which page (slice) of entire results set should be returned. 
-  --page-size: list # Number of records per page of results.  Max is 2000.
+  --cohort: list<string> # Narrow search to one or more TCGA disease cohorts from the scrollable list.
+  --page: list<int> # Which page (slice) of entire results set should be returned.
+  --page-size: list<int> # Number of records per page of results. Max is 2000.
   --sort-by: string@sort-by-completer-6 # Which column in the results should be used for sorting paginated results? (default: cohort)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -686,14 +717,14 @@ export def "metadata-patients Patients" [
   let full_url = (build-url $base "/Metadata/Patients" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Translate TCGA platform codes to full platform names.
 #
 # GET /Metadata/Platforms
 # operationId: Platforms
-export def "metadata-platforms Platforms" [
+export def "metadata-platforms get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -701,10 +732,11 @@ export def "metadata-platforms Platforms" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --format: string@format-completer # Format of result. (default: json)
-  --platform: list # Narrow search to one or more TCGA data generation platforms from the scrollable list.
+  --platform: list<string> # Narrow search to one or more TCGA data generation platforms from the scrollable list.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -712,15 +744,15 @@ export def "metadata-platforms Platforms" [
   let full_url = (build-url $base "/Metadata/Platforms" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Given a TCGA barcode, return its short letter sample type code.
 #
 # GET /Metadata/SampleType/Barcode/{TCGA_Barcode}
 # operationId: Barcode
-export def "metadata-sample-type-barcode Barcode" [
-  TCGA_Barcode: string
+export def "metadata-sample-type-barcode get" [
+  tcga_barcode: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -728,6 +760,7 @@ export def "metadata-sample-type-barcode Barcode" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --format: string@format-completer # Format of result. (default: json)
@@ -735,17 +768,17 @@ export def "metadata-sample-type-barcode Barcode" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Metadata/SampleType/Barcode/($TCGA_Barcode)" $qp)
+  let full_url = (build-url $base ({tcga_barcode: (encode-path-segment $tcga_barcode)} | format pattern "/Metadata/SampleType/Barcode/{tcga_barcode}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Translate from numeric to symbolic TCGA sample codes.
 #
 # GET /Metadata/SampleType/Code/{code}
 # operationId: Code
-export def "metadata-sample-type-code Code" [
+export def "metadata-sample-type-code get" [
   code: list
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -754,6 +787,7 @@ export def "metadata-sample-type-code Code" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --format: string@format-completer # Format of result. (default: json)
@@ -761,17 +795,17 @@ export def "metadata-sample-type-code Code" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Metadata/SampleType/Code/($code)" $qp)
+  let full_url = (build-url $base ({code: (encode-path-segment $code)} | format pattern "/Metadata/SampleType/Code/{code}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Translate from symbolic to numeric TCGA sample codes.
 #
 # GET /Metadata/SampleType/ShortLetterCode/{short_letter_code}
 # operationId: ShortLetterCode
-export def "metadata-sample-type-short-letter-code ShortLetterCode" [
+export def "metadata-sample-type-short-letter-code get" [
   short_letter_code: list
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -780,6 +814,7 @@ export def "metadata-sample-type-short-letter-code ShortLetterCode" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --format: string@format-completer # Format of result. (default: json)
@@ -787,17 +822,17 @@ export def "metadata-sample-type-short-letter-code ShortLetterCode" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Metadata/SampleType/ShortLetterCode/($short_letter_code)" $qp)
+  let full_url = (build-url $base ({short_letter_code: (encode-path-segment $short_letter_code)} | format pattern "/Metadata/SampleType/ShortLetterCode/{short_letter_code}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Return all TCGA sample type codes, both numeric and symbolic.
 #
 # GET /Metadata/SampleTypes
 # operationId: SampleTypes
-export def "metadata-sample-types SampleTypes" [
+export def "metadata-sample-types get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -805,6 +840,7 @@ export def "metadata-sample-types SampleTypes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --format: string@format-completer # Format of result. (default: json)
@@ -815,14 +851,14 @@ export def "metadata-sample-types SampleTypes" [
   let full_url = (build-url $base "/Metadata/SampleTypes" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Obtain identities of tissue source sites in TCGA.
 #
 # GET /Metadata/TSSites
 # operationId: TSSites
-export def "metadata-ts-sites TSSites" [
+export def "metadata-ts-sites get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -830,10 +866,11 @@ export def "metadata-ts-sites TSSites" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --format: string@format-completer # Format of result. (default: json)
-  --tss-code: list # Narrow search to one or more TSS codes
+  --tss-code: list<string> # Narrow search to one or more TSS codes
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -841,14 +878,14 @@ export def "metadata-ts-sites TSSites" [
   let full_url = (build-url $base "/Metadata/TSSites" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Retrieve TCGA CDEs verbatim, i.e. not normalized by Firehose.
 #
 # GET /Samples/Clinical
 # operationId: Clinical
-export def "samples-clinical Clinical" [
+export def "samples-clinical get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -856,14 +893,15 @@ export def "samples-clinical Clinical" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --format: string@format-completer # Format of result. (default: json)
-  --cohort: list # Narrow search to one or more TCGA disease cohorts from the scrollable list.
-  --tcga-participant-barcode: list # Comma separated list of TCGA participant barcodes (e.g. TCGA-GF-A4EO).
-  --cde-name: list # Retrieve results only for specified CDEs, per the Metadata/ClinicalNames function
-  --page: list # Which page (slice) of entire results set should be returned. 
-  --page-size: list # Number of records per page of results.  Max is 2000.
+  --cohort: list<string> # Narrow search to one or more TCGA disease cohorts from the scrollable list.
+  --tcga-participant-barcode: list<string> # Comma separated list of TCGA participant barcodes (e.g. TCGA-GF-A4EO).
+  --cde-name: list<string> # Retrieve results only for specified CDEs, per the Metadata/ClinicalNames function
+  --page: list<int> # Which page (slice) of entire results set should be returned.
+  --page-size: list<int> # Number of records per page of results. Max is 2000.
   --sort-by: string@sort-by-completer-7 # Which column in the results should be used for sorting paginated results? (default: cohort)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -872,14 +910,14 @@ export def "samples-clinical Clinical" [
   let full_url = (build-url $base "/Samples/Clinical" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Retrieve CDEs normalized by Firehose and selected for analyses.
 #
 # GET /Samples/Clinical_FH
 # operationId: Clinical_FH
-export def "samples-clinical-fh FH" [
+export def "samples-clinical-fh get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -887,14 +925,15 @@ export def "samples-clinical-fh FH" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --format: string@format-completer # Format of result. (default: json)
-  --cohort: list # Narrow search to one or more TCGA disease cohorts from the scrollable list.
-  --tcga-participant-barcode: list # Comma separated list of TCGA participant barcodes (e.g. TCGA-GF-A4EO).
-  --fh-cde-name: list # Retrieve results only for the CDEs specified from the scrollable list.
-  --page: list # Which page (slice) of entire results set should be returned. 
-  --page-size: list # Number of records per page of results.  Max is 2000.
+  --cohort: list<string> # Narrow search to one or more TCGA disease cohorts from the scrollable list.
+  --tcga-participant-barcode: list<string> # Comma separated list of TCGA participant barcodes (e.g. TCGA-GF-A4EO).
+  --fh-cde-name: list<string> # Retrieve results only for the CDEs specified from the scrollable list.
+  --page: list<int> # Which page (slice) of entire results set should be returned.
+  --page-size: list<int> # Number of records per page of results. Max is 2000.
   --sort-by: string@sort-by-completer-8 # Which column in the results should be used for sorting paginated results? (default: cohort)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -903,14 +942,14 @@ export def "samples-clinical-fh FH" [
   let full_url = (build-url $base "/Samples/Clinical_FH" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Retrieve mRNASeq data.
 #
 # GET /Samples/mRNASeq
 # operationId: mRNASeq
-export def "samples-m-rna-seq mRNASeq" [
+export def "samples-m-rna-seq get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -918,16 +957,17 @@ export def "samples-m-rna-seq mRNASeq" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --format: string@format-completer # Format of result. (default: json)
-  --gene: list # Comma separated list of gene name(s).
-  --cohort: list # Narrow search to one or more TCGA disease cohorts from the scrollable list.
-  --tcga-participant-barcode: list # Comma separated list of TCGA participant barcodes (e.g. TCGA-GF-A4EO).
-  --sample-type: list # Narrow search to one or more TCGA sample types from the scrollable list.
-  --protocol: list # Narrow search to one or more sample characterization protocols from the scrollable list.
-  --page: list # Which page (slice) of entire results set should be returned. 
-  --page-size: list # Number of records per page of results.  Max is 2000.
+  --gene: list<string> # Comma separated list of gene name(s).
+  --cohort: list<string> # Narrow search to one or more TCGA disease cohorts from the scrollable list.
+  --tcga-participant-barcode: list<string> # Comma separated list of TCGA participant barcodes (e.g. TCGA-GF-A4EO).
+  --sample-type: list<string> # Narrow search to one or more TCGA sample types from the scrollable list.
+  --protocol: list<string> # Narrow search to one or more sample characterization protocols from the scrollable list.
+  --page: list<int> # Which page (slice) of entire results set should be returned.
+  --page-size: list<int> # Number of records per page of results. Max is 2000.
   --sort-by: string@sort-by-completer-9 # Which column in the results should be used for sorting paginated results? (default: cohort)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -936,14 +976,14 @@ export def "samples-m-rna-seq mRNASeq" [
   let full_url = (build-url $base "/Samples/mRNASeq" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Retrieve miRSeq data.
 #
 # GET /Samples/miRSeq
 # operationId: miRSeq
-export def "samples-mi-r-seq miRSeq" [
+export def "samples-mi-r-seq get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -951,16 +991,17 @@ export def "samples-mi-r-seq miRSeq" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --format: string@format-completer # Format of result. (default: json)
-  --mir: list # Comma separated list of miR names (e.g. hsa-let-7b-5p,hsa-let-7a-1).
-  --cohort: list # Narrow search to one or more TCGA disease cohorts from the scrollable list.
-  --tcga-participant-barcode: list # Comma separated list of TCGA participant barcodes (e.g. TCGA-GF-A4EO).
-  --tool: list # Narrow search to include only data/results produced by the selected Firehose tool.
-  --sample-type: list # Narrow search to one or more TCGA sample types from the scrollable list.
-  --page: list # Which page (slice) of entire results set should be returned. 
-  --page-size: list # Number of records per page of results.  Max is 2000.
+  --mir: list<string> # Comma separated list of miR names (e.g. hsa-let-7b-5p,hsa-let-7a-1).
+  --cohort: list<string> # Narrow search to one or more TCGA disease cohorts from the scrollable list.
+  --tcga-participant-barcode: list<string> # Comma separated list of TCGA participant barcodes (e.g. TCGA-GF-A4EO).
+  --tool: list<string> # Narrow search to include only data/results produced by the selected Firehose tool.
+  --sample-type: list<string> # Narrow search to one or more TCGA sample types from the scrollable list.
+  --page: list<int> # Which page (slice) of entire results set should be returned.
+  --page-size: list<int> # Number of records per page of results. Max is 2000.
   --sort-by: string@sort-by-completer-10 # Which column in the results should be used for sorting paginated results? (default: cohort)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -969,5 +1010,5 @@ export def "samples-mi-r-seq miRSeq" [
   let full_url = (build-url $base "/Samples/miRSeq" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }

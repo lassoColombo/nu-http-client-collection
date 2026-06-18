@@ -17,21 +17,32 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 }
 
 # Serialize a single query parameter based on collection style
+# Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
+# ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = ($name | url encode)
+  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
-  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
-    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
-    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
+    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
+    _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
+}
+
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Build URL from base, path, and optional query string
@@ -43,7 +54,7 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
@@ -52,13 +63,13 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
     "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "put" => { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "patch" => { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
   if ($method in ["head" "options"]) { return $resp }
-  if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
+  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
 def base-url-completer [] { ["https://safebrowsing.googleapis.com"] }
@@ -67,13 +78,13 @@ def auth-scheme-completer [] { ["bearer"] }
 # Completers for enum parameters
 def xgafv-completer [] { ["1" "2"] }
 def alt-completer [] { ["json" "media" "proto"] }
-def platformType-completer [] { ["ALL_PLATFORMS" "ANDROID" "ANY_PLATFORM" "CHROME" "IOS" "LINUX" "OSX" "PLATFORM_TYPE_UNSPECIFIED" "WINDOWS"] }
-def threatType-completer [] { ["ACCURACY_TIPS" "API_ABUSE" "APK_MALWARE_OFFLINE" "CLIENT_INCIDENT" "CLIENT_INCIDENT_WHITELIST" "CSD_DOWNLOAD_WHITELIST" "CSD_WHITELIST" "HIGH_CONFIDENCE_ALLOWLIST" "MALICIOUS_BINARY" "MALWARE" "POTENTIALLY_HARMFUL_APPLICATION" "SOCIAL_ENGINEERING" "SOCIAL_ENGINEERING_INTERNAL" "SUBRESOURCE_FILTER" "SUSPICIOUS" "THREAT_TYPE_UNSPECIFIED" "TRICK_TO_BILL" "UNWANTED_SOFTWARE"] }
+def platform-type-completer [] { ["ALL_PLATFORMS" "ANDROID" "ANY_PLATFORM" "CHROME" "IOS" "LINUX" "OSX" "PLATFORM_TYPE_UNSPECIFIED" "WINDOWS"] }
+def threat-type-completer [] { ["ACCURACY_TIPS" "API_ABUSE" "APK_MALWARE_OFFLINE" "CLIENT_INCIDENT" "CLIENT_INCIDENT_WHITELIST" "CSD_DOWNLOAD_WHITELIST" "CSD_WHITELIST" "HIGH_CONFIDENCE_ALLOWLIST" "MALICIOUS_BINARY" "MALWARE" "POTENTIALLY_HARMFUL_APPLICATION" "SOCIAL_ENGINEERING" "SOCIAL_ENGINEERING_INTERNAL" "SUBRESOURCE_FILTER" "SUSPICIOUS" "THREAT_TYPE_UNSPECIFIED" "TRICK_TO_BILL" "UNWANTED_SOFTWARE"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "encoded-full-hashes safebrowsingencodedFullHashesget" } } | get name | first)
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "encoded-full-hashes get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -96,8 +107,8 @@ export def commands []: nothing -> table {
 # GET /v4/encodedFullHashes/{encodedRequest}
 #
 # operationId: safebrowsing.encodedFullHashes.get
-export def "encoded-full-hashes safebrowsingencodedFullHashesget" [
-  encodedRequest: string
+export def "encoded-full-hashes get" [
+  encoded_request: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -105,6 +116,7 @@ export def "encoded-full-hashes safebrowsingencodedFullHashesget" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
@@ -113,27 +125,27 @@ export def "encoded-full-hashes safebrowsingencodedFullHashesget" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --clientId: string # A client ID that (hopefully) uniquely identifies the client implementation of the Safe Browsing API.
-  --clientVersion: string # The version of the client implementation.
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --client-id: string # A client ID that (hopefully) uniquely identifies the client implementation of the Safe Browsing API.
+  --client-version: string # The version of the client implementation.
 ]: nothing -> record<matches: table<cacheDuration: string, platformType: string, threat: record, threatEntryMetadata: record, threatEntryType: string, threatType: string>, minimumWaitDuration: string, negativeCacheDuration: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "clientId" $clientId "scalar") (serialize-qp "clientVersion" $clientVersion "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v4/encodedFullHashes/($encodedRequest)" $qp)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "clientId" $client_id "scalar") (serialize-qp "clientVersion" $client_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({encoded_request: (encode-path-segment $encoded_request)} | format pattern "/v4/encodedFullHashes/{encoded_request}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # GET /v4/encodedUpdates/{encodedRequest}
 #
 # operationId: safebrowsing.encodedUpdates.get
-export def "encoded-updates safebrowsingencodedUpdatesget" [
-  encodedRequest: string
+export def "encoded-updates get" [
+  encoded_request: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -141,6 +153,7 @@ export def "encoded-updates safebrowsingencodedUpdatesget" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
@@ -149,20 +162,20 @@ export def "encoded-updates safebrowsingencodedUpdatesget" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --clientId: string # A client ID that uniquely identifies the client implementation of the Safe Browsing API.
-  --clientVersion: string # The version of the client implementation.
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --client-id: string # A client ID that uniquely identifies the client implementation of the Safe Browsing API.
+  --client-version: string # The version of the client implementation.
 ]: nothing -> record<listUpdateResponses: table<additions: list, checksum: record, newClientState: string, platformType: string, removals: list, responseType: string, threatEntryType: string, threatType: string>, minimumWaitDuration: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "clientId" $clientId "scalar") (serialize-qp "clientVersion" $clientVersion "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v4/encodedUpdates/($encodedRequest)" $qp)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "clientId" $client_id "scalar") (serialize-qp "clientVersion" $client_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({encoded_request: (encode-path-segment $encoded_request)} | format pattern "/v4/encodedUpdates/{encoded_request}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Finds the full hashes that match the requested hash prefixes.
@@ -171,8 +184,8 @@ export def "encoded-updates safebrowsingencodedUpdatesget" [
 # operationId: safebrowsing.fullHashes.find
 # --apiClient shape: {clientId?: string, clientVersion?: string}
 # --client shape: {clientId?: string, clientVersion?: string}
-# --threatInfo shape: {platformTypes?: list, threatEntries?: list, threatEntryTypes?: list, threatTypes?: list}
-export def "full-hashes-find safebrowsingfullHashesfind" [
+# --threatInfo shape: {platformTypes?: list<string>, threatEntries?: list, threatEntryTypes?: list<string>, threatTypes?: list<string>}
+export def "full-hashes-find find" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -180,6 +193,7 @@ export def "full-hashes-find safebrowsingfullHashesfind" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
@@ -188,25 +202,25 @@ export def "full-hashes-find safebrowsingfullHashesfind" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --apiClient: record # The client metadata associated with Safe Browsing API requests. — shape: {clientId?: string, clientVersion?: string}
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --api-client: record # The client metadata associated with Safe Browsing API requests. — shape: {clientId?: string, clientVersion?: string}
   --client: record # The client metadata associated with Safe Browsing API requests. — shape: {clientId?: string, clientVersion?: string}
-  --clientStates: list # The current client states for each of the client's local threat lists.
-  --threatInfo: record # The information regarding one or more threats that a client submits when checking for matches in threat lists. — shape: {platformTypes?: list, threatEntries?: list, threatEntryTypes?: list, threatTypes?: list}
+  --client-states: list<string> # The current client states for each of the client's local threat lists.
+  --threat-info: record # The information regarding one or more threats that a client submits when checking for matches in threat lists. — shape: {platformTypes?: list<string>, threatEntries?: list, threatEntryTypes?: list<string>, threatTypes?: list<string>}
 ]: any -> record<matches: table<cacheDuration: string, platformType: string, threat: record, threatEntryMetadata: record, threatEntryType: string, threatType: string>, minimumWaitDuration: string, negativeCacheDuration: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v4/fullHashes:find" $qp)
-  let body = {apiClient: $apiClient, client: $client, clientStates: $clientStates, threatInfo: $threatInfo} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"apiClient": $api_client, "client": $client, "clientStates": $client_states, "threatInfo": $threat_info} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Reports a Safe Browsing threat list hit to Google. Only projects with TRUSTED_REPORTER visibility can use this method.
@@ -217,7 +231,7 @@ export def "full-hashes-find safebrowsingfullHashesfind" [
 # --entry shape: {digest?: string, hash?: string, url?: string}
 # --resources item shape: {referrer?: string, remoteIp?: string, type?: "THREAT_SOURCE_TYPE_UNSPECIFIED"|"MATCHING_URL"|"TAB_URL"|"TAB_REDIRECT"|"TAB_RESOURCE", url?: string}
 # --userInfo shape: {regionCode?: string, userId?: string}
-export def "threat-hits safebrowsingthreatHitscreate" [
+export def "threat-hits create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -225,6 +239,7 @@ export def "threat-hits safebrowsingthreatHitscreate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
@@ -233,27 +248,27 @@ export def "threat-hits safebrowsingthreatHitscreate" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --clientInfo: record # The client metadata associated with Safe Browsing API requests. — shape: {clientId?: string, clientVersion?: string}
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --client-info: record # The client metadata associated with Safe Browsing API requests. — shape: {clientId?: string, clientVersion?: string}
   --entry: record # An individual threat; for example, a malicious URL or its hash representation. Only one of these fields should be set. — shape: {digest?: string, hash?: string, url?: string}
-  --platformType: string@platformType-completer # The platform type reported.
+  --platform-type: string@platform-type-completer # The platform type reported.
   --resources: list # The resources related to the threat hit. — item shape: {referrer?: string, remoteIp?: string, type?: "THREAT_SOURCE_TYPE_UNSPECIFIED"|"MATCHING_URL"|"TAB_URL"|"TAB_REDIRECT"|"TAB_RESOURCE", url?: string}
-  --threatType: string@threatType-completer # The threat type reported.
-  --userInfo: record # Details about the user that encountered the threat. — shape: {regionCode?: string, userId?: string}
+  --threat-type: string@threat-type-completer # The threat type reported.
+  --user-info: record # Details about the user that encountered the threat. — shape: {regionCode?: string, userId?: string}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v4/threatHits" $qp)
-  let body = {clientInfo: $clientInfo, entry: $entry, platformType: $platformType, resources: $resources, threatType: $threatType, userInfo: $userInfo} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"clientInfo": $client_info, "entry": $entry, "platformType": $platform_type, "resources": $resources, "threatType": $threat_type, "userInfo": $user_info} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Fetches the most recent threat list updates. A client can request updates for multiple lists at once.
@@ -261,8 +276,8 @@ export def "threat-hits safebrowsingthreatHitscreate" [
 # POST /v4/threatListUpdates:fetch
 # operationId: safebrowsing.threatListUpdates.fetch
 # --client shape: {clientId?: string, clientVersion?: string}
-# --listUpdateRequests item shape: {constraints?: record, platformType?: "PLATFORM_TYPE_UNSPECIFIED"|"WINDOWS"|"LINUX"|"ANDROID"|"OSX"|"IOS"|"ANY_PLATFORM"|"ALL_PLATFORMS"|"CHROME", state?: string, threatEntryType?: "THREAT_ENTRY_TYPE_UNSPECIFIED"|"URL"|"EXECUTABLE"|"IP_RANGE"|"CHROME_EXTENSION"|"FILENAME"|"CERT", threatType?: "THREAT_TYPE_UNSPECIFIED"|"MALWARE"|"SOCIAL_ENGINEERING"|"UNWANTED_SOFTWARE"|"POTENTIALLY_HARMFUL_APPLICATION"|"SOCIAL_ENGINEERING_INTERNAL"|"API_ABUSE"|"MALICIOUS_BINARY"|"CSD_WHITELIST"|"CSD_DOWNLOAD_WHITELIST"|"CLIENT_INCIDENT"|"CLIENT_INCIDENT_WHITELIST"|"APK_MALWARE_OFFLINE"|"SUBRESOURCE_FILTER"|"SUSPICIOUS"|"TRICK_TO_BILL"|"HIGH_CONFIDENCE_ALLOWLIST"|"ACCURACY_TIPS"}
-export def "threat-list-updates-fetch safebrowsingthreatListUpdatesfetch" [
+# --listUpdateRequests item shape: {constraints?: record, platformType?: "PLATFORM_TYPE_UNSPECIFIED"|"WINDOWS"|"LINUX"|"ANDROID"|"OSX"|"IOS"|"ANY_PLATFORM"|"ALL_PLATFORMS"|"CHROME", state?: string, threatEntryType?: "THREAT_ENTRY_TYPE_UNSPECIFIED"|"URL"|"EXECUTABLE"|"IP_RANGE"|"CHROME_EXTENSION"|"FILENAME"|"CERT", ... (1 more fields)}
+export def "threat-list-updates-fetch get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -270,6 +285,7 @@ export def "threat-list-updates-fetch safebrowsingthreatListUpdatesfetch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
@@ -278,30 +294,30 @@ export def "threat-list-updates-fetch safebrowsingthreatListUpdatesfetch" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --client: record # The client metadata associated with Safe Browsing API requests. — shape: {clientId?: string, clientVersion?: string}
-  --listUpdateRequests: list # The requested threat list updates. — item shape: {constraints?: record, platformType?: "PLATFORM_TYPE_UNSPECIFIED"|"WINDOWS"|"LINUX"|"ANDROID"|"OSX"|"IOS"|"ANY_PLATFORM"|"ALL_PLATFORMS"|"CHROME", state?: string, threatEntryType?: "THREAT_ENTRY_TYPE_UNSPECIFIED"|"URL"|"EXECUTABLE"|"IP_RANGE"|"CHROME_EXTENSION"|"FILENAME"|"CERT", threatType?: "THREAT_TYPE_UNSPECIFIED"|"MALWARE"|"SOCIAL_ENGINEERING"|"UNWANTED_SOFTWARE"|"POTENTIALLY_HARMFUL_APPLICATION"|"SOCIAL_ENGINEERING_INTERNAL"|"API_ABUSE"|"MALICIOUS_BINARY"|"CSD_WHITELIST"|"CSD_DOWNLOAD_WHITELIST"|"CLIENT_INCIDENT"|"CLIENT_INCIDENT_WHITELIST"|"APK_MALWARE_OFFLINE"|"SUBRESOURCE_FILTER"|"SUSPICIOUS"|"TRICK_TO_BILL"|"HIGH_CONFIDENCE_ALLOWLIST"|"ACCURACY_TIPS"}
+  --list-update-requests: list # The requested threat list updates. — item shape: {constraints?: record, platformType?: "PLATFORM_TYPE_UNSPECIFIED"|"WINDOWS"|"LINUX"|"ANDROID"|"OSX"|"IOS"|"ANY_PLATFORM"|"ALL_PLATFORMS"|"CHROME", state?: string, threatEntryType?: "THREAT_ENTRY_TYPE_UNSPECIFIED"|"URL"|"EXECUTABLE"|"IP_RANGE"|"CHROME_EXTENSION"|"FILENAME"|"CERT", ... (1 more fields)}
 ]: any -> record<listUpdateResponses: table<additions: list, checksum: record, newClientState: string, platformType: string, removals: list, responseType: string, threatEntryType: string, threatType: string>, minimumWaitDuration: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v4/threatListUpdates:fetch" $qp)
-  let body = {client: $client, listUpdateRequests: $listUpdateRequests} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"client": $client, "listUpdateRequests": $list_update_requests} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Lists the Safe Browsing threat lists available for download.
 #
 # GET /v4/threatLists
 # operationId: safebrowsing.threatLists.list
-export def "threat-lists safebrowsingthreatListslist" [
+export def "threat-lists list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -309,6 +325,7 @@ export def "threat-lists safebrowsingthreatListslist" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
@@ -317,18 +334,18 @@ export def "threat-lists safebrowsingthreatListslist" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<threatLists: table<platformType: string, threatEntryType: string, threatType: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v4/threatLists" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Finds the threat entries that match the Safe Browsing lists.
@@ -336,8 +353,8 @@ export def "threat-lists safebrowsingthreatListslist" [
 # POST /v4/threatMatches:find
 # operationId: safebrowsing.threatMatches.find
 # --client shape: {clientId?: string, clientVersion?: string}
-# --threatInfo shape: {platformTypes?: list, threatEntries?: list, threatEntryTypes?: list, threatTypes?: list}
-export def "threat-matches-find safebrowsingthreatMatchesfind" [
+# --threatInfo shape: {platformTypes?: list<string>, threatEntries?: list, threatEntryTypes?: list<string>, threatTypes?: list<string>}
+export def "threat-matches-find find" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -345,6 +362,7 @@ export def "threat-matches-find safebrowsingthreatMatchesfind" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --xgafv: string@xgafv-completer # V1 error format.
   --access-token: string # OAuth access token.
@@ -353,21 +371,21 @@ export def "threat-matches-find safebrowsingthreatMatchesfind" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --client: record # The client metadata associated with Safe Browsing API requests. — shape: {clientId?: string, clientVersion?: string}
-  --threatInfo: record # The information regarding one or more threats that a client submits when checking for matches in threat lists. — shape: {platformTypes?: list, threatEntries?: list, threatEntryTypes?: list, threatTypes?: list}
+  --threat-info: record # The information regarding one or more threats that a client submits when checking for matches in threat lists. — shape: {platformTypes?: list<string>, threatEntries?: list, threatEntryTypes?: list<string>, threatTypes?: list<string>}
 ]: any -> record<matches: table<cacheDuration: string, platformType: string, threat: record, threatEntryMetadata: record, threatEntryType: string, threatType: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v4/threatMatches:find" $qp)
-  let body = {client: $client, threatInfo: $threatInfo} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"client": $client, "threatInfo": $threat_info} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }

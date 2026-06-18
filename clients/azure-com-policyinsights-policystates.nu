@@ -18,21 +18,32 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 }
 
 # Serialize a single query parameter based on collection style
+# Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
+# ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = ($name | url encode)
+  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
-  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
-    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
-    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
+    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
+    _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
+}
+
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Build URL from base, path, and optional query string
@@ -44,7 +55,7 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
@@ -53,13 +64,13 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
     "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "put" => { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "patch" => { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
   if ($method in ["head" "options"]) { return $resp }
-  if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
+  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
 def base-url-completer [] { ["https://management.azure.com"] }
@@ -68,8 +79,8 @@ def auth-scheme-completer [] { ["bearer"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-policy-insights-operations List" } } | get name | first)
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-policy-insights-operations list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -93,7 +104,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.PolicyInsights/operations
 # operationId: Operations_List
-export def "providers-microsoft-policy-insights-operations List" [
+export def "providers-microsoft-policy-insights-operations list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -101,6 +112,7 @@ export def "providers-microsoft-policy-insights-operations List" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
 ]: nothing -> record<_odata_count: int, value: table<display: record, name: string>> {
@@ -110,17 +122,17 @@ export def "providers-microsoft-policy-insights-operations List" [
   let full_url = (build-url $base "/providers/Microsoft.PolicyInsights/operations" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Queries policy states for the resources under the management group.
 #
 # POST /providers/{managementGroupsNamespace}/managementGroups/{managementGroupName}/providers/Microsoft.PolicyInsights/policyStates/{policyStatesResource}/queryResults
 # operationId: PolicyStates_ListQueryResultsForManagementGroup
-export def "providers-management-groups-providers-microsoft-policy-insights-policy-states-query-results ListQueryResultsForManagementGroup" [
-  policyStatesResource: string
-  managementGroupsNamespace: string
-  managementGroupName: string
+export def "providers-management-groups-providers-microsoft-policy-insights-policy-states-query-results list" [
+  management_groups_namespace: string
+  management_group_name: string
+  policy_states_resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -128,6 +140,7 @@ export def "providers-management-groups-providers-microsoft-policy-insights-poli
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
   --top: int # Maximum number of records to return. (format: int32)
@@ -141,20 +154,20 @@ export def "providers-management-groups-providers-microsoft-policy-insights-poli
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "$select" $select "scalar") (serialize-qp "$from" $qp_from "scalar") (serialize-qp "$to" $qp_to "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$apply" $apply "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/providers/($managementGroupsNamespace)/managementGroups/($managementGroupName)/providers/Microsoft.PolicyInsights/policyStates/($policyStatesResource)/queryResults" $qp)
+  let full_url = (build-url $base ({management_groups_namespace: (encode-path-segment $management_groups_namespace), management_group_name: (encode-path-segment $management_group_name), policy_states_resource: (encode-path-segment $policy_states_resource)} | format pattern "/providers/{management_groups_namespace}/managementGroups/{management_group_name}/providers/Microsoft.PolicyInsights/policyStates/{policy_states_resource}/queryResults") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Summarizes policy states for the resources under the management group.
 #
 # POST /providers/{managementGroupsNamespace}/managementGroups/{managementGroupName}/providers/Microsoft.PolicyInsights/policyStates/{policyStatesSummaryResource}/summarize
 # operationId: PolicyStates_SummarizeForManagementGroup
-export def "providers-management-groups-providers-microsoft-policy-insights-policy-states-summarize SummarizeForManagementGroup" [
-  policyStatesSummaryResource: string
-  managementGroupsNamespace: string
-  managementGroupName: string
+export def "providers-management-groups-providers-microsoft-policy-insights-policy-states-summarize create" [
+  management_groups_namespace: string
+  management_group_name: string
+  policy_states_summary_resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -162,6 +175,7 @@ export def "providers-management-groups-providers-microsoft-policy-insights-poli
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
   --top: int # Maximum number of records to return. (format: int32)
@@ -172,19 +186,19 @@ export def "providers-management-groups-providers-microsoft-policy-insights-poli
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$from" $qp_from "scalar") (serialize-qp "$to" $qp_to "scalar") (serialize-qp "$filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/providers/($managementGroupsNamespace)/managementGroups/($managementGroupName)/providers/Microsoft.PolicyInsights/policyStates/($policyStatesSummaryResource)/summarize" $qp)
+  let full_url = (build-url $base ({management_groups_namespace: (encode-path-segment $management_groups_namespace), management_group_name: (encode-path-segment $management_group_name), policy_states_summary_resource: (encode-path-segment $policy_states_summary_resource)} | format pattern "/providers/{management_groups_namespace}/managementGroups/{management_group_name}/providers/Microsoft.PolicyInsights/policyStates/{policy_states_summary_resource}/summarize") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Queries policy states for the resources under the subscription.
 #
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.PolicyInsights/policyStates/{policyStatesResource}/queryResults
 # operationId: PolicyStates_ListQueryResultsForSubscription
-export def "subscriptions-providers-microsoft-policy-insights-policy-states-query-results ListQueryResultsForSubscription" [
-  policyStatesResource: string
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-policy-insights-policy-states-query-results list" [
+  subscription_id: string
+  policy_states_resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -192,6 +206,7 @@ export def "subscriptions-providers-microsoft-policy-insights-policy-states-quer
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
   --top: int # Maximum number of records to return. (format: int32)
@@ -205,19 +220,19 @@ export def "subscriptions-providers-microsoft-policy-insights-policy-states-quer
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "$select" $select "scalar") (serialize-qp "$from" $qp_from "scalar") (serialize-qp "$to" $qp_to "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$apply" $apply "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.PolicyInsights/policyStates/($policyStatesResource)/queryResults" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), policy_states_resource: (encode-path-segment $policy_states_resource)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.PolicyInsights/policyStates/{policy_states_resource}/queryResults") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Summarizes policy states for the resources under the subscription.
 #
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.PolicyInsights/policyStates/{policyStatesSummaryResource}/summarize
 # operationId: PolicyStates_SummarizeForSubscription
-export def "subscriptions-providers-microsoft-policy-insights-policy-states-summarize SummarizeForSubscription" [
-  policyStatesSummaryResource: string
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-policy-insights-policy-states-summarize create" [
+  subscription_id: string
+  policy_states_summary_resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -225,6 +240,7 @@ export def "subscriptions-providers-microsoft-policy-insights-policy-states-summ
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
   --top: int # Maximum number of records to return. (format: int32)
@@ -235,21 +251,21 @@ export def "subscriptions-providers-microsoft-policy-insights-policy-states-summ
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$from" $qp_from "scalar") (serialize-qp "$to" $qp_to "scalar") (serialize-qp "$filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.PolicyInsights/policyStates/($policyStatesSummaryResource)/summarize" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), policy_states_summary_resource: (encode-path-segment $policy_states_summary_resource)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.PolicyInsights/policyStates/{policy_states_summary_resource}/summarize") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Queries policy states for the subscription level policy assignment.
 #
 # POST /subscriptions/{subscriptionId}/providers/{authorizationNamespace}/policyAssignments/{policyAssignmentName}/providers/Microsoft.PolicyInsights/policyStates/{policyStatesResource}/queryResults
 # operationId: PolicyStates_ListQueryResultsForSubscriptionLevelPolicyAssignment
-export def "subscriptions-providers-policy-assignments-providers-microsoft-policy-insights-policy-states-query-results ListQueryResultsForSubscriptionLevelPolicyAssignment" [
-  policyStatesResource: string
-  subscriptionId: string
-  authorizationNamespace: string
-  policyAssignmentName: string
+export def "subscriptions-providers-policy-assignments-providers-microsoft-policy-insights-policy-states-query-results list-for-level" [
+  subscription_id: string
+  authorization_namespace: string
+  policy_assignment_name: string
+  policy_states_resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -257,6 +273,7 @@ export def "subscriptions-providers-policy-assignments-providers-microsoft-polic
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
   --top: int # Maximum number of records to return. (format: int32)
@@ -270,21 +287,21 @@ export def "subscriptions-providers-policy-assignments-providers-microsoft-polic
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "$select" $select "scalar") (serialize-qp "$from" $qp_from "scalar") (serialize-qp "$to" $qp_to "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$apply" $apply "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/($authorizationNamespace)/policyAssignments/($policyAssignmentName)/providers/Microsoft.PolicyInsights/policyStates/($policyStatesResource)/queryResults" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), authorization_namespace: (encode-path-segment $authorization_namespace), policy_assignment_name: (encode-path-segment $policy_assignment_name), policy_states_resource: (encode-path-segment $policy_states_resource)} | format pattern "/subscriptions/{subscription_id}/providers/{authorization_namespace}/policyAssignments/{policy_assignment_name}/providers/Microsoft.PolicyInsights/policyStates/{policy_states_resource}/queryResults") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Summarizes policy states for the subscription level policy assignment.
 #
 # POST /subscriptions/{subscriptionId}/providers/{authorizationNamespace}/policyAssignments/{policyAssignmentName}/providers/Microsoft.PolicyInsights/policyStates/{policyStatesSummaryResource}/summarize
 # operationId: PolicyStates_SummarizeForSubscriptionLevelPolicyAssignment
-export def "subscriptions-providers-policy-assignments-providers-microsoft-policy-insights-policy-states-summarize SummarizeForSubscriptionLevelPolicyAssignment" [
-  policyStatesSummaryResource: string
-  subscriptionId: string
-  authorizationNamespace: string
-  policyAssignmentName: string
+export def "subscriptions-providers-policy-assignments-providers-microsoft-policy-insights-policy-states-summarize create-for-level" [
+  subscription_id: string
+  authorization_namespace: string
+  policy_assignment_name: string
+  policy_states_summary_resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -292,6 +309,7 @@ export def "subscriptions-providers-policy-assignments-providers-microsoft-polic
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
   --top: int # Maximum number of records to return. (format: int32)
@@ -302,21 +320,21 @@ export def "subscriptions-providers-policy-assignments-providers-microsoft-polic
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$from" $qp_from "scalar") (serialize-qp "$to" $qp_to "scalar") (serialize-qp "$filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/($authorizationNamespace)/policyAssignments/($policyAssignmentName)/providers/Microsoft.PolicyInsights/policyStates/($policyStatesSummaryResource)/summarize" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), authorization_namespace: (encode-path-segment $authorization_namespace), policy_assignment_name: (encode-path-segment $policy_assignment_name), policy_states_summary_resource: (encode-path-segment $policy_states_summary_resource)} | format pattern "/subscriptions/{subscription_id}/providers/{authorization_namespace}/policyAssignments/{policy_assignment_name}/providers/Microsoft.PolicyInsights/policyStates/{policy_states_summary_resource}/summarize") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Queries policy states for the subscription level policy definition.
 #
 # POST /subscriptions/{subscriptionId}/providers/{authorizationNamespace}/policyDefinitions/{policyDefinitionName}/providers/Microsoft.PolicyInsights/policyStates/{policyStatesResource}/queryResults
 # operationId: PolicyStates_ListQueryResultsForPolicyDefinition
-export def "subscriptions-providers-policy-definitions-providers-microsoft-policy-insights-policy-states-query-results ListQueryResultsForPolicyDefinition" [
-  policyStatesResource: string
-  subscriptionId: string
-  authorizationNamespace: string
-  policyDefinitionName: string
+export def "subscriptions-providers-policy-definitions-providers-microsoft-policy-insights-policy-states-query-results list" [
+  subscription_id: string
+  authorization_namespace: string
+  policy_definition_name: string
+  policy_states_resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -324,6 +342,7 @@ export def "subscriptions-providers-policy-definitions-providers-microsoft-polic
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
   --top: int # Maximum number of records to return. (format: int32)
@@ -337,21 +356,21 @@ export def "subscriptions-providers-policy-definitions-providers-microsoft-polic
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "$select" $select "scalar") (serialize-qp "$from" $qp_from "scalar") (serialize-qp "$to" $qp_to "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$apply" $apply "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/($authorizationNamespace)/policyDefinitions/($policyDefinitionName)/providers/Microsoft.PolicyInsights/policyStates/($policyStatesResource)/queryResults" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), authorization_namespace: (encode-path-segment $authorization_namespace), policy_definition_name: (encode-path-segment $policy_definition_name), policy_states_resource: (encode-path-segment $policy_states_resource)} | format pattern "/subscriptions/{subscription_id}/providers/{authorization_namespace}/policyDefinitions/{policy_definition_name}/providers/Microsoft.PolicyInsights/policyStates/{policy_states_resource}/queryResults") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Summarizes policy states for the subscription level policy definition.
 #
 # POST /subscriptions/{subscriptionId}/providers/{authorizationNamespace}/policyDefinitions/{policyDefinitionName}/providers/Microsoft.PolicyInsights/policyStates/{policyStatesSummaryResource}/summarize
 # operationId: PolicyStates_SummarizeForPolicyDefinition
-export def "subscriptions-providers-policy-definitions-providers-microsoft-policy-insights-policy-states-summarize SummarizeForPolicyDefinition" [
-  policyStatesSummaryResource: string
-  subscriptionId: string
-  authorizationNamespace: string
-  policyDefinitionName: string
+export def "subscriptions-providers-policy-definitions-providers-microsoft-policy-insights-policy-states-summarize create" [
+  subscription_id: string
+  authorization_namespace: string
+  policy_definition_name: string
+  policy_states_summary_resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -359,6 +378,7 @@ export def "subscriptions-providers-policy-definitions-providers-microsoft-polic
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
   --top: int # Maximum number of records to return. (format: int32)
@@ -369,21 +389,21 @@ export def "subscriptions-providers-policy-definitions-providers-microsoft-polic
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$from" $qp_from "scalar") (serialize-qp "$to" $qp_to "scalar") (serialize-qp "$filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/($authorizationNamespace)/policyDefinitions/($policyDefinitionName)/providers/Microsoft.PolicyInsights/policyStates/($policyStatesSummaryResource)/summarize" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), authorization_namespace: (encode-path-segment $authorization_namespace), policy_definition_name: (encode-path-segment $policy_definition_name), policy_states_summary_resource: (encode-path-segment $policy_states_summary_resource)} | format pattern "/subscriptions/{subscription_id}/providers/{authorization_namespace}/policyDefinitions/{policy_definition_name}/providers/Microsoft.PolicyInsights/policyStates/{policy_states_summary_resource}/summarize") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Queries policy states for the subscription level policy set definition.
 #
 # POST /subscriptions/{subscriptionId}/providers/{authorizationNamespace}/policySetDefinitions/{policySetDefinitionName}/providers/Microsoft.PolicyInsights/policyStates/{policyStatesResource}/queryResults
 # operationId: PolicyStates_ListQueryResultsForPolicySetDefinition
-export def "subscriptions-providers-policy-set-definitions-providers-microsoft-policy-insights-policy-states-query-results ListQueryResultsForPolicySetDefinition" [
-  policyStatesResource: string
-  subscriptionId: string
-  authorizationNamespace: string
-  policySetDefinitionName: string
+export def "subscriptions-providers-policy-set-definitions-providers-microsoft-policy-insights-policy-states-query-results list" [
+  subscription_id: string
+  authorization_namespace: string
+  policy_set_definition_name: string
+  policy_states_resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -391,6 +411,7 @@ export def "subscriptions-providers-policy-set-definitions-providers-microsoft-p
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
   --top: int # Maximum number of records to return. (format: int32)
@@ -404,21 +425,21 @@ export def "subscriptions-providers-policy-set-definitions-providers-microsoft-p
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "$select" $select "scalar") (serialize-qp "$from" $qp_from "scalar") (serialize-qp "$to" $qp_to "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$apply" $apply "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/($authorizationNamespace)/policySetDefinitions/($policySetDefinitionName)/providers/Microsoft.PolicyInsights/policyStates/($policyStatesResource)/queryResults" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), authorization_namespace: (encode-path-segment $authorization_namespace), policy_set_definition_name: (encode-path-segment $policy_set_definition_name), policy_states_resource: (encode-path-segment $policy_states_resource)} | format pattern "/subscriptions/{subscription_id}/providers/{authorization_namespace}/policySetDefinitions/{policy_set_definition_name}/providers/Microsoft.PolicyInsights/policyStates/{policy_states_resource}/queryResults") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Summarizes policy states for the subscription level policy set definition.
 #
 # POST /subscriptions/{subscriptionId}/providers/{authorizationNamespace}/policySetDefinitions/{policySetDefinitionName}/providers/Microsoft.PolicyInsights/policyStates/{policyStatesSummaryResource}/summarize
 # operationId: PolicyStates_SummarizeForPolicySetDefinition
-export def "subscriptions-providers-policy-set-definitions-providers-microsoft-policy-insights-policy-states-summarize SummarizeForPolicySetDefinition" [
-  policyStatesSummaryResource: string
-  subscriptionId: string
-  authorizationNamespace: string
-  policySetDefinitionName: string
+export def "subscriptions-providers-policy-set-definitions-providers-microsoft-policy-insights-policy-states-summarize update" [
+  subscription_id: string
+  authorization_namespace: string
+  policy_set_definition_name: string
+  policy_states_summary_resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -426,6 +447,7 @@ export def "subscriptions-providers-policy-set-definitions-providers-microsoft-p
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
   --top: int # Maximum number of records to return. (format: int32)
@@ -436,20 +458,20 @@ export def "subscriptions-providers-policy-set-definitions-providers-microsoft-p
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$from" $qp_from "scalar") (serialize-qp "$to" $qp_to "scalar") (serialize-qp "$filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/($authorizationNamespace)/policySetDefinitions/($policySetDefinitionName)/providers/Microsoft.PolicyInsights/policyStates/($policyStatesSummaryResource)/summarize" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), authorization_namespace: (encode-path-segment $authorization_namespace), policy_set_definition_name: (encode-path-segment $policy_set_definition_name), policy_states_summary_resource: (encode-path-segment $policy_states_summary_resource)} | format pattern "/subscriptions/{subscription_id}/providers/{authorization_namespace}/policySetDefinitions/{policy_set_definition_name}/providers/Microsoft.PolicyInsights/policyStates/{policy_states_summary_resource}/summarize") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Queries policy states for the resources under the resource group.
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.PolicyInsights/policyStates/{policyStatesResource}/queryResults
 # operationId: PolicyStates_ListQueryResultsForResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-policy-insights-policy-states-query-results ListQueryResultsForResourceGroup" [
-  policyStatesResource: string
-  subscriptionId: string
-  resourceGroupName: string
+export def "subscriptions-resource-groups-providers-microsoft-policy-insights-policy-states-query-results list" [
+  subscription_id: string
+  resource_group_name: string
+  policy_states_resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -457,6 +479,7 @@ export def "subscriptions-resource-groups-providers-microsoft-policy-insights-po
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
   --top: int # Maximum number of records to return. (format: int32)
@@ -470,20 +493,20 @@ export def "subscriptions-resource-groups-providers-microsoft-policy-insights-po
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "$select" $select "scalar") (serialize-qp "$from" $qp_from "scalar") (serialize-qp "$to" $qp_to "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$apply" $apply "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.PolicyInsights/policyStates/($policyStatesResource)/queryResults" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), policy_states_resource: (encode-path-segment $policy_states_resource)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.PolicyInsights/policyStates/{policy_states_resource}/queryResults") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Summarizes policy states for the resources under the resource group.
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.PolicyInsights/policyStates/{policyStatesSummaryResource}/summarize
 # operationId: PolicyStates_SummarizeForResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-policy-insights-policy-states-summarize SummarizeForResourceGroup" [
-  policyStatesSummaryResource: string
-  subscriptionId: string
-  resourceGroupName: string
+export def "subscriptions-resource-groups-providers-microsoft-policy-insights-policy-states-summarize create" [
+  subscription_id: string
+  resource_group_name: string
+  policy_states_summary_resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -491,6 +514,7 @@ export def "subscriptions-resource-groups-providers-microsoft-policy-insights-po
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
   --top: int # Maximum number of records to return. (format: int32)
@@ -501,22 +525,22 @@ export def "subscriptions-resource-groups-providers-microsoft-policy-insights-po
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$from" $qp_from "scalar") (serialize-qp "$to" $qp_to "scalar") (serialize-qp "$filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.PolicyInsights/policyStates/($policyStatesSummaryResource)/summarize" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), policy_states_summary_resource: (encode-path-segment $policy_states_summary_resource)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.PolicyInsights/policyStates/{policy_states_summary_resource}/summarize") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Queries policy states for the resource group level policy assignment.
 #
 # POST /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/{authorizationNamespace}/policyAssignments/{policyAssignmentName}/providers/Microsoft.PolicyInsights/policyStates/{policyStatesResource}/queryResults
 # operationId: PolicyStates_ListQueryResultsForResourceGroupLevelPolicyAssignment
-export def "subscriptions-resourcegroups-providers-policy-assignments-providers-microsoft-policy-insights-policy-states-query-results ListQueryResultsForResourceGroupLevelPolicyAssignment" [
-  policyStatesResource: string
-  subscriptionId: string
-  resourceGroupName: string
-  authorizationNamespace: string
-  policyAssignmentName: string
+export def "subscriptions-resourcegroups-providers-policy-assignments-providers-microsoft-policy-insights-policy-states-query-results list-for-resource-group-level" [
+  subscription_id: string
+  resource_group_name: string
+  authorization_namespace: string
+  policy_assignment_name: string
+  policy_states_resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -524,6 +548,7 @@ export def "subscriptions-resourcegroups-providers-policy-assignments-providers-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
   --top: int # Maximum number of records to return. (format: int32)
@@ -537,22 +562,22 @@ export def "subscriptions-resourcegroups-providers-policy-assignments-providers-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "$select" $select "scalar") (serialize-qp "$from" $qp_from "scalar") (serialize-qp "$to" $qp_to "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$apply" $apply "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourcegroups/($resourceGroupName)/providers/($authorizationNamespace)/policyAssignments/($policyAssignmentName)/providers/Microsoft.PolicyInsights/policyStates/($policyStatesResource)/queryResults" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), authorization_namespace: (encode-path-segment $authorization_namespace), policy_assignment_name: (encode-path-segment $policy_assignment_name), policy_states_resource: (encode-path-segment $policy_states_resource)} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/{authorization_namespace}/policyAssignments/{policy_assignment_name}/providers/Microsoft.PolicyInsights/policyStates/{policy_states_resource}/queryResults") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Summarizes policy states for the resource group level policy assignment.
 #
 # POST /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/{authorizationNamespace}/policyAssignments/{policyAssignmentName}/providers/Microsoft.PolicyInsights/policyStates/{policyStatesSummaryResource}/summarize
 # operationId: PolicyStates_SummarizeForResourceGroupLevelPolicyAssignment
-export def "subscriptions-resourcegroups-providers-policy-assignments-providers-microsoft-policy-insights-policy-states-summarize SummarizeForResourceGroupLevelPolicyAssignment" [
-  policyStatesSummaryResource: string
-  subscriptionId: string
-  resourceGroupName: string
-  authorizationNamespace: string
-  policyAssignmentName: string
+export def "subscriptions-resourcegroups-providers-policy-assignments-providers-microsoft-policy-insights-policy-states-summarize create-for-resource-group-level" [
+  subscription_id: string
+  resource_group_name: string
+  authorization_namespace: string
+  policy_assignment_name: string
+  policy_states_summary_resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -560,6 +585,7 @@ export def "subscriptions-resourcegroups-providers-policy-assignments-providers-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
   --top: int # Maximum number of records to return. (format: int32)
@@ -570,19 +596,19 @@ export def "subscriptions-resourcegroups-providers-policy-assignments-providers-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$from" $qp_from "scalar") (serialize-qp "$to" $qp_to "scalar") (serialize-qp "$filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourcegroups/($resourceGroupName)/providers/($authorizationNamespace)/policyAssignments/($policyAssignmentName)/providers/Microsoft.PolicyInsights/policyStates/($policyStatesSummaryResource)/summarize" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), authorization_namespace: (encode-path-segment $authorization_namespace), policy_assignment_name: (encode-path-segment $policy_assignment_name), policy_states_summary_resource: (encode-path-segment $policy_states_summary_resource)} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/{authorization_namespace}/policyAssignments/{policy_assignment_name}/providers/Microsoft.PolicyInsights/policyStates/{policy_states_summary_resource}/summarize") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Queries policy states for the resource.
 #
 # POST /{resourceId}/providers/Microsoft.PolicyInsights/policyStates/{policyStatesResource}/queryResults
 # operationId: PolicyStates_ListQueryResultsForResource
-export def "providers-microsoft-policy-insights-policy-states-query-results ListQueryResultsForResource" [
-  policyStatesResource: string
-  resourceId: string
+export def "providers-microsoft-policy-insights-policy-states-query-results list-for-resource" [
+  resource_id: string
+  policy_states_resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -590,6 +616,7 @@ export def "providers-microsoft-policy-insights-policy-states-query-results List
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
   --top: int # Maximum number of records to return. (format: int32)
@@ -604,19 +631,19 @@ export def "providers-microsoft-policy-insights-policy-states-query-results List
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "$select" $select "scalar") (serialize-qp "$from" $qp_from "scalar") (serialize-qp "$to" $qp_to "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$apply" $apply "scalar") (serialize-qp "$expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($resourceId)/providers/Microsoft.PolicyInsights/policyStates/($policyStatesResource)/queryResults" $qp)
+  let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id), policy_states_resource: (encode-path-segment $policy_states_resource)} | format pattern "/{resource_id}/providers/Microsoft.PolicyInsights/policyStates/{policy_states_resource}/queryResults") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Summarizes policy states for the resource.
 #
 # POST /{resourceId}/providers/Microsoft.PolicyInsights/policyStates/{policyStatesSummaryResource}/summarize
 # operationId: PolicyStates_SummarizeForResource
-export def "providers-microsoft-policy-insights-policy-states-summarize SummarizeForResource" [
-  policyStatesSummaryResource: string
-  resourceId: string
+export def "providers-microsoft-policy-insights-policy-states-summarize create-for-resource" [
+  resource_id: string
+  policy_states_summary_resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -624,6 +651,7 @@ export def "providers-microsoft-policy-insights-policy-states-summarize Summariz
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
   --top: int # Maximum number of records to return. (format: int32)
@@ -634,17 +662,17 @@ export def "providers-microsoft-policy-insights-policy-states-summarize Summariz
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$from" $qp_from "scalar") (serialize-qp "$to" $qp_to "scalar") (serialize-qp "$filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($resourceId)/providers/Microsoft.PolicyInsights/policyStates/($policyStatesSummaryResource)/summarize" $qp)
+  let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id), policy_states_summary_resource: (encode-path-segment $policy_states_summary_resource)} | format pattern "/{resource_id}/providers/Microsoft.PolicyInsights/policyStates/{policy_states_summary_resource}/summarize") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Gets OData metadata XML document.
 #
 # GET /{scope}/providers/Microsoft.PolicyInsights/policyStates/$metadata
 # operationId: PolicyStates_GetMetadata
-export def "providers-microsoft-policy-insights-policy-states-metadata GetMetadata" [
+export def "providers-microsoft-policy-insights-policy-states-metadata get-metadata" [
   scope: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -653,14 +681,15 @@ export def "providers-microsoft-policy-insights-policy-states-metadata GetMetada
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($scope)/providers/Microsoft.PolicyInsights/policyStates/$metadata" $qp)
+  let full_url = (build-url $base ({scope: (encode-path-segment $scope)} | format pattern "/{scope}/providers/Microsoft.PolicyInsights/policyStates/$metadata") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }

@@ -18,21 +18,32 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 }
 
 # Serialize a single query parameter based on collection style
+# Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
+# ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = ($name | url encode)
+  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
-  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
-    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
-    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
+    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
+    _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
+}
+
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Build URL from base, path, and optional query string
@@ -44,7 +55,7 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
@@ -53,13 +64,41 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
     "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "put" => { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "patch" => { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
   if ($method in ["head" "options"]) { return $resp }
-  if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
+  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
+}
+
+# Build a `multipart/form-data` envelope per RFC 7578. `file_fields` lists
+# the field names whose value should be read from disk as bytes; every
+# other field is sent as a text part (records/lists JSON-stringified).
+# Returns {content_type, body} ready to pass to `do-request`.
+# When `$dry_run` is true, file fields are NOT read from disk — they emit
+# an empty-bytes placeholder so callers can inspect the request shape
+# without the file existing on disk (issue 11.B).
+def build-multipart-body [parts: record, file_fields: list<string>, dry_run: bool = false]: nothing -> record {
+  let boundary = $"----nu-(random chars --length 24)"
+  let crlf = "\r\n"
+  let chunks = ($parts | items {|name, val|
+    if $val == null { null } else if $name in $file_fields {
+      let filename = ($val | into string | path basename)
+      let bytes = if $dry_run { (0x[] | into binary) } else { (open --raw $val | into binary | collect) }
+      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"; filename=\"($filename)\"($crlf)Content-Type: application/octet-stream($crlf)($crlf)" | into binary)
+      $head ++ $bytes ++ ($crlf | into binary)
+    } else {
+      let dt = ($val | describe)
+      let s = if (($dt | str starts-with "record") or ($dt | str starts-with "list") or ($dt | str starts-with "table")) { ($val | to json --raw) } else { ($val | into string) }
+      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"($crlf)($crlf)" | into binary)
+      $head ++ ($"($s)($crlf)" | into binary)
+    }
+  } | compact)
+  let trailer = ($"--($boundary)--($crlf)" | into binary)
+  let body = ($chunks | reduce --fold (0x[] | into binary) {|chunk, acc| $acc ++ $chunk }) ++ $trailer
+  {content_type: $"multipart/form-data; boundary=($boundary)", body: $body}
 }
 
 def base-url-completer [] { ["https://api.zeno.fm"] }
@@ -68,7 +107,7 @@ def auth-scheme-completer [] { ["x-zeno-api-key"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "podcasts-categories get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -101,6 +140,7 @@ export def "podcasts-categories get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-zeno-api-key"))
@@ -108,7 +148,7 @@ export def "podcasts-categories get" [
   let full_url = (build-url $base "/api/v2/podcasts/categories")
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get the list of Countries that can be used to filter podcasts in the search podcasts request
@@ -123,6 +163,7 @@ export def "podcasts-countries get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-zeno-api-key"))
@@ -130,15 +171,15 @@ export def "podcasts-countries get" [
   let full_url = (build-url $base "/api/v2/podcasts/countries")
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Create podcast
 #
 # POST /api/v2/podcasts/create
 # operationId: createPodcast
-# --podcast shape: {author?: string, block?: bool, categories: list, copyright?: string, country?: string, description: string, explicit?: bool, image?: string, key?: string, keywords?: list, language: string, link?: string, ownerEmail?: string, ownerName?: string, showType?: string, subtitle?: string, summary: string, title: string}
-export def "podcasts-create createPodcast" [
+# --podcast shape: {author?: string, block?: bool, categories: list<string>, copyright?: string, country?: string, description: string, explicit?: bool, image?: string, key?: string, keywords?: list<string>, language: string, link?: string, ownerEmail?: string, ownerName?: string, showType?: string, subtitle?: string, summary: string, title: string}
+export def "podcasts-create create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -146,19 +187,22 @@ export def "podcasts-create createPodcast" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   file_logo: string # format: binary
-  podcast: record # Podcast model — shape: {author?: string, block?: bool, categories: list, copyright?: string, country?: string, description: string, explicit?: bool, image?: string, key?: string, keywords?: list, language: string, link?: string, ownerEmail?: string, ownerName?: string, showType?: string, subtitle?: string, summary: string, title: string}
+  podcast: record # Podcast model — shape: {author?: string, block?: bool, categories: list<string>, copyright?: string, country?: string, description: string, explicit?: bool, image?: string, key?: string, keywords?: list<string>, language: string, link?: string, ownerEmail?: string, ownerName?: string, showType?: string, subtitle?: string, summary: string, title: string}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-zeno-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v2/podcasts/create")
-  let body = {file_logo: $file_logo, podcast: $podcast} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"file_logo": $file_logo, "podcast": $podcast} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
+  let mp = (build-multipart-body $req_body ["file_logo"] $dry_run)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
 }
 
 # Get the list of Languages that can be used to filter podcasts in the search podcasts request
@@ -173,6 +217,7 @@ export def "podcasts-languages get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-zeno-api-key"))
@@ -180,15 +225,15 @@ export def "podcasts-languages get" [
   let full_url = (build-url $base "/api/v2/podcasts/languages")
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Search podcasts
 #
 # POST /api/v2/podcasts/search
 # operationId: searchPodcasts
-# --filters shape: {category?: list, country?: list, language?: list, podcastType?: "podcasts"|"shows"}
-export def "podcasts-search searchPodcasts" [
+# --filters shape: {category?: list<string>, country?: list<string>, language?: list<string>, podcastType?: "podcasts"|"shows"}
+export def "podcasts-search list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -196,9 +241,10 @@ export def "podcasts-search searchPodcasts" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --filters: record # Filters for podcast search — shape: {category?: list, country?: list, language?: list, podcastType?: "podcasts"|"shows"}
-  --hitsPerPage: int # format: int32, default: 10
+  --filters: record # Filters for podcast search — shape: {category?: list<string>, country?: list<string>, language?: list<string>, podcastType?: "podcasts"|"shows"}
+  --hits-per-page: int # format: int32, default: 10
   --page: int # format: int32, default: 1
   --query: string
 ]: any -> any {
@@ -206,11 +252,11 @@ export def "podcasts-search searchPodcasts" [
   let auth = (build-auth $token ($auth_scheme | default "x-zeno-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v2/podcasts/search")
-  let body = {filters: $filters, hitsPerPage: $hitsPerPage, page: $page, query: $query} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"filters": $filters, "hitsPerPage": $hits_per_page, "page": $page, "query": $query} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Delete podcast
@@ -218,7 +264,7 @@ export def "podcasts-search searchPodcasts" [
 # DELETE /api/v2/podcasts/{podcastKey}
 # operationId: deletePodcast
 export def "podcasts delete" [
-  podcastKey: string
+  podcast_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -226,14 +272,15 @@ export def "podcasts delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-zeno-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v2/podcasts/($podcastKey)")
+  let full_url = (build-url $base ({podcast_key: (encode-path-segment $podcast_key)} | format pattern "/api/v2/podcasts/{podcast_key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get podcast
@@ -241,7 +288,7 @@ export def "podcasts delete" [
 # GET /api/v2/podcasts/{podcastKey}
 # operationId: getPodcast
 export def "podcasts get" [
-  podcastKey: string
+  podcast_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -249,23 +296,24 @@ export def "podcasts get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-zeno-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v2/podcasts/($podcastKey)")
+  let full_url = (build-url $base ({podcast_key: (encode-path-segment $podcast_key)} | format pattern "/api/v2/podcasts/{podcast_key}"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Update podcast
 #
 # PUT /api/v2/podcasts/{podcastKey}
 # operationId: updatePodcast
-# --podcast shape: {author?: string, block?: bool, categories: list, copyright?: string, country?: string, description: string, explicit?: bool, image?: string, key?: string, keywords?: list, language: string, link?: string, ownerEmail?: string, ownerName?: string, showType?: string, subtitle?: string, summary: string, title: string}
-export def "podcasts updatePodcast" [
-  podcastKey: string
+# --podcast shape: {author?: string, block?: bool, categories: list<string>, copyright?: string, country?: string, description: string, explicit?: bool, image?: string, key?: string, keywords?: list<string>, language: string, link?: string, ownerEmail?: string, ownerName?: string, showType?: string, subtitle?: string, summary: string, title: string}
+export def "podcasts update" [
+  podcast_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -273,19 +321,22 @@ export def "podcasts updatePodcast" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --file-logo: string # format: binary
-  podcast: record # Podcast model — shape: {author?: string, block?: bool, categories: list, copyright?: string, country?: string, description: string, explicit?: bool, image?: string, key?: string, keywords?: list, language: string, link?: string, ownerEmail?: string, ownerName?: string, showType?: string, subtitle?: string, summary: string, title: string}
+  podcast: record # Podcast model — shape: {author?: string, block?: bool, categories: list<string>, copyright?: string, country?: string, description: string, explicit?: bool, image?: string, key?: string, keywords?: list<string>, language: string, link?: string, ownerEmail?: string, ownerName?: string, showType?: string, subtitle?: string, summary: string, title: string}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-zeno-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v2/podcasts/($podcastKey)")
-  let body = {file_logo: $file_logo, podcast: $podcast} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({podcast_key: (encode-path-segment $podcast_key)} | format pattern "/api/v2/podcasts/{podcast_key}"))
+  let req_body = {"file_logo": $file_logo, "podcast": $podcast} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
+  let mp = (build-multipart-body $req_body ["file_logo"] $dry_run)
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
 }
 
 # Get podcast episodes
@@ -293,7 +344,7 @@ export def "podcasts updatePodcast" [
 # GET /api/v2/podcasts/{podcastKey}/episodes
 # operationId: getPodcastEpisodes
 export def "podcasts-episodes list" [
-  podcastKey: string
+  podcast_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -301,6 +352,7 @@ export def "podcasts-episodes list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: string # default: 10
   --offset: string # default: 0
@@ -308,19 +360,19 @@ export def "podcasts-episodes list" [
   let auth = (build-auth $token ($auth_scheme | default "x-zeno-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v2/podcasts/($podcastKey)/episodes" $qp)
+  let full_url = (build-url $base ({podcast_key: (encode-path-segment $podcast_key)} | format pattern "/api/v2/podcasts/{podcast_key}/episodes") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Create podcast episode
 #
 # POST /api/v2/podcasts/{podcastKey}/episodes/create
 # operationId: createPodcastEpisode
-# --episode shape: {author?: string, block?: bool, description: string, duration?: int, episode?: int, episodeType?: string, explicit?: bool, fileUrl?: string, image?: string, key?: string, link?: string, publishDate: string, season?: int, size?: int, subtitle?: string, summary: string, tags?: list, title: string}
-export def "podcasts-episodes-create createPodcastEpisode" [
-  podcastKey: string
+# --episode shape: {author?: string, block?: bool, description: string, duration?: int, episode?: int, episodeType?: string, explicit?: bool, fileUrl?: string, image?: string, key?: string, link?: string, publishDate: string, season?: int, size?: int, subtitle?: string, summary: string, tags?: list<string>, title: string}
+export def "podcasts-episodes-create create" [
+  podcast_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -328,20 +380,23 @@ export def "podcasts-episodes-create createPodcastEpisode" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  episode: record # PodcastEpisode model — shape: {author?: string, block?: bool, description: string, duration?: int, episode?: int, episodeType?: string, explicit?: bool, fileUrl?: string, image?: string, key?: string, link?: string, publishDate: string, season?: int, size?: int, subtitle?: string, summary: string, tags?: list, title: string}
+  episode: record # PodcastEpisode model — shape: {author?: string, block?: bool, description: string, duration?: int, episode?: int, episodeType?: string, explicit?: bool, fileUrl?: string, image?: string, key?: string, link?: string, publishDate: string, season?: int, size?: int, subtitle?: string, summary: string, tags?: list<string>, title: string}
   file_logo: string # format: binary
   file_media: string # format: binary
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-zeno-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v2/podcasts/($podcastKey)/episodes/create")
-  let body = {episode: $episode, file_logo: $file_logo, file_media: $file_media} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({podcast_key: (encode-path-segment $podcast_key)} | format pattern "/api/v2/podcasts/{podcast_key}/episodes/create"))
+  let req_body = {"episode": $episode, "file_logo": $file_logo, "file_media": $file_media} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
+  let mp = (build-multipart-body $req_body ["file_logo" "file_media"] $dry_run)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
 }
 
 # Delete podcast episode
@@ -349,8 +404,8 @@ export def "podcasts-episodes-create createPodcastEpisode" [
 # DELETE /api/v2/podcasts/{podcastKey}/episodes/{episodeKey}
 # operationId: deletePodcast_1
 export def "podcasts-episodes delete-by-podcastKey-episodeKey" [
-  podcastKey: string
-  episodeKey: string
+  podcast_key: string
+  episode_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -358,14 +413,15 @@ export def "podcasts-episodes delete-by-podcastKey-episodeKey" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-zeno-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v2/podcasts/($podcastKey)/episodes/($episodeKey)")
+  let full_url = (build-url $base ({podcast_key: (encode-path-segment $podcast_key), episode_key: (encode-path-segment $episode_key)} | format pattern "/api/v2/podcasts/{podcast_key}/episodes/{episode_key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get podcast episode
@@ -373,8 +429,8 @@ export def "podcasts-episodes delete-by-podcastKey-episodeKey" [
 # GET /api/v2/podcasts/{podcastKey}/episodes/{episodeKey}
 # operationId: getPodcastEpisode
 export def "podcasts-episodes get" [
-  podcastKey: string
-  episodeKey: string
+  podcast_key: string
+  episode_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -382,24 +438,25 @@ export def "podcasts-episodes get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-zeno-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v2/podcasts/($podcastKey)/episodes/($episodeKey)")
+  let full_url = (build-url $base ({podcast_key: (encode-path-segment $podcast_key), episode_key: (encode-path-segment $episode_key)} | format pattern "/api/v2/podcasts/{podcast_key}/episodes/{episode_key}"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Update podcast episode
 #
 # PUT /api/v2/podcasts/{podcastKey}/episodes/{episodeKey}
 # operationId: updatePodcastEpisode
-# --episode shape: {author?: string, block?: bool, description: string, duration?: int, episode?: int, episodeType?: string, explicit?: bool, fileUrl?: string, image?: string, key?: string, link?: string, publishDate: string, season?: int, size?: int, subtitle?: string, summary: string, tags?: list, title: string}
-export def "podcasts-episodes updatePodcastEpisode" [
-  podcastKey: string
-  episodeKey: string
+# --episode shape: {author?: string, block?: bool, description: string, duration?: int, episode?: int, episodeType?: string, explicit?: bool, fileUrl?: string, image?: string, key?: string, link?: string, publishDate: string, season?: int, size?: int, subtitle?: string, summary: string, tags?: list<string>, title: string}
+export def "podcasts-episodes update" [
+  podcast_key: string
+  episode_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -407,19 +464,22 @@ export def "podcasts-episodes updatePodcastEpisode" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  episode: record # PodcastEpisode model — shape: {author?: string, block?: bool, description: string, duration?: int, episode?: int, episodeType?: string, explicit?: bool, fileUrl?: string, image?: string, key?: string, link?: string, publishDate: string, season?: int, size?: int, subtitle?: string, summary: string, tags?: list, title: string}
+  episode: record # PodcastEpisode model — shape: {author?: string, block?: bool, description: string, duration?: int, episode?: int, episodeType?: string, explicit?: bool, fileUrl?: string, image?: string, key?: string, link?: string, publishDate: string, season?: int, size?: int, subtitle?: string, summary: string, tags?: list<string>, title: string}
   --file-logo: string # format: binary
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-zeno-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v2/podcasts/($podcastKey)/episodes/($episodeKey)")
-  let body = {episode: $episode, file_logo: $file_logo} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({podcast_key: (encode-path-segment $podcast_key), episode_key: (encode-path-segment $episode_key)} | format pattern "/api/v2/podcasts/{podcast_key}/episodes/{episode_key}"))
+  let req_body = {"episode": $episode, "file_logo": $file_logo} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
+  let mp = (build-multipart-body $req_body ["file_logo"] $dry_run)
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
 }
 
 # Get the list of Countries that can be used to filter stations in the search stations request
@@ -434,6 +494,7 @@ export def "stations-countries get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-zeno-api-key"))
@@ -441,7 +502,7 @@ export def "stations-countries get" [
   let full_url = (build-url $base "/api/v2/stations/countries")
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get the list of Genres that can be used to filter stations in the search stations request
@@ -456,6 +517,7 @@ export def "stations-genres get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-zeno-api-key"))
@@ -463,7 +525,7 @@ export def "stations-genres get" [
   let full_url = (build-url $base "/api/v2/stations/genres")
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get the list of Languages that can be used to filter stations in the search stations request
@@ -478,6 +540,7 @@ export def "stations-languages get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-zeno-api-key"))
@@ -485,14 +548,14 @@ export def "stations-languages get" [
   let full_url = (build-url $base "/api/v2/stations/languages")
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # List stations
 #
 # GET /api/v2/stations/list
 # operationId: getPartnerAggregatorStations
-export def "stations-list get" [
+export def "stations-list get-partner-aggregator" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -500,25 +563,26 @@ export def "stations-list get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: string # default: 1
-  --hitsPerPage: string # default: 10
+  --hits-per-page: string # default: 10
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-zeno-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "hitsPerPage" $hitsPerPage "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "hitsPerPage" $hits_per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v2/stations/list" $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Search stations
 #
 # POST /api/v2/stations/search
 # operationId: searchStations
-# --filters shape: {country?: list, genre?: list, language?: list}
-export def "stations-search searchStations" [
+# --filters shape: {country?: list<string>, genre?: list<string>, language?: list<string>}
+export def "stations-search list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -526,9 +590,10 @@ export def "stations-search searchStations" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --filters: record # Filters for station search — shape: {country?: list, genre?: list, language?: list}
-  --hitsPerPage: int # format: int32, default: 10
+  --filters: record # Filters for station search — shape: {country?: list<string>, genre?: list<string>, language?: list<string>}
+  --hits-per-page: int # format: int32, default: 10
   --page: int # format: int32, default: 1
   --query: string
 ]: any -> any {
@@ -536,9 +601,9 @@ export def "stations-search searchStations" [
   let auth = (build-auth $token ($auth_scheme | default "x-zeno-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v2/stations/search")
-  let body = {filters: $filters, hitsPerPage: $hitsPerPage, page: $page, query: $query} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"filters": $filters, "hitsPerPage": $hits_per_page, "page": $page, "query": $query} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }

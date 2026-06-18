@@ -12,27 +12,39 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {headers: {}, query: ""} }
   match $scheme {
     "basic" => { {headers: {Authorization: $"Basic ($token_val)"}, query: ""} }
+    "basic-credentials" => { {headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: ""} }
     "none" => { {headers: {}, query: ""} }
     _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
   }
 }
 
 # Serialize a single query parameter based on collection style
+# Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
+# ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = ($name | url encode)
+  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
-  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
-    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
-    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
+    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
+    _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
+}
+
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Build URL from base, path, and optional query string
@@ -44,7 +56,7 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
@@ -53,17 +65,17 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
     "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "put" => { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "patch" => { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
   if ($method in ["head" "options"]) { return $resp }
-  if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
+  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
 def base-url-completer [] { ["https://cloud.redhat.com//api/catalog-inventory/v1.0" "http://localhost:3000//api/catalog-inventory/v1.0"] }
-def auth-scheme-completer [] { ["basic"] }
+def auth-scheme-completer [] { ["basic" "basic-credentials"] }
 
 # Completers for enum parameters
 def state-completer [] { ["completed" "pending" "queued" "running" "timedout"] }
@@ -71,8 +83,8 @@ def status-completer [] { ["error" "ok" "unchanged" "warn"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "graphql post" } } | get name | first)
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "graphql create-graph-ql" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -96,7 +108,7 @@ export def commands []: nothing -> table {
 #
 # POST /graphql
 # operationId: postGraphQL
-export def "graphql post" [
+export def "graphql create-graph-ql" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -104,8 +116,9 @@ export def "graphql post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --operationName: string # If the Query contains several named operations, the operationName controls which one should be executed (default: )
+  --operation-name: string # If the Query contains several named operations, the operationName controls which one should be executed (default: )
   query: string # The GraphQL query (default: {})
   --variables: record # Optional Query variables (nullable)
 ]: any -> record<data: record, errors: list<record>> {
@@ -113,18 +126,18 @@ export def "graphql post" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/graphql")
-  let body = {operationName: $operationName, query: $query, variables: $variables} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"operationName": $operation_name, "query": $query, "variables": $variables} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Return this API document in JSON format
 #
 # GET /openapi.json
 # operationId: getDocumentation
-export def "openapijson get" [
+export def "openapi-json get-documentation" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -132,6 +145,7 @@ export def "openapijson get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -139,14 +153,14 @@ export def "openapijson get" [
   let full_url = (build-url $base "/openapi.json")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # List ServiceCredentialTypes
 #
 # GET /service_credential_types
 # operationId: listServiceCredentialTypes
-export def "service-credential-types listServiceCredentialTypes" [
+export def "service-credential-types list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -154,6 +168,7 @@ export def "service-credential-types listServiceCredentialTypes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The numbers of items to return per page. (default: 100)
   --offset: int # The number of items to skip before starting to collect the result set. (default: 0)
@@ -166,14 +181,14 @@ export def "service-credential-types listServiceCredentialTypes" [
   let full_url = (build-url $base "/service_credential_types" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Show an existing ServiceCredentialType
 #
 # GET /service_credential_types/{id}
 # operationId: showServiceCredentialType
-export def "service-credential-types showServiceCredentialType" [
+export def "service-credential-types get-show" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -182,21 +197,22 @@ export def "service-credential-types showServiceCredentialType" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<archived_at: string, created_at: string, description: string, id: string, kind: string, last_seen_at: string, name: string, namespace: string, refresh_state_part_id: string, source_created_at: string, source_deleted_at: string, source_id: string, source_ref: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/service_credential_types/($id)")
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/service_credential_types/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # List ServiceCredentials
 #
 # GET /service_credentials
 # operationId: listServiceCredentials
-export def "service-credentials listServiceCredentials" [
+export def "service-credentials list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -204,6 +220,7 @@ export def "service-credentials listServiceCredentials" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The numbers of items to return per page. (default: 100)
   --offset: int # The number of items to skip before starting to collect the result set. (default: 0)
@@ -216,14 +233,14 @@ export def "service-credentials listServiceCredentials" [
   let full_url = (build-url $base "/service_credentials" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Show an existing ServiceCredential
 #
 # GET /service_credentials/{id}
 # operationId: showServiceCredential
-export def "service-credentials showServiceCredential" [
+export def "service-credentials get-show" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -232,21 +249,22 @@ export def "service-credentials showServiceCredential" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<archived_at: string, created_at: string, description: string, id: string, last_seen_at: string, name: string, refresh_state_part_id: string, service_credential_type_id: string, source_created_at: string, source_id: string, source_ref: string, source_updated_at: string, type_name: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/service_credentials/($id)")
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/service_credentials/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # List ServiceInstances
 #
 # GET /service_instances
 # operationId: listServiceInstances
-export def "service-instances listServiceInstances" [
+export def "service-instances list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -254,6 +272,7 @@ export def "service-instances listServiceInstances" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The numbers of items to return per page. (default: 100)
   --offset: int # The number of items to skip before starting to collect the result set. (default: 0)
@@ -266,14 +285,14 @@ export def "service-instances listServiceInstances" [
   let full_url = (build-url $base "/service_instances" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Show an existing ServiceInstance
 #
 # GET /service_instances/{id}
 # operationId: showServiceInstance
-export def "service-instances showServiceInstance" [
+export def "service-instances get-show" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -282,21 +301,22 @@ export def "service-instances showServiceInstance" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<archived_at: string, created_at: string, external_url: string, extra: record, id: string, last_seen_at: string, name: string, refresh_state_part_id: string, root_service_instance_id: string, service_inventory_id: string, service_offering_id: string, service_plan_id: string, source_created_at: string, source_deleted_at: string, source_id: string, source_ref: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/service_instances/($id)")
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/service_instances/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # List ServiceInventories
 #
 # GET /service_inventories
 # operationId: listServiceInventories
-export def "service-inventories listServiceInventories" [
+export def "service-inventories list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -304,6 +324,7 @@ export def "service-inventories listServiceInventories" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The numbers of items to return per page. (default: 100)
   --offset: int # The number of items to skip before starting to collect the result set. (default: 0)
@@ -316,14 +337,14 @@ export def "service-inventories listServiceInventories" [
   let full_url = (build-url $base "/service_inventories" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Show an existing ServiceInventory
 #
 # GET /service_inventories/{id}
 # operationId: showServiceInventory
-export def "service-inventories showServiceInventory" [
+export def "service-inventories get-show-inventory" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -332,21 +353,22 @@ export def "service-inventories showServiceInventory" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<archived_at: string, created_at: string, description: string, extra: record, id: string, last_seen_at: string, name: string, refresh_state_part_id: string, source_created_at: string, source_id: string, source_ref: string, source_updated_at: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/service_inventories/($id)")
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/service_inventories/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Tag a ServiceInventory
 #
 # POST /service_inventories/{id}/tag
 # operationId: tagServiceInventory
-export def "service-inventories-tag tagServiceInventory" [
+export def "service-inventories-tag tag-inventory" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -355,24 +377,26 @@ export def "service-inventories-tag tagServiceInventory" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body: record
+  --body: list
 ]: any -> table<tag: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/service_inventories/($id)/tag")
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/service_inventories/{id}/tag"))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # List Tags for ServiceInventory
 #
 # GET /service_inventories/{id}/tags
 # operationId: listServiceInventoryTags
-export def "service-inventories-tags listServiceInventoryTags" [
+export def "service-inventories-tags list-inventory" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -381,6 +405,7 @@ export def "service-inventories-tags listServiceInventoryTags" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The numbers of items to return per page. (default: 100)
   --offset: int # The number of items to skip before starting to collect the result set. (default: 0)
@@ -390,17 +415,17 @@ export def "service-inventories-tags listServiceInventoryTags" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "filter" $filter "deepObject") (serialize-qp "sort_by" $sort_by "deepObject")] | flatten | str join "&"
-  let full_url = (build-url $base $"/service_inventories/($id)/tags" $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/service_inventories/{id}/tags") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Untag a ServiceInventory
 #
 # POST /service_inventories/{id}/untag
 # operationId: untagServiceInventory
-export def "service-inventories-untag untagServiceInventory" [
+export def "service-inventories-untag untag-inventory" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -409,24 +434,26 @@ export def "service-inventories-untag untagServiceInventory" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body: record
+  --body: list
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/service_inventories/($id)/untag")
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/service_inventories/{id}/untag"))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # List ServiceOfferingNodes
 #
 # GET /service_offering_nodes
 # operationId: listServiceOfferingNodes
-export def "service-offering-nodes listServiceOfferingNodes" [
+export def "service-offering-nodes list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -434,6 +461,7 @@ export def "service-offering-nodes listServiceOfferingNodes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The numbers of items to return per page. (default: 100)
   --offset: int # The number of items to skip before starting to collect the result set. (default: 0)
@@ -446,14 +474,14 @@ export def "service-offering-nodes listServiceOfferingNodes" [
   let full_url = (build-url $base "/service_offering_nodes" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Show an existing ServiceOfferingNode
 #
 # GET /service_offering_nodes/{id}
 # operationId: showServiceOfferingNode
-export def "service-offering-nodes showServiceOfferingNode" [
+export def "service-offering-nodes get-show" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -462,21 +490,22 @@ export def "service-offering-nodes showServiceOfferingNode" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<archived_at: string, created_at: string, extra: record, id: string, last_seen_at: string, name: string, refresh_state_part_id: string, root_service_offering_id: string, service_inventory_id: string, service_offering_id: string, source_created_at: string, source_id: string, source_ref: string, source_updated_at: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/service_offering_nodes/($id)")
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/service_offering_nodes/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # List ServiceOfferings
 #
 # GET /service_offerings
 # operationId: listServiceOfferings
-export def "service-offerings listServiceOfferings" [
+export def "service-offerings list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -484,6 +513,7 @@ export def "service-offerings listServiceOfferings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The numbers of items to return per page. (default: 100)
   --offset: int # The number of items to skip before starting to collect the result set. (default: 0)
@@ -496,14 +526,14 @@ export def "service-offerings listServiceOfferings" [
   let full_url = (build-url $base "/service_offerings" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Show an existing ServiceOffering
 #
 # GET /service_offerings/{id}
 # operationId: showServiceOffering
-export def "service-offerings showServiceOffering" [
+export def "service-offerings get-show" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -512,21 +542,22 @@ export def "service-offerings showServiceOffering" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<archived_at: string, created_at: string, description: string, display_name: string, distributor: string, documentation_url: string, extra: record, id: string, last_seen_at: string, long_description: string, name: string, refresh_state_part_id: string, service_inventory_id: string, source_created_at: string, source_deleted_at: string, source_id: string, source_ref: string, support_url: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/service_offerings/($id)")
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/service_offerings/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Invokes computing of ServiceInventories tags for given ServiceOffering
 #
 # POST /service_offerings/{id}/applied_inventories_tags
 # operationId: appliedInventoriesTagsForServiceOffering
-export def "service-offerings-applied-inventories-tags appliedInventoriesTagsForServiceOffering" [
+export def "service-offerings-applied-inventories-tags create" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -535,25 +566,26 @@ export def "service-offerings-applied-inventories-tags appliedInventoriesTagsFor
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --service-parameters: record # The provider specific parameters needed to compute list of used service inventories
 ]: any -> table<tag: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/service_offerings/($id)/applied_inventories_tags")
-  let body = {service_parameters: $service_parameters} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/service_offerings/{id}/applied_inventories_tags"))
+  let req_body = {"service_parameters": $service_parameters} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Order an existing ServiceOffering
 #
 # POST /service_offerings/{id}/order
 # operationId: orderServiceOffering
-export def "service-offerings-order orderServiceOffering" [
+export def "service-offerings-order create" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -562,6 +594,7 @@ export def "service-offerings-order orderServiceOffering" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --provider-control-parameters: record # The provider specific parameters needed to provision this service. This might include namespaces, special keys
   --service-parameters: record # JSON object with provisioning parameters
@@ -569,19 +602,19 @@ export def "service-offerings-order orderServiceOffering" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/service_offerings/($id)/order")
-  let body = {provider_control_parameters: $provider_control_parameters, service_parameters: $service_parameters} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/service_offerings/{id}/order"))
+  let req_body = {"provider_control_parameters": $provider_control_parameters, "service_parameters": $service_parameters} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # List ServiceInstances for ServiceOffering
 #
 # GET /service_offerings/{id}/service_instances
 # operationId: listServiceOfferingServiceInstances
-export def "service-offerings-service-instances listServiceOfferingServiceInstances" [
+export def "service-offerings-service-instances list" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -590,6 +623,7 @@ export def "service-offerings-service-instances listServiceOfferingServiceInstan
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The numbers of items to return per page. (default: 100)
   --offset: int # The number of items to skip before starting to collect the result set. (default: 0)
@@ -599,17 +633,17 @@ export def "service-offerings-service-instances listServiceOfferingServiceInstan
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "filter" $filter "deepObject") (serialize-qp "sort_by" $sort_by "deepObject")] | flatten | str join "&"
-  let full_url = (build-url $base $"/service_offerings/($id)/service_instances" $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/service_offerings/{id}/service_instances") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # List ServiceOfferingNodes for ServiceOffering
 #
 # GET /service_offerings/{id}/service_offering_nodes
 # operationId: listServiceOfferingServiceOfferingNodes
-export def "service-offerings-service-offering-nodes listServiceOfferingServiceOfferingNodes" [
+export def "service-offerings-service-offering-nodes list" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -618,6 +652,7 @@ export def "service-offerings-service-offering-nodes listServiceOfferingServiceO
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The numbers of items to return per page. (default: 100)
   --offset: int # The number of items to skip before starting to collect the result set. (default: 0)
@@ -627,17 +662,17 @@ export def "service-offerings-service-offering-nodes listServiceOfferingServiceO
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "filter" $filter "deepObject") (serialize-qp "sort_by" $sort_by "deepObject")] | flatten | str join "&"
-  let full_url = (build-url $base $"/service_offerings/($id)/service_offering_nodes" $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/service_offerings/{id}/service_offering_nodes") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # List ServicePlans for ServiceOffering
 #
 # GET /service_offerings/{id}/service_plans
 # operationId: listServiceOfferingServicePlans
-export def "service-offerings-service-plans listServiceOfferingServicePlans" [
+export def "service-offerings-service-plans list" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -646,6 +681,7 @@ export def "service-offerings-service-plans listServiceOfferingServicePlans" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The numbers of items to return per page. (default: 100)
   --offset: int # The number of items to skip before starting to collect the result set. (default: 0)
@@ -655,17 +691,17 @@ export def "service-offerings-service-plans listServiceOfferingServicePlans" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "filter" $filter "deepObject") (serialize-qp "sort_by" $sort_by "deepObject")] | flatten | str join "&"
-  let full_url = (build-url $base $"/service_offerings/($id)/service_plans" $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/service_offerings/{id}/service_plans") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # List ServicePlans
 #
 # GET /service_plans
 # operationId: listServicePlans
-export def "service-plans listServicePlans" [
+export def "service-plans list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -673,6 +709,7 @@ export def "service-plans listServicePlans" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The numbers of items to return per page. (default: 100)
   --offset: int # The number of items to skip before starting to collect the result set. (default: 0)
@@ -685,14 +722,14 @@ export def "service-plans listServicePlans" [
   let full_url = (build-url $base "/service_plans" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Show an existing ServicePlan
 #
 # GET /service_plans/{id}
 # operationId: showServicePlan
-export def "service-plans showServicePlan" [
+export def "service-plans get-show" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -701,21 +738,22 @@ export def "service-plans showServicePlan" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<archived_at: string, create_json_schema: record, created_at: string, description: string, extra: record, id: string, last_seen_at: string, name: string, refresh_state_part_id: string, resource_version: string, service_offering_id: string, source_created_at: string, source_deleted_at: string, source_id: string, source_ref: string, update_json_schema: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/service_plans/($id)")
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/service_plans/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # List Sources
 #
 # GET /sources
 # operationId: listSources
-export def "sources listSources" [
+export def "sources list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -723,6 +761,7 @@ export def "sources listSources" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The numbers of items to return per page. (default: 100)
   --offset: int # The number of items to skip before starting to collect the result set. (default: 0)
@@ -735,14 +774,14 @@ export def "sources listSources" [
   let full_url = (build-url $base "/sources" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Show an existing Source
 #
 # GET /sources/{id}
 # operationId: showSource
-export def "sources showSource" [
+export def "sources get-show" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -751,21 +790,22 @@ export def "sources showSource" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<archived_at: string, availability_message: string, availability_status: string, cloud_connector_id: string, created_at: string, enabled: bool, id: string, info: record, last_available_at: string, last_checked_at: string, last_refresh_message: string, last_successful_refresh_at: string, name: string, previous_sha: string, previous_size: int, refresh_finished_at: string, refresh_started_at: string, refresh_state: string, refresh_task_id: string, uid: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/sources/($id)")
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/sources/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Incremental Refresh an existing Source
 #
 # PATCH /sources/{id}/incremental_refresh
 # operationId: incrementalRefreshSource
-export def "sources-incremental-refresh incrementalRefreshSource" [
+export def "sources-incremental-refresh refresh" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -774,21 +814,22 @@ export def "sources-incremental-refresh incrementalRefreshSource" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/sources/($id)/incremental_refresh")
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/sources/{id}/incremental_refresh"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
-#  Refresh an existing Source
+# Refresh an existing Source
 #
 # PATCH /sources/{id}/refresh
 # operationId: refreshSource
-export def "sources-refresh refreshSource" [
+export def "sources-refresh refresh" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -797,21 +838,22 @@ export def "sources-refresh refreshSource" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/sources/($id)/refresh")
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/sources/{id}/refresh"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # List ServiceInstances for Source
 #
 # GET /sources/{id}/service_instances
 # operationId: listSourceServiceInstances
-export def "sources-service-instances listSourceServiceInstances" [
+export def "sources-service-instances list" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -820,6 +862,7 @@ export def "sources-service-instances listSourceServiceInstances" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The numbers of items to return per page. (default: 100)
   --offset: int # The number of items to skip before starting to collect the result set. (default: 0)
@@ -829,17 +872,17 @@ export def "sources-service-instances listSourceServiceInstances" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "filter" $filter "deepObject") (serialize-qp "sort_by" $sort_by "deepObject")] | flatten | str join "&"
-  let full_url = (build-url $base $"/sources/($id)/service_instances" $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/sources/{id}/service_instances") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # List ServiceInventories for Source
 #
 # GET /sources/{id}/service_inventories
 # operationId: listSourceServiceInventories
-export def "sources-service-inventories listSourceServiceInventories" [
+export def "sources-service-inventories list" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -848,6 +891,7 @@ export def "sources-service-inventories listSourceServiceInventories" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The numbers of items to return per page. (default: 100)
   --offset: int # The number of items to skip before starting to collect the result set. (default: 0)
@@ -857,17 +901,17 @@ export def "sources-service-inventories listSourceServiceInventories" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "filter" $filter "deepObject") (serialize-qp "sort_by" $sort_by "deepObject")] | flatten | str join "&"
-  let full_url = (build-url $base $"/sources/($id)/service_inventories" $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/sources/{id}/service_inventories") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # List ServiceOfferingNodes for Source
 #
 # GET /sources/{id}/service_offering_nodes
 # operationId: listSourceServiceOfferingNodes
-export def "sources-service-offering-nodes listSourceServiceOfferingNodes" [
+export def "sources-service-offering-nodes list" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -876,6 +920,7 @@ export def "sources-service-offering-nodes listSourceServiceOfferingNodes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The numbers of items to return per page. (default: 100)
   --offset: int # The number of items to skip before starting to collect the result set. (default: 0)
@@ -885,17 +930,17 @@ export def "sources-service-offering-nodes listSourceServiceOfferingNodes" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "filter" $filter "deepObject") (serialize-qp "sort_by" $sort_by "deepObject")] | flatten | str join "&"
-  let full_url = (build-url $base $"/sources/($id)/service_offering_nodes" $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/sources/{id}/service_offering_nodes") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # List ServiceOfferings for Source
 #
 # GET /sources/{id}/service_offerings
 # operationId: listSourceServiceOfferings
-export def "sources-service-offerings listSourceServiceOfferings" [
+export def "sources-service-offerings list" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -904,6 +949,7 @@ export def "sources-service-offerings listSourceServiceOfferings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The numbers of items to return per page. (default: 100)
   --offset: int # The number of items to skip before starting to collect the result set. (default: 0)
@@ -913,17 +959,17 @@ export def "sources-service-offerings listSourceServiceOfferings" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "filter" $filter "deepObject") (serialize-qp "sort_by" $sort_by "deepObject")] | flatten | str join "&"
-  let full_url = (build-url $base $"/sources/($id)/service_offerings" $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/sources/{id}/service_offerings") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # List ServicePlans for Source
 #
 # GET /sources/{id}/service_plans
 # operationId: listSourceServicePlans
-export def "sources-service-plans listSourceServicePlans" [
+export def "sources-service-plans list" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -932,6 +978,7 @@ export def "sources-service-plans listSourceServicePlans" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The numbers of items to return per page. (default: 100)
   --offset: int # The number of items to skip before starting to collect the result set. (default: 0)
@@ -941,17 +988,17 @@ export def "sources-service-plans listSourceServicePlans" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "filter" $filter "deepObject") (serialize-qp "sort_by" $sort_by "deepObject")] | flatten | str join "&"
-  let full_url = (build-url $base $"/sources/($id)/service_plans" $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/sources/{id}/service_plans") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # List Tasks for Source
 #
 # GET /sources/{id}/tasks
 # operationId: listSourceTasks
-export def "sources-tasks listSourceTasks" [
+export def "sources-tasks list" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -960,6 +1007,7 @@ export def "sources-tasks listSourceTasks" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The numbers of items to return per page. (default: 100)
   --offset: int # The number of items to skip before starting to collect the result set. (default: 0)
@@ -969,17 +1017,17 @@ export def "sources-tasks listSourceTasks" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "filter" $filter "deepObject") (serialize-qp "sort_by" $sort_by "deepObject")] | flatten | str join "&"
-  let full_url = (build-url $base $"/sources/($id)/tasks" $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/sources/{id}/tasks") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # List Tags
 #
 # GET /tags
 # operationId: listTags
-export def "tags listTags" [
+export def "tags list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -987,6 +1035,7 @@ export def "tags listTags" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The numbers of items to return per page. (default: 100)
   --offset: int # The number of items to skip before starting to collect the result set. (default: 0)
@@ -999,14 +1048,14 @@ export def "tags listTags" [
   let full_url = (build-url $base "/tags" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # List Tasks
 #
 # GET /tasks
 # operationId: listTasks
-export def "tasks listTasks" [
+export def "tasks list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1014,6 +1063,7 @@ export def "tasks listTasks" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The numbers of items to return per page. (default: 100)
   --offset: int # The number of items to skip before starting to collect the result set. (default: 0)
@@ -1026,14 +1076,14 @@ export def "tasks listTasks" [
   let full_url = (build-url $base "/tasks" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Show an existing Task
 #
 # GET /tasks/{id}
 # operationId: showTask
-export def "tasks showTask" [
+export def "tasks get-show" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1042,21 +1092,22 @@ export def "tasks showTask" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<archived_at: string, child_task_id: string, completed_at: string, controller_message_id: string, created_at: string, id: string, input: record, message: string, name: string, output: record, owner: string, source_id: string, state: string, status: string, target_source_ref: string, target_type: string, type: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/tasks/($id)")
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/tasks/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Update an existing Task
 #
 # PATCH /tasks/{id}
 # operationId: updateTask
-export def "tasks updateTask" [
+export def "tasks update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1065,6 +1116,7 @@ export def "tasks updateTask" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --completed-at: string # format: date-time
   --message: string # e.g. received message starting inventory collection
@@ -1079,10 +1131,10 @@ export def "tasks updateTask" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/tasks/($id)")
-  let body = {completed_at: $completed_at, message: $message, name: $name, output: $output, state: $state, status: $status, target_source_ref: $target_source_ref, target_type: $target_type, type: $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/tasks/{id}"))
+  let req_body = {"completed_at": $completed_at, "message": $message, "name": $name, "output": $output, "state": $state, "status": $status, "target_source_ref": $target_source_ref, "target_type": $target_type, "type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }

@@ -13,28 +13,39 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   match $scheme {
     "x-aio-key" => { {headers: {X-AIO-Key: $token_val}, query: ""} }
     "x-aio-signature" => { {headers: {X-AIO-Signature: $token_val}, query: ""} }
-    "query-X-AIO-Key" => { {headers: {}, query: $"X-AIO-Key=($token_val)"} }
+    "query-X-AIO-Key" => { {headers: {}, query: $"(encode-path-segment "X-AIO-Key")=(encode-path-segment $token_val)"} }
     "none" => { {headers: {}, query: ""} }
     _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
   }
 }
 
 # Serialize a single query parameter based on collection style
+# Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
+# ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = ($name | url encode)
+  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
-  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
-    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
-    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
+    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
+    _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
+}
+
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Build URL from base, path, and optional query string
@@ -46,7 +57,7 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
@@ -55,13 +66,13 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
     "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "put" => { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "patch" => { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
   if ($method in ["head" "options"]) { return $resp }
-  if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
+  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
 def base-url-completer [] { ["https://io.adafruit.com/api/v2" "http://io.adafruit.com/api/v2"] }
@@ -72,8 +83,8 @@ def accept-completer [] { ["application/json" "text/csv"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "user currentUser" } } | get name | first)
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "user get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -97,7 +108,7 @@ export def commands []: nothing -> table {
 #
 # GET /user
 # operationId: currentUser
-export def "user currentUser" [
+export def "user get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -105,6 +116,7 @@ export def "user currentUser" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<color: string, created_at: string, id: float, name: string, time_zone: string, updated_at: string, username: string> {
@@ -113,14 +125,14 @@ export def "user currentUser" [
   let full_url = (build-url $base "/user")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Send data to a feed via webhook URL.
 #
 # POST /webhooks/feed/:token
 # operationId: createWebhookFeedData
-export def "webhooks-feed-token createWebhookFeedData" [
+export def "webhooks-feed-token create-data" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -128,6 +140,7 @@ export def "webhooks-feed-token createWebhookFeedData" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --value: string
@@ -136,18 +149,18 @@ export def "webhooks-feed-token createWebhookFeedData" [
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/webhooks/feed/:token")
-  let body = {value: $value} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"value": $value} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Send arbitrary data to a feed via webhook URL.
 #
 # POST /webhooks/feed/:token/raw
 # operationId: createRawWebhookFeedData
-export def "webhooks-feed-token-raw createRawWebhookFeedData" [
+export def "webhooks-feed-token-raw create-data" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -155,6 +168,7 @@ export def "webhooks-feed-token-raw createRawWebhookFeedData" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<completed_at: string, created_at: string, created_epoch: float, ele: float, expiration: string, feed_id: float, group_id: float, id: string, lat: float, lon: float, updated_at: string, value: string> {
@@ -163,14 +177,14 @@ export def "webhooks-feed-token-raw createRawWebhookFeedData" [
   let full_url = (build-url $base "/webhooks/feed/:token/raw")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # All activities for current user
 #
 # DELETE /{username}/activities
 # operationId: destroyActivities
-export def "activities destroyActivities" [
+export def "activities delete" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -179,22 +193,23 @@ export def "activities destroyActivities" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($username)/activities")
+  let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/{username}/activities"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # All activities for current user
 #
 # GET /{username}/activities
 # operationId: allActivities
-export def "activities allActivities" [
+export def "activities list" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -203,6 +218,7 @@ export def "activities allActivities" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --start-time: string # Start time for filtering, returns records created after given time. (format: date-time)
@@ -212,17 +228,17 @@ export def "activities allActivities" [
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start_time" $start_time "scalar") (serialize-qp "end_time" $end_time "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($username)/activities" $qp)
+  let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/{username}/activities") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get activities by type for current user
 #
 # GET /{username}/activities/{type}
 # operationId: getActivity
-export def "activities get" [
+export def "activities get-activity" [
   username: string
   type: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -232,6 +248,7 @@ export def "activities get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --start-time: string # Start time for filtering, returns records created after given time. (format: date-time)
@@ -241,17 +258,17 @@ export def "activities get" [
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start_time" $start_time "scalar") (serialize-qp "end_time" $end_time "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($username)/activities/($type)" $qp)
+  let full_url = (build-url $base ({username: (encode-path-segment $username), type: (encode-path-segment $type)} | format pattern "/{username}/activities/{type}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # All dashboards for current user
 #
 # GET /{username}/dashboards
 # operationId: allDashboards
-export def "dashboards allDashboards" [
+export def "dashboards list" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -260,22 +277,23 @@ export def "dashboards allDashboards" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> table<blocks: list<record>, description: string, key: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($username)/dashboards")
+  let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/{username}/dashboards"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Create a new Dashboard
 #
 # POST /{username}/dashboards
 # operationId: createDashboard
-export def "dashboards createDashboard" [
+export def "dashboards create" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -284,22 +302,23 @@ export def "dashboards createDashboard" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<blocks: table<block_feeds: list, column: float, description: string, key: string, name: string, row: float, size_x: float, size_y: float, visual_type: string>, description: string, key: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($username)/dashboards")
+  let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/{username}/dashboards"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # All blocks for current user
 #
 # GET /{username}/dashboards/{dashboard_id}/blocks
 # operationId: allBlocks
-export def "dashboards-blocks allBlocks" [
+export def "dashboards-blocks list" [
   username: string
   dashboard_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -309,22 +328,23 @@ export def "dashboards-blocks allBlocks" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> table<block_feeds: list<record>, column: float, description: string, key: string, name: string, row: float, size_x: float, size_y: float, visual_type: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($username)/dashboards/($dashboard_id)/blocks")
+  let full_url = (build-url $base ({username: (encode-path-segment $username), dashboard_id: (encode-path-segment $dashboard_id)} | format pattern "/{username}/dashboards/{dashboard_id}/blocks"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Create a new Block
 #
 # POST /{username}/dashboards/{dashboard_id}/blocks
 # operationId: createBlock
-export def "dashboards-blocks createBlock" [
+export def "dashboards-blocks create" [
   username: string
   dashboard_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -334,22 +354,23 @@ export def "dashboards-blocks createBlock" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<block_feeds: table<feed: record, group: record, id: string>, column: float, description: string, key: string, name: string, row: float, size_x: float, size_y: float, visual_type: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($username)/dashboards/($dashboard_id)/blocks")
+  let full_url = (build-url $base ({username: (encode-path-segment $username), dashboard_id: (encode-path-segment $dashboard_id)} | format pattern "/{username}/dashboards/{dashboard_id}/blocks"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Delete an existing Block
 #
 # DELETE /{username}/dashboards/{dashboard_id}/blocks/{id}
 # operationId: destroyBlock
-export def "dashboards-blocks destroyBlock" [
+export def "dashboards-blocks delete" [
   username: string
   dashboard_id: string
   id: string
@@ -360,15 +381,16 @@ export def "dashboards-blocks destroyBlock" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($username)/dashboards/($dashboard_id)/blocks/($id)")
+  let full_url = (build-url $base ({username: (encode-path-segment $username), dashboard_id: (encode-path-segment $dashboard_id), id: (encode-path-segment $id)} | format pattern "/{username}/dashboards/{dashboard_id}/blocks/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Returns Block based on ID
@@ -386,22 +408,23 @@ export def "dashboards-blocks get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<block_feeds: table<feed: record, group: record, id: string>, column: float, description: string, key: string, name: string, row: float, size_x: float, size_y: float, visual_type: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($username)/dashboards/($dashboard_id)/blocks/($id)")
+  let full_url = (build-url $base ({username: (encode-path-segment $username), dashboard_id: (encode-path-segment $dashboard_id), id: (encode-path-segment $id)} | format pattern "/{username}/dashboards/{dashboard_id}/blocks/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Update properties of an existing Block
 #
 # PATCH /{username}/dashboards/{dashboard_id}/blocks/{id}
 # operationId: updateBlock
-export def "dashboards-blocks updateBlock" [
+export def "dashboards-blocks update-by-username-dashboard_id-id" [
   username: string
   dashboard_id: string
   id: string
@@ -412,22 +435,23 @@ export def "dashboards-blocks updateBlock" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<block_feeds: table<feed: record, group: record, id: string>, column: float, description: string, key: string, name: string, row: float, size_x: float, size_y: float, visual_type: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($username)/dashboards/($dashboard_id)/blocks/($id)")
+  let full_url = (build-url $base ({username: (encode-path-segment $username), dashboard_id: (encode-path-segment $dashboard_id), id: (encode-path-segment $id)} | format pattern "/{username}/dashboards/{dashboard_id}/blocks/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Replace an existing Block
 #
 # PUT /{username}/dashboards/{dashboard_id}/blocks/{id}
 # operationId: replaceBlock
-export def "dashboards-blocks replaceBlock" [
+export def "dashboards-blocks update-by-username-dashboard_id-id-1" [
   username: string
   dashboard_id: string
   id: string
@@ -438,22 +462,23 @@ export def "dashboards-blocks replaceBlock" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<block_feeds: table<feed: record, group: record, id: string>, column: float, description: string, key: string, name: string, row: float, size_x: float, size_y: float, visual_type: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($username)/dashboards/($dashboard_id)/blocks/($id)")
+  let full_url = (build-url $base ({username: (encode-path-segment $username), dashboard_id: (encode-path-segment $dashboard_id), id: (encode-path-segment $id)} | format pattern "/{username}/dashboards/{dashboard_id}/blocks/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Delete an existing Dashboard
 #
 # DELETE /{username}/dashboards/{id}
 # operationId: destroyDashboard
-export def "dashboards destroyDashboard" [
+export def "dashboards delete" [
   username: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -463,15 +488,16 @@ export def "dashboards destroyDashboard" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($username)/dashboards/($id)")
+  let full_url = (build-url $base ({username: (encode-path-segment $username), id: (encode-path-segment $id)} | format pattern "/{username}/dashboards/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Returns Dashboard based on ID
@@ -488,22 +514,23 @@ export def "dashboards get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<blocks: table<block_feeds: list, column: float, description: string, key: string, name: string, row: float, size_x: float, size_y: float, visual_type: string>, description: string, key: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($username)/dashboards/($id)")
+  let full_url = (build-url $base ({username: (encode-path-segment $username), id: (encode-path-segment $id)} | format pattern "/{username}/dashboards/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Update properties of an existing Dashboard
 #
 # PATCH /{username}/dashboards/{id}
 # operationId: updateDashboard
-export def "dashboards updateDashboard" [
+export def "dashboards update-by-username-id" [
   username: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -513,22 +540,23 @@ export def "dashboards updateDashboard" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<blocks: table<block_feeds: list, column: float, description: string, key: string, name: string, row: float, size_x: float, size_y: float, visual_type: string>, description: string, key: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($username)/dashboards/($id)")
+  let full_url = (build-url $base ({username: (encode-path-segment $username), id: (encode-path-segment $id)} | format pattern "/{username}/dashboards/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Replace an existing Dashboard
 #
 # PUT /{username}/dashboards/{id}
 # operationId: replaceDashboard
-export def "dashboards replaceDashboard" [
+export def "dashboards update-by-username-id-1" [
   username: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -538,22 +566,23 @@ export def "dashboards replaceDashboard" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<blocks: table<block_feeds: list, column: float, description: string, key: string, name: string, row: float, size_x: float, size_y: float, visual_type: string>, description: string, key: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($username)/dashboards/($id)")
+  let full_url = (build-url $base ({username: (encode-path-segment $username), id: (encode-path-segment $id)} | format pattern "/{username}/dashboards/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # All feeds for current user
 #
 # GET /{username}/feeds
 # operationId: allFeeds
-export def "feeds allFeeds" [
+export def "feeds list" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -562,22 +591,23 @@ export def "feeds allFeeds" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> table<created_at: string, description: string, details: record<data: record, shared_with: list>, enabled: bool, group: record, groups: list<record>, history: bool, id: float, key: string, last_value: string, license: string, name: string, status: string, status_notify: bool, status_timeout: int, unit_symbol: string, unit_type: string, updated_at: string, visibility: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($username)/feeds")
+  let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/{username}/feeds"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Create a new Feed
 #
 # POST /{username}/feeds
 # operationId: createFeed
-export def "feeds createFeed" [
+export def "feeds create" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -586,6 +616,7 @@ export def "feeds createFeed" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --group-key: string
@@ -593,17 +624,17 @@ export def "feeds createFeed" [
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "group_key" $group_key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($username)/feeds" $qp)
+  let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/{username}/feeds") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Delete an existing Feed
 #
 # DELETE /{username}/feeds/{feed_key}
 # operationId: destroyFeed
-export def "feeds destroyFeed" [
+export def "feeds delete" [
   username: string
   feed_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -613,15 +644,16 @@ export def "feeds destroyFeed" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($username)/feeds/($feed_key)")
+  let full_url = (build-url $base ({username: (encode-path-segment $username), feed_key: (encode-path-segment $feed_key)} | format pattern "/{username}/feeds/{feed_key}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get feed by feed key
@@ -638,22 +670,23 @@ export def "feeds get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<created_at: string, description: string, details: record<data: record<count: int, first: record, last: record>, shared_with: list<record>>, enabled: bool, group: record, groups: table<created_at: string, description: string, id: float, name: string, updated_at: string>, history: bool, id: float, key: string, last_value: string, license: string, name: string, status: string, status_notify: bool, status_timeout: int, unit_symbol: string, unit_type: string, updated_at: string, visibility: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($username)/feeds/($feed_key)")
+  let full_url = (build-url $base ({username: (encode-path-segment $username), feed_key: (encode-path-segment $feed_key)} | format pattern "/{username}/feeds/{feed_key}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Update properties of an existing Feed
 #
 # PATCH /{username}/feeds/{feed_key}
 # operationId: updateFeed
-export def "feeds updateFeed" [
+export def "feeds update-by-username-feed_key" [
   username: string
   feed_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -663,22 +696,23 @@ export def "feeds updateFeed" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<created_at: string, description: string, details: record<data: record<count: int, first: record, last: record>, shared_with: list<record>>, enabled: bool, group: record, groups: table<created_at: string, description: string, id: float, name: string, updated_at: string>, history: bool, id: float, key: string, last_value: string, license: string, name: string, status: string, status_notify: bool, status_timeout: int, unit_symbol: string, unit_type: string, updated_at: string, visibility: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($username)/feeds/($feed_key)")
+  let full_url = (build-url $base ({username: (encode-path-segment $username), feed_key: (encode-path-segment $feed_key)} | format pattern "/{username}/feeds/{feed_key}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Replace an existing Feed
 #
 # PUT /{username}/feeds/{feed_key}
 # operationId: replaceFeed
-export def "feeds replaceFeed" [
+export def "feeds update-by-username-feed_key-1" [
   username: string
   feed_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -688,22 +722,23 @@ export def "feeds replaceFeed" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<created_at: string, description: string, details: record<data: record<count: int, first: record, last: record>, shared_with: list<record>>, enabled: bool, group: record, groups: table<created_at: string, description: string, id: float, name: string, updated_at: string>, history: bool, id: float, key: string, last_value: string, license: string, name: string, status: string, status_notify: bool, status_timeout: int, unit_symbol: string, unit_type: string, updated_at: string, visibility: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($username)/feeds/($feed_key)")
+  let full_url = (build-url $base ({username: (encode-path-segment $username), feed_key: (encode-path-segment $feed_key)} | format pattern "/{username}/feeds/{feed_key}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get all data for the given feed
 #
 # GET /{username}/feeds/{feed_key}/data
 # operationId: allData
-export def "feeds-data allData" [
+export def "feeds-data list" [
   username: string
   feed_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -713,27 +748,28 @@ export def "feeds-data allData" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --start-time: string # Start time for filtering, returns records created after given time. (format: date-time)
   --end-time: string # End time for filtering, returns records created before give time. (format: date-time)
   --limit: int # Limit the number of records returned.
-  --include: string # List of Data record fields to include in response as comma separated list. Acceptable values are: `value`, `lat`, `lon`, `ele`, `id`, and `created_at`. 
+  --include: string # List of Data record fields to include in response as comma separated list. Acceptable values are: `value`, `lat`, `lon`, `ele`, `id`, and `created_at`.
 ]: nothing -> table<completed_at: string, created_at: string, created_epoch: float, ele: float, expiration: string, feed_id: float, group_id: float, id: string, lat: float, lon: float, updated_at: string, value: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start_time" $start_time "scalar") (serialize-qp "end_time" $end_time "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "include" $include "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($username)/feeds/($feed_key)/data" $qp)
+  let full_url = (build-url $base ({username: (encode-path-segment $username), feed_key: (encode-path-segment $feed_key)} | format pattern "/{username}/feeds/{feed_key}/data") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Create new Data
 #
 # POST /{username}/feeds/{feed_key}/data
 # operationId: createData
-export def "feeds-data createData" [
+export def "feeds-data create" [
   username: string
   feed_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -743,22 +779,23 @@ export def "feeds-data createData" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<completed_at: string, created_at: string, created_epoch: float, ele: float, expiration: string, feed_id: float, group_id: float, id: string, lat: float, lon: float, updated_at: string, value: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($username)/feeds/($feed_key)/data")
+  let full_url = (build-url $base ({username: (encode-path-segment $username), feed_key: (encode-path-segment $feed_key)} | format pattern "/{username}/feeds/{feed_key}/data"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Create multiple new Data records
 #
 # POST /{username}/feeds/{feed_key}/data/batch
 # operationId: batchCreateData
-export def "feeds-data-batch batchCreateData" [
+export def "feeds-data-batch create" [
   username: string
   feed_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -768,22 +805,23 @@ export def "feeds-data-batch batchCreateData" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> table<completed_at: string, created_at: string, created_epoch: float, ele: float, expiration: string, feed_id: float, group_id: float, id: string, lat: float, lon: float, updated_at: string, value: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($username)/feeds/($feed_key)/data/batch")
+  let full_url = (build-url $base ({username: (encode-path-segment $username), feed_key: (encode-path-segment $feed_key)} | format pattern "/{username}/feeds/{feed_key}/data/batch"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Chart data for current feed
 #
 # GET /{username}/feeds/{feed_key}/data/chart
 # operationId: chartData
-export def "feeds-data-chart chartData" [
+export def "feeds-data-chart get" [
   username: string
   feed_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -793,6 +831,7 @@ export def "feeds-data-chart chartData" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --start-time: string # Start time for filtering, returns records created after given time. (format: date-time)
@@ -803,17 +842,17 @@ export def "feeds-data-chart chartData" [
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start_time" $start_time "scalar") (serialize-qp "end_time" $end_time "scalar") (serialize-qp "resolution" $resolution "scalar") (serialize-qp "hours" $hours "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($username)/feeds/($feed_key)/data/chart" $qp)
+  let full_url = (build-url $base ({username: (encode-path-segment $username), feed_key: (encode-path-segment $feed_key)} | format pattern "/{username}/feeds/{feed_key}/data/chart") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # First Data in Queue
 #
 # GET /{username}/feeds/{feed_key}/data/first
 # operationId: firstData
-export def "feeds-data-first firstData" [
+export def "feeds-data-first get" [
   username: string
   feed_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -823,24 +862,25 @@ export def "feeds-data-first firstData" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --include: string # List of Data record fields to include in response as comma separated list. Acceptable values are: `value`, `lat`, `lon`, `ele`, `id`, and `created_at`. 
+  --include: string # List of Data record fields to include in response as comma separated list. Acceptable values are: `value`, `lat`, `lon`, `ele`, `id`, and `created_at`.
 ]: nothing -> record<completed_at: string, created_at: string, created_epoch: float, ele: float, expiration: string, feed_id: float, group_id: float, id: string, lat: float, lon: float, updated_at: string, value: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "include" $include "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($username)/feeds/($feed_key)/data/first" $qp)
+  let full_url = (build-url $base ({username: (encode-path-segment $username), feed_key: (encode-path-segment $feed_key)} | format pattern "/{username}/feeds/{feed_key}/data/first") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Last Data in Queue
 #
 # GET /{username}/feeds/{feed_key}/data/last
 # operationId: lastData
-export def "feeds-data-last lastData" [
+export def "feeds-data-last get" [
   username: string
   feed_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -850,24 +890,25 @@ export def "feeds-data-last lastData" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --include: string # List of Data record fields to include in response as comma separated list. Acceptable values are: `value`, `lat`, `lon`, `ele`, `id`, and `created_at`. 
+  --include: string # List of Data record fields to include in response as comma separated list. Acceptable values are: `value`, `lat`, `lon`, `ele`, `id`, and `created_at`.
 ]: nothing -> record<completed_at: string, created_at: string, created_epoch: float, ele: float, expiration: string, feed_id: float, group_id: float, id: string, lat: float, lon: float, updated_at: string, value: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "include" $include "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($username)/feeds/($feed_key)/data/last" $qp)
+  let full_url = (build-url $base ({username: (encode-path-segment $username), feed_key: (encode-path-segment $feed_key)} | format pattern "/{username}/feeds/{feed_key}/data/last") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Next Data in Queue
 #
 # GET /{username}/feeds/{feed_key}/data/next
 # operationId: nextData
-export def "feeds-data-next nextData" [
+export def "feeds-data-next get" [
   username: string
   feed_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -877,24 +918,25 @@ export def "feeds-data-next nextData" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --include: string # List of Data record fields to include in response as comma separated list. Acceptable values are: `value`, `lat`, `lon`, `ele`, `id`, and `created_at`. 
+  --include: string # List of Data record fields to include in response as comma separated list. Acceptable values are: `value`, `lat`, `lon`, `ele`, `id`, and `created_at`.
 ]: nothing -> record<completed_at: string, created_at: string, created_epoch: float, ele: float, expiration: string, feed_id: float, group_id: float, id: string, lat: float, lon: float, updated_at: string, value: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "include" $include "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($username)/feeds/($feed_key)/data/next" $qp)
+  let full_url = (build-url $base ({username: (encode-path-segment $username), feed_key: (encode-path-segment $feed_key)} | format pattern "/{username}/feeds/{feed_key}/data/next") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Previous Data in Queue
 #
 # GET /{username}/feeds/{feed_key}/data/previous
 # operationId: previousData
-export def "feeds-data-previous previousData" [
+export def "feeds-data-previous get" [
   username: string
   feed_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -904,24 +946,25 @@ export def "feeds-data-previous previousData" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --include: string # List of Data record fields to include in response as comma separated list. Acceptable values are: `value`, `lat`, `lon`, `ele`, `id`, and `created_at`. 
+  --include: string # List of Data record fields to include in response as comma separated list. Acceptable values are: `value`, `lat`, `lon`, `ele`, `id`, and `created_at`.
 ]: nothing -> record<completed_at: string, created_at: string, created_epoch: float, ele: float, expiration: string, feed_id: float, group_id: float, id: string, lat: float, lon: float, updated_at: string, value: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "include" $include "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($username)/feeds/($feed_key)/data/previous" $qp)
+  let full_url = (build-url $base ({username: (encode-path-segment $username), feed_key: (encode-path-segment $feed_key)} | format pattern "/{username}/feeds/{feed_key}/data/previous") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Last Data in MQTT CSV format
 #
 # GET /{username}/feeds/{feed_key}/data/retain
 # operationId: retainData
-export def "feeds-data-retain retainData" [
+export def "feeds-data-retain get" [
   username: string
   feed_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -931,21 +974,22 @@ export def "feeds-data-retain retainData" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($username)/feeds/($feed_key)/data/retain")
+  let full_url = (build-url $base ({username: (encode-path-segment $username), feed_key: (encode-path-segment $feed_key)} | format pattern "/{username}/feeds/{feed_key}/data/retain"))
   let accept_val = "text/csv"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Delete existing Data
 #
 # DELETE /{username}/feeds/{feed_key}/data/{id}
 # operationId: destroyData
-export def "feeds-data destroyData" [
+export def "feeds-data delete" [
   username: string
   feed_key: string
   id: string
@@ -956,15 +1000,16 @@ export def "feeds-data destroyData" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($username)/feeds/($feed_key)/data/($id)")
+  let full_url = (build-url $base ({username: (encode-path-segment $username), feed_key: (encode-path-segment $feed_key), id: (encode-path-segment $id)} | format pattern "/{username}/feeds/{feed_key}/data/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Returns data based on feed key
@@ -982,24 +1027,25 @@ export def "feeds-data get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --include: string # List of Data record fields to include in response as comma separated list. Acceptable values are: `value`, `lat`, `lon`, `ele`, `id`, and `created_at`. 
+  --include: string # List of Data record fields to include in response as comma separated list. Acceptable values are: `value`, `lat`, `lon`, `ele`, `id`, and `created_at`.
 ]: nothing -> record<completed_at: string, created_at: string, created_epoch: float, ele: float, expiration: string, feed_id: float, group_id: float, id: string, lat: float, lon: float, updated_at: string, value: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "include" $include "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($username)/feeds/($feed_key)/data/($id)" $qp)
+  let full_url = (build-url $base ({username: (encode-path-segment $username), feed_key: (encode-path-segment $feed_key), id: (encode-path-segment $id)} | format pattern "/{username}/feeds/{feed_key}/data/{id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Update properties of existing Data
 #
 # PATCH /{username}/feeds/{feed_key}/data/{id}
 # operationId: updateData
-export def "feeds-data updateData" [
+export def "feeds-data update-by-username-feed_key-id" [
   username: string
   feed_key: string
   id: string
@@ -1010,22 +1056,23 @@ export def "feeds-data updateData" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<completed_at: string, created_at: string, created_epoch: float, ele: float, expiration: string, feed_id: float, group_id: float, id: string, lat: float, lon: float, updated_at: string, value: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($username)/feeds/($feed_key)/data/($id)")
+  let full_url = (build-url $base ({username: (encode-path-segment $username), feed_key: (encode-path-segment $feed_key), id: (encode-path-segment $id)} | format pattern "/{username}/feeds/{feed_key}/data/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Replace existing Data
 #
 # PUT /{username}/feeds/{feed_key}/data/{id}
 # operationId: replaceData
-export def "feeds-data replaceData" [
+export def "feeds-data update-by-username-feed_key-id-1" [
   username: string
   feed_key: string
   id: string
@@ -1036,15 +1083,16 @@ export def "feeds-data replaceData" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<completed_at: string, created_at: string, created_epoch: float, ele: float, expiration: string, feed_id: float, group_id: float, id: string, lat: float, lon: float, updated_at: string, value: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($username)/feeds/($feed_key)/data/($id)")
+  let full_url = (build-url $base ({username: (encode-path-segment $username), feed_key: (encode-path-segment $feed_key), id: (encode-path-segment $id)} | format pattern "/{username}/feeds/{feed_key}/data/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get detailed feed by feed key
@@ -1061,22 +1109,23 @@ export def "feeds-details get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<created_at: string, description: string, details: record<data: record<count: int, first: record, last: record>, shared_with: list<record>>, enabled: bool, group: record, groups: table<created_at: string, description: string, id: float, name: string, updated_at: string>, history: bool, id: float, key: string, last_value: string, license: string, name: string, status: string, status_notify: bool, status_timeout: int, unit_symbol: string, unit_type: string, updated_at: string, visibility: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($username)/feeds/($feed_key)/details")
+  let full_url = (build-url $base ({username: (encode-path-segment $username), feed_key: (encode-path-segment $feed_key)} | format pattern "/{username}/feeds/{feed_key}/details"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # All groups for current user
 #
 # GET /{username}/groups
 # operationId: allGroups
-export def "groups allGroups" [
+export def "groups list" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1085,22 +1134,23 @@ export def "groups allGroups" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> table<created_at: string, description: string, feeds: list<record>, id: float, name: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($username)/groups")
+  let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/{username}/groups"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Create a new Group
 #
 # POST /{username}/groups
 # operationId: createGroup
-export def "groups createGroup" [
+export def "groups create" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1109,22 +1159,23 @@ export def "groups createGroup" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<created_at: string, description: string, feeds: table<created_at: string, description: string, details: record, enabled: bool, group: record, groups: list, history: bool, id: float, key: string, last_value: string, license: string, name: string, status: string, status_notify: bool, status_timeout: int, unit_symbol: string, unit_type: string, updated_at: string, visibility: string>, id: float, name: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($username)/groups")
+  let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/{username}/groups"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Delete an existing Group
 #
 # DELETE /{username}/groups/{group_key}
 # operationId: destroyGroup
-export def "groups destroyGroup" [
+export def "groups delete" [
   username: string
   group_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1134,15 +1185,16 @@ export def "groups destroyGroup" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($username)/groups/($group_key)")
+  let full_url = (build-url $base ({username: (encode-path-segment $username), group_key: (encode-path-segment $group_key)} | format pattern "/{username}/groups/{group_key}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Returns Group based on ID
@@ -1159,22 +1211,23 @@ export def "groups get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<created_at: string, description: string, feeds: table<created_at: string, description: string, details: record, enabled: bool, group: record, groups: list, history: bool, id: float, key: string, last_value: string, license: string, name: string, status: string, status_notify: bool, status_timeout: int, unit_symbol: string, unit_type: string, updated_at: string, visibility: string>, id: float, name: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($username)/groups/($group_key)")
+  let full_url = (build-url $base ({username: (encode-path-segment $username), group_key: (encode-path-segment $group_key)} | format pattern "/{username}/groups/{group_key}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Update properties of an existing Group
 #
 # PATCH /{username}/groups/{group_key}
 # operationId: updateGroup
-export def "groups updateGroup" [
+export def "groups update-by-username-group_key" [
   username: string
   group_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1184,22 +1237,23 @@ export def "groups updateGroup" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<created_at: string, description: string, feeds: table<created_at: string, description: string, details: record, enabled: bool, group: record, groups: list, history: bool, id: float, key: string, last_value: string, license: string, name: string, status: string, status_notify: bool, status_timeout: int, unit_symbol: string, unit_type: string, updated_at: string, visibility: string>, id: float, name: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($username)/groups/($group_key)")
+  let full_url = (build-url $base ({username: (encode-path-segment $username), group_key: (encode-path-segment $group_key)} | format pattern "/{username}/groups/{group_key}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Replace an existing Group
 #
 # PUT /{username}/groups/{group_key}
 # operationId: replaceGroup
-export def "groups replaceGroup" [
+export def "groups update-by-username-group_key-1" [
   username: string
   group_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1209,24 +1263,25 @@ export def "groups replaceGroup" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<created_at: string, description: string, feeds: table<created_at: string, description: string, details: record, enabled: bool, group: record, groups: list, history: bool, id: float, key: string, last_value: string, license: string, name: string, status: string, status_notify: bool, status_timeout: int, unit_symbol: string, unit_type: string, updated_at: string, visibility: string>, id: float, name: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($username)/groups/($group_key)")
+  let full_url = (build-url $base ({username: (encode-path-segment $username), group_key: (encode-path-segment $group_key)} | format pattern "/{username}/groups/{group_key}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Add an existing Feed to a Group
 #
 # POST /{username}/groups/{group_key}/add
 # operationId: addFeedToGroup
-export def "groups-add addFeedToGroup" [
-  group_key: string
+export def "groups-add create-feed" [
   username: string
+  group_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1234,6 +1289,7 @@ export def "groups-add addFeedToGroup" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --feed-key: string
@@ -1241,17 +1297,17 @@ export def "groups-add addFeedToGroup" [
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "feed_key" $feed_key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($username)/groups/($group_key)/add" $qp)
+  let full_url = (build-url $base ({username: (encode-path-segment $username), group_key: (encode-path-segment $group_key)} | format pattern "/{username}/groups/{group_key}/add") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Create new data for multiple feeds in a group
 #
 # POST /{username}/groups/{group_key}/data
 # operationId: createGroupData
-export def "groups-data createGroupData" [
+export def "groups-data create" [
   username: string
   group_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1261,24 +1317,25 @@ export def "groups-data createGroupData" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> table<completed_at: string, created_at: string, created_epoch: float, ele: float, expiration: string, feed_id: float, group_id: float, id: string, lat: float, lon: float, updated_at: string, value: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($username)/groups/($group_key)/data")
+  let full_url = (build-url $base ({username: (encode-path-segment $username), group_key: (encode-path-segment $group_key)} | format pattern "/{username}/groups/{group_key}/data"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # All feeds for current user in a given group
 #
 # GET /{username}/groups/{group_key}/feeds
 # operationId: allGroupFeeds
-export def "groups-feeds allGroupFeeds" [
-  group_key: string
+export def "groups-feeds list" [
   username: string
+  group_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1286,22 +1343,23 @@ export def "groups-feeds allGroupFeeds" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> table<created_at: string, description: string, details: record<data: record, shared_with: list>, enabled: bool, group: record, groups: list<record>, history: bool, id: float, key: string, last_value: string, license: string, name: string, status: string, status_notify: bool, status_timeout: int, unit_symbol: string, unit_type: string, updated_at: string, visibility: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($username)/groups/($group_key)/feeds")
+  let full_url = (build-url $base ({username: (encode-path-segment $username), group_key: (encode-path-segment $group_key)} | format pattern "/{username}/groups/{group_key}/feeds"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Create a new Feed in a Group
 #
 # POST /{username}/groups/{group_key}/feeds
 # operationId: createGroupFeed
-export def "groups-feeds createGroupFeed" [
+export def "groups-feeds create" [
   username: string
   group_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1311,22 +1369,23 @@ export def "groups-feeds createGroupFeed" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<created_at: string, description: string, details: record<data: record<count: int, first: record, last: record>, shared_with: list<record>>, enabled: bool, group: record, groups: table<created_at: string, description: string, id: float, name: string, updated_at: string>, history: bool, id: float, key: string, last_value: string, license: string, name: string, status: string, status_notify: bool, status_timeout: int, unit_symbol: string, unit_type: string, updated_at: string, visibility: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($username)/groups/($group_key)/feeds")
+  let full_url = (build-url $base ({username: (encode-path-segment $username), group_key: (encode-path-segment $group_key)} | format pattern "/{username}/groups/{group_key}/feeds"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # All data for current feed in a specific group
 #
 # GET /{username}/groups/{group_key}/feeds/{feed_key}/data
 # operationId: allGroupFeedData
-export def "groups-feeds-data allGroupFeedData" [
+export def "groups-feeds-data list" [
   username: string
   group_key: string
   feed_key: string
@@ -1337,6 +1396,7 @@ export def "groups-feeds-data allGroupFeedData" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --start-time: string # Start time for filtering data. Returns data created after given time. (format: date-time)
@@ -1346,17 +1406,17 @@ export def "groups-feeds-data allGroupFeedData" [
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start_time" $start_time "scalar") (serialize-qp "end_time" $end_time "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($username)/groups/($group_key)/feeds/($feed_key)/data" $qp)
+  let full_url = (build-url $base ({username: (encode-path-segment $username), group_key: (encode-path-segment $group_key), feed_key: (encode-path-segment $feed_key)} | format pattern "/{username}/groups/{group_key}/feeds/{feed_key}/data") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Create new Data in a feed belonging to a particular group
 #
 # POST /{username}/groups/{group_key}/feeds/{feed_key}/data
 # operationId: createGroupFeedData
-export def "groups-feeds-data createGroupFeedData" [
+export def "groups-feeds-data create" [
   username: string
   group_key: string
   feed_key: string
@@ -1367,22 +1427,23 @@ export def "groups-feeds-data createGroupFeedData" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<completed_at: string, created_at: string, created_epoch: float, ele: float, expiration: string, feed_id: float, group_id: float, id: string, lat: float, lon: float, updated_at: string, value: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($username)/groups/($group_key)/feeds/($feed_key)/data")
+  let full_url = (build-url $base ({username: (encode-path-segment $username), group_key: (encode-path-segment $group_key), feed_key: (encode-path-segment $feed_key)} | format pattern "/{username}/groups/{group_key}/feeds/{feed_key}/data"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Create multiple new Data records in a feed belonging to a particular group
 #
 # POST /{username}/groups/{group_key}/feeds/{feed_key}/data/batch
 # operationId: batchCreateGroupFeedData
-export def "groups-feeds-data-batch batchCreateGroupFeedData" [
+export def "groups-feeds-data-batch create" [
   username: string
   group_key: string
   feed_key: string
@@ -1393,24 +1454,25 @@ export def "groups-feeds-data-batch batchCreateGroupFeedData" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> table<completed_at: string, created_at: string, created_epoch: float, ele: float, expiration: string, feed_id: float, group_id: float, id: string, lat: float, lon: float, updated_at: string, value: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($username)/groups/($group_key)/feeds/($feed_key)/data/batch")
+  let full_url = (build-url $base ({username: (encode-path-segment $username), group_key: (encode-path-segment $group_key), feed_key: (encode-path-segment $feed_key)} | format pattern "/{username}/groups/{group_key}/feeds/{feed_key}/data/batch"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Remove a Feed from a Group
 #
 # POST /{username}/groups/{group_key}/remove
 # operationId: removeFeedFromGroup
-export def "groups-remove removeFeedFromGroup" [
-  group_key: string
+export def "groups-remove delete-feed" [
   username: string
+  group_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1418,6 +1480,7 @@ export def "groups-remove removeFeedFromGroup" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --feed-key: string
@@ -1425,17 +1488,17 @@ export def "groups-remove removeFeedFromGroup" [
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "feed_key" $feed_key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($username)/groups/($group_key)/remove" $qp)
+  let full_url = (build-url $base ({username: (encode-path-segment $username), group_key: (encode-path-segment $group_key)} | format pattern "/{username}/groups/{group_key}/remove") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get the user's data rate limit and current activity level.
 #
 # GET /{username}/throttle
 # operationId: getCurrentUserThrottle
-export def "throttle get" [
+export def "throttle get-get-user" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1444,22 +1507,23 @@ export def "throttle get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<active_data_rate: int, data_rate_limit: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($username)/throttle")
+  let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/{username}/throttle"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # All tokens for current user
 #
 # GET /{username}/tokens
 # operationId: allTokens
-export def "tokens allTokens" [
+export def "tokens list" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1468,22 +1532,23 @@ export def "tokens allTokens" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> table<token: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($username)/tokens")
+  let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/{username}/tokens"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Create a new Token
 #
 # POST /{username}/tokens
 # operationId: createToken
-export def "tokens createToken" [
+export def "tokens create" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1492,22 +1557,23 @@ export def "tokens createToken" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<token: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($username)/tokens")
+  let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/{username}/tokens"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Delete an existing Token
 #
 # DELETE /{username}/tokens/{id}
 # operationId: destroyToken
-export def "tokens destroyToken" [
+export def "tokens delete" [
   username: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1517,15 +1583,16 @@ export def "tokens destroyToken" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($username)/tokens/($id)")
+  let full_url = (build-url $base ({username: (encode-path-segment $username), id: (encode-path-segment $id)} | format pattern "/{username}/tokens/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Returns Token based on ID
@@ -1542,22 +1609,23 @@ export def "tokens get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<token: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($username)/tokens/($id)")
+  let full_url = (build-url $base ({username: (encode-path-segment $username), id: (encode-path-segment $id)} | format pattern "/{username}/tokens/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Update properties of an existing Token
 #
 # PATCH /{username}/tokens/{id}
 # operationId: updateToken
-export def "tokens updateToken" [
+export def "tokens update-by-username-id" [
   username: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1567,22 +1635,23 @@ export def "tokens updateToken" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<token: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($username)/tokens/($id)")
+  let full_url = (build-url $base ({username: (encode-path-segment $username), id: (encode-path-segment $id)} | format pattern "/{username}/tokens/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Replace an existing Token
 #
 # PUT /{username}/tokens/{id}
 # operationId: replaceToken
-export def "tokens replaceToken" [
+export def "tokens update-by-username-id-1" [
   username: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1592,22 +1661,23 @@ export def "tokens replaceToken" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<token: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($username)/tokens/($id)")
+  let full_url = (build-url $base ({username: (encode-path-segment $username), id: (encode-path-segment $id)} | format pattern "/{username}/tokens/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # All triggers for current user
 #
 # GET /{username}/triggers
 # operationId: allTriggers
-export def "triggers allTriggers" [
+export def "triggers list" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1616,22 +1686,23 @@ export def "triggers allTriggers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> table<name: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($username)/triggers")
+  let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/{username}/triggers"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Create a new Trigger
 #
 # POST /{username}/triggers
 # operationId: createTrigger
-export def "triggers createTrigger" [
+export def "triggers create" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1640,22 +1711,23 @@ export def "triggers createTrigger" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<name: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($username)/triggers")
+  let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/{username}/triggers"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Delete an existing Trigger
 #
 # DELETE /{username}/triggers/{id}
 # operationId: destroyTrigger
-export def "triggers destroyTrigger" [
+export def "triggers delete" [
   username: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1665,15 +1737,16 @@ export def "triggers destroyTrigger" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($username)/triggers/($id)")
+  let full_url = (build-url $base ({username: (encode-path-segment $username), id: (encode-path-segment $id)} | format pattern "/{username}/triggers/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Returns Trigger based on ID
@@ -1690,22 +1763,23 @@ export def "triggers get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<name: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($username)/triggers/($id)")
+  let full_url = (build-url $base ({username: (encode-path-segment $username), id: (encode-path-segment $id)} | format pattern "/{username}/triggers/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Update properties of an existing Trigger
 #
 # PATCH /{username}/triggers/{id}
 # operationId: updateTrigger
-export def "triggers updateTrigger" [
+export def "triggers update-by-username-id" [
   username: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1715,22 +1789,23 @@ export def "triggers updateTrigger" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<name: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($username)/triggers/($id)")
+  let full_url = (build-url $base ({username: (encode-path-segment $username), id: (encode-path-segment $id)} | format pattern "/{username}/triggers/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Replace an existing Trigger
 #
 # PUT /{username}/triggers/{id}
 # operationId: replaceTrigger
-export def "triggers replaceTrigger" [
+export def "triggers update-by-username-id-1" [
   username: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1740,22 +1815,23 @@ export def "triggers replaceTrigger" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<name: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($username)/triggers/($id)")
+  let full_url = (build-url $base ({username: (encode-path-segment $username), id: (encode-path-segment $id)} | format pattern "/{username}/triggers/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # All permissions for current user and type
 #
 # GET /{username}/{type}/{type_id}/acl
 # operationId: allPermissions
-export def "acl allPermissions" [
+export def "acl list-permissions" [
   username: string
   type: string
   type_id: string
@@ -1766,22 +1842,23 @@ export def "acl allPermissions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> table<created_at: string, id: float, model: string, object_id: float, scope: string, scope_value: string, updated_at: string, user_id: float> {
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($username)/($type)/($type_id)/acl")
+  let full_url = (build-url $base ({username: (encode-path-segment $username), type: (encode-path-segment $type), type_id: (encode-path-segment $type_id)} | format pattern "/{username}/{type}/{type_id}/acl"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Create a new Permission
 #
 # POST /{username}/{type}/{type_id}/acl
 # operationId: createPermission
-export def "acl createPermission" [
+export def "acl create-permission" [
   username: string
   type: string
   type_id: string
@@ -1792,22 +1869,23 @@ export def "acl createPermission" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<created_at: string, id: float, model: string, object_id: float, scope: string, scope_value: string, updated_at: string, user_id: float> {
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($username)/($type)/($type_id)/acl")
+  let full_url = (build-url $base ({username: (encode-path-segment $username), type: (encode-path-segment $type), type_id: (encode-path-segment $type_id)} | format pattern "/{username}/{type}/{type_id}/acl"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Delete an existing Permission
 #
 # DELETE /{username}/{type}/{type_id}/acl/{id}
 # operationId: destroyPermission
-export def "acl destroyPermission" [
+export def "acl delete-permission" [
   username: string
   type: string
   type_id: string
@@ -1819,22 +1897,23 @@ export def "acl destroyPermission" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($username)/($type)/($type_id)/acl/($id)")
+  let full_url = (build-url $base ({username: (encode-path-segment $username), type: (encode-path-segment $type), type_id: (encode-path-segment $type_id), id: (encode-path-segment $id)} | format pattern "/{username}/{type}/{type_id}/acl/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Returns Permission based on ID
 #
 # GET /{username}/{type}/{type_id}/acl/{id}
 # operationId: getPermission
-export def "acl get" [
+export def "acl get-permission" [
   username: string
   type: string
   type_id: string
@@ -1846,22 +1925,23 @@ export def "acl get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<created_at: string, id: float, model: string, object_id: float, scope: string, scope_value: string, updated_at: string, user_id: float> {
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($username)/($type)/($type_id)/acl/($id)")
+  let full_url = (build-url $base ({username: (encode-path-segment $username), type: (encode-path-segment $type), type_id: (encode-path-segment $type_id), id: (encode-path-segment $id)} | format pattern "/{username}/{type}/{type_id}/acl/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Update properties of an existing Permission
 #
 # PATCH /{username}/{type}/{type_id}/acl/{id}
 # operationId: updatePermission
-export def "acl updatePermission" [
+export def "acl update-permission-by-username-type-type_id-id" [
   username: string
   type: string
   type_id: string
@@ -1873,22 +1953,23 @@ export def "acl updatePermission" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<created_at: string, id: float, model: string, object_id: float, scope: string, scope_value: string, updated_at: string, user_id: float> {
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($username)/($type)/($type_id)/acl/($id)")
+  let full_url = (build-url $base ({username: (encode-path-segment $username), type: (encode-path-segment $type), type_id: (encode-path-segment $type_id), id: (encode-path-segment $id)} | format pattern "/{username}/{type}/{type_id}/acl/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Replace an existing Permission
 #
 # PUT /{username}/{type}/{type_id}/acl/{id}
 # operationId: replacePermission
-export def "acl replacePermission" [
+export def "acl update-permission-by-username-type-type_id-id-1" [
   username: string
   type: string
   type_id: string
@@ -1900,13 +1981,14 @@ export def "acl replacePermission" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<created_at: string, id: float, model: string, object_id: float, scope: string, scope_value: string, updated_at: string, user_id: float> {
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($username)/($type)/($type_id)/acl/($id)")
+  let full_url = (build-url $base ({username: (encode-path-segment $username), type: (encode-path-segment $type), type_id: (encode-path-segment $type_id), id: (encode-path-segment $id)} | format pattern "/{username}/{type}/{type_id}/acl/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }

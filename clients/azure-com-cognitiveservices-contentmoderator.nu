@@ -18,21 +18,32 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 }
 
 # Serialize a single query parameter based on collection style
+# Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
+# ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = ($name | url encode)
+  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
-  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
-    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
-    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
+    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
+    _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
+}
+
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Build URL from base, path, and optional query string
@@ -44,7 +55,7 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
@@ -53,29 +64,29 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
     "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "put" => { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "patch" => { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
   if ($method in ["head" "options"]) { return $resp }
-  if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
+  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
 def base-url-completer [] { ["https://azure.local"] }
 def auth-scheme-completer [] { ["ocp-apim-subscription-key"] }
 
 # Completers for enum parameters
-def Content-Type-completer [] { ["text/html" "text/markdown" "text/plain" "text/xml"] }
-def ContentType-completer [] { ["Image" "Text" "Video"] }
-def Content-Type-completer-1 [] { ["application/json" "image/jpeg"] }
+def content-type-completer [] { ["text/html" "text/markdown" "text/plain" "text/xml"] }
+def content-type-completer-1 [] { ["Image" "Text" "Video"] }
+def content-type-completer-2 [] { ["application/json" "image/jpeg"] }
 def accept-completer [] { ["application/json" "text/json"] }
-def Content-Type-completer-2 [] { ["text/plain"] }
+def content-type-completer-3 [] { ["text/plain"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "contentmoderator-lists-v10-imagelists GetAllImageLists" } } | get name | first)
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "contentmoderator-lists-v1-0-imagelists get-management-image-list-image" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -99,7 +110,7 @@ export def commands []: nothing -> table {
 #
 # GET /contentmoderator/lists/v1.0/imagelists
 # operationId: ListManagementImageLists_GetAllImageLists
-export def "contentmoderator-lists-v10-imagelists GetAllImageLists" [
+export def "contentmoderator-lists-v1-0-imagelists get-management-image-list-image" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -107,6 +118,7 @@ export def "contentmoderator-lists-v10-imagelists GetAllImageLists" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<Description: string, Id: int, Metadata: record, Name: string> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
@@ -114,14 +126,14 @@ export def "contentmoderator-lists-v10-imagelists GetAllImageLists" [
   let full_url = (build-url $base "/contentmoderator/lists/v1.0/imagelists")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Creates an image list.
 #
 # POST /contentmoderator/lists/v1.0/imagelists
 # operationId: ListManagementImageLists_Create
-export def "contentmoderator-lists-v10-imagelists Create" [
+export def "contentmoderator-lists-v1-0-imagelists create-management-image" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -129,25 +141,26 @@ export def "contentmoderator-lists-v10-imagelists Create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # The content type.
+  --content-type: string # The content type.
 ]: nothing -> record<Description: string, Id: int, Metadata: record, Name: string> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/contentmoderator/lists/v1.0/imagelists")
-  let extra_headers = {"Content-Type": $Content_Type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"Content-Type": $content_type} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Deletes image list with the list Id equal to list Id passed.
 #
 # DELETE /contentmoderator/lists/v1.0/imagelists/{listId}
 # operationId: ListManagementImageLists_Delete
-export def "contentmoderator-lists-v10-imagelists Delete" [
-  listId: string
+export def "contentmoderator-lists-v1-0-imagelists delete-management-image" [
+  list_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -155,22 +168,23 @@ export def "contentmoderator-lists-v10-imagelists Delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/contentmoderator/lists/v1.0/imagelists/($listId)")
+  let full_url = (build-url $base ({list_id: (encode-path-segment $list_id)} | format pattern "/contentmoderator/lists/v1.0/imagelists/{list_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Returns the details of the image list with list Id equal to list Id passed.
 #
 # GET /contentmoderator/lists/v1.0/imagelists/{listId}
 # operationId: ListManagementImageLists_GetDetails
-export def "contentmoderator-lists-v10-imagelists GetDetails" [
-  listId: string
+export def "contentmoderator-lists-v1-0-imagelists get-management-image-details" [
+  list_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -178,22 +192,23 @@ export def "contentmoderator-lists-v10-imagelists GetDetails" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<Description: string, Id: int, Metadata: record, Name: string> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/contentmoderator/lists/v1.0/imagelists/($listId)")
+  let full_url = (build-url $base ({list_id: (encode-path-segment $list_id)} | format pattern "/contentmoderator/lists/v1.0/imagelists/{list_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Updates an image list with list Id equal to list Id passed.
 #
 # PUT /contentmoderator/lists/v1.0/imagelists/{listId}
 # operationId: ListManagementImageLists_Update
-export def "contentmoderator-lists-v10-imagelists Update" [
-  listId: string
+export def "contentmoderator-lists-v1-0-imagelists update-management-image" [
+  list_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -201,25 +216,26 @@ export def "contentmoderator-lists-v10-imagelists Update" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # The content type.
+  --content-type: string # The content type.
 ]: nothing -> record<Description: string, Id: int, Metadata: record, Name: string> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/contentmoderator/lists/v1.0/imagelists/($listId)")
-  let extra_headers = {"Content-Type": $Content_Type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({list_id: (encode-path-segment $list_id)} | format pattern "/contentmoderator/lists/v1.0/imagelists/{list_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"Content-Type": $content_type} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Refreshes the index of the list with list Id equal to list Id passed.
 #
 # POST /contentmoderator/lists/v1.0/imagelists/{listId}/RefreshIndex
 # operationId: ListManagementImageLists_RefreshIndex
-export def "contentmoderator-lists-v10-imagelists-refresh-index RefreshIndex" [
-  listId: string
+export def "contentmoderator-lists-v1-0-imagelists-refresh-index list-management-image" [
+  list_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -227,22 +243,23 @@ export def "contentmoderator-lists-v10-imagelists-refresh-index RefreshIndex" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<AdvancedInfo: list<record>, ContentSourceId: string, IsUpdateSuccess: bool, Status: record<Code: int, Description: string, Exception: string>, TrackingId: string> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/contentmoderator/lists/v1.0/imagelists/($listId)/RefreshIndex")
+  let full_url = (build-url $base ({list_id: (encode-path-segment $list_id)} | format pattern "/contentmoderator/lists/v1.0/imagelists/{list_id}/RefreshIndex"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Deletes all images from the list with list Id equal to list Id passed.
 #
 # DELETE /contentmoderator/lists/v1.0/imagelists/{listId}/images
 # operationId: ListManagementImage_DeleteAllImages
-export def "contentmoderator-lists-v10-imagelists-images DeleteAllImages" [
-  listId: string
+export def "contentmoderator-lists-v1-0-imagelists-images delete-management-list" [
+  list_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -250,22 +267,23 @@ export def "contentmoderator-lists-v10-imagelists-images DeleteAllImages" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/contentmoderator/lists/v1.0/imagelists/($listId)/images")
+  let full_url = (build-url $base ({list_id: (encode-path-segment $list_id)} | format pattern "/contentmoderator/lists/v1.0/imagelists/{list_id}/images"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Gets all image Ids from the list with list Id equal to list Id passed.
 #
 # GET /contentmoderator/lists/v1.0/imagelists/{listId}/images
 # operationId: ListManagementImage_GetAllImageIds
-export def "contentmoderator-lists-v10-imagelists-images GetAllImageIds" [
-  listId: string
+export def "contentmoderator-lists-v1-0-imagelists-images get-management-list" [
+  list_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -273,22 +291,23 @@ export def "contentmoderator-lists-v10-imagelists-images GetAllImageIds" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<ContentIds: list<int>, ContentSource: string, Status: record<Code: int, Description: string, Exception: string>, TrackingId: string> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/contentmoderator/lists/v1.0/imagelists/($listId)/images")
+  let full_url = (build-url $base ({list_id: (encode-path-segment $list_id)} | format pattern "/contentmoderator/lists/v1.0/imagelists/{list_id}/images"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Add an image to the list with list Id equal to list Id passed.
 #
 # POST /contentmoderator/lists/v1.0/imagelists/{listId}/images
 # operationId: ListManagementImage_AddImage
-export def "contentmoderator-lists-v10-imagelists-images AddImage" [
-  listId: string
+export def "contentmoderator-lists-v1-0-imagelists-images create-management" [
+  list_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -296,6 +315,7 @@ export def "contentmoderator-lists-v10-imagelists-images AddImage" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --tag: int # Tag for the image.
   --label: string # The image label.
@@ -303,19 +323,19 @@ export def "contentmoderator-lists-v10-imagelists-images AddImage" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "tag" $tag "scalar") (serialize-qp "label" $label "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/contentmoderator/lists/v1.0/imagelists/($listId)/images" $qp)
+  let full_url = (build-url $base ({list_id: (encode-path-segment $list_id)} | format pattern "/contentmoderator/lists/v1.0/imagelists/{list_id}/images") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Deletes an image from the list with list Id and image Id passed.
 #
 # DELETE /contentmoderator/lists/v1.0/imagelists/{listId}/images/{ImageId}
 # operationId: ListManagementImage_DeleteImage
-export def "contentmoderator-lists-v10-imagelists-images DeleteImage" [
-  listId: string
-  ImageId: string
+export def "contentmoderator-lists-v1-0-imagelists-images delete-management" [
+  list_id: string
+  image_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -323,21 +343,22 @@ export def "contentmoderator-lists-v10-imagelists-images DeleteImage" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/contentmoderator/lists/v1.0/imagelists/($listId)/images/($ImageId)")
+  let full_url = (build-url $base ({list_id: (encode-path-segment $list_id), image_id: (encode-path-segment $image_id)} | format pattern "/contentmoderator/lists/v1.0/imagelists/{list_id}/images/{image_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # gets all the Term Lists
 #
 # GET /contentmoderator/lists/v1.0/termlists
 # operationId: ListManagementTermLists_GetAllTermLists
-export def "contentmoderator-lists-v10-termlists GetAllTermLists" [
+export def "contentmoderator-lists-v1-0-termlists get-management-term-list-term" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -345,6 +366,7 @@ export def "contentmoderator-lists-v10-termlists GetAllTermLists" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<Description: string, Id: int, Metadata: record, Name: string> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
@@ -352,14 +374,14 @@ export def "contentmoderator-lists-v10-termlists GetAllTermLists" [
   let full_url = (build-url $base "/contentmoderator/lists/v1.0/termlists")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Creates a Term List
 #
 # POST /contentmoderator/lists/v1.0/termlists
 # operationId: ListManagementTermLists_Create
-export def "contentmoderator-lists-v10-termlists Create" [
+export def "contentmoderator-lists-v1-0-termlists create-management-term" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -367,25 +389,26 @@ export def "contentmoderator-lists-v10-termlists Create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # The content type.
+  --content-type: string # The content type.
 ]: nothing -> record<Description: string, Id: int, Metadata: record, Name: string> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/contentmoderator/lists/v1.0/termlists")
-  let extra_headers = {"Content-Type": $Content_Type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"Content-Type": $content_type} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Deletes term list with the list Id equal to list Id passed.
 #
 # DELETE /contentmoderator/lists/v1.0/termlists/{listId}
 # operationId: ListManagementTermLists_Delete
-export def "contentmoderator-lists-v10-termlists Delete" [
-  listId: string
+export def "contentmoderator-lists-v1-0-termlists delete-management-term" [
+  list_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -393,22 +416,23 @@ export def "contentmoderator-lists-v10-termlists Delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/contentmoderator/lists/v1.0/termlists/($listId)")
+  let full_url = (build-url $base ({list_id: (encode-path-segment $list_id)} | format pattern "/contentmoderator/lists/v1.0/termlists/{list_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Returns list Id details of the term list with list Id equal to list Id passed.
 #
 # GET /contentmoderator/lists/v1.0/termlists/{listId}
 # operationId: ListManagementTermLists_GetDetails
-export def "contentmoderator-lists-v10-termlists GetDetails" [
-  listId: string
+export def "contentmoderator-lists-v1-0-termlists get-management-term-details" [
+  list_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -416,22 +440,23 @@ export def "contentmoderator-lists-v10-termlists GetDetails" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<Description: string, Id: int, Metadata: record, Name: string> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/contentmoderator/lists/v1.0/termlists/($listId)")
+  let full_url = (build-url $base ({list_id: (encode-path-segment $list_id)} | format pattern "/contentmoderator/lists/v1.0/termlists/{list_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Updates an Term List.
 #
 # PUT /contentmoderator/lists/v1.0/termlists/{listId}
 # operationId: ListManagementTermLists_Update
-export def "contentmoderator-lists-v10-termlists Update" [
-  listId: string
+export def "contentmoderator-lists-v1-0-termlists update-management-term" [
+  list_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -439,25 +464,26 @@ export def "contentmoderator-lists-v10-termlists Update" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # The content type.
+  --content-type: string # The content type.
 ]: nothing -> record<Description: string, Id: int, Metadata: record, Name: string> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/contentmoderator/lists/v1.0/termlists/($listId)")
-  let extra_headers = {"Content-Type": $Content_Type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({list_id: (encode-path-segment $list_id)} | format pattern "/contentmoderator/lists/v1.0/termlists/{list_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"Content-Type": $content_type} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Refreshes the index of the list with list Id equal to list ID passed.
 #
 # POST /contentmoderator/lists/v1.0/termlists/{listId}/RefreshIndex
 # operationId: ListManagementTermLists_RefreshIndex
-export def "contentmoderator-lists-v10-termlists-refresh-index RefreshIndex" [
-  listId: string
+export def "contentmoderator-lists-v1-0-termlists-refresh-index list-management-term" [
+  list_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -465,24 +491,25 @@ export def "contentmoderator-lists-v10-termlists-refresh-index RefreshIndex" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --language: string # Language of the terms.
 ]: nothing -> record<AdvancedInfo: list<record>, ContentSourceId: string, IsUpdateSuccess: bool, Status: record<Code: int, Description: string, Exception: string>, TrackingId: string> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "language" $language "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/contentmoderator/lists/v1.0/termlists/($listId)/RefreshIndex" $qp)
+  let full_url = (build-url $base ({list_id: (encode-path-segment $list_id)} | format pattern "/contentmoderator/lists/v1.0/termlists/{list_id}/RefreshIndex") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Deletes all terms from the list with list Id equal to the list Id passed.
 #
 # DELETE /contentmoderator/lists/v1.0/termlists/{listId}/terms
 # operationId: ListManagementTerm_DeleteAllTerms
-export def "contentmoderator-lists-v10-termlists-terms DeleteAllTerms" [
-  listId: string
+export def "contentmoderator-lists-v1-0-termlists-terms delete-management-list" [
+  list_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -490,24 +517,25 @@ export def "contentmoderator-lists-v10-termlists-terms DeleteAllTerms" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --language: string # Language of the terms.
 ]: nothing -> record<Error: record<Code: string, Message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "language" $language "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/contentmoderator/lists/v1.0/termlists/($listId)/terms" $qp)
+  let full_url = (build-url $base ({list_id: (encode-path-segment $list_id)} | format pattern "/contentmoderator/lists/v1.0/termlists/{list_id}/terms") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Gets all terms from the list with list Id equal to the list Id passed.
 #
 # GET /contentmoderator/lists/v1.0/termlists/{listId}/terms
 # operationId: ListManagementTerm_GetAllTerms
-export def "contentmoderator-lists-v10-termlists-terms GetAllTerms" [
-  listId: string
+export def "contentmoderator-lists-v1-0-termlists-terms get-management-list" [
+  list_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -515,6 +543,7 @@ export def "contentmoderator-lists-v10-termlists-terms GetAllTerms" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --language: string # Language of the terms.
   --offset: int # The pagination start index.
@@ -523,18 +552,18 @@ export def "contentmoderator-lists-v10-termlists-terms GetAllTerms" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "language" $language "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/contentmoderator/lists/v1.0/termlists/($listId)/terms" $qp)
+  let full_url = (build-url $base ({list_id: (encode-path-segment $list_id)} | format pattern "/contentmoderator/lists/v1.0/termlists/{list_id}/terms") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Deletes a term from the list with list Id equal to the list Id passed.
 #
 # DELETE /contentmoderator/lists/v1.0/termlists/{listId}/terms/{term}
 # operationId: ListManagementTerm_DeleteTerm
-export def "contentmoderator-lists-v10-termlists-terms DeleteTerm" [
-  listId: string
+export def "contentmoderator-lists-v1-0-termlists-terms delete-management" [
+  list_id: string
   term: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -543,24 +572,25 @@ export def "contentmoderator-lists-v10-termlists-terms DeleteTerm" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --language: string # Language of the terms.
 ]: nothing -> record<Error: record<Code: string, Message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "language" $language "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/contentmoderator/lists/v1.0/termlists/($listId)/terms/($term)" $qp)
+  let full_url = (build-url $base ({list_id: (encode-path-segment $list_id), term: (encode-path-segment $term)} | format pattern "/contentmoderator/lists/v1.0/termlists/{list_id}/terms/{term}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Add a term to the term list with list Id equal to list Id passed.
 #
 # POST /contentmoderator/lists/v1.0/termlists/{listId}/terms/{term}
 # operationId: ListManagementTerm_AddTerm
-export def "contentmoderator-lists-v10-termlists-terms AddTerm" [
-  listId: string
+export def "contentmoderator-lists-v1-0-termlists-terms create-management" [
+  list_id: string
   term: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -569,23 +599,24 @@ export def "contentmoderator-lists-v10-termlists-terms AddTerm" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --language: string # Language of the terms.
 ]: nothing -> record<Error: record<Code: string, Message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "language" $language "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/contentmoderator/lists/v1.0/termlists/($listId)/terms/($term)" $qp)
+  let full_url = (build-url $base ({list_id: (encode-path-segment $list_id), term: (encode-path-segment $term)} | format pattern "/contentmoderator/lists/v1.0/termlists/{list_id}/terms/{term}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Returns probabilities of the image containing racy or adult content.
 #
 # POST /contentmoderator/moderate/v1.0/ProcessImage/Evaluate
 # operationId: ImageModeration_Evaluate
-export def "contentmoderator-moderate-v10-process-image-evaluate Evaluate" [
+export def "contentmoderator-moderate-v1-0-process-image-evaluate create-moderation" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -593,23 +624,24 @@ export def "contentmoderator-moderate-v10-process-image-evaluate Evaluate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --CacheImage: oneof<nothing, bool> # Whether to retain the submitted image for future use; defaults to false if omitted.
+  --cache-image: oneof<nothing, bool> # Whether to retain the submitted image for future use; defaults to false if omitted.
 ]: nothing -> record<AdultClassificationScore: float, AdvancedInfo: table<Key: string, Value: string>, CacheID: string, IsImageAdultClassified: bool, IsImageRacyClassified: bool, RacyClassificationScore: float, Result: bool, Status: record<Code: int, Description: string, Exception: string>, TrackingId: string> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "CacheImage" $CacheImage "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "CacheImage" $cache_image "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/contentmoderator/moderate/v1.0/ProcessImage/Evaluate" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Returns the list of faces found.
 #
 # POST /contentmoderator/moderate/v1.0/ProcessImage/FindFaces
 # operationId: ImageModeration_FindFaces
-export def "contentmoderator-moderate-v10-process-image-find-faces FindFaces" [
+export def "contentmoderator-moderate-v1-0-process-image-find-faces find-moderation" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -617,23 +649,24 @@ export def "contentmoderator-moderate-v10-process-image-find-faces FindFaces" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --CacheImage: oneof<nothing, bool> # Whether to retain the submitted image for future use; defaults to false if omitted.
+  --cache-image: oneof<nothing, bool> # Whether to retain the submitted image for future use; defaults to false if omitted.
 ]: nothing -> record<AdvancedInfo: table<Key: string, Value: string>, CacheId: string, Count: int, Faces: table<Bottom: int, Left: int, Right: int, Top: int>, Result: bool, Status: record<Code: int, Description: string, Exception: string>, TrackingId: string> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "CacheImage" $CacheImage "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "CacheImage" $cache_image "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/contentmoderator/moderate/v1.0/ProcessImage/FindFaces" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
-# Fuzzily match an image against one of your custom Image Lists. You can create and manage your custom image lists using <a href="/docs/services/578ff44d2703741568569ab9/operations/578ff7b12703741568569abe">this</a> API.   Returns ID and tags of matching image.<br/> <br/> Note: Refresh Index must be run on the corresponding Image List before additions and removals are reflected in the response.
+# Fuzzily match an image against one of your custom Image Lists. You can create and manage your custom image lists using this (/docs/services/578ff44d2703741568569ab9/operations/578ff7b12703741568569abe) API. Returns ID and tags of matching image. Note: Refresh Index must be run on the corresponding Image List before additions and removals are reflected in the response.
 #
 # POST /contentmoderator/moderate/v1.0/ProcessImage/Match
 # operationId: ImageModeration_Match
-export def "contentmoderator-moderate-v10-process-image-match Match" [
+export def "contentmoderator-moderate-v1-0-process-image-match create-moderation" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -641,24 +674,25 @@ export def "contentmoderator-moderate-v10-process-image-match Match" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --listId: string # The list Id.
-  --CacheImage: oneof<nothing, bool> # Whether to retain the submitted image for future use; defaults to false if omitted.
+  --list-id: string # The list Id.
+  --cache-image: oneof<nothing, bool> # Whether to retain the submitted image for future use; defaults to false if omitted.
 ]: nothing -> record<CacheID: string, IsMatch: bool, Matches: table<Label: string, MatchId: int, Score: float, Source: string, Tags: list>, Status: record<Code: int, Description: string, Exception: string>, TrackingId: string> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "listId" $listId "scalar") (serialize-qp "CacheImage" $CacheImage "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "listId" $list_id "scalar") (serialize-qp "CacheImage" $cache_image "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/contentmoderator/moderate/v1.0/ProcessImage/Match" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Returns any text found in the image for the language specified. If no language is specified in input then the detection defaults to English.
 #
 # POST /contentmoderator/moderate/v1.0/ProcessImage/OCR
 # operationId: ImageModeration_OCR
-export def "contentmoderator-moderate-v10-process-image-ocr OCR" [
+export def "contentmoderator-moderate-v1-0-process-image-ocr create-moderation" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -666,25 +700,26 @@ export def "contentmoderator-moderate-v10-process-image-ocr OCR" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --language: string # Language of the terms.
-  --CacheImage: oneof<nothing, bool> # Whether to retain the submitted image for future use; defaults to false if omitted.
-  --enhanced: oneof<nothing, bool> # When set to True, the image goes through additional processing to come with additional candidates.  image/tiff is not supported when enhanced is set to true  Note: This impacts the response time. (default: false)
+  --cache-image: oneof<nothing, bool> # Whether to retain the submitted image for future use; defaults to false if omitted.
+  --enhanced: oneof<nothing, bool> # When set to True, the image goes through additional processing to come with additional candidates. image/tiff is not supported when enhanced is set to true Note: This impacts the response time. (default: false)
 ]: nothing -> record<CacheId: string, Candidates: table<Confidence: float, Text: string>, Language: string, Metadata: table<Key: string, Value: string>, Status: record<Code: int, Description: string, Exception: string>, Text: string, TrackingId: string> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "language" $language "scalar") (serialize-qp "CacheImage" $CacheImage "scalar") (serialize-qp "enhanced" $enhanced "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "language" $language "scalar") (serialize-qp "CacheImage" $cache_image "scalar") (serialize-qp "enhanced" $enhanced "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/contentmoderator/moderate/v1.0/ProcessImage/OCR" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
-# This operation will detect the language of given input content. Returns the <a href="http://www-01.sil.org/iso639-3/codes.asp">ISO 639-3 code</a> for the predominant language comprising the submitted text. Over 110 languages supported.
+# This operation will detect the language of given input content. Returns the ISO 639-3 code (http://www-01.sil.org/iso639-3/codes.asp) for the predominant language comprising the submitted text. Over 110 languages supported.
 #
 # POST /contentmoderator/moderate/v1.0/ProcessText/DetectLanguage
 # operationId: TextModeration_DetectLanguage
-export def "contentmoderator-moderate-v10-process-text-detect-language DetectLanguage" [
+export def "contentmoderator-moderate-v1-0-process-text-detect-language create-moderation" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -692,24 +727,25 @@ export def "contentmoderator-moderate-v10-process-text-detect-language DetectLan
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string@Content-Type-completer # The content type.
+  --content-type: string@content-type-completer # The content type.
 ]: nothing -> record<DetectedLanguage: string, Status: record<Code: int, Description: string, Exception: string>, TrackingId: string> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/contentmoderator/moderate/v1.0/ProcessText/DetectLanguage")
-  let extra_headers = {"Content-Type": $Content_Type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"Content-Type": $content_type} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Detect profanity and match against custom and shared blacklists
 #
 # POST /contentmoderator/moderate/v1.0/ProcessText/Screen/
 # operationId: TextModeration_ScreenText
-export def "contentmoderator-moderate-v10-process-text-screen ScreenText" [
+export def "contentmoderator-moderate-v1-0-process-text-screen create-moderation" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -717,31 +753,32 @@ export def "contentmoderator-moderate-v10-process-text-screen ScreenText" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --language: string # Language of the text.
   --autocorrect: oneof<nothing, bool> # Autocorrect text. (default: false)
-  --PII: oneof<nothing, bool> # Detect personal identifiable information. (default: false)
-  --listId: string # The list Id.
+  --pii: oneof<nothing, bool> # Detect personal identifiable information. (default: false)
+  --list-id: string # The list Id.
   --classify: oneof<nothing, bool> # Classify input. (default: false)
-  --Content-Type: string@Content-Type-completer # The content type.
+  --content-type: string@content-type-completer # The content type.
 ]: nothing -> record<AutoCorrectedText: string, Classification: record<Category1: record<Score: float>, Category2: record<Score: float>, Category3: record<Score: float>, ReviewRecommended: bool>, Language: string, Misrepresentation: list<string>, NormalizedText: string, OriginalText: string, PII: record<Address: list<record>, Email: list<record>, IPA: list<record>, Phone: list<record>, SSN: list<record>>, Status: record<Code: int, Description: string, Exception: string>, Terms: table<Index: int, ListId: int, OriginalIndex: int, Term: string>, TrackingId: string> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "language" $language "scalar") (serialize-qp "autocorrect" $autocorrect "scalar") (serialize-qp "PII" $PII "scalar") (serialize-qp "listId" $listId "scalar") (serialize-qp "classify" $classify "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "language" $language "scalar") (serialize-qp "autocorrect" $autocorrect "scalar") (serialize-qp "PII" $pii "scalar") (serialize-qp "listId" $list_id "scalar") (serialize-qp "classify" $classify "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/contentmoderator/moderate/v1.0/ProcessText/Screen/" $qp)
-  let extra_headers = {"Content-Type": $Content_Type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"Content-Type": $content_type} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
-# A job Id will be returned for the content posted on this endpoint.   Once the content is evaluated against the Workflow provided the review will be created or ignored based on the workflow expression.  <h3>CallBack Schemas </h3>  <p> <h4>Job Completion CallBack Sample</h4><br/>  {<br/>   "JobId": "<Job Id>,<br/>   "ReviewId": "<Review Id, if the Job resulted in a Review to be created>",<br/>   "WorkFlowId": "default",<br/>   "Status": "<This will be one of Complete, InProgress, Error>",<br/>   "ContentType": "Image",<br/>   "ContentId": "<This is the ContentId that was specified on input>",<br/>   "CallBackType": "Job",<br/>   "Metadata": {<br/>     "adultscore": "0.xxx",<br/>     "a": "False",<br/>     "racyscore": "0.xxx",<br/>     "r": "True"<br/>   }<br/> }<br/>  </p> <p> <h4>Review Completion CallBack Sample</h4><br/>  {   "ReviewId": "<Review Id>",<br/>   "ModifiedOn": "2016-10-11T22:36:32.9934851Z",<br/>   "ModifiedBy": "<Name of the Reviewer>",<br/>   "CallBackType": "Review",<br/>   "ContentId": "<The ContentId that was specified input>",<br/>   "Metadata": {<br/>     "adultscore": "0.xxx",     "a": "False",<br/>     "racyscore": "0.xxx",<br/>     "r": "True"<br/>   },<br/>   "ReviewerResultTags": {<br/>     "a": "False",<br/>     "r": "True"<br/>   }<br/> }<br/>  </p>.
+# A job Id will be returned for the content posted on this endpoint. Once the content is evaluated against the Workflow provided the review will be created or ignored based on the workflow expression. CallBack Schemas Job Completion CallBack Sample { "JobId": ", "ReviewId": "", "WorkFlowId": "default", "Status": "", "ContentType": "Image", "ContentId": "", "CallBackType": "Job", "Metadata": { "adultscore": "0.xxx", "a": "False", "racyscore": "0.xxx", "r": "True" } } Review Completion CallBack Sample { "ReviewId": "", "ModifiedOn": "2016-10-11T22:36:32.9934851Z", "ModifiedBy": "", "CallBackType": "Review", "ContentId": "", "Metadata": { "adultscore": "0.xxx", "a": "False", "racyscore": "0.xxx", "r": "True" }, "ReviewerResultTags": { "a": "False", "r": "True" } } .
 #
 # POST /contentmoderator/review/v1.0/teams/{teamName}/jobs
 # operationId: Reviews_CreateJob
-export def "contentmoderator-review-v10-teams-jobs CreateJob" [
-  teamName: string
+export def "contentmoderator-review-v1-0-teams-jobs create" [
+  team_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -749,36 +786,39 @@ export def "contentmoderator-review-v10-teams-jobs CreateJob" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --ContentType: string@ContentType-completer # Image, Text or Video.
-  --ContentId: string # Id/Name to identify the content submitted.
-  --WorkflowName: string # Workflow Name that you want to invoke.
-  --CallBackEndpoint: string # Callback endpoint for posting the create job result.
-  --Content-Type: string@Content-Type-completer-1 # The content type.
-  ContentValue: string # Content to evaluate for a job.
+  --content-type: string@content-type-completer-1 # Image, Text or Video.
+  --content-id: string # Id/Name to identify the content submitted.
+  --workflow-name: string # Workflow Name that you want to invoke.
+  --call-back-endpoint: string # Callback endpoint for posting the create job result.
+  --content-type: string@content-type-completer-2 # The content type.
+  content_value: string # Content to evaluate for a job.
 ]: any -> record<JobId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "ContentType" $ContentType "scalar") (serialize-qp "ContentId" $ContentId "scalar") (serialize-qp "WorkflowName" $WorkflowName "scalar") (serialize-qp "CallBackEndpoint" $CallBackEndpoint "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/contentmoderator/review/v1.0/teams/($teamName)/jobs" $qp)
-  let body = {ContentValue: $ContentValue} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $Content_Type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let qp = [(serialize-qp "ContentType" $content_type "scalar") (serialize-qp "ContentId" $content_id "scalar") (serialize-qp "WorkflowName" $workflow_name "scalar") (serialize-qp "CallBackEndpoint" $call_back_endpoint "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({team_name: (encode-path-segment $team_name)} | format pattern "/contentmoderator/review/v1.0/teams/{team_name}/jobs") $qp)
+  let req_body = {"ContentValue": $content_value} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Content-Type": $content_type} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let effective_ct = ($content_type | default "application/json")
+  let req_body = if $effective_ct == "application/x-www-form-urlencoded" { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else { $req_body }
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $effective_ct $req_body
 }
 
 # Get the Job Details for a Job Id.
 #
 # GET /contentmoderator/review/v1.0/teams/{teamName}/jobs/{JobId}
 # operationId: Reviews_GetJobDetails
-export def "contentmoderator-review-v10-teams-jobs GetJobDetails" [
-  teamName: string
-  JobId: string
+export def "contentmoderator-review-v1-0-teams-jobs get-details" [
+  team_name: string
+  job_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -786,22 +826,23 @@ export def "contentmoderator-review-v10-teams-jobs GetJobDetails" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<CallBackEndpoint: string, Id: string, JobExecutionReport: table<Msg: string, Ts: string>, ResultMetaData: table<Key: string, Value: string>, ReviewId: string, Status: string, TeamName: string, Type: string, WorkflowId: string> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/contentmoderator/review/v1.0/teams/($teamName)/jobs/($JobId)")
+  let full_url = (build-url $base ({team_name: (encode-path-segment $team_name), job_id: (encode-path-segment $job_id)} | format pattern "/contentmoderator/review/v1.0/teams/{team_name}/jobs/{job_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
-# The reviews created would show up for Reviewers on your team. As Reviewers complete reviewing, results of the Review would be POSTED (i.e. HTTP POST) on the specified CallBackEndpoint.  <h3>CallBack Schemas </h3> <h4>Review Completion CallBack Sample</h4> <p> {<br/>   "ReviewId": "<Review Id>",<br/>   "ModifiedOn": "2016-10-11T22:36:32.9934851Z",<br/>   "ModifiedBy": "<Name of the Reviewer>",<br/>   "CallBackType": "Review",<br/>   "ContentId": "<The ContentId that was specified input>",<br/>   "Metadata": {<br/>     "adultscore": "0.xxx",<br/>     "a": "False",<br/>     "racyscore": "0.xxx",<br/>     "r": "True"<br/>   },<br/>   "ReviewerResultTags": {<br/>     "a": "False",<br/>     "r": "True"<br/>   }<br/> }<br/>  </p>.
+# The reviews created would show up for Reviewers on your team. As Reviewers complete reviewing, results of the Review would be POSTED (i.e. HTTP POST) on the specified CallBackEndpoint. CallBack Schemas Review Completion CallBack Sample { "ReviewId": "", "ModifiedOn": "2016-10-11T22:36:32.9934851Z", "ModifiedBy": "", "CallBackType": "Review", "ContentId": "", "Metadata": { "adultscore": "0.xxx", "a": "False", "racyscore": "0.xxx", "r": "True" }, "ReviewerResultTags": { "a": "False", "r": "True" } } .
 #
 # POST /contentmoderator/review/v1.0/teams/{teamName}/reviews
 # operationId: Reviews_CreateReviews
-export def "contentmoderator-review-v10-teams-reviews CreateReviews" [
-  teamName: string
+export def "contentmoderator-review-v1-0-teams-reviews create" [
+  team_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -809,31 +850,33 @@ export def "contentmoderator-review-v10-teams-reviews CreateReviews" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --subTeam: string # SubTeam of your team, you want to assign the created review to.
-  --UrlContentType: string # The content type.
-  --body: record
+  --sub-team: string # SubTeam of your team, you want to assign the created review to.
+  --url-content-type: string # The content type.
+  --body: list
 ]: any -> list<string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "subTeam" $subTeam "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/contentmoderator/review/v1.0/teams/($teamName)/reviews" $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"UrlContentType": $UrlContentType} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let qp = [(serialize-qp "subTeam" $sub_team "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({team_name: (encode-path-segment $team_name)} | format pattern "/contentmoderator/review/v1.0/teams/{team_name}/reviews") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"UrlContentType": $url_content_type} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Returns review details for the review Id passed.
 #
 # GET /contentmoderator/review/v1.0/teams/{teamName}/reviews/{reviewId}
 # operationId: Reviews_GetReview
-export def "contentmoderator-review-v10-teams-reviews GetReview" [
-  teamName: string
-  reviewId: string
+export def "contentmoderator-review-v1-0-teams-reviews get" [
+  team_name: string
+  review_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -841,23 +884,24 @@ export def "contentmoderator-review-v10-teams-reviews GetReview" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<CallbackEndpoint: string, Content: string, ContentId: string, CreatedBy: string, Metadata: table<Key: string, Value: string>, ReviewId: string, ReviewerResultTags: table<Key: string, Value: string>, Status: string, SubTeam: string, Type: string> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/contentmoderator/review/v1.0/teams/($teamName)/reviews/($reviewId)")
+  let full_url = (build-url $base ({team_name: (encode-path-segment $team_name), review_id: (encode-path-segment $review_id)} | format pattern "/contentmoderator/review/v1.0/teams/{team_name}/reviews/{review_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
-# The reviews created would show up for Reviewers on your team. As Reviewers complete reviewing, results of the Review would be POSTED (i.e. HTTP POST) on the specified CallBackEndpoint.  <h3>CallBack Schemas </h3> <h4>Review Completion CallBack Sample</h4> <p> {<br/>   "ReviewId": "<Review Id>",<br/>   "ModifiedOn": "2016-10-11T22:36:32.9934851Z",<br/>   "ModifiedBy": "<Name of the Reviewer>",<br/>   "CallBackType": "Review",<br/>   "ContentId": "<The ContentId that was specified input>",<br/>   "Metadata": {<br/>     "adultscore": "0.xxx",<br/>     "a": "False",<br/>     "racyscore": "0.xxx",<br/>     "r": "True"<br/>   },<br/>   "ReviewerResultTags": {<br/>     "a": "False",<br/>     "r": "True"<br/>   }<br/> }<br/>  </p>.
+# The reviews created would show up for Reviewers on your team. As Reviewers complete reviewing, results of the Review would be POSTED (i.e. HTTP POST) on the specified CallBackEndpoint. CallBack Schemas Review Completion CallBack Sample { "ReviewId": "", "ModifiedOn": "2016-10-11T22:36:32.9934851Z", "ModifiedBy": "", "CallBackType": "Review", "ContentId": "", "Metadata": { "adultscore": "0.xxx", "a": "False", "racyscore": "0.xxx", "r": "True" }, "ReviewerResultTags": { "a": "False", "r": "True" } } .
 #
 # GET /contentmoderator/review/v1.0/teams/{teamName}/reviews/{reviewId}/frames
 # operationId: Reviews_GetVideoFrames
-export def "contentmoderator-review-v10-teams-reviews-frames GetVideoFrames" [
-  teamName: string
-  reviewId: string
+export def "contentmoderator-review-v1-0-teams-reviews-frames get-video" [
+  team_name: string
+  review_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -865,27 +909,28 @@ export def "contentmoderator-review-v10-teams-reviews-frames GetVideoFrames" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --startSeed: int # Time stamp of the frame from where you want to start fetching the frames.
-  --noOfRecords: int # Number of frames to fetch.
+  --start-seed: int # Time stamp of the frame from where you want to start fetching the frames.
+  --no-of-records: int # Number of frames to fetch.
   --filter: string # Get frames filtered by tags.
 ]: nothing -> record<ReviewId: string, VideoFrames: table<FrameImage: string, Metadata: list, ReviewerResultTags: list, Timestamp: string>> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "startSeed" $startSeed "scalar") (serialize-qp "noOfRecords" $noOfRecords "scalar") (serialize-qp "filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/contentmoderator/review/v1.0/teams/($teamName)/reviews/($reviewId)/frames" $qp)
+  let qp = [(serialize-qp "startSeed" $start_seed "scalar") (serialize-qp "noOfRecords" $no_of_records "scalar") (serialize-qp "filter" $filter "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({team_name: (encode-path-segment $team_name), review_id: (encode-path-segment $review_id)} | format pattern "/contentmoderator/review/v1.0/teams/{team_name}/reviews/{review_id}/frames") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
-# The reviews created would show up for Reviewers on your team. As Reviewers complete reviewing, results of the Review would be POSTED (i.e. HTTP POST) on the specified CallBackEndpoint.  <h3>CallBack Schemas </h3> <h4>Review Completion CallBack Sample</h4> <p> {<br/>   "ReviewId": "<Review Id>",<br/>   "ModifiedOn": "2016-10-11T22:36:32.9934851Z",<br/>   "ModifiedBy": "<Name of the Reviewer>",<br/>   "CallBackType": "Review",<br/>   "ContentId": "<The ContentId that was specified input>",<br/>   "Metadata": {<br/>     "adultscore": "0.xxx",<br/>     "a": "False",<br/>     "racyscore": "0.xxx",<br/>     "r": "True"<br/>   },<br/>   "ReviewerResultTags": {<br/>     "a": "False",<br/>     "r": "True"<br/>   }<br/> }<br/>  </p>.
+# The reviews created would show up for Reviewers on your team. As Reviewers complete reviewing, results of the Review would be POSTED (i.e. HTTP POST) on the specified CallBackEndpoint. CallBack Schemas Review Completion CallBack Sample { "ReviewId": "", "ModifiedOn": "2016-10-11T22:36:32.9934851Z", "ModifiedBy": "", "CallBackType": "Review", "ContentId": "", "Metadata": { "adultscore": "0.xxx", "a": "False", "racyscore": "0.xxx", "r": "True" }, "ReviewerResultTags": { "a": "False", "r": "True" } } .
 #
 # POST /contentmoderator/review/v1.0/teams/{teamName}/reviews/{reviewId}/frames
 # operationId: Reviews_AddVideoFrame
-export def "contentmoderator-review-v10-teams-reviews-frames AddVideoFrame" [
-  teamName: string
-  reviewId: string
+export def "contentmoderator-review-v1-0-teams-reviews-frames create-video" [
+  team_name: string
+  review_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -893,25 +938,26 @@ export def "contentmoderator-review-v10-teams-reviews-frames AddVideoFrame" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --timescale: int # Timescale of the video you are adding frames to.
 ]: nothing -> record<Error: record<Code: string, Message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "timescale" $timescale "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/contentmoderator/review/v1.0/teams/($teamName)/reviews/($reviewId)/frames" $qp)
+  let full_url = (build-url $base ({team_name: (encode-path-segment $team_name), review_id: (encode-path-segment $review_id)} | format pattern "/contentmoderator/review/v1.0/teams/{team_name}/reviews/{review_id}/frames") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Publish video review to make it available for review.
 #
 # POST /contentmoderator/review/v1.0/teams/{teamName}/reviews/{reviewId}/publish
 # operationId: Reviews_PublishVideoReview
-export def "contentmoderator-review-v10-teams-reviews-publish PublishVideoReview" [
-  teamName: string
-  reviewId: string
+export def "contentmoderator-review-v1-0-teams-reviews-publish publish-video" [
+  team_name: string
+  review_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -919,23 +965,24 @@ export def "contentmoderator-review-v10-teams-reviews-publish PublishVideoReview
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<Error: record<Code: string, Message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/contentmoderator/review/v1.0/teams/($teamName)/reviews/($reviewId)/publish")
+  let full_url = (build-url $base ({team_name: (encode-path-segment $team_name), review_id: (encode-path-segment $review_id)} | format pattern "/contentmoderator/review/v1.0/teams/{team_name}/reviews/{review_id}/publish"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # This API adds a transcript file (text version of all the words spoken in a video) to a video review. The file should be a valid WebVTT format.
 #
 # PUT /contentmoderator/review/v1.0/teams/{teamName}/reviews/{reviewId}/transcript
 # operationId: Reviews_AddVideoTranscript
-export def "contentmoderator-review-v10-teams-reviews-transcript AddVideoTranscript" [
-  teamName: string
-  reviewId: string
+export def "contentmoderator-review-v1-0-teams-reviews-transcript create-video" [
+  team_name: string
+  review_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -943,26 +990,27 @@ export def "contentmoderator-review-v10-teams-reviews-transcript AddVideoTranscr
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string@Content-Type-completer-2 # The content type.
+  --content-type: string@content-type-completer-3 # The content type.
 ]: nothing -> record<Error: record<Code: string, Message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/contentmoderator/review/v1.0/teams/($teamName)/reviews/($reviewId)/transcript")
-  let extra_headers = {"Content-Type": $Content_Type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({team_name: (encode-path-segment $team_name), review_id: (encode-path-segment $review_id)} | format pattern "/contentmoderator/review/v1.0/teams/{team_name}/reviews/{review_id}/transcript"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"Content-Type": $content_type} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # This API adds a transcript screen text result file for a video review. Transcript screen text result file is a result of Screen Text API . In order to generate transcript screen text result file , a transcript file has to be screened for profanity using Screen Text API.
 #
 # PUT /contentmoderator/review/v1.0/teams/{teamName}/reviews/{reviewId}/transcriptmoderationresult
 # operationId: Reviews_AddVideoTranscriptModerationResult
-export def "contentmoderator-review-v10-teams-reviews-transcriptmoderationresult AddVideoTranscriptModerationResult" [
-  teamName: string
-  reviewId: string
+export def "contentmoderator-review-v1-0-teams-reviews-transcriptmoderationresult create-video-transcript-moderation-result" [
+  team_name: string
+  review_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -970,15 +1018,16 @@ export def "contentmoderator-review-v10-teams-reviews-transcriptmoderationresult
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # The content type.
+  --content-type: string # The content type.
 ]: nothing -> record<Error: record<Code: string, Message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/contentmoderator/review/v1.0/teams/($teamName)/reviews/($reviewId)/transcriptmoderationresult")
-  let extra_headers = {"Content-Type": $Content_Type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({team_name: (encode-path-segment $team_name), review_id: (encode-path-segment $review_id)} | format pattern "/contentmoderator/review/v1.0/teams/{team_name}/reviews/{review_id}/transcriptmoderationresult"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"Content-Type": $content_type} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }

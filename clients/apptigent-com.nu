@@ -18,21 +18,32 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 }
 
 # Serialize a single query parameter based on collection style
+# Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
+# ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = ($name | url encode)
+  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
-  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
-    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
-    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
+    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
+    _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
+}
+
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Build URL from base, path, and optional query string
@@ -44,7 +55,7 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
@@ -53,13 +64,41 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
     "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "put" => { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "patch" => { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
   if ($method in ["head" "options"]) { return $resp }
-  if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
+  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
+}
+
+# Build a `multipart/form-data` envelope per RFC 7578. `file_fields` lists
+# the field names whose value should be read from disk as bytes; every
+# other field is sent as a text part (records/lists JSON-stringified).
+# Returns {content_type, body} ready to pass to `do-request`.
+# When `$dry_run` is true, file fields are NOT read from disk — they emit
+# an empty-bytes placeholder so callers can inspect the request shape
+# without the file existing on disk (issue 11.B).
+def build-multipart-body [parts: record, file_fields: list<string>, dry_run: bool = false]: nothing -> record {
+  let boundary = $"----nu-(random chars --length 24)"
+  let crlf = "\r\n"
+  let chunks = ($parts | items {|name, val|
+    if $val == null { null } else if $name in $file_fields {
+      let filename = ($val | into string | path basename)
+      let bytes = if $dry_run { (0x[] | into binary) } else { (open --raw $val | into binary | collect) }
+      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"; filename=\"($filename)\"($crlf)Content-Type: application/octet-stream($crlf)($crlf)" | into binary)
+      $head ++ $bytes ++ ($crlf | into binary)
+    } else {
+      let dt = ($val | describe)
+      let s = if (($dt | str starts-with "record") or ($dt | str starts-with "list") or ($dt | str starts-with "table")) { ($val | to json --raw) } else { ($val | into string) }
+      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"($crlf)($crlf)" | into binary)
+      $head ++ ($"($s)($crlf)" | into binary)
+    }
+  } | compact)
+  let trailer = ($"--($boundary)--($crlf)" | into binary)
+  let body = ($chunks | reduce --fold (0x[] | into binary) {|chunk, acc| $acc ++ $chunk }) ++ $trailer
+  {content_type: $"multipart/form-data; boundary=($boundary)", body: $body}
 }
 
 def base-url-completer [] { ["https://connect.apptigent.com/api/utilities"] }
@@ -104,7 +143,7 @@ def uppercase-completer [] { ["false" "true"] }
 def algorithm-completer [] { ["MD5" "SHA1" "SHA256" "SHA384" "SHA512"] }
 def payload-completer [] { ["Bitcoin Payment (address|amount|label|message)" "Bookmark (url|title)" "Calendar Event (subject|description|location|start|end|allDayEvent['true' or 'false']|format ['universal' or 'iCal'])" "Geolocation (latitude|longitude)" "Mail (recipient|subject|message)" "Phone Number (string)" "Plain Text (string)" "SMS (number|message)" "URL (string)" "WiFi (ssid|password|authenticationMode ['WEP', 'WPA' or 'WPA2'])"] }
 def symbol-completer [] { ["CDAXX.INDX (DAX Composite Index [Germany])" "DJA.INDX (Dow Jones Composite Average)" "DJI.INDX (Dow Jones Industrial Average)" "DJT.INDX (Dow Jones Transportation)" "DJUS.INDX (Dow Jones US)" "DXY.INDX (US Dollar Index)" "ES.INDX (S&P 500 Futures)" "FTSE.INDX (FTSE 100 Index [UK])" "GDAXI.INDX (DAX Index [Germany])" "GDOW.INDX (Global Dow USD)" "GPTSE.INDX (S&P TSX Composite Index [Canada])" "GSPC.INDX (S&P 500)" "HSCE.INDX (Hang Seng China Enterprise (CEI))" "HSI.INDX (Hang Seng Index [Hong Kong])" "IXIC.INDX (NASDAQ Composite)" "MID.INDX (S&P Midcap 400)" "N100.INDX (EuroNext 100)" "N225.INDX (Nikkei 225 Index)" "NDX.INDX (NASDAQ 100)" "NY.INDX (NYSE US 100 Index)" "NYA.INDX (NYSE Composite)" "RTSI.INDX (RTSI Index [Russia])" "SSEC.INDX (Shanghai Composite)" "SSMI.INDX (Swiss Market Index)"] }
-def ignoreCase-completer [] { ["false" "true"] }
+def ignore-case-completer [] { ["false" "true"] }
 def algorithm-completer-1 [] { ["Bicubic (default)" "Bilinear" "Cubic (Box)" "Cubic (Catmull-Rom)" "Cubic (Hermite)" "Cubic (Spline)" "Nearest Neighbor" "Robidoux" "Robidoux Sharp" "Sinc (Lanczos2)" "Sinc (Lanczos3)" "Sinc (Lanczos5)" "Sinc (Lanczos8)"] }
 def units-completer [] { ["Percent" "Pixels"] }
 def order-completer [] { ["Ascending" "Descending"] }
@@ -124,8 +163,8 @@ def target-completer-11 [] { ["AUS Central Standard Time - (GMT+09:30) Darwin" "
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "add-to-collection AddToCollection" } } | get name | first)
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "add-to-collection create" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -149,7 +188,7 @@ export def commands []: nothing -> table {
 #
 # POST /AddToCollection
 # operationId: AddToCollection
-export def "add-to-collection AddToCollection" [
+export def "add-to-collection create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -157,28 +196,29 @@ export def "add-to-collection AddToCollection" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --index: string # Index position for operation (leave blank to specify end of collection)
-  input: list # Collection of values or objects to modify
+  input: list<string> # Collection of values or objects to modify
   --item: string # Item (for multiple items, leave blank and use Items)
-  --items: list # Items (Collection, for a single item leave blank and use Item)
+  --items: list<string> # Items (Collection, for a single item leave blank and use Item)
 ]: any -> record<result: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/AddToCollection")
-  let body = {index: $index, input: $input, item: $item, items: $items} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"index": $index, "input": $input, "item": $item, "items": $items} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Data - CSV to JSON
 #
 # POST /CSVtoJSON
 # operationId: CsvToJson
-export def "cs-vto-json CsvToJson" [
+export def "cs-vto-json create-csv" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -186,6 +226,7 @@ export def "cs-vto-json CsvToJson" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --header: oneof<nothing, bool> # Include header row (default: true)
   input: string # CSV string
@@ -194,18 +235,18 @@ export def "cs-vto-json CsvToJson" [
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/CSVtoJSON")
-  let body = {header: $header, input: $input} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"header": $header, "input": $input} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Math - Calculate Absolute
 #
 # POST /CalculateAbsolute
 # operationId: CalculateAbsolute
-export def "calculate-absolute CalculateAbsolute" [
+export def "calculate-absolute create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -213,6 +254,7 @@ export def "calculate-absolute CalculateAbsolute" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   decimals: float # Round to number of decimal places
   input: float # Numeric value to calculate
@@ -221,18 +263,18 @@ export def "calculate-absolute CalculateAbsolute" [
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/CalculateAbsolute")
-  let body = {decimals: $decimals, input: $input} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"decimals": $decimals, "input": $input} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Math - Calculate Addition
 #
 # POST /CalculateAddition
 # operationId: CalculateAddition
-export def "calculate-addition CalculateAddition" [
+export def "calculate-addition create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -240,6 +282,7 @@ export def "calculate-addition CalculateAddition" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   decimals: float # Round to number of decimal places
   input: float # Numeric value
@@ -249,18 +292,18 @@ export def "calculate-addition CalculateAddition" [
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/CalculateAddition")
-  let body = {decimals: $decimals, input: $input, value: $value} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"decimals": $decimals, "input": $input, "value": $value} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Math - Calculate average
 #
 # POST /CalculateAverage
 # operationId: CalculateAverage
-export def "calculate-average CalculateAverage" [
+export def "calculate-average create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -268,26 +311,27 @@ export def "calculate-average CalculateAverage" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   decimals: float # Round to number of decimal places
-  input: list # Colllection of values to calculate
+  input: list<float> # Colllection of values to calculate
 ]: any -> record<result: float> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/CalculateAverage")
-  let body = {decimals: $decimals, input: $input} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"decimals": $decimals, "input": $input} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Math - Calculate Cosine
 #
 # POST /CalculateCosine
 # operationId: CalculateCosine
-export def "calculate-cosine CalculateCosine" [
+export def "calculate-cosine create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -295,6 +339,7 @@ export def "calculate-cosine CalculateCosine" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   decimals: float # Round to number of decimal places
   input: float # Numeric value to calculate
@@ -303,18 +348,18 @@ export def "calculate-cosine CalculateCosine" [
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/CalculateCosine")
-  let body = {decimals: $decimals, input: $input} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"decimals": $decimals, "input": $input} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Math - Calculate Division
 #
 # POST /CalculateDivision
 # operationId: CalculateDivision
-export def "calculate-division CalculateDivision" [
+export def "calculate-division create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -322,6 +367,7 @@ export def "calculate-division CalculateDivision" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   decimals: float # Round to number of decimal places
   input: float # Numeric value
@@ -331,18 +377,18 @@ export def "calculate-division CalculateDivision" [
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/CalculateDivision")
-  let body = {decimals: $decimals, input: $input, value: $value} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"decimals": $decimals, "input": $input, "value": $value} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Math - Calculate Logarithm
 #
 # POST /CalculateLogarithm
 # operationId: CalculateLogarithm
-export def "calculate-logarithm CalculateLogarithm" [
+export def "calculate-logarithm create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -350,6 +396,7 @@ export def "calculate-logarithm CalculateLogarithm" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   decimals: float # Round to number of decimal places
   input: float # Numeric value to calculate
@@ -358,18 +405,18 @@ export def "calculate-logarithm CalculateLogarithm" [
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/CalculateLogarithm")
-  let body = {decimals: $decimals, input: $input} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"decimals": $decimals, "input": $input} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Math - Calculate median
 #
 # POST /CalculateMedian
 # operationId: CalculateMedian
-export def "calculate-median CalculateMedian" [
+export def "calculate-median create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -377,26 +424,27 @@ export def "calculate-median CalculateMedian" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   decimals: float # Round to number of decimal places
-  input: list # Colllection of values to calculate
+  input: list<float> # Colllection of values to calculate
 ]: any -> record<result: float> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/CalculateMedian")
-  let body = {decimals: $decimals, input: $input} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"decimals": $decimals, "input": $input} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Math - Calculate minimum or maximum
 #
 # POST /CalculateMinMax
 # operationId: CalculateMinMax
-export def "calculate-min-max CalculateMinMax" [
+export def "calculate-min-max create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -404,26 +452,27 @@ export def "calculate-min-max CalculateMinMax" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  input: list # Colllection of values to calculate
+  input: list<float> # Colllection of values to calculate
   type: string@type-completer # Minimum or Maximum (default: Minimum)
 ]: any -> record<result: float> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/CalculateMinMax")
-  let body = {input: $input, type: $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"input": $input, "type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Math - Calculate Modulo
 #
 # POST /CalculateModulo
 # operationId: CalculateModulo
-export def "calculate-modulo CalculateModulo" [
+export def "calculate-modulo create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -431,6 +480,7 @@ export def "calculate-modulo CalculateModulo" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   decimals: float # Round to number of decimal places
   input: float # Numeric value
@@ -440,18 +490,18 @@ export def "calculate-modulo CalculateModulo" [
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/CalculateModulo")
-  let body = {decimals: $decimals, input: $input, value: $value} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"decimals": $decimals, "input": $input, "value": $value} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Math - Calculate Multiplication
 #
 # POST /CalculateMultiplication
 # operationId: CalculateMultiplication
-export def "calculate-multiplication CalculateMultiplication" [
+export def "calculate-multiplication create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -459,6 +509,7 @@ export def "calculate-multiplication CalculateMultiplication" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   decimals: float # Round to number of decimal places
   input: float # Numeric value
@@ -468,18 +519,18 @@ export def "calculate-multiplication CalculateMultiplication" [
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/CalculateMultiplication")
-  let body = {decimals: $decimals, input: $input, value: $value} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"decimals": $decimals, "input": $input, "value": $value} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Math - Calculate Nth Root
 #
 # POST /CalculateNthRoot
 # operationId: CalculateNthRoot
-export def "calculate-nth-root CalculateNthRoot" [
+export def "calculate-nth-root create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -487,6 +538,7 @@ export def "calculate-nth-root CalculateNthRoot" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   decimals: float # Round to number of decimal places
   input: float # Numeric value
@@ -496,18 +548,18 @@ export def "calculate-nth-root CalculateNthRoot" [
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/CalculateNthRoot")
-  let body = {decimals: $decimals, input: $input, value: $value} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"decimals": $decimals, "input": $input, "value": $value} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Math - Calculate power
 #
 # POST /CalculatePower
 # operationId: CalculatePower
-export def "calculate-power CalculatePower" [
+export def "calculate-power create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -515,6 +567,7 @@ export def "calculate-power CalculatePower" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   decimals: float # Round to number of decimal places
   input: float # Number to raise
@@ -524,18 +577,18 @@ export def "calculate-power CalculatePower" [
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/CalculatePower")
-  let body = {decimals: $decimals, input: $input, power: $power} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"decimals": $decimals, "input": $input, "power": $power} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Math - Calculate Sine
 #
 # POST /CalculateSine
 # operationId: CalculateSine
-export def "calculate-sine CalculateSine" [
+export def "calculate-sine create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -543,6 +596,7 @@ export def "calculate-sine CalculateSine" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   decimals: float # Round to number of decimal places
   input: float # Numeric value to calculate
@@ -551,18 +605,18 @@ export def "calculate-sine CalculateSine" [
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/CalculateSine")
-  let body = {decimals: $decimals, input: $input} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"decimals": $decimals, "input": $input} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Math - Calculate Square Root
 #
 # POST /CalculateSquareRoot
 # operationId: CalculateSquareRoot
-export def "calculate-square-root CalculateSquareRoot" [
+export def "calculate-square-root create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -570,6 +624,7 @@ export def "calculate-square-root CalculateSquareRoot" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   decimals: float # Round to number of decimal places
   input: float # Numeric value to calculate
@@ -578,18 +633,18 @@ export def "calculate-square-root CalculateSquareRoot" [
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/CalculateSquareRoot")
-  let body = {decimals: $decimals, input: $input} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"decimals": $decimals, "input": $input} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Math - Calculate Subtraction
 #
 # POST /CalculateSubtraction
 # operationId: CalculateSubtraction
-export def "calculate-subtraction CalculateSubtraction" [
+export def "calculate-subtraction create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -597,6 +652,7 @@ export def "calculate-subtraction CalculateSubtraction" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   decimals: float # Round to number of decimal places
   input: float # Numeric value
@@ -606,18 +662,18 @@ export def "calculate-subtraction CalculateSubtraction" [
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/CalculateSubtraction")
-  let body = {decimals: $decimals, input: $input, value: $value} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"decimals": $decimals, "input": $input, "value": $value} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Math - Calculate sum
 #
 # POST /CalculateSum
 # operationId: CalculateSum
-export def "calculate-sum CalculateSum" [
+export def "calculate-sum create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -625,26 +681,27 @@ export def "calculate-sum CalculateSum" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   decimals: float # Round to number of decimal places
-  input: list # Colllection of values to calculate
+  input: list<float> # Colllection of values to calculate
 ]: any -> record<result: float> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/CalculateSum")
-  let body = {decimals: $decimals, input: $input} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"decimals": $decimals, "input": $input} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Math - Calculate Tangent
 #
 # POST /CalculateTangent
 # operationId: CalculateTangent
-export def "calculate-tangent CalculateTangent" [
+export def "calculate-tangent create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -652,6 +709,7 @@ export def "calculate-tangent CalculateTangent" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   decimals: float # Round to number of decimal places
   input: float # Numeric value to calculate
@@ -660,18 +718,18 @@ export def "calculate-tangent CalculateTangent" [
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/CalculateTangent")
-  let body = {decimals: $decimals, input: $input} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"decimals": $decimals, "input": $input} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Math - Calculate variance
 #
 # POST /CalculateVariance
 # operationId: CalculateVariance
-export def "calculate-variance CalculateVariance" [
+export def "calculate-variance create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -679,26 +737,27 @@ export def "calculate-variance CalculateVariance" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   decimals: float # Round to number of decimal places
-  input: list # Colllection of values to calculate
+  input: list<float> # Colllection of values to calculate
 ]: any -> record<result: float> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/CalculateVariance")
-  let body = {decimals: $decimals, input: $input} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"decimals": $decimals, "input": $input} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Collections - Contains number
 #
 # POST /CollectionContainsNumber
 # operationId: CollectionContainsNumber
-export def "collection-contains-number CollectionContainsNumber" [
+export def "collection-contains-number create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -706,8 +765,9 @@ export def "collection-contains-number CollectionContainsNumber" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  input: list # Collection of strings to search
+  input: list<float> # Collection of strings to search
   --body-match: float # Number to match
   --type: string@type-completer-1 # Type of number - integer or decimal (default: Integer)
 ]: any -> record<item: float, items: list<float>, status: bool> {
@@ -715,18 +775,18 @@ export def "collection-contains-number CollectionContainsNumber" [
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/CollectionContainsNumber")
-  let body = {input: $input, match: $body_match, type: $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"input": $input, "match": $body_match, "type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Collections - Contains string
 #
 # POST /CollectionContainsString
 # operationId: CollectionContainsString
-export def "collection-contains-string CollectionContainsString" [
+export def "collection-contains-string create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -734,9 +794,10 @@ export def "collection-contains-string CollectionContainsString" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --ignorecase: string@ignorecase-completer # Ignore case when performing comparison
-  input: list # Collection of strings to search
+  input: list<string> # Collection of strings to search
   --body-match: string # Text to match
   --trim: string@trim-completer # Trim white space from comparison string
 ]: any -> record<item: string, items: list<string>, status: bool> {
@@ -744,18 +805,18 @@ export def "collection-contains-string CollectionContainsString" [
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/CollectionContainsString")
-  let body = {ignorecase: $ignorecase, input: $input, match: $body_match, trim: $trim} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"ignorecase": $ignorecase, "input": $input, "match": $body_match, "trim": $trim} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Collections - Ends with string
 #
 # POST /CollectionEndsWithString
 # operationId: CollectionEndsWithString
-export def "collection-ends-with-string CollectionEndsWithString" [
+export def "collection-ends-with-string create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -763,9 +824,10 @@ export def "collection-ends-with-string CollectionEndsWithString" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --ignorecase: string@ignorecase-completer # Ignore case when performing comparison
-  input: list # Collection of strings to search
+  input: list<string> # Collection of strings to search
   --body-match: string # Text to match
   --trim: string@trim-completer # Trim white space from comparison string
 ]: any -> record<item: string, items: list<string>, status: bool> {
@@ -773,18 +835,18 @@ export def "collection-ends-with-string CollectionEndsWithString" [
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/CollectionEndsWithString")
-  let body = {ignorecase: $ignorecase, input: $input, match: $body_match, trim: $trim} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"ignorecase": $ignorecase, "input": $input, "match": $body_match, "trim": $trim} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Collections - Starts with string
 #
 # POST /CollectionStartsWithString
 # operationId: CollectionStartsWithString
-export def "collection-starts-with-string CollectionStartsWithString" [
+export def "collection-starts-with-string create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -792,9 +854,10 @@ export def "collection-starts-with-string CollectionStartsWithString" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --ignorecase: string@ignorecase-completer # Ignore case when performing comparison
-  input: list # Collection of strings to search
+  input: list<string> # Collection of strings to search
   --body-match: string # Text to match
   --trim: string@trim-completer # Trim white space from comparison string
 ]: any -> record<item: string, items: list<string>, status: bool> {
@@ -802,18 +865,18 @@ export def "collection-starts-with-string CollectionStartsWithString" [
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/CollectionStartsWithString")
-  let body = {ignorecase: $ignorecase, input: $input, match: $body_match, trim: $trim} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"ignorecase": $ignorecase, "input": $input, "match": $body_match, "trim": $trim} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Collections - Collection to JSON
 #
 # POST /CollectionToJSON
 # operationId: CollectionToJSON
-export def "collection-to-json CollectionToJSON" [
+export def "collection-to-json create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -821,26 +884,27 @@ export def "collection-to-json CollectionToJSON" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  input: list # Collection containing strings to convert
+  input: list<string> # Collection containing strings to convert
   name: string # Collection name
 ]: any -> record<result: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/CollectionToJSON")
-  let body = {input: $input, name: $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"input": $input, "name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Collections - Collection to XML
 #
 # POST /CollectionToXML
 # operationId: CollectionToXml
-export def "collection-to-xml CollectionToXml" [
+export def "collection-to-xml create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -848,27 +912,28 @@ export def "collection-to-xml CollectionToXml" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   child: string # Name of child XML node(s)
-  input: list # Collection containing strings to convert
+  input: list<string> # Collection containing strings to convert
   root: string # Name of root XML node
 ]: any -> record<result: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/CollectionToXML")
-  let body = {child: $child, input: $input, root: $root} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"child": $child, "input": $input, "root": $root} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Text - Compare strings
 #
 # POST /CompareStrings
 # operationId: CompareStrings
-export def "compare-strings CompareStrings" [
+export def "compare-strings create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -876,6 +941,7 @@ export def "compare-strings CompareStrings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   compare: string # Comparison string
   input: string # Original string
@@ -886,18 +952,18 @@ export def "compare-strings CompareStrings" [
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/CompareStrings")
-  let body = {compare: $compare, input: $input, lower: $lower, trim: $trim} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"compare": $compare, "input": $input, "lower": $lower, "trim": $trim} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Text - Contains string
 #
 # POST /ContainsString
 # operationId: ContainsString
-export def "contains-string ContainsString" [
+export def "contains-string create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -905,6 +971,7 @@ export def "contains-string ContainsString" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   find: string # Text to match
   input: string # Text to search
@@ -914,18 +981,18 @@ export def "contains-string ContainsString" [
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/ContainsString")
-  let body = {find: $find, input: $input, lower: $lower} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"find": $find, "input": $input, "lower": $lower} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Math - Convert angle
 #
 # POST /ConvertAngle
 # operationId: ConvertAngle
-export def "convert-angle ConvertAngle" [
+export def "convert-angle create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -933,6 +1000,7 @@ export def "convert-angle ConvertAngle" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   input: float
   --body-source: string@source-completer
@@ -942,18 +1010,18 @@ export def "convert-angle ConvertAngle" [
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/ConvertAngle")
-  let body = {input: $input, source: $body_source, target: $target} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"input": $input, "source": $body_source, "target": $target} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Math - Convert area
 #
 # POST /ConvertArea
 # operationId: ConvertArea
-export def "convert-area ConvertArea" [
+export def "convert-area create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -961,6 +1029,7 @@ export def "convert-area ConvertArea" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   input: float
   --body-source: string@source-completer-1
@@ -970,18 +1039,18 @@ export def "convert-area ConvertArea" [
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/ConvertArea")
-  let body = {input: $input, source: $body_source, target: $target} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"input": $input, "source": $body_source, "target": $target} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Text - Convert case
 #
 # POST /ConvertCase
 # operationId: ConvertCase
-export def "convert-case ConvertCase" [
+export def "convert-case create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -989,6 +1058,7 @@ export def "convert-case ConvertCase" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   alphacase: string@alphacase-completer # Case of conversion result
   input: string # String containing the text to convert
@@ -997,18 +1067,18 @@ export def "convert-case ConvertCase" [
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/ConvertCase")
-  let body = {alphacase: $alphacase, input: $input} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"alphacase": $alphacase, "input": $input} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Currency - Convert currency
 #
 # POST /ConvertCurrency
 # operationId: ConvertCurrency
-export def "convert-currency ConvertCurrency" [
+export def "convert-currency create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1016,6 +1086,7 @@ export def "convert-currency ConvertCurrency" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   input: float # Amount to convert
   --body-source: string@source-completer-2 # default: USD
@@ -1025,18 +1096,18 @@ export def "convert-currency ConvertCurrency" [
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/ConvertCurrency")
-  let body = {input: $input, source: $body_source, target: $target} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"input": $input, "source": $body_source, "target": $target} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Math - Convert distance
 #
 # POST /ConvertDistance
 # operationId: ConvertDistance
-export def "convert-distance ConvertDistance" [
+export def "convert-distance create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1044,6 +1115,7 @@ export def "convert-distance ConvertDistance" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   input: float
   --body-source: string@source-completer-3
@@ -1053,18 +1125,18 @@ export def "convert-distance ConvertDistance" [
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/ConvertDistance")
-  let body = {input: $input, source: $body_source, target: $target} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"input": $input, "source": $body_source, "target": $target} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Math - Convert duration
 #
 # POST /ConvertDuration
 # operationId: ConvertDuration
-export def "convert-duration ConvertDuration" [
+export def "convert-duration create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1072,6 +1144,7 @@ export def "convert-duration ConvertDuration" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   input: float
   --body-source: string@source-completer-4
@@ -1081,18 +1154,18 @@ export def "convert-duration ConvertDuration" [
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/ConvertDuration")
-  let body = {input: $input, source: $body_source, target: $target} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"input": $input, "source": $body_source, "target": $target} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Math - Convert energy
 #
 # POST /ConvertEnergy
 # operationId: ConvertEnergy
-export def "convert-energy ConvertEnergy" [
+export def "convert-energy create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1100,6 +1173,7 @@ export def "convert-energy ConvertEnergy" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   input: float
   --body-source: string@source-completer-5
@@ -1109,18 +1183,18 @@ export def "convert-energy ConvertEnergy" [
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/ConvertEnergy")
-  let body = {input: $input, source: $body_source, target: $target} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"input": $input, "source": $body_source, "target": $target} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Files - Convert Image
 #
 # POST /ConvertImage
 # operationId: ConvertImage
-export def "convert-image ConvertImage" [
+export def "convert-image create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1128,6 +1202,7 @@ export def "convert-image ConvertImage" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   file: string # Source image file (format: binary)
@@ -1137,18 +1212,20 @@ export def "convert-image ConvertImage" [
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/ConvertImage")
-  let body = {file: $file, format: $format} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"file": $file, "format": $format} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "image/bmp")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
+  let mp = (build-multipart-body $req_body ["file"] $dry_run)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
 }
 
 # Math - Convert power
 #
 # POST /ConvertPower
 # operationId: ConvertPower
-export def "convert-power ConvertPower" [
+export def "convert-power create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1156,6 +1233,7 @@ export def "convert-power ConvertPower" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   input: float
   --body-source: string@source-completer-6
@@ -1165,18 +1243,18 @@ export def "convert-power ConvertPower" [
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/ConvertPower")
-  let body = {input: $input, source: $body_source, target: $target} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"input": $input, "source": $body_source, "target": $target} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Math - Convert speed
 #
 # POST /ConvertSpeed
 # operationId: ConvertSpeed
-export def "convert-speed ConvertSpeed" [
+export def "convert-speed create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1184,6 +1262,7 @@ export def "convert-speed ConvertSpeed" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   input: float
   --body-source: string@source-completer-7
@@ -1193,18 +1272,18 @@ export def "convert-speed ConvertSpeed" [
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/ConvertSpeed")
-  let body = {input: $input, source: $body_source, target: $target} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"input": $input, "source": $body_source, "target": $target} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Math - Convert temperature
 #
 # POST /ConvertTemperature
 # operationId: ConvertTemperature
-export def "convert-temperature ConvertTemperature" [
+export def "convert-temperature create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1212,6 +1291,7 @@ export def "convert-temperature ConvertTemperature" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   input: float
   --body-source: string@source-completer-8
@@ -1221,18 +1301,18 @@ export def "convert-temperature ConvertTemperature" [
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/ConvertTemperature")
-  let body = {input: $input, source: $body_source, target: $target} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"input": $input, "source": $body_source, "target": $target} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Math - Convert volume
 #
 # POST /ConvertVolume
 # operationId: ConvertVolume
-export def "convert-volume ConvertVolume" [
+export def "convert-volume create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1240,6 +1320,7 @@ export def "convert-volume ConvertVolume" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   input: float
   --body-source: string@source-completer-9
@@ -1249,18 +1330,18 @@ export def "convert-volume ConvertVolume" [
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/ConvertVolume")
-  let body = {input: $input, source: $body_source, target: $target} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"input": $input, "source": $body_source, "target": $target} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Math - Convert weight
 #
 # POST /ConvertWeight
 # operationId: ConvertWeight
-export def "convert-weight ConvertWeight" [
+export def "convert-weight create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1268,6 +1349,7 @@ export def "convert-weight ConvertWeight" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   input: float
   --body-source: string@source-completer-10
@@ -1277,18 +1359,18 @@ export def "convert-weight ConvertWeight" [
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/ConvertWeight")
-  let body = {input: $input, source: $body_source, target: $target} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"input": $input, "source": $body_source, "target": $target} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Collections - Count collection
 #
 # POST /CountCollection
 # operationId: CountCollection
-export def "count-collection CountCollection" [
+export def "count-collection create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1296,25 +1378,26 @@ export def "count-collection CountCollection" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  input: list # Collection of items to count
+  input: list<string> # Collection of items to count
 ]: any -> record<result: float> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/CountCollection")
-  let body = {input: $input} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"input": $input} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Files - Crop Image
 #
 # POST /CropImage
 # operationId: CropImage
-export def "crop-image CropImage" [
+export def "crop-image create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1322,10 +1405,11 @@ export def "crop-image CropImage" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  Height: float # Height (Y-axis down, negative to reverse)
-  Width: float # Width (X-axis right, negative to reverse)
+  height: float # Height (Y-axis down, negative to reverse)
+  width: float # Width (X-axis right, negative to reverse)
   file: string # Source image file (format: binary)
   position: string@position-completer # Crop start position (use negative values to reverse crop area) (default: TopLeft)
 ]: any -> any {
@@ -1333,18 +1417,20 @@ export def "crop-image CropImage" [
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/CropImage")
-  let body = {Height: $Height, Width: $Width, file: $file, position: $position} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"Height": $height, "Width": $width, "file": $file, "position": $position} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "image/bmp")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
+  let mp = (build-multipart-body $req_body ["file"] $dry_run)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
 }
 
 # DateTime - DateTime difference
 #
 # POST /DateTimeDifference
 # operationId: DateTimeDifference
-export def "date-time-difference DateTimeDifference" [
+export def "date-time-difference create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1352,26 +1438,27 @@ export def "date-time-difference DateTimeDifference" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  dateTime1: string # First date/time value
-  dateTime2: string # Second date/time value
+  date_time1: string # First date/time value
+  date_time2: string # Second date/time value
 ]: any -> record<days: float, hours: float, milliseconds: float, minutes: float, months: float, ticks: float, totalDays: float, totalHours: float, totalMilliseconds: float, totalMinutes: float, totalMonths: float, totalSeconds: float, totalYears: float, years: float> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/DateTimeDifference")
-  let body = {dateTime1: $dateTime1, dateTime2: $dateTime2} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"dateTime1": $date_time1, "dateTime2": $date_time2} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # DateTime - Get date and time information
 #
 # POST /DateTimeInfo
 # operationId: DateTimeInfo
-export def "date-time-info DateTimeInfo" [
+export def "date-time-info get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1379,6 +1466,7 @@ export def "date-time-info DateTimeInfo" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   culture: string@culture-completer # Language culture (default: en-US)
   input: string # Source date and time
@@ -1387,18 +1475,18 @@ export def "date-time-info DateTimeInfo" [
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/DateTimeInfo")
-  let body = {culture: $culture, input: $input} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"culture": $culture, "input": $input} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Text - Decode string
 #
 # POST /DecodeString
 # operationId: DecodeString
-export def "decode-string DecodeString" [
+export def "decode-string create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1406,6 +1494,7 @@ export def "decode-string DecodeString" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body-source: string # Encoded string variable or text value
 ]: any -> record<result: string> {
@@ -1413,18 +1502,18 @@ export def "decode-string DecodeString" [
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/DecodeString")
-  let body = {source: $body_source} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"source": $body_source} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Text - Encode string
 #
 # POST /EncodeString
 # operationId: EncodeString
-export def "encode-string EncodeString" [
+export def "encode-string create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1432,6 +1521,7 @@ export def "encode-string EncodeString" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body-source: string # String variable or text value
 ]: any -> record<result: string> {
@@ -1439,18 +1529,18 @@ export def "encode-string EncodeString" [
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/EncodeString")
-  let body = {source: $body_source} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"source": $body_source} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Files - File to string
 #
 # POST /FileToString
 # operationId: FileToString
-export def "file-to-string FileToString" [
+export def "file-to-string create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1458,6 +1548,7 @@ export def "file-to-string FileToString" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   file: string # Source file (10MB limit) (format: binary)
 ]: any -> record<result: string> {
@@ -1465,18 +1556,20 @@ export def "file-to-string FileToString" [
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/FileToString")
-  let body = {file: $file} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"file": $file} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
+  let mp = (build-multipart-body $req_body ["file"] $dry_run)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
 }
 
 # Collections - Filter collection
 #
 # POST /FilterCollection
 # operationId: FilterCollection
-export def "filter-collection FilterCollection" [
+export def "filter-collection create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1484,8 +1577,9 @@ export def "filter-collection FilterCollection" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  input: list # Collection of strings to filter
+  input: list<string> # Collection of strings to filter
   keywords: string # Keywords (separate multiple values with commas)
   --body-match: string@match-completer # Match type (default: Any)
 ]: any -> record<result: list<string>> {
@@ -1493,18 +1587,18 @@ export def "filter-collection FilterCollection" [
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/FilterCollection")
-  let body = {input: $input, keywords: $keywords, match: $body_match} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"input": $input, "keywords": $keywords, "match": $body_match} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Files - Flip Image
 #
 # POST /FlipImage
 # operationId: FlipImage
-export def "flip-image FlipImage" [
+export def "flip-image create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1512,6 +1606,7 @@ export def "flip-image FlipImage" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   file: string # Source image file (format: binary)
   orientation: string@orientation-completer # Horizontal or Vertical (default: Horizontal)
@@ -1520,18 +1615,20 @@ export def "flip-image FlipImage" [
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/FlipImage")
-  let body = {file: $file, orientation: $orientation} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"file": $file, "orientation": $orientation} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
+  let mp = (build-multipart-body $req_body ["file"] $dry_run)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
 }
 
 # Currency - Format currency
 #
 # POST /FormatCurrency
 # operationId: FormatCurrency
-export def "format-currency FormatCurrency" [
+export def "format-currency create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1539,6 +1636,7 @@ export def "format-currency FormatCurrency" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   input: float # Amount to format
   target: string@target-completer-2
@@ -1547,18 +1645,18 @@ export def "format-currency FormatCurrency" [
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/FormatCurrency")
-  let body = {input: $input, target: $target} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"input": $input, "target": $target} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # DateTime - Format date and time
 #
 # POST /FormatDateTime
 # operationId: FormatDateTime
-export def "format-date-time FormatDateTime" [
+export def "format-date-time create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1566,6 +1664,7 @@ export def "format-date-time FormatDateTime" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   culture: string@culture-completer # Language culture (default: en-US)
   format: string # Output format
@@ -1575,18 +1674,18 @@ export def "format-date-time FormatDateTime" [
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/FormatDateTime")
-  let body = {culture: $culture, format: $format, input: $input} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"culture": $culture, "format": $format, "input": $input} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Text - Generate GUID
 #
 # POST /GenerateGuid
 # operationId: GenerateGuid
-export def "generate-guid GenerateGuid" [
+export def "generate-guid generate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1594,6 +1693,7 @@ export def "generate-guid GenerateGuid" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   uppercase: string@uppercase-completer # All uppercase alpha characters
 ]: any -> record<result: string> {
@@ -1601,18 +1701,18 @@ export def "generate-guid GenerateGuid" [
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/GenerateGuid")
-  let body = {uppercase: $uppercase} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"uppercase": $uppercase} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Text - Generate hash
 #
 # POST /GenerateHash
 # operationId: GenerateHash
-export def "generate-hash GenerateHash" [
+export def "generate-hash generate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1620,6 +1720,7 @@ export def "generate-hash GenerateHash" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   algorithm: string@algorithm-completer # Hash algorithm
   input: string # Hash source string
@@ -1628,18 +1729,18 @@ export def "generate-hash GenerateHash" [
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/GenerateHash")
-  let body = {algorithm: $algorithm, input: $input} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"algorithm": $algorithm, "input": $input} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Files - Generate QR code
 #
 # POST /GenerateQRCode
 # operationId: GenerateQRCode
-export def "generate-qr-code GenerateQRCode" [
+export def "generate-qr-code generate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1647,6 +1748,7 @@ export def "generate-qr-code GenerateQRCode" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   input: string # Text value(s) (vertical bar delimited by type)
   payload: string@payload-completer # Payload type (default: Plain Text (string))
@@ -1655,18 +1757,18 @@ export def "generate-qr-code GenerateQRCode" [
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/GenerateQRCode")
-  let body = {input: $input, payload: $payload} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"input": $input, "payload": $payload} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "image/png"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Data - JSON to CSV
 #
 # POST /JSONtoCSV
 # operationId: JsonToCsv
-export def "jso-nto-csv JsonToCsv" [
+export def "jso-nto-csv create-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1674,6 +1776,7 @@ export def "jso-nto-csv JsonToCsv" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --header: oneof<nothing, bool> # Include header row (default: true)
   input: string # JSON array object
@@ -1684,18 +1787,18 @@ export def "jso-nto-csv JsonToCsv" [
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/JSONtoCSV")
-  let body = {header: $header, input: $input, omit: $omit, order: $order} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"header": $header, "input": $input, "omit": $omit, "order": $order} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Data - JSON to HTML Table
 #
 # POST /JSONtoHTML
 # operationId: JsonToHtml
-export def "jso-nto-html JsonToHtml" [
+export def "jso-nto-html create-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1703,6 +1806,7 @@ export def "jso-nto-html JsonToHtml" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --alternate: string # Alternate header row markup
   --attributes: string # Optional table attributes (single quoted values)
@@ -1715,18 +1819,18 @@ export def "jso-nto-html JsonToHtml" [
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/JSONtoHTML")
-  let body = {alternate: $alternate, attributes: $attributes, header: $header, input: $input, omit: $omit, order: $order} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"alternate": $alternate, "attributes": $attributes, "header": $header, "input": $input, "omit": $omit, "order": $order} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Data - JSON to XML
 #
 # POST /JSONtoXML
 # operationId: JsonToXml
-export def "jso-nto-xml JsonToXml" [
+export def "jso-nto-xml create-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1734,6 +1838,7 @@ export def "jso-nto-xml JsonToXml" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   input: string # JSON array object
   root: string # Name of root node
@@ -1742,18 +1847,18 @@ export def "jso-nto-xml JsonToXml" [
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/JSONtoXML")
-  let body = {input: $input, root: $root} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"input": $input, "root": $root} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Text - Join strings
 #
 # POST /JoinStrings
 # operationId: JoinStrings
-export def "join-strings JoinStrings" [
+export def "join-strings create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1761,8 +1866,9 @@ export def "join-strings JoinStrings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  input: list # Collection of strings to be joined
+  input: list<string> # Collection of strings to be joined
   lower: string@lower-completer # Convert strings in collection to lowercase
   separator: string # Separator character
   trim: string@trim-completer # Trim strings in collection
@@ -1771,18 +1877,18 @@ export def "join-strings JoinStrings" [
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/JoinStrings")
-  let body = {input: $input, lower: $lower, separator: $separator, trim: $trim} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"input": $input, "lower": $lower, "separator": $separator, "trim": $trim} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Finance - Market index
 #
 # POST /MarketIndex
 # operationId: MarketIndex
-export def "market-index MarketIndex" [
+export def "market-index create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1790,6 +1896,7 @@ export def "market-index MarketIndex" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --date: string # Date (yyyy-MM-dd, leave empty for last trading day)
   symbol: string@symbol-completer # Market index
@@ -1798,18 +1905,18 @@ export def "market-index MarketIndex" [
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/MarketIndex")
-  let body = {date: $date, symbol: $symbol} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"date": $date, "symbol": $symbol} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Data - Query JSON
 #
 # POST /QueryJSON
 # operationId: QueryJson
-export def "query-json QueryJson" [
+export def "query-json list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1817,6 +1924,7 @@ export def "query-json QueryJson" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   input: string # XML or JSON string
   query: string # XPath or JSONPath query
@@ -1825,18 +1933,18 @@ export def "query-json QueryJson" [
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/QueryJSON")
-  let body = {input: $input, query: $query} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"input": $input, "query": $query} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Data - Query XML
 #
 # POST /QueryXML
 # operationId: QueryXml
-export def "query-xml QueryXml" [
+export def "query-xml list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1844,6 +1952,7 @@ export def "query-xml QueryXml" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   input: string # XML or JSON string
   query: string # XPath or JSONPath query
@@ -1852,18 +1961,18 @@ export def "query-xml QueryXml" [
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/QueryXML")
-  let body = {input: $input, query: $query} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"input": $input, "query": $query} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Math - Random number
 #
 # POST /RandomNumber
 # operationId: RandomNumber
-export def "random-number RandomNumber" [
+export def "random-number create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1871,6 +1980,7 @@ export def "random-number RandomNumber" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   end: float # End of range
   start: float # Start of range
@@ -1879,18 +1989,18 @@ export def "random-number RandomNumber" [
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/RandomNumber")
-  let body = {end: $end, start: $start} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"end": $end, "start": $start} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Text - Redact string
 #
 # POST /RedactString
 # operationId: RedactString
-export def "redact-string RedactString" [
+export def "redact-string create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1898,28 +2008,29 @@ export def "redact-string RedactString" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --regex: string # Regular expression pattern for matching strings
   --body-source: string # String containing the complete text
   --value: string # Individual string to redact
-  --values: list # Collection of strings to redact
+  --values: list<string> # Collection of strings to redact
 ]: any -> record<result: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/RedactString")
-  let body = {regex: $regex, source: $body_source, value: $value, values: $values} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"regex": $regex, "source": $body_source, "value": $value, "values": $values} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Collections - Remove from collection
 #
 # POST /RemoveFromCollection
 # operationId: RemoveFromCollection
-export def "remove-from-collection RemoveFromCollection" [
+export def "remove-from-collection delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1927,28 +2038,29 @@ export def "remove-from-collection RemoveFromCollection" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --index: string # Index position for operation (leave blank to specify end of collection)
-  input: list # Collection of values or objects to modify
+  input: list<string> # Collection of values or objects to modify
   --item: string # Item (for multiple items, leave blank and use Items)
-  --items: list # Items (Collection, for a single item leave blank and use Item)
+  --items: list<string> # Items (Collection, for a single item leave blank and use Item)
 ]: any -> record<result: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/RemoveFromCollection")
-  let body = {index: $index, input: $input, item: $item, items: $items} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"index": $index, "input": $input, "item": $item, "items": $items} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Text - Replace string
 #
 # POST /ReplaceString
 # operationId: ReplaceString
-export def "replace-string ReplaceString" [
+export def "replace-string update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1956,6 +2068,7 @@ export def "replace-string ReplaceString" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   replacement: string # Replacement text
   --body-source: string # String containing the text to be replaced
@@ -1965,18 +2078,18 @@ export def "replace-string ReplaceString" [
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/ReplaceString")
-  let body = {replacement: $replacement, source: $body_source, value: $value} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"replacement": $replacement, "source": $body_source, "value": $value} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Collections - Replace values in collection
 #
 # POST /ReplaceValuesInCollection
 # operationId: ReplaceValuesInCollection
-export def "replace-values-in-collection ReplaceValuesInCollection" [
+export def "replace-values-in-collection update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1984,9 +2097,10 @@ export def "replace-values-in-collection ReplaceValuesInCollection" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  ignoreCase: string@ignoreCase-completer # Ignore case (default: true)
-  input: list # Collection of strings
+  ignore_case: string@ignore-case-completer # Ignore case (default: true)
+  input: list<string> # Collection of strings
   --body-match: string # Match value
   replacement: string # Replacement value
 ]: any -> record<result: list<string>> {
@@ -1994,18 +2108,18 @@ export def "replace-values-in-collection ReplaceValuesInCollection" [
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/ReplaceValuesInCollection")
-  let body = {ignoreCase: $ignoreCase, input: $input, match: $body_match, replacement: $replacement} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"ignoreCase": $ignore_case, "input": $input, "match": $body_match, "replacement": $replacement} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Files - Resize Image
 #
 # POST /ResizeImage
 # operationId: ResizeImage
-export def "resize-image ResizeImage" [
+export def "resize-image resize" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2013,6 +2127,7 @@ export def "resize-image ResizeImage" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   algorithm: string@algorithm-completer-1 # Optimize output quality of the target image (default: Bicubic (default))
@@ -2025,18 +2140,20 @@ export def "resize-image ResizeImage" [
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/ResizeImage")
-  let body = {algorithm: $algorithm, file: $file, height: $height, units: $units, width: $width} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"algorithm": $algorithm, "file": $file, "height": $height, "units": $units, "width": $width} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "image/bmp")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
+  let mp = (build-multipart-body $req_body ["file"] $dry_run)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
 }
 
 # Files - Rotate Image
 #
 # POST /RotateImage
 # operationId: RotateImage
-export def "rotate-image RotateImage" [
+export def "rotate-image create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2044,6 +2161,7 @@ export def "rotate-image RotateImage" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   degrees: string # Number of degrees
   file: string # Source image file (format: binary)
@@ -2052,18 +2170,20 @@ export def "rotate-image RotateImage" [
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/RotateImage")
-  let body = {degrees: $degrees, file: $file} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"degrees": $degrees, "file": $file} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
+  let mp = (build-multipart-body $req_body ["file"] $dry_run)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
 }
 
 # Math - Round number
 #
 # POST /RoundNumber
 # operationId: RoundNumber
-export def "round-number RoundNumber" [
+export def "round-number create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2071,6 +2191,7 @@ export def "round-number RoundNumber" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   decimals: float # Round to number of decimal places
   input: float # Numeric value to calculate
@@ -2079,18 +2200,18 @@ export def "round-number RoundNumber" [
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/RoundNumber")
-  let body = {decimals: $decimals, input: $input} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"decimals": $decimals, "input": $input} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Text - Shorten hyperlink
 #
 # POST /ShortenLink
 # operationId: ShortenLink
-export def "shorten-link ShortenLink" [
+export def "shorten-link create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2098,6 +2219,7 @@ export def "shorten-link ShortenLink" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body-source: string # String variable or text value
 ]: any -> record<result: string> {
@@ -2105,18 +2227,18 @@ export def "shorten-link ShortenLink" [
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/ShortenLink")
-  let body = {source: $body_source} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"source": $body_source} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Collections - Sort collection
 #
 # POST /SortCollection
 # operationId: SortCollection
-export def "sort-collection SortCollection" [
+export def "sort-collection create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2124,26 +2246,27 @@ export def "sort-collection SortCollection" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  input: list # Collection of strings to sort
+  input: list<string> # Collection of strings to sort
   order: string@order-completer # Sort order (default: Ascending)
 ]: any -> record<result: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/SortCollection")
-  let body = {input: $input, order: $order} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"input": $input, "order": $order} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Text - Speech to Text
 #
 # POST /SpeechToText
 # operationId: SpeechToText
-export def "speech-to-text SpeechToText" [
+export def "speech-to-text create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2151,6 +2274,7 @@ export def "speech-to-text SpeechToText" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   file: string # Source audio file (WAV, MP3, AAC, M4A) (format: binary)
   language: string@language-completer # Language of audio input (default: English (United States))
@@ -2159,18 +2283,20 @@ export def "speech-to-text SpeechToText" [
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/SpeechToText")
-  let body = {file: $file, language: $language} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"file": $file, "language": $language} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
+  let mp = (build-multipart-body $req_body ["file"] $dry_run)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
 }
 
 # Collections - Split collection
 #
 # POST /SplitCollection
 # operationId: SplitCollection
-export def "split-collection SplitCollection" [
+export def "split-collection create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2178,27 +2304,28 @@ export def "split-collection SplitCollection" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --index: string # Index location to split (leave empty to use Match value)
-  input: list # Collection of items to split
+  input: list<string> # Collection of items to split
   --body-match: string # String to match (explicit, case-insensitive, leave empty to use Index)
 ]: any -> record<result1: list<string>, result2: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/SplitCollection")
-  let body = {index: $index, input: $input, match: $body_match} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"index": $index, "input": $input, "match": $body_match} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Text - Split string
 #
 # POST /SplitString
 # operationId: SplitString
-export def "split-string SplitString" [
+export def "split-string create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2206,6 +2333,7 @@ export def "split-string SplitString" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   characters: string # One or more characters that will be used to split the text
   input: string # Text to split
@@ -2214,18 +2342,18 @@ export def "split-string SplitString" [
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/SplitString")
-  let body = {characters: $characters, input: $input} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"characters": $characters, "input": $input} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Math - Calculate standard deviation
 #
 # POST /StandardDeviation
 # operationId: StandardDeviation
-export def "standard-deviation StandardDeviation" [
+export def "standard-deviation create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2233,26 +2361,27 @@ export def "standard-deviation StandardDeviation" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   decimals: float # Round to number of decimal places
-  input: list # Colllection of values to calculate
+  input: list<float> # Colllection of values to calculate
 ]: any -> record<result: float> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/StandardDeviation")
-  let body = {decimals: $decimals, input: $input} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"decimals": $decimals, "input": $input} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Finance - Stock prices
 #
 # POST /StockPrices
 # operationId: StockPrices
-export def "stock-prices StockPrices" [
+export def "stock-prices create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2260,6 +2389,7 @@ export def "stock-prices StockPrices" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --date: string # Date (yyyy-MM-dd, leave empty for latest)
   --exchange: string@exchange-completer # Stock exchange
@@ -2269,18 +2399,18 @@ export def "stock-prices StockPrices" [
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/StockPrices")
-  let body = {date: $date, exchange: $exchange, symbols: $symbols} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"date": $date, "exchange": $exchange, "symbols": $symbols} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Text - String to File
 #
 # POST /StringToFile
 # operationId: StringToFile
-export def "string-to-file StringToFile" [
+export def "string-to-file create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2288,6 +2418,7 @@ export def "string-to-file StringToFile" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
   extension: string@extension-completer # File extension (default: TXT)
@@ -2298,18 +2429,18 @@ export def "string-to-file StringToFile" [
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/StringToFile")
-  let body = {extension: $extension, filename: $filename, input: $input} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"extension": $extension, "filename": $filename, "input": $input} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Text - Text to Speech
 #
 # POST /TextToSpeech
 # operationId: TextToSpeech
-export def "text-to-speech TextToSpeech" [
+export def "text-to-speech create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2317,6 +2448,7 @@ export def "text-to-speech TextToSpeech" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   text: string # Text to convert (10,000 characters max)
   type: string@type-completer-2 # Text or file type (default: PlainText)
@@ -2326,18 +2458,18 @@ export def "text-to-speech TextToSpeech" [
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/TextToSpeech")
-  let body = {text: $text, type: $type, voice: $voice} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"text": $text, "type": $type, "voice": $voice} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "audio/mp3"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Text - Translate string
 #
 # POST /TranslateString
 # operationId: TranslateString
-export def "translate-string TranslateString" [
+export def "translate-string create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2345,6 +2477,7 @@ export def "translate-string TranslateString" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   input: string # String containing the text to be translated
   language: string@language-completer-1 # Translation language
@@ -2353,18 +2486,18 @@ export def "translate-string TranslateString" [
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/TranslateString")
-  let body = {input: $input, language: $language} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"input": $input, "language": $language} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Text - Trim string
 #
 # POST /TrimString
 # operationId: TrimString
-export def "trim-string TrimString" [
+export def "trim-string create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2372,6 +2505,7 @@ export def "trim-string TrimString" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body-source: string # String containing the text to be trimmed
   type: string@type-completer-3 # Type of white space to remove
@@ -2380,18 +2514,18 @@ export def "trim-string TrimString" [
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/TrimString")
-  let body = {source: $body_source, type: $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"source": $body_source, "type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Text - Decode URL
 #
 # POST /URLDecode
 # operationId: UrlDecode
-export def "url-decode UrlDecode" [
+export def "url-decode create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2399,6 +2533,7 @@ export def "url-decode UrlDecode" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body-source: string # Encoded string variable or text value
 ]: any -> record<result: string> {
@@ -2406,18 +2541,18 @@ export def "url-decode UrlDecode" [
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/URLDecode")
-  let body = {source: $body_source} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"source": $body_source} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Text - Encode URL
 #
 # POST /URLEncode
 # operationId: UrlEncode
-export def "url-encode UrlEncode" [
+export def "url-encode create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2425,6 +2560,7 @@ export def "url-encode UrlEncode" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body-source: string # String variable or text value
 ]: any -> record<result: string> {
@@ -2432,18 +2568,18 @@ export def "url-encode UrlEncode" [
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/URLEncode")
-  let body = {source: $body_source} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"source": $body_source} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Text - Validate email
 #
 # POST /ValidateEmail
 # operationId: ValidateEmail
-export def "validate-email ValidateEmail" [
+export def "validate-email validate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2451,6 +2587,7 @@ export def "validate-email ValidateEmail" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body-source: string # String variable or text value
 ]: any -> record<result: string> {
@@ -2458,18 +2595,18 @@ export def "validate-email ValidateEmail" [
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/ValidateEmail")
-  let body = {source: $body_source} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"source": $body_source} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Text - Verify hash
 #
 # POST /VerifyHash
 # operationId: VerifyHash
-export def "verify-hash VerifyHash" [
+export def "verify-hash verify" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2477,6 +2614,7 @@ export def "verify-hash VerifyHash" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   algorithm: string@algorithm-completer # Hash algorithm
   hash: string # Hashed result
@@ -2486,18 +2624,18 @@ export def "verify-hash VerifyHash" [
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/VerifyHash")
-  let body = {algorithm: $algorithm, hash: $hash, input: $input} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"algorithm": $algorithm, "hash": $hash, "input": $input} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Files - Watermark Image
 #
 # POST /WatermarkImage
 # operationId: WatermarkImage
-export def "watermark-image WatermarkImage" [
+export def "watermark-image create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2505,6 +2643,7 @@ export def "watermark-image WatermarkImage" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   color: string # Text color hex value (default: 000000)
   file: string # Source image file (format: binary)
@@ -2518,18 +2657,20 @@ export def "watermark-image WatermarkImage" [
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/WatermarkImage")
-  let body = {color: $color, file: $file, font: $font, horizontal: $horizontal, size: $size, text: $text, vertical: $vertical} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"color": $color, "file": $file, "font": $font, "horizontal": $horizontal, "size": $size, "text": $text, "vertical": $vertical} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
+  let mp = (build-multipart-body $req_body ["file"] $dry_run)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
 }
 
 # DateTime - Get world time
 #
 # POST /WorldTime
 # operationId: WorldTime
-export def "world-time WorldTime" [
+export def "world-time create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2537,6 +2678,7 @@ export def "world-time WorldTime" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --format: string # Display format (defaults to 'yyyy-MM-dd HH:mm:ss')
   input: string # Source date and time
@@ -2547,18 +2689,18 @@ export def "world-time WorldTime" [
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/WorldTime")
-  let body = {format: $format, input: $input, source: $body_source, target: $target} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"format": $format, "input": $input, "source": $body_source, "target": $target} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Data - XML to JSON
 #
 # POST /XMLtoJSON
 # operationId: XmlToJson
-export def "xm-lto-json XmlToJson" [
+export def "xm-lto-json create-xml" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2566,6 +2708,7 @@ export def "xm-lto-json XmlToJson" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   input: string # XML string
 ]: any -> record<result: string> {
@@ -2573,9 +2716,9 @@ export def "xm-lto-json XmlToJson" [
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/XMLtoJSON")
-  let body = {input: $input} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"input": $input} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }

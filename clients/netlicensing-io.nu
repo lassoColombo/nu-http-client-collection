@@ -12,27 +12,39 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {headers: {}, query: ""} }
   match $scheme {
     "basic" => { {headers: {Authorization: $"Basic ($token_val)"}, query: ""} }
+    "basic-credentials" => { {headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: ""} }
     "none" => { {headers: {}, query: ""} }
     _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
   }
 }
 
 # Serialize a single query parameter based on collection style
+# Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
+# ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = ($name | url encode)
+  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
-  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
-    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
-    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
+    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
+    _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
+}
+
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Build URL from base, path, and optional query string
@@ -44,7 +56,7 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
@@ -53,33 +65,33 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
     "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "put" => { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "patch" => { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
   if ($method in ["head" "options"]) { return $resp }
-  if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
+  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
 def base-url-completer [] { ["https://go.netlicensing.io/core/v2/rest"] }
-def auth-scheme-completer [] { ["basic"] }
+def auth-scheme-completer [] { ["basic" "basic-credentials"] }
 
 # Completers for enum parameters
 def accept-completer [] { ["application/json" "application/xml"] }
 def action-completer [] { ["checkIn" "checkOut"] }
-def vatMode-completer [] { ["GROSS" "NET"] }
+def vat-mode-completer [] { ["GROSS" "NET"] }
 def action-completer-1 [] { ["licenseeLogin"] }
-def apiKeyRole-completer [] { ["ROLE_APIKEY_ADMIN" "ROLE_APIKEY_ANALYTICS" "ROLE_APIKEY_LICENSEE" "ROLE_APIKEY_MAINTENANCE" "ROLE_APIKEY_OPERATION"] }
-def tokenType-completer [] { ["APIKEY" "DEFAULT" "SHOP"] }
+def api-key-role-completer [] { ["ROLE_APIKEY_ADMIN" "ROLE_APIKEY_ANALYTICS" "ROLE_APIKEY_LICENSEE" "ROLE_APIKEY_MAINTENANCE" "ROLE_APIKEY_OPERATION"] }
+def token-type-completer [] { ["APIKEY" "DEFAULT" "SHOP"] }
 def type-completer [] { ["ACTION"] }
 def source-completer [] { ["SHOP"] }
 def status-completer [] { ["CANCELLED" "CLOSED" "PENDING"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "license listLicenses" } } | get name | first)
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "license list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -103,7 +115,7 @@ export def commands []: nothing -> table {
 #
 # GET /license
 # operationId: listLicenses
-export def "license listLicenses" [
+export def "license list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -111,6 +123,7 @@ export def "license listLicenses" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> table<infos: any, items: any> {
@@ -119,14 +132,14 @@ export def "license listLicenses" [
   let full_url = (build-url $base "/license")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Create License
 #
 # POST /license
 # operationId: createLicense
-export def "license createLicense" [
+export def "license create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -134,32 +147,34 @@ export def "license createLicense" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --active: oneof<nothing, bool>
   --currency: string # Specifies currency for the License price. Check data types to discover which currencies are supported. Read-only, set from License Template on creation
   --hidden: oneof<nothing, bool> # If set to 'true', this License is not shown in NetLicensing Shop as purchased License. Set from License Template on creation, if not specified explicitly
-  licenseTemplateNumber: string
-  licenseeNumber: string
+  license_template_number: string
+  licensee_number: string
   --name: string # Name for the Licensed item. Set from License Template on creation, if not specified explicitly.
   --number: string
   --parentfeature: string # Mandatory for 'TIMEVOLUME' License Type and 'RENTAL' licensing model
   --price: float # Price for the License. If >0, it must always be accompanied by the currency specification. Read-only, set from License Template on creation (format: double)
   --quantity: string # Mandatory for 'Pay-per-Use' License Model.
-  --startDate: string # Mandatory for 'TIMEVOLUME' License Type. (format: date-time)
-  --timeVolume: string # Mandatory for 'TIMEVOLUME' License Type.
-  --timeVolumePeriod: string # For 'TIMEVOLUME' License Type.
-  --usedQuantity: string # Mandatory for 'Pay-per-Use' License Model.
+  --start-date: string # Mandatory for 'TIMEVOLUME' License Type. (format: date-time)
+  --time-volume: string # Mandatory for 'TIMEVOLUME' License Type.
+  --time-volume-period: string # For 'TIMEVOLUME' License Type.
+  --used-quantity: string # Mandatory for 'Pay-per-Use' License Model.
 ]: any -> record<infos: any, items: any> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/license")
-  let body = {active: $active, currency: $currency, hidden: $hidden, licenseTemplateNumber: $licenseTemplateNumber, licenseeNumber: $licenseeNumber, name: $name, number: $number, parentfeature: $parentfeature, price: $price, quantity: $quantity, startDate: $startDate, timeVolume: $timeVolume, timeVolumePeriod: $timeVolumePeriod, usedQuantity: $usedQuantity} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"active": $active, "currency": $currency, "hidden": $hidden, "licenseTemplateNumber": $license_template_number, "licenseeNumber": $licensee_number, "name": $name, "number": $number, "parentfeature": $parentfeature, "price": $price, "quantity": $quantity, "startDate": $start_date, "timeVolume": $time_volume, "timeVolumePeriod": $time_volume_period, "usedQuantity": $used_quantity} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # Delete License
@@ -167,7 +182,7 @@ export def "license createLicense" [
 # DELETE /license/{licenseNumber}
 # operationId: deleteLicense
 export def "license delete" [
-  licenseNumber: string
+  license_number: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -175,15 +190,16 @@ export def "license delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<infos: any, items: any> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/license/($licenseNumber)")
+  let full_url = (build-url $base ({license_number: (encode-path-segment $license_number)} | format pattern "/license/{license_number}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get License
@@ -191,7 +207,7 @@ export def "license delete" [
 # GET /license/{licenseNumber}
 # operationId: getLicense
 export def "license get" [
-  licenseNumber: string
+  license_number: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -199,23 +215,24 @@ export def "license get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<infos: any, items: any> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/license/($licenseNumber)")
+  let full_url = (build-url $base ({license_number: (encode-path-segment $license_number)} | format pattern "/license/{license_number}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Update License
 #
 # POST /license/{licenseNumber}
 # operationId: updateLicense
-export def "license updateLicense" [
-  licenseNumber: string
+export def "license update" [
+  license_number: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -223,6 +240,7 @@ export def "license updateLicense" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --active: oneof<nothing, bool>
@@ -233,27 +251,28 @@ export def "license updateLicense" [
   --parentfeature: string
   --price: float # Price for the License. If > 0, it must always be accompanied by the currency specification. Read-only, set from License Template on creation (format: double)
   --quantity: string # Mandatory for 'Pay-per-Use' License Model.
-  --startDate: string # For 'TIMEVOLUME' License type (format: date-time)
-  --timeVolume: string # Mandatory for 'TIMEVOLUME' License Type.
-  --timeVolumePeriod: string # For 'TIMEVOLUME' License Type.
-  --usedQuantity: string # Mandatory for 'Pay-per-Use' License Model.
+  --start-date: string # For 'TIMEVOLUME' License type (format: date-time)
+  --time-volume: string # Mandatory for 'TIMEVOLUME' License Type.
+  --time-volume-period: string # For 'TIMEVOLUME' License Type.
+  --used-quantity: string # Mandatory for 'Pay-per-Use' License Model.
 ]: any -> record<infos: any, items: any> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/license/($licenseNumber)")
-  let body = {active: $active, currency: $currency, hidden: $hidden, name: $name, number: $number, parentfeature: $parentfeature, price: $price, quantity: $quantity, startDate: $startDate, timeVolume: $timeVolume, timeVolumePeriod: $timeVolumePeriod, usedQuantity: $usedQuantity} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({license_number: (encode-path-segment $license_number)} | format pattern "/license/{license_number}"))
+  let req_body = {"active": $active, "currency": $currency, "hidden": $hidden, "name": $name, "number": $number, "parentfeature": $parentfeature, "price": $price, "quantity": $quantity, "startDate": $start_date, "timeVolume": $time_volume, "timeVolumePeriod": $time_volume_period, "usedQuantity": $used_quantity} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # List Licensees
 #
 # GET /licensee
 # operationId: listLicensees
-export def "licensee listLicensees" [
+export def "licensee list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -261,6 +280,7 @@ export def "licensee listLicensees" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> table<infos: any, items: any> {
@@ -269,14 +289,14 @@ export def "licensee listLicensees" [
   let full_url = (build-url $base "/licensee")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Create Licensee
 #
 # POST /licensee
 # operationId: createLicensee
-export def "licensee createLicensee" [
+export def "licensee create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -284,23 +304,25 @@ export def "licensee createLicensee" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --active: oneof<nothing, bool> # If set to 'false', the Licensee is disabled. Licensee can not obtain new Licenses, and validation is disabled
-  --markedForTransfer: oneof<nothing, bool> # Mark Licensee for transfer.
+  --marked-for-transfer: oneof<nothing, bool> # Mark Licensee for transfer.
   --name: string
   --number: string # Unique number (across all Products of a Vendor) that identifies the Licensee. Vendor can assign this number when creating a Licensee or let NetLicensing generate one. Read-only after creation of the first License for the Licensee
-  productNumber: string # 'productNumber' to assign new Licensee object
+  product_number: string # 'productNumber' to assign new Licensee object
 ]: any -> record<infos: any, items: any> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/licensee")
-  let body = {active: $active, markedForTransfer: $markedForTransfer, name: $name, number: $number, productNumber: $productNumber} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"active": $active, "markedForTransfer": $marked_for_transfer, "name": $name, "number": $number, "productNumber": $product_number} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # Delete Licensee
@@ -308,7 +330,7 @@ export def "licensee createLicensee" [
 # DELETE /licensee/{licenseeNumber}
 # operationId: deleteLicensee
 export def "licensee delete" [
-  licenseeNumber: string
+  licensee_number: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -316,17 +338,18 @@ export def "licensee delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --forceCascade: oneof<nothing, bool> # Force object deletion and all descendants.
+  --force-cascade: oneof<nothing, bool> # Force object deletion and all descendants.
 ]: nothing -> record<infos: any, items: any> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "forceCascade" $forceCascade "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/licensee/($licenseeNumber)" $qp)
+  let qp = [(serialize-qp "forceCascade" $force_cascade "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({licensee_number: (encode-path-segment $licensee_number)} | format pattern "/licensee/{licensee_number}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get Licensee
@@ -334,7 +357,7 @@ export def "licensee delete" [
 # GET /licensee/{licenseeNumber}
 # operationId: getLicensee
 export def "licensee get" [
-  licenseeNumber: string
+  licensee_number: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -342,23 +365,24 @@ export def "licensee get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<infos: any, items: any> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/licensee/($licenseeNumber)")
+  let full_url = (build-url $base ({licensee_number: (encode-path-segment $licensee_number)} | format pattern "/licensee/{licensee_number}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Update Licensee
 #
 # POST /licensee/{licenseeNumber}
 # operationId: updateLicensee
-export def "licensee updateLicensee" [
-  licenseeNumber: string
+export def "licensee update" [
+  licensee_number: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -366,30 +390,32 @@ export def "licensee updateLicensee" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --active: oneof<nothing, bool> # If set to 'false', the Licensee is disabled. Licensee can not obtain new Licenses, and validation is disabled
-  --markedForTransfer: oneof<nothing, bool> # Mark Licensee for transfer.
+  --marked-for-transfer: oneof<nothing, bool> # Mark Licensee for transfer.
   --name: string
   --number: string # New Licensee number (update).
 ]: any -> record<infos: any, items: any> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/licensee/($licenseeNumber)")
-  let body = {active: $active, markedForTransfer: $markedForTransfer, name: $name, number: $number} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({licensee_number: (encode-path-segment $licensee_number)} | format pattern "/licensee/{licensee_number}"))
+  let req_body = {"active": $active, "markedForTransfer": $marked_for_transfer, "name": $name, "number": $number} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # Transfer Licenses
 #
 # POST /licensee/{licenseeNumber}/transfer
 # operationId: transferLicenses
-export def "licensee-transfer transferLicenses" [
-  licenseeNumber: string
+export def "licensee-transfer create-licenses" [
+  licensee_number: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -397,27 +423,29 @@ export def "licensee-transfer transferLicenses" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  sourceLicenseeNumber: string # Licensee number which Licenses to be transferred
+  source_licensee_number: string # Licensee number which Licenses to be transferred
 ]: any -> record<infos: any, items: any> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/licensee/($licenseeNumber)/transfer")
-  let body = {sourceLicenseeNumber: $sourceLicenseeNumber} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({licensee_number: (encode-path-segment $licensee_number)} | format pattern "/licensee/{licensee_number}/transfer"))
+  let req_body = {"sourceLicenseeNumber": $source_licensee_number} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # Validate Licensee
 #
 # POST /licensee/{licenseeNumber}/validate
 # operationId: validateLicensee
-export def "licensee-validate validateLicensee" [
-  licenseeNumber: string
+export def "licensee-validate validate" [
+  licensee_number: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -425,31 +453,33 @@ export def "licensee-validate validateLicensee" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --action: string@action-completer # 'Floating' licensing model: check-out or check-in session action, to allocate or return it from/to the pool of available sessions
-  --licenseeName: string # Human-readable name for the auto-created Licensee (will be set as custom Licensee property)
-  --nodeSecret: string # 'Node-Locked' licensing model: specifies unique secret
-  --productModuleNumber: string # 'Node-Locked' licensing model: product module number
-  --productNumber: string # Product number, must be provided when 'Licensee auto-create' is enabled (see also Product JavaDoc). Identifies the Product to which new Licensee should be added
-  --sessionId: string # 'Floating' licensing model: specifies unique session identifier
+  --licensee-name: string # Human-readable name for the auto-created Licensee (will be set as custom Licensee property)
+  --node-secret: string # 'Node-Locked' licensing model: specifies unique secret
+  --product-module-number: string # 'Node-Locked' licensing model: product module number
+  --product-number: string # Product number, must be provided when 'Licensee auto-create' is enabled (see also Product JavaDoc). Identifies the Product to which new Licensee should be added
+  --session-id: string # 'Floating' licensing model: specifies unique session identifier
 ]: any -> record<infos: any, items: any> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/licensee/($licenseeNumber)/validate")
-  let body = {action: $action, licenseeName: $licenseeName, nodeSecret: $nodeSecret, productModuleNumber: $productModuleNumber, productNumber: $productNumber, sessionId: $sessionId} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({licensee_number: (encode-path-segment $licensee_number)} | format pattern "/licensee/{licensee_number}/validate"))
+  let req_body = {"action": $action, "licenseeName": $licensee_name, "nodeSecret": $node_secret, "productModuleNumber": $product_module_number, "productNumber": $product_number, "sessionId": $session_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # List License Templates
 #
 # GET /licensetemplate
 # operationId: listLicenseTemplates
-export def "licensetemplate listLicenseTemplates" [
+export def "licensetemplate list-license-templates" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -457,6 +487,7 @@ export def "licensetemplate listLicenseTemplates" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> table<infos: any, items: any> {
@@ -465,14 +496,14 @@ export def "licensetemplate listLicenseTemplates" [
   let full_url = (build-url $base "/licensetemplate")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Create License Template
 #
 # POST /licensetemplate
 # operationId: createLicenseTemplate
-export def "licensetemplate createLicenseTemplate" [
+export def "licensetemplate create-license-template" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -480,41 +511,43 @@ export def "licensetemplate createLicenseTemplate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --active: oneof<nothing, bool> # If set to 'false', the License Template is disabled. Licensee can not obtain any new Licenses off this License Template.
   --automatic: oneof<nothing, bool> # If set to 'true', every new Licensee automatically gets one License out of this License Template on creation. Automatic Licenses must have their price set to 0.
   --currency: string # Specifies currency for the License price. Check data types to discover which currencies are supported.
   --hidden: oneof<nothing, bool> # If set to 'true', this License Template is not shown in NetLicensing Shop as offered for purchase.
-  --hideLicenses: oneof<nothing, bool> # If set to 'true', Licenses from this License Template are not visible to the end customer, but participate in validation.
-  licenseType: string # Type of Licenses created from this License Template. Supported types: FEATURE, TIMEVOLUME, FLOATING, QUANTITY
-  --maxSessions: string # Mandatory for 'FLOATING' License Type.
+  --hide-licenses: oneof<nothing, bool> # If set to 'true', Licenses from this License Template are not visible to the end customer, but participate in validation.
+  license_type: string # Type of Licenses created from this License Template. Supported types: FEATURE, TIMEVOLUME, FLOATING, QUANTITY
+  --max-sessions: string # Mandatory for 'FLOATING' License Type.
   name: string # License Template name to create License Template object
   --number: string # Unique number (across all Products of a Vendor) that identifies the License Template. Vendor can assign this number when creating a License Template or let NetLicensing generate one. Read-only after creation of the first License from this License Template.
   --price: float # Price for the License. If >0, it must always be accompanied by the currency specification. (format: double)
-  productModuleNumber: string # Number of Product Module to create License Template object
+  product_module_number: string # Number of Product Module to create License Template object
   --quantity: string # Mandatory for 'Pay-per-Use' and 'Node-Locked' License Model.
   --quota: string # Mandatory for 'Quota' License Model.
-  --timeVolume: string # Mandatory for 'TIMEVOLUME' License Type.
-  --timeVolumePeriod: string # For 'TIMEVOLUME' License Type.
+  --time-volume: string # Mandatory for 'TIMEVOLUME' License Type.
+  --time-volume-period: string # For 'TIMEVOLUME' License Type.
 ]: any -> record<infos: any, items: any> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/licensetemplate")
-  let body = {active: $active, automatic: $automatic, currency: $currency, hidden: $hidden, hideLicenses: $hideLicenses, licenseType: $licenseType, maxSessions: $maxSessions, name: $name, number: $number, price: $price, productModuleNumber: $productModuleNumber, quantity: $quantity, quota: $quota, timeVolume: $timeVolume, timeVolumePeriod: $timeVolumePeriod} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"active": $active, "automatic": $automatic, "currency": $currency, "hidden": $hidden, "hideLicenses": $hide_licenses, "licenseType": $license_type, "maxSessions": $max_sessions, "name": $name, "number": $number, "price": $price, "productModuleNumber": $product_module_number, "quantity": $quantity, "quota": $quota, "timeVolume": $time_volume, "timeVolumePeriod": $time_volume_period} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # Delete License Template
 #
 # DELETE /licensetemplate/{licenseTemplateNumber}
 # operationId: deleteLicenseTemplate
-export def "licensetemplate delete" [
-  licenseTemplateNumber: string
+export def "licensetemplate delete-license-template" [
+  license_template_number: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -522,25 +555,26 @@ export def "licensetemplate delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --forceCascade: oneof<nothing, bool> # Force object deletion and all descendants.
+  --force-cascade: oneof<nothing, bool> # Force object deletion and all descendants.
 ]: nothing -> record<infos: any, items: any> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "forceCascade" $forceCascade "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/licensetemplate/($licenseTemplateNumber)" $qp)
+  let qp = [(serialize-qp "forceCascade" $force_cascade "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({license_template_number: (encode-path-segment $license_template_number)} | format pattern "/licensetemplate/{license_template_number}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get License Template
 #
 # GET /licensetemplate/{licenseTemplateNumber}
 # operationId: getLicenseTemplate
-export def "licensetemplate get" [
-  licenseTemplateNumber: string
+export def "licensetemplate get-license-template" [
+  license_template_number: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -548,23 +582,24 @@ export def "licensetemplate get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<infos: any, items: any> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/licensetemplate/($licenseTemplateNumber)")
+  let full_url = (build-url $base ({license_template_number: (encode-path-segment $license_template_number)} | format pattern "/licensetemplate/{license_template_number}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Update License Template
 #
 # POST /licensetemplate/{licenseTemplateNumber}
 # operationId: updateLicenseTemplate
-export def "licensetemplate updateLicenseTemplate" [
-  licenseTemplateNumber: string
+export def "licensetemplate update-license-template" [
+  license_template_number: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -572,39 +607,41 @@ export def "licensetemplate updateLicenseTemplate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --active: oneof<nothing, bool> # If set to 'false', the License Template is disabled. Licensee can not obtain any new Licenses off this License Template.
   --automatic: oneof<nothing, bool> # If set to 'true', every new Licensee automatically gets one License out of this License Template on creation. Automatic Licenses must have their price set to 0.
   --currency: string # Specifies currency for the License price. Check data types to discover which currencies are supported.
   --hidden: oneof<nothing, bool> # If set to 'true', this License Template is not shown in NetLicensing Shop as offered for purchase.
-  --hideLicenses: oneof<nothing, bool> # If set to 'true', Licenses from this License Template are not visible to the end customer, but participate in validation.
-  --licenseType: string # Type of Licenses created from this License Template. Supported types: FEATURE, TIMEVOLUME, FLOATING, QUANTITY
-  --maxSessions: string # Mandatory for 'FLOATING' License Type.
+  --hide-licenses: oneof<nothing, bool> # If set to 'true', Licenses from this License Template are not visible to the end customer, but participate in validation.
+  --license-type: string # Type of Licenses created from this License Template. Supported types: FEATURE, TIMEVOLUME, FLOATING, QUANTITY
+  --max-sessions: string # Mandatory for 'FLOATING' License Type.
   --name: string # Name for the Licensed item
   --number: string # New License Template number (update).
   --price: float # Price for the License. If >0, it must always be accompanied by the currency specification. (format: double)
   --quantity: string # Mandatory for 'Pay-per-Use' and 'Node-Locked' License Model.
   --quota: string # Mandatory for 'Quota' License Model.
-  --timeVolume: string # Mandatory for 'TIMEVOLUME' License Type.
-  --timeVolumePeriod: string # For 'TIMEVOLUME' License Type.
+  --time-volume: string # Mandatory for 'TIMEVOLUME' License Type.
+  --time-volume-period: string # For 'TIMEVOLUME' License Type.
 ]: any -> record<infos: any, items: any> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/licensetemplate/($licenseTemplateNumber)")
-  let body = {active: $active, automatic: $automatic, currency: $currency, hidden: $hidden, hideLicenses: $hideLicenses, licenseType: $licenseType, maxSessions: $maxSessions, name: $name, number: $number, price: $price, quantity: $quantity, quota: $quota, timeVolume: $timeVolume, timeVolumePeriod: $timeVolumePeriod} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({license_template_number: (encode-path-segment $license_template_number)} | format pattern "/licensetemplate/{license_template_number}"))
+  let req_body = {"active": $active, "automatic": $automatic, "currency": $currency, "hidden": $hidden, "hideLicenses": $hide_licenses, "licenseType": $license_type, "maxSessions": $max_sessions, "name": $name, "number": $number, "price": $price, "quantity": $quantity, "quota": $quota, "timeVolume": $time_volume, "timeVolumePeriod": $time_volume_period} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # List Payment Methods
 #
 # GET /paymentmethod
 # operationId: listPaymentMethods
-export def "paymentmethod listPaymentMethods" [
+export def "paymentmethod list-payment-methods" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -612,6 +649,7 @@ export def "paymentmethod listPaymentMethods" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> table<infos: any, items: any> {
@@ -620,15 +658,15 @@ export def "paymentmethod listPaymentMethods" [
   let full_url = (build-url $base "/paymentmethod")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get Payment Method
 #
 # GET /paymentmethod/{paymentMethodNumber}
 # operationId: getPaymentMethod
-export def "paymentmethod get" [
-  paymentMethodNumber: string
+export def "paymentmethod get-payment-method" [
+  payment_method_number: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -636,23 +674,24 @@ export def "paymentmethod get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<infos: any, items: any> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/paymentmethod/($paymentMethodNumber)")
+  let full_url = (build-url $base ({payment_method_number: (encode-path-segment $payment_method_number)} | format pattern "/paymentmethod/{payment_method_number}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Update Payment Method
 #
 # POST /paymentmethod/{paymentMethodNumber}
 # operationId: updatePaymentMethod
-export def "paymentmethod updatePaymentMethod" [
-  paymentMethodNumber: string
+export def "paymentmethod update-payment-method" [
+  payment_method_number: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -660,27 +699,29 @@ export def "paymentmethod updatePaymentMethod" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --active: oneof<nothing, bool> # If set to 'false', the Payment Method is disabled.
-  --paypalsubject: string # The e-mail address of the PayPal account for which you are making the API calls.
+  --paypal-subject: string # The e-mail address of the PayPal account for which you are making the API calls.
 ]: any -> record<infos: any, items: any> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/paymentmethod/($paymentMethodNumber)")
-  let body = {active: $active, paypal.subject: $paypalsubject} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({payment_method_number: (encode-path-segment $payment_method_number)} | format pattern "/paymentmethod/{payment_method_number}"))
+  let req_body = {"active": $active, "paypal.subject": $paypal_subject} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # List Products
 #
 # GET /product
 # operationId: listProducts
-export def "product listProducts" [
+export def "product list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -688,6 +729,7 @@ export def "product listProducts" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> table<infos: any, items: any> {
@@ -696,14 +738,14 @@ export def "product listProducts" [
   let full_url = (build-url $base "/product")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Create Product
 #
 # POST /product
 # operationId: createProduct
-export def "product createProduct" [
+export def "product create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -711,26 +753,28 @@ export def "product createProduct" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --active: oneof<nothing, bool> # If set to 'false', the Product is disabled. No new Licensees can be registered for the Product, existing Licensees can not obtain new Licenses.
   --description: string # Product description.
-  --licenseeAutoCreate: oneof<nothing, bool> # If set to 'true', non-existing Licensees will be created at first validation attempt.
-  --licensingInfo: string # Licensing information.
+  --licensee-auto-create: oneof<nothing, bool> # If set to 'true', non-existing Licensees will be created at first validation attempt.
+  --licensing-info: string # Licensing information.
   name: string # Product name. Together with the version identifies the Product for the end customer.
   --number: string # Unique number that identifies the Product. Vendor can assign this number when creating a Product or let NetLicensing generate one.
-  --vatMode: string@vatMode-completer # Vat mode for Product. Supported types: GROSS, NET
+  --vat-mode: string@vat-mode-completer # Vat mode for Product. Supported types: GROSS, NET
   version: string # Product version. Convenience parameter, additional to the Product name.
 ]: any -> record<infos: any, items: any> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/product")
-  let body = {active: $active, description: $description, licenseeAutoCreate: $licenseeAutoCreate, licensingInfo: $licensingInfo, name: $name, number: $number, vatMode: $vatMode, version: $version} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"active": $active, "description": $description, "licenseeAutoCreate": $licensee_auto_create, "licensingInfo": $licensing_info, "name": $name, "number": $number, "vatMode": $vat_mode, "version": $version} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # Delete Product
@@ -738,7 +782,7 @@ export def "product createProduct" [
 # DELETE /product/{productNumber}
 # operationId: deleteProduct
 export def "product delete" [
-  productNumber: string
+  product_number: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -746,25 +790,26 @@ export def "product delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --forceCascade: oneof<nothing, bool> # Force object deletion and all descendants.
+  --force-cascade: oneof<nothing, bool> # Force object deletion and all descendants.
 ]: nothing -> record<infos: any, items: any> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "forceCascade" $forceCascade "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/product/($productNumber)" $qp)
+  let qp = [(serialize-qp "forceCascade" $force_cascade "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({product_number: (encode-path-segment $product_number)} | format pattern "/product/{product_number}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get Product
 #
 # GET /product/{productNumber}
 # operationId: productNumber
-export def "product productNumber" [
-  productNumber: string
+export def "product get-number" [
+  product_number: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -772,23 +817,24 @@ export def "product productNumber" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<infos: any, items: any> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/product/($productNumber)")
+  let full_url = (build-url $base ({product_number: (encode-path-segment $product_number)} | format pattern "/product/{product_number}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Update Product
 #
 # POST /product/{productNumber}
 # operationId: updateProduct
-export def "product updateProduct" [
-  productNumber: string
+export def "product update" [
+  product_number: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -796,33 +842,35 @@ export def "product updateProduct" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --active: oneof<nothing, bool> # If set to 'false', the Product is disabled. No new Licensees can be registered for the Product, existing Licensees can not obtain new Licenses.
   --description: string # Product description.
-  --licenseeAutoCreate: oneof<nothing, bool> # If set to 'true', non-existing Licensees will be created at first validation attempt.
-  --licensingInfo: string # Licensing information.
+  --licensee-auto-create: oneof<nothing, bool> # If set to 'true', non-existing Licensees will be created at first validation attempt.
+  --licensing-info: string # Licensing information.
   --name: string # Product name. Together with the version identifies the Product for the end customer.
   --number: string # New Product number (update)
-  --vatMode: string@vatMode-completer # Vat mode for Product. Supported types: GROSS, NET
+  --vat-mode: string@vat-mode-completer # Vat mode for Product. Supported types: GROSS, NET
   --version: string # Product version. Convenience parameter, additional to the Product name.
 ]: any -> record<infos: any, items: any> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/product/($productNumber)")
-  let body = {active: $active, description: $description, licenseeAutoCreate: $licenseeAutoCreate, licensingInfo: $licensingInfo, name: $name, number: $number, vatMode: $vatMode, version: $version} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({product_number: (encode-path-segment $product_number)} | format pattern "/product/{product_number}"))
+  let req_body = {"active": $active, "description": $description, "licenseeAutoCreate": $licensee_auto_create, "licensingInfo": $licensing_info, "name": $name, "number": $number, "vatMode": $vat_mode, "version": $version} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # List Product Modules
 #
 # GET /productmodule
 # operationId: listProductModules
-export def "productmodule listProductModules" [
+export def "productmodule list-product-modules" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -830,6 +878,7 @@ export def "productmodule listProductModules" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> table<infos: any, items: any> {
@@ -838,14 +887,14 @@ export def "productmodule listProductModules" [
   let full_url = (build-url $base "/productmodule")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Create Product Module
 #
 # POST /productmodule
 # operationId: createProductModule
-export def "productmodule createProductModule" [
+export def "productmodule create-product-module" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -853,36 +902,38 @@ export def "productmodule createProductModule" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --active: oneof<nothing, bool> # If set to 'false', the Product Module is disabled. Licensees can not obtain any new Licenses for this Product Module.
-  --licenseTemplate: list # License Template. Mandatory for 'Try &amp; Buy' licensing model.
-  licensingModel: string # Licensing model applied to this Product Module. Defines what License Templates can be configured for the Product Module and how Licenses for this Product Module are processed during validation.
-  --maxCheckoutValidity: int # Maximum checkout validity (days). Mandatory for 'Floating' licensing model. (format: int32)
+  --license-template: list<string> # License Template. Mandatory for 'Try & Buy' licensing model.
+  licensing_model: string # Licensing model applied to this Product Module. Defines what License Templates can be configured for the Product Module and how Licenses for this Product Module are processed during validation.
+  --max-checkout-validity: int # Maximum checkout validity (days). Mandatory for 'Floating' licensing model. (format: int32)
   name: string # Product Module name that is visible to the end customers in NetLicensing Shop.
-  --nodeSecretMode: list # Secret Mode. Mandatory for 'Node-Locked' licensing model.
+  --node-secret-mode: list<string> # Secret Mode. Mandatory for 'Node-Locked' licensing model.
   --number: string # Unique number (across all Products of a Vendor) that identifies the Product Module. Vendor can assign this number when creating a Product Module or let NetLicensing generate one. Read-only after creation of the first Licensee for the Product.
-  productNumber: string # Unique number (across all Products of a Vendor) that identifies the Product Module. Vendor can assign this number when creating a Product Module or let NetLicensing generate one. Read-only after creation of the first Licensee for the Product.
-  --redThreshold: int # Remaining time volume for red level. Mandatory for 'Rental' licensing model. (format: int32)
-  --yellowThreshold: int # Remaining time volume for yellow level. Mandatory for 'Rental' licensing model. (format: int32)
+  product_number: string # Unique number (across all Products of a Vendor) that identifies the Product Module. Vendor can assign this number when creating a Product Module or let NetLicensing generate one. Read-only after creation of the first Licensee for the Product.
+  --red-threshold: int # Remaining time volume for red level. Mandatory for 'Rental' licensing model. (format: int32)
+  --yellow-threshold: int # Remaining time volume for yellow level. Mandatory for 'Rental' licensing model. (format: int32)
 ]: any -> record<infos: any, items: any> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/productmodule")
-  let body = {active: $active, licenseTemplate: $licenseTemplate, licensingModel: $licensingModel, maxCheckoutValidity: $maxCheckoutValidity, name: $name, nodeSecretMode: $nodeSecretMode, number: $number, productNumber: $productNumber, redThreshold: $redThreshold, yellowThreshold: $yellowThreshold} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"active": $active, "licenseTemplate": $license_template, "licensingModel": $licensing_model, "maxCheckoutValidity": $max_checkout_validity, "name": $name, "nodeSecretMode": $node_secret_mode, "number": $number, "productNumber": $product_number, "redThreshold": $red_threshold, "yellowThreshold": $yellow_threshold} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # Delete Product Module
 #
 # DELETE /productmodule/{productModuleNumber}
 # operationId: deleteProductModule
-export def "productmodule delete" [
-  productModuleNumber: string
+export def "productmodule delete-product-module" [
+  product_module_number: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -890,25 +941,26 @@ export def "productmodule delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --forceCascade: oneof<nothing, bool> # Force object deletion and all descendants.
+  --force-cascade: oneof<nothing, bool> # Force object deletion and all descendants.
 ]: nothing -> record<infos: any, items: any> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "forceCascade" $forceCascade "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/productmodule/($productModuleNumber)" $qp)
+  let qp = [(serialize-qp "forceCascade" $force_cascade "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({product_module_number: (encode-path-segment $product_module_number)} | format pattern "/productmodule/{product_module_number}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get Product Module
 #
 # GET /productmodule/{productModuleNumber}
 # operationId: getProductModule
-export def "productmodule get" [
-  productModuleNumber: string
+export def "productmodule get-product-module" [
+  product_module_number: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -916,23 +968,24 @@ export def "productmodule get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<infos: any, items: any> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/productmodule/($productModuleNumber)")
+  let full_url = (build-url $base ({product_module_number: (encode-path-segment $product_module_number)} | format pattern "/productmodule/{product_module_number}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Update Product Module
 #
 # POST /productmodule/{productModuleNumber}
 # operationId: updateProductModule
-export def "productmodule updateProductModule" [
-  productModuleNumber: string
+export def "productmodule update-product-module" [
+  product_module_number: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -940,34 +993,36 @@ export def "productmodule updateProductModule" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --active: oneof<nothing, bool> # If set to 'false', the Product Module is disabled. Licensees can not obtain any new Licenses for this Product Module.
-  --licenseTemplate: list # License Template. Mandatory for 'Try &amp; Buy' licensing model.
-  --licensingModel: string # Licensing model applied to this Product Module. Defines what License Templates can be configured for the Product Module and how Licenses for this Product Module are processed during validation.
-  --maxCheckoutValidity: int # Maximum checkout validity (days). Mandatory for 'Floating' licensing model. (format: int32)
+  --license-template: list<string> # License Template. Mandatory for 'Try & Buy' licensing model.
+  --licensing-model: string # Licensing model applied to this Product Module. Defines what License Templates can be configured for the Product Module and how Licenses for this Product Module are processed during validation.
+  --max-checkout-validity: int # Maximum checkout validity (days). Mandatory for 'Floating' licensing model. (format: int32)
   --name: string # Product Module name that is visible to the end customers in NetLicensing Shop.
-  --nodeSecretMode: list # Secret Mode. Mandatory for 'Node-Locked' licensing model.
+  --node-secret-mode: list<string> # Secret Mode. Mandatory for 'Node-Locked' licensing model.
   --number: string # New Product Module number (update).
-  --redThreshold: int # Remaining time volume for red level. Mandatory for 'Rental' licensing model. (format: int32)
-  --yellowThreshold: int # Remaining time volume for yellow level. Mandatory for 'Rental' licensing model. (format: int32)
+  --red-threshold: int # Remaining time volume for red level. Mandatory for 'Rental' licensing model. (format: int32)
+  --yellow-threshold: int # Remaining time volume for yellow level. Mandatory for 'Rental' licensing model. (format: int32)
 ]: any -> record<infos: any, items: any> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/productmodule/($productModuleNumber)")
-  let body = {active: $active, licenseTemplate: $licenseTemplate, licensingModel: $licensingModel, maxCheckoutValidity: $maxCheckoutValidity, name: $name, nodeSecretMode: $nodeSecretMode, number: $number, redThreshold: $redThreshold, yellowThreshold: $yellowThreshold} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({product_module_number: (encode-path-segment $product_module_number)} | format pattern "/productmodule/{product_module_number}"))
+  let req_body = {"active": $active, "licenseTemplate": $license_template, "licensingModel": $licensing_model, "maxCheckoutValidity": $max_checkout_validity, "name": $name, "nodeSecretMode": $node_secret_mode, "number": $number, "redThreshold": $red_threshold, "yellowThreshold": $yellow_threshold} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # List Tokens
 #
 # GET /token
 # operationId: listTokens
-export def "token listTokens" [
+export def "token list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -975,6 +1030,7 @@ export def "token listTokens" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> table<infos: any, items: any> {
@@ -983,14 +1039,14 @@ export def "token listTokens" [
   let full_url = (build-url $base "/token")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Create token
 #
 # POST /token
 # operationId: createToken
-export def "token createToken" [
+export def "token create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -998,31 +1054,33 @@ export def "token createToken" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --action: string@action-completer-1 # For <i>type=ACTION</i> only; defines token action to be perfromed
-  --apiKeyRole: string@apiKeyRole-completer # For <i>tokenType=APIKEY</i> only (default: ROLE_APIKEY_LICENSEE); defines token RoleID
-  --cancelURL: string # For <i>tokenType=SHOP</i> only; take customers to this URL when they cancel their checkout
-  --cancelURLTitle: string # For <i>tokenType=SHOP</i> only; shop link title for cancel checkout process
-  --licenseTemplateNumber: string # For <i>tokenType=SHOP</i> only; identifies LicenseTemplate that will be assigned to the shop token
-  --licenseeNumber: string # For <i>tokenType=SHOP</i> or <i>type=ACTION</i> only (mandatory); identifies Licensee that will be assigned to the shop token
-  --predefinedShoppingItem: string # For <i>tokenType=SHOP</i> only; identifies Shopping Item name that will be shown to the customer
-  --privateKey: string # For <i>tokenType=APIKEY</i> only (optional); defines PrivateKey to be used with the validate method<br/><strong>Please Note:</strong> PrivateKey need to be provided as one line without spaces
-  --productNumber: string # For <i>tokenType=SHOP</i> only (mandatory); identifies Product that will be assigned to the shop token
-  --successURL: string # For <i>tokenType=SHOP</i> only; take customers to this URL when they finish checkout
-  --successURLTitle: string # For <i>tokenType=SHOP</i> only; shop link title for successful checkout process
-  tokenType: string@tokenType-completer # Token type to be generated
-  --type: string@type-completer # For <i>tokenType=DEFAULT</i> only; action type to be set
+  --action: string@action-completer-1 # For type=ACTION only; defines token action to be perfromed
+  --api-key-role: string@api-key-role-completer # For tokenType=APIKEY only (default: ROLE_APIKEY_LICENSEE); defines token RoleID
+  --cancel-url: string # For tokenType=SHOP only; take customers to this URL when they cancel their checkout
+  --cancel-url-title: string # For tokenType=SHOP only; shop link title for cancel checkout process
+  --license-template-number: string # For tokenType=SHOP only; identifies LicenseTemplate that will be assigned to the shop token
+  --licensee-number: string # For tokenType=SHOP or type=ACTION only (mandatory); identifies Licensee that will be assigned to the shop token
+  --predefined-shopping-item: string # For tokenType=SHOP only; identifies Shopping Item name that will be shown to the customer
+  --private-key: string # For tokenType=APIKEY only (optional); defines PrivateKey to be used with the validate methodPlease Note: PrivateKey need to be provided as one line without spaces
+  --product-number: string # For tokenType=SHOP only (mandatory); identifies Product that will be assigned to the shop token
+  --success-url: string # For tokenType=SHOP only; take customers to this URL when they finish checkout
+  --success-url-title: string # For tokenType=SHOP only; shop link title for successful checkout process
+  token_type: string@token-type-completer # Token type to be generated
+  --type: string@type-completer # For tokenType=DEFAULT only; action type to be set
 ]: any -> record<infos: any, items: any> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/token")
-  let body = {action: $action, apiKeyRole: $apiKeyRole, cancelURL: $cancelURL, cancelURLTitle: $cancelURLTitle, licenseTemplateNumber: $licenseTemplateNumber, licenseeNumber: $licenseeNumber, predefinedShoppingItem: $predefinedShoppingItem, privateKey: $privateKey, productNumber: $productNumber, successURL: $successURL, successURLTitle: $successURLTitle, tokenType: $tokenType, type: $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"action": $action, "apiKeyRole": $api_key_role, "cancelURL": $cancel_url, "cancelURLTitle": $cancel_url_title, "licenseTemplateNumber": $license_template_number, "licenseeNumber": $licensee_number, "predefinedShoppingItem": $predefined_shopping_item, "privateKey": $private_key, "productNumber": $product_number, "successURL": $success_url, "successURLTitle": $success_url_title, "tokenType": $token_type, "type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # Delete token
@@ -1030,7 +1088,7 @@ export def "token createToken" [
 # DELETE /token/{tokenNumber}
 # operationId: deleteToken
 export def "token delete" [
-  tokenNumber: string
+  token_number: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1038,15 +1096,16 @@ export def "token delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<infos: any, items: any> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/token/($tokenNumber)")
+  let full_url = (build-url $base ({token_number: (encode-path-segment $token_number)} | format pattern "/token/{token_number}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get token
@@ -1054,7 +1113,7 @@ export def "token delete" [
 # GET /token/{tokenNumber}
 # operationId: getToken
 export def "token get" [
-  tokenNumber: string
+  token_number: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1062,22 +1121,23 @@ export def "token get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<infos: any, items: any> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/token/($tokenNumber)")
+  let full_url = (build-url $base ({token_number: (encode-path-segment $token_number)} | format pattern "/token/{token_number}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # List Transactions
 #
 # GET /transaction
 # operationId: listTransactions
-export def "transaction listTransactions" [
+export def "transaction list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1085,6 +1145,7 @@ export def "transaction listTransactions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> table<infos: any, items: any> {
@@ -1093,14 +1154,14 @@ export def "transaction listTransactions" [
   let full_url = (build-url $base "/transaction")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Create Transaction
 #
 # POST /transaction
 # operationId: createTransaction
-export def "transaction createTransaction" [
+export def "transaction create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1108,14 +1169,15 @@ export def "transaction createTransaction" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --active: oneof<nothing, bool> # Always 'true' for Transactions
-  --dateClosed: string # format: date-time
-  --dateCreated: string # format: date-time
-  --licenseeNumber: string
+  --date-closed: string # format: date-time
+  --date-created: string # format: date-time
+  --licensee-number: string
   --number: string # Unique number (across all Products of a Vendor) that identifies the Transaction
-  --paymentMethod: string
+  --payment-method: string
   --body-source: string@source-completer # AUTO Transaction for internal use only
   status: string@status-completer
 ]: any -> record<infos: any, items: any> {
@@ -1123,19 +1185,20 @@ export def "transaction createTransaction" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/transaction")
-  let body = {active: $active, dateClosed: $dateClosed, dateCreated: $dateCreated, licenseeNumber: $licenseeNumber, number: $number, paymentMethod: $paymentMethod, source: $body_source, status: $status} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"active": $active, "dateClosed": $date_closed, "dateCreated": $date_created, "licenseeNumber": $licensee_number, "number": $number, "paymentMethod": $payment_method, "source": $body_source, "status": $status} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
-# Get Transaction 
+# Get Transaction
 #
 # GET /transaction/{transactionNumber}
 # operationId: getTransaction
 export def "transaction get" [
-  transactionNumber: string
+  transaction_number: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1143,23 +1206,24 @@ export def "transaction get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<infos: any, items: any> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/transaction/($transactionNumber)")
+  let full_url = (build-url $base ({transaction_number: (encode-path-segment $transaction_number)} | format pattern "/transaction/{transaction_number}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Update Transaction
 #
 # POST /transaction/{transactionNumber}
 # operationId: updateTransaction
-export def "transaction updateTransaction" [
-  transactionNumber: string
+export def "transaction update" [
+  transaction_number: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1167,32 +1231,34 @@ export def "transaction updateTransaction" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --active: oneof<nothing, bool> # Always 'true' for Transactions
-  --dateClosed: string # format: date-time
-  --dateCreated: string # format: date-time
+  --date-closed: string # format: date-time
+  --date-created: string # format: date-time
   --number: string # Unique number (across all Products of a Vendor) that identifies the Transaction
-  --paymentMethod: string
+  --payment-method: string
   --body-source: string@source-completer # AUTO Transaction for internal use only
   --status: string@status-completer
 ]: any -> record<infos: any, items: any> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/transaction/($transactionNumber)")
-  let body = {active: $active, dateClosed: $dateClosed, dateCreated: $dateCreated, number: $number, paymentMethod: $paymentMethod, source: $body_source, status: $status} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({transaction_number: (encode-path-segment $transaction_number)} | format pattern "/transaction/{transaction_number}"))
+  let req_body = {"active": $active, "dateClosed": $date_closed, "dateCreated": $date_created, "number": $number, "paymentMethod": $payment_method, "source": $body_source, "status": $status} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # List License Types
 #
 # GET /utility/licenseTypes
 # operationId: licenseTypes
-export def "utility-license-types licenseTypes" [
+export def "utility-license-types get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1200,6 +1266,7 @@ export def "utility-license-types licenseTypes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<infos: any, items: any> {
@@ -1208,14 +1275,14 @@ export def "utility-license-types licenseTypes" [
   let full_url = (build-url $base "/utility/licenseTypes")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # List Licensing Models
 #
 # GET /utility/licensingModels
 # operationId: licensingModels
-export def "utility-licensing-models licensingModels" [
+export def "utility-licensing-models get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1223,6 +1290,7 @@ export def "utility-licensing-models licensingModels" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<infos: any, items: any> {
@@ -1231,5 +1299,5 @@ export def "utility-licensing-models licensingModels" [
   let full_url = (build-url $base "/utility/licensingModels")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }

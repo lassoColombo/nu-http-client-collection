@@ -17,21 +17,32 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 }
 
 # Serialize a single query parameter based on collection style
+# Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
+# ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = ($name | url encode)
+  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
-  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
-    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
-    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
+    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
+    _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
+}
+
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Build URL from base, path, and optional query string
@@ -43,7 +54,7 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
@@ -52,13 +63,41 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
     "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "put" => { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "patch" => { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
   if ($method in ["head" "options"]) { return $resp }
-  if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
+  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
+}
+
+# Build a `multipart/form-data` envelope per RFC 7578. `file_fields` lists
+# the field names whose value should be read from disk as bytes; every
+# other field is sent as a text part (records/lists JSON-stringified).
+# Returns {content_type, body} ready to pass to `do-request`.
+# When `$dry_run` is true, file fields are NOT read from disk — they emit
+# an empty-bytes placeholder so callers can inspect the request shape
+# without the file existing on disk (issue 11.B).
+def build-multipart-body [parts: record, file_fields: list<string>, dry_run: bool = false]: nothing -> record {
+  let boundary = $"----nu-(random chars --length 24)"
+  let crlf = "\r\n"
+  let chunks = ($parts | items {|name, val|
+    if $val == null { null } else if $name in $file_fields {
+      let filename = ($val | into string | path basename)
+      let bytes = if $dry_run { (0x[] | into binary) } else { (open --raw $val | into binary | collect) }
+      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"; filename=\"($filename)\"($crlf)Content-Type: application/octet-stream($crlf)($crlf)" | into binary)
+      $head ++ $bytes ++ ($crlf | into binary)
+    } else {
+      let dt = ($val | describe)
+      let s = if (($dt | str starts-with "record") or ($dt | str starts-with "list") or ($dt | str starts-with "table")) { ($val | to json --raw) } else { ($val | into string) }
+      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"($crlf)($crlf)" | into binary)
+      $head ++ ($"($s)($crlf)" | into binary)
+    }
+  } | compact)
+  let trailer = ($"--($boundary)--($crlf)" | into binary)
+  let body = ($chunks | reduce --fold (0x[] | into binary) {|chunk, acc| $acc ++ $chunk }) ++ $trailer
+  {content_type: $"multipart/form-data; boundary=($boundary)", body: $body}
 }
 
 def base-url-completer [] { ["https://api.telegram.org/bot123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11"] }
@@ -69,8 +108,8 @@ def emoji-completer [] { ["⚽" "🎯" "🎰" "🎲" "🏀"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "add-sticker-to-set post" } } | get name | first)
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "add-sticker-to-set create" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -95,7 +134,7 @@ export def commands []: nothing -> table {
 # POST /addStickerToSet
 # Docs: https://core.telegram.org/bots/api/#addstickertoset
 # --mask_position shape: {point: "forehead"|"eyes"|"mouth"|"chin", scale: float, x_shift: float, y_shift: float}
-export def "add-sticker-to-set post" [
+export def "add-sticker-to-set create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -103,6 +142,7 @@ export def "add-sticker-to-set post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   emojis: string # One or more emoji corresponding to the sticker
   --mask-position: record # This object describes the position on faces where a mask should be placed by default. — shape: {point: "forehead"|"eyes"|"mouth"|"chin", scale: float, x_shift: float, y_shift: float}
@@ -115,18 +155,20 @@ export def "add-sticker-to-set post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/addStickerToSet")
-  let body = {emojis: $emojis, mask_position: $mask_position, name: $name, png_sticker: $png_sticker, tgs_sticker: $tgs_sticker, user_id: $user_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"emojis": $emojis, "mask_position": $mask_position, "name": $name, "png_sticker": $png_sticker, "tgs_sticker": $tgs_sticker, "user_id": $user_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
+  let mp = (build-multipart-body $req_body [] $dry_run)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
 }
 
-# Use this method to send answers to callback queries sent from [inline keyboards](/bots#inline-keyboards-and-on-the-fly-updating). The answer will be displayed to the user as a notification at the top of the chat screen or as an alert. On success, *True* is returned.  Alternatively, the user can be redirected to the specified Game URL. For this option to work, you must first create a game for your bot via [@Botfather](https://t.me/botfather) and accept the terms. Otherwise, you may use links like `t.me/your_bot?start=XXXX` that open your bot with a parameter.
+# Use this method to send answers to callback queries sent from [inline keyboards](/bots#inline-keyboards-and-on-the-fly-updating). The answer will be displayed to the user as a notification at the top of the chat screen or as an alert. On success, *True* is returned. Alternatively, the user can be redirected to the specified Game URL. For this option to work, you must first create a game for your bot via [@Botfather](https://t.me/botfather) and accept the terms. Otherwise, you may use links like `t.me/your_bot?start=XXXX` that open your bot with a parameter.
 #
 # POST /answerCallbackQuery
 # Docs: https://core.telegram.org/bots/api/#answercallbackquery
-export def "answer-callback-query post" [
+export def "answer-callback-query create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -134,29 +176,30 @@ export def "answer-callback-query post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --cache-time: int # The maximum amount of time in seconds that the result of the callback query may be cached client-side. Telegram apps will support caching starting in version 3.14. Defaults to 0. (default: 0)
   callback_query_id: string # Unique identifier for the query to be answered
   --show-alert: oneof<nothing, bool> # If *true*, an alert will be shown by the client instead of a notification at the top of the chat screen. Defaults to *false*. (default: false)
   --text: string # Text of the notification. If not specified, nothing will be shown to the user, 0-200 characters
-  --body-url: string # URL that will be opened by the user's client. If you have created a [Game](https://core.telegram.org/bots/api/#game) and accepted the conditions via [@Botfather](https://t.me/botfather), specify the URL that opens your game — note that this will only work if the query comes from a [*callback\_game*](https://core.telegram.org/bots/api/#inlinekeyboardbutton) button.    Otherwise, you may use links like `t.me/your_bot?start=XXXX` that open your bot with a parameter.
+  --url: string # URL that will be opened by the user's client. If you have created a [Game](https://core.telegram.org/bots/api/#game) and accepted the conditions via [@Botfather](https://t.me/botfather), specify the URL that opens your game — note that this will only work if the query comes from a [*callback\_game*](https://core.telegram.org/bots/api/#inlinekeyboardbutton) button. Otherwise, you may use links like `t.me/your_bot?start=XXXX` that open your bot with a parameter.
 ]: any -> record<ok: bool, result: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/answerCallbackQuery")
-  let body = {cache_time: $cache_time, callback_query_id: $callback_query_id, show_alert: $show_alert, text: $text, url: $body_url} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"cache_time": $cache_time, "callback_query_id": $callback_query_id, "show_alert": $show_alert, "text": $text, "url": $url} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
-# Use this method to send answers to an inline query. On success, *True* is returned.   No more than **50** results per query are allowed.
+# Use this method to send answers to an inline query. On success, *True* is returned. No more than **50** results per query are allowed.
 #
 # POST /answerInlineQuery
 # Docs: https://core.telegram.org/bots/api/#answerinlinequery
-export def "answer-inline-query post" [
+export def "answer-inline-query create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -164,31 +207,32 @@ export def "answer-inline-query post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --cache-time: int # The maximum amount of time in seconds that the result of the inline query may be cached on the server. Defaults to 300. (default: 300)
   inline_query_id: string # Unique identifier for the answered query
   --is-personal: oneof<nothing, bool> # Pass *True*, if results may be cached on the server side only for the user that sent the query. By default, results may be returned to any user who sends the same query
   --next-offset: string # Pass the offset that a client should send in the next query with the same text to receive more results. Pass an empty string if there are no more results or if you don't support pagination. Offset length can't exceed 64 bytes.
   results: list # A JSON-serialized array of results for the inline query
-  --switch-pm-parameter: string # [Deep-linking](/bots#deep-linking) parameter for the /start message sent to the bot when user presses the switch button. 1-64 characters, only `A-Z`, `a-z`, `0-9`, `_` and `-` are allowed.    *Example:* An inline bot that sends YouTube videos can ask the user to connect the bot to their YouTube account to adapt search results accordingly. To do this, it displays a 'Connect your YouTube account' button above the results, or even before showing any. The user presses the button, switches to a private chat with the bot and, in doing so, passes a start parameter that instructs the bot to return an oauth link. Once done, the bot can offer a [*switch\_inline*](https://core.telegram.org/bots/api/#inlinekeyboardmarkup) button so that the user can easily return to the chat where they wanted to use the bot's inline capabilities.
+  --switch-pm-parameter: string # [Deep-linking](/bots#deep-linking) parameter for the /start message sent to the bot when user presses the switch button. 1-64 characters, only `A-Z`, `a-z`, `0-9`, `_` and `-` are allowed. *Example:* An inline bot that sends YouTube videos can ask the user to connect the bot to their YouTube account to adapt search results accordingly. To do this, it displays a 'Connect your YouTube account' button above the results, or even before showing any. The user presses the button, switches to a private chat with the bot and, in doing so, passes a start parameter that instructs the bot to return an oauth link. Once done, the bot can offer a [*switch\_inline*](https://core.telegram.org/bots/api/#inlinekeyboardmarkup) button so that the user can easily return to the chat where they wanted to use the bot's inline capabilities.
   --switch-pm-text: string # If passed, clients will display a button with specified text that switches the user to a private chat with the bot and sends the bot a start message with the parameter *switch\_pm\_parameter*
 ]: any -> record<ok: bool, result: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/answerInlineQuery")
-  let body = {cache_time: $cache_time, inline_query_id: $inline_query_id, is_personal: $is_personal, next_offset: $next_offset, results: $results, switch_pm_parameter: $switch_pm_parameter, switch_pm_text: $switch_pm_text} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"cache_time": $cache_time, "inline_query_id": $inline_query_id, "is_personal": $is_personal, "next_offset": $next_offset, "results": $results, "switch_pm_parameter": $switch_pm_parameter, "switch_pm_text": $switch_pm_text} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Once the user has confirmed their payment and shipping details, the Bot API sends the final confirmation in the form of an [Update](https://core.telegram.org/bots/api/#update) with the field *pre\_checkout\_query*. Use this method to respond to such pre-checkout queries. On success, True is returned. **Note:** The Bot API must receive an answer within 10 seconds after the pre-checkout query was sent.
 #
 # POST /answerPreCheckoutQuery
 # Docs: https://core.telegram.org/bots/api/#answerprecheckoutquery
-export def "answer-pre-checkout-query post" [
+export def "answer-pre-checkout-query create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -196,6 +240,7 @@ export def "answer-pre-checkout-query post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --error-message: string # Required if *ok* is *False*. Error message in human readable form that explains the reason for failure to proceed with the checkout (e.g. "Sorry, somebody just bought the last of our amazing black T-shirts while you were busy filling out your payment details. Please choose a different color or garment!"). Telegram will display this message to the user.
   --ok: oneof<nothing, bool> # Specify *True* if everything is alright (goods are available, etc.) and the bot is ready to proceed with the order. Use *False* if there are any problems.
@@ -205,11 +250,11 @@ export def "answer-pre-checkout-query post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/answerPreCheckoutQuery")
-  let body = {error_message: $error_message, ok: $ok, pre_checkout_query_id: $pre_checkout_query_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"error_message": $error_message, "ok": $ok, "pre_checkout_query_id": $pre_checkout_query_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # If you sent an invoice requesting a shipping address and the parameter *is\_flexible* was specified, the Bot API will send an [Update](https://core.telegram.org/bots/api/#update) with a *shipping\_query* field to the bot. Use this method to reply to shipping queries. On success, True is returned.
@@ -217,7 +262,7 @@ export def "answer-pre-checkout-query post" [
 # POST /answerShippingQuery
 # Docs: https://core.telegram.org/bots/api/#answershippingquery
 # --shipping_options item shape: {id: string, prices: list, title: string}
-export def "answer-shipping-query post" [
+export def "answer-shipping-query create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -225,6 +270,7 @@ export def "answer-shipping-query post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --error-message: string # Required if *ok* is False. Error message in human readable form that explains why it is impossible to complete the order (e.g. "Sorry, delivery to your desired address is unavailable'). Telegram will display this message to the user.
   --ok: oneof<nothing, bool> # Specify True if delivery to the specified address is possible and False if there are any problems (for example, if delivery to the specified address is not possible)
@@ -235,18 +281,18 @@ export def "answer-shipping-query post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/answerShippingQuery")
-  let body = {error_message: $error_message, ok: $ok, shipping_options: $shipping_options, shipping_query_id: $shipping_query_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"error_message": $error_message, "ok": $ok, "shipping_options": $shipping_options, "shipping_query_id": $shipping_query_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Use this method to close the bot instance before moving it from one local server to another. You need to delete the webhook before calling this method to ensure that the bot isn't launched again after server restart. The method will return error 429 in the first 10 minutes after the bot is launched. Returns *True* on success. Requires no parameters.
 #
 # POST /close
 # Docs: https://core.telegram.org/bots/api/#close
-export def "close post" [
+export def "close create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -254,6 +300,7 @@ export def "close post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<ok: bool, result: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -261,7 +308,7 @@ export def "close post" [
   let full_url = (build-url $base "/close")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Use this method to copy messages of any kind. The method is analogous to the method [forwardMessages](https://core.telegram.org/bots/api/#forwardmessages), but the copied message doesn't have a link to the original message. Returns the [MessageId](https://core.telegram.org/bots/api/#messageid) of the sent message on success.
@@ -269,7 +316,7 @@ export def "close post" [
 # POST /copyMessage
 # Docs: https://core.telegram.org/bots/api/#copymessage
 # --caption_entities item shape: {language?: string, length: int, offset: int, type: "mention"|"hashtag"|"cashtag"|"bot_command"|"url"|"email"|"phone_number"|"bold"|"italic"|"underline"|"strikethrough"|"code"|"pre"|"text_link"|"text_mention", url?: string, user?: record}
-export def "copy-message post" [
+export def "copy-message create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -277,6 +324,7 @@ export def "copy-message post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --allow-sending-without-reply: oneof<nothing, bool> # Pass *True*, if the message should be sent even if the specified replied-to message is not found
   --caption: string # New caption for media, 0-1024 characters after entities parsing. If not specified, the original caption is kept
@@ -293,11 +341,11 @@ export def "copy-message post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/copyMessage")
-  let body = {allow_sending_without_reply: $allow_sending_without_reply, caption: $caption, caption_entities: $caption_entities, chat_id: $chat_id, disable_notification: $disable_notification, from_chat_id: $from_chat_id, message_id: $message_id, parse_mode: $parse_mode, reply_markup: $reply_markup, reply_to_message_id: $reply_to_message_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"allow_sending_without_reply": $allow_sending_without_reply, "caption": $caption, "caption_entities": $caption_entities, "chat_id": $chat_id, "disable_notification": $disable_notification, "from_chat_id": $from_chat_id, "message_id": $message_id, "parse_mode": $parse_mode, "reply_markup": $reply_markup, "reply_to_message_id": $reply_to_message_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Use this method to create a new sticker set owned by a user. The bot will be able to edit the sticker set thus created. You **must** use exactly one of the fields *png\_sticker* or *tgs\_sticker*. Returns *True* on success.
@@ -305,7 +353,7 @@ export def "copy-message post" [
 # POST /createNewStickerSet
 # Docs: https://core.telegram.org/bots/api/#createnewstickerset
 # --mask_position shape: {point: "forehead"|"eyes"|"mouth"|"chin", scale: float, x_shift: float, y_shift: float}
-export def "create-new-sticker-set post" [
+export def "create-new-sticker-set create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -313,11 +361,12 @@ export def "create-new-sticker-set post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --contains-masks: oneof<nothing, bool> # Pass *True*, if a set of mask stickers should be created
   emojis: string # One or more emoji corresponding to the sticker
   --mask-position: record # This object describes the position on faces where a mask should be placed by default. — shape: {point: "forehead"|"eyes"|"mouth"|"chin", scale: float, x_shift: float, y_shift: float}
-  name: string # Short name of sticker set, to be used in `t.me/addstickers/` URLs (e.g., *animals*). Can contain only english letters, digits and underscores. Must begin with a letter, can't contain consecutive underscores and must end in *“\_by\_<bot username>”*. *<bot\_username>* is case insensitive. 1-64 characters.
+  name: string # Short name of sticker set, to be used in `t.me/addstickers/` URLs (e.g., *animals*). Can contain only english letters, digits and underscores. Must begin with a letter, can't contain consecutive underscores and must end in *“\_by\_”*. *<bot\_username>* is case insensitive. 1-64 characters.
   --png-sticker: any # **PNG** image with the sticker, must be up to 512 kilobytes in size, dimensions must not exceed 512px, and either width or height must be exactly 512px. Pass a *file\_id* as a String to send a file that already exists on the Telegram servers, pass an HTTP URL as a String for Telegram to get a file from the Internet, or upload a new one using multipart/form-data. [More info on Sending Files »](https://core.telegram.org/bots/api/#sending-files)
   --tgs-sticker: any # This object represents the contents of a file to be uploaded. Must be posted using multipart/form-data in the usual way that files are uploaded via the browser.
   title: string # Sticker set title, 1-64 characters
@@ -327,18 +376,20 @@ export def "create-new-sticker-set post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/createNewStickerSet")
-  let body = {contains_masks: $contains_masks, emojis: $emojis, mask_position: $mask_position, name: $name, png_sticker: $png_sticker, tgs_sticker: $tgs_sticker, title: $title, user_id: $user_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"contains_masks": $contains_masks, "emojis": $emojis, "mask_position": $mask_position, "name": $name, "png_sticker": $png_sticker, "tgs_sticker": $tgs_sticker, "title": $title, "user_id": $user_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
+  let mp = (build-multipart-body $req_body [] $dry_run)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
 }
 
 # Use this method to delete a chat photo. Photos can't be changed for private chats. The bot must be an administrator in the chat for this to work and must have the appropriate admin rights. Returns *True* on success.
 #
 # POST /deleteChatPhoto
 # Docs: https://core.telegram.org/bots/api/#deletechatphoto
-export def "delete-chat-photo post" [
+export def "delete-chat-photo create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -346,6 +397,7 @@ export def "delete-chat-photo post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   chat_id: any # Unique identifier for the target chat or username of the target channel (in the format `@channelusername`)
 ]: any -> record<ok: bool, result: bool> {
@@ -353,18 +405,18 @@ export def "delete-chat-photo post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/deleteChatPhoto")
-  let body = {chat_id: $chat_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"chat_id": $chat_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Use this method to delete a group sticker set from a supergroup. The bot must be an administrator in the chat for this to work and must have the appropriate admin rights. Use the field *can\_set\_sticker\_set* optionally returned in [getChat](https://core.telegram.org/bots/api/#getchat) requests to check if the bot can use this method. Returns *True* on success.
 #
 # POST /deleteChatStickerSet
 # Docs: https://core.telegram.org/bots/api/#deletechatstickerset
-export def "delete-chat-sticker-set post" [
+export def "delete-chat-sticker-set create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -372,6 +424,7 @@ export def "delete-chat-sticker-set post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   chat_id: any # Unique identifier for the target chat or username of the target supergroup (in the format `@supergroupusername`)
 ]: any -> record<ok: bool, result: bool> {
@@ -379,18 +432,18 @@ export def "delete-chat-sticker-set post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/deleteChatStickerSet")
-  let body = {chat_id: $chat_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"chat_id": $chat_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
-# Use this method to delete a message, including service messages, with the following limitations:   \- A message can only be deleted if it was sent less than 48 hours ago.   \- A dice message in a private chat can only be deleted if it was sent more than 24 hours ago.   \- Bots can delete outgoing messages in private chats, groups, and supergroups.   \- Bots can delete incoming messages in private chats.   \- Bots granted *can\_post\_messages* permissions can delete outgoing messages in channels.   \- If the bot is an administrator of a group, it can delete any message there.   \- If the bot has *can\_delete\_messages* permission in a supergroup or a channel, it can delete any message there.   Returns *True* on success.
+# Use this method to delete a message, including service messages, with the following limitations: \- A message can only be deleted if it was sent less than 48 hours ago. \- A dice message in a private chat can only be deleted if it was sent more than 24 hours ago. \- Bots can delete outgoing messages in private chats, groups, and supergroups. \- Bots can delete incoming messages in private chats. \- Bots granted *can\_post\_messages* permissions can delete outgoing messages in channels. \- If the bot is an administrator of a group, it can delete any message there. \- If the bot has *can\_delete\_messages* permission in a supergroup or a channel, it can delete any message there. Returns *True* on success.
 #
 # POST /deleteMessage
 # Docs: https://core.telegram.org/bots/api/#deletemessage
-export def "delete-message post" [
+export def "delete-message create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -398,6 +451,7 @@ export def "delete-message post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   chat_id: any # Unique identifier for the target chat or username of the target channel (in the format `@channelusername`)
   message_id: int # Identifier of the message to delete
@@ -406,18 +460,18 @@ export def "delete-message post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/deleteMessage")
-  let body = {chat_id: $chat_id, message_id: $message_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"chat_id": $chat_id, "message_id": $message_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Use this method to delete a sticker from a set created by the bot. Returns *True* on success.
 #
 # POST /deleteStickerFromSet
 # Docs: https://core.telegram.org/bots/api/#deletestickerfromset
-export def "delete-sticker-from-set post" [
+export def "delete-sticker-from-set create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -425,6 +479,7 @@ export def "delete-sticker-from-set post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   sticker: string # File identifier of the sticker
 ]: any -> record<ok: bool, result: bool> {
@@ -432,18 +487,18 @@ export def "delete-sticker-from-set post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/deleteStickerFromSet")
-  let body = {sticker: $sticker} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"sticker": $sticker} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Use this method to remove webhook integration if you decide to switch back to [getUpdates](https://core.telegram.org/bots/api/#getupdates). Returns *True* on success.
 #
 # POST /deleteWebhook
 # Docs: https://core.telegram.org/bots/api/#deletewebhook
-export def "delete-webhook post" [
+export def "delete-webhook create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -451,6 +506,7 @@ export def "delete-webhook post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --drop-pending-updates: oneof<nothing, bool> # Pass *True* to drop all pending updates
 ]: any -> record<ok: bool, result: bool> {
@@ -458,11 +514,11 @@ export def "delete-webhook post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/deleteWebhook")
-  let body = {drop_pending_updates: $drop_pending_updates} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"drop_pending_updates": $drop_pending_updates} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Use this method to edit captions of messages. On success, if the edited message is not an inline message, the edited [Message](https://core.telegram.org/bots/api/#message) is returned, otherwise *True* is returned.
@@ -471,7 +527,7 @@ export def "delete-webhook post" [
 # Docs: https://core.telegram.org/bots/api/#editmessagecaption
 # --caption_entities item shape: {language?: string, length: int, offset: int, type: "mention"|"hashtag"|"cashtag"|"bot_command"|"url"|"email"|"phone_number"|"bold"|"italic"|"underline"|"strikethrough"|"code"|"pre"|"text_link"|"text_mention", url?: string, user?: record}
 # --reply_markup shape: {inline_keyboard: list}
-export def "edit-message-caption post" [
+export def "edit-message-caption create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -479,6 +535,7 @@ export def "edit-message-caption post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --caption: string # New caption of the message, 0-1024 characters after entities parsing
   --caption-entities: list # List of special entities that appear in the caption, which can be specified instead of *parse\_mode* — item shape: {language?: string, length: int, offset: int, type: "mention"|"hashtag"|"cashtag"|"bot_command"|"url"|"email"|"phone_number"|"bold"|"italic"|"underline"|"strikethrough"|"code"|"pre"|"text_link"|"text_mention", url?: string, user?: record}
@@ -492,11 +549,11 @@ export def "edit-message-caption post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/editMessageCaption")
-  let body = {caption: $caption, caption_entities: $caption_entities, chat_id: $chat_id, inline_message_id: $inline_message_id, message_id: $message_id, parse_mode: $parse_mode, reply_markup: $reply_markup} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"caption": $caption, "caption_entities": $caption_entities, "chat_id": $chat_id, "inline_message_id": $inline_message_id, "message_id": $message_id, "parse_mode": $parse_mode, "reply_markup": $reply_markup} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Use this method to edit live location messages. A location can be edited until its *live\_period* expires or editing is explicitly disabled by a call to [stopMessageLiveLocation](https://core.telegram.org/bots/api/#stopmessagelivelocation). On success, if the edited message is not an inline message, the edited [Message](https://core.telegram.org/bots/api/#message) is returned, otherwise *True* is returned.
@@ -504,7 +561,7 @@ export def "edit-message-caption post" [
 # POST /editMessageLiveLocation
 # Docs: https://core.telegram.org/bots/api/#editmessagelivelocation
 # --reply_markup shape: {inline_keyboard: list}
-export def "edit-message-live-location post" [
+export def "edit-message-live-location create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -512,6 +569,7 @@ export def "edit-message-live-location post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --chat-id: any # Required if *inline\_message\_id* is not specified. Unique identifier for the target chat or username of the target channel (in the format `@channelusername`)
   --heading: int # Direction in which the user is moving, in degrees. Must be between 1 and 360 if specified.
@@ -527,11 +585,11 @@ export def "edit-message-live-location post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/editMessageLiveLocation")
-  let body = {chat_id: $chat_id, heading: $heading, horizontal_accuracy: $horizontal_accuracy, inline_message_id: $inline_message_id, latitude: $latitude, longitude: $longitude, message_id: $message_id, proximity_alert_radius: $proximity_alert_radius, reply_markup: $reply_markup} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"chat_id": $chat_id, "heading": $heading, "horizontal_accuracy": $horizontal_accuracy, "inline_message_id": $inline_message_id, "latitude": $latitude, "longitude": $longitude, "message_id": $message_id, "proximity_alert_radius": $proximity_alert_radius, "reply_markup": $reply_markup} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Use this method to edit animation, audio, document, photo, or video messages. If a message is part of a message album, then it can be edited only to an audio for audio albums, only to a document for document albums and to a photo or a video otherwise. When an inline message is edited, a new file can't be uploaded. Use a previously uploaded file via its file\_id or specify a URL. On success, if the edited message was sent by the bot, the edited [Message](https://core.telegram.org/bots/api/#message) is returned, otherwise *True* is returned.
@@ -539,7 +597,7 @@ export def "edit-message-live-location post" [
 # POST /editMessageMedia
 # Docs: https://core.telegram.org/bots/api/#editmessagemedia
 # --reply_markup shape: {inline_keyboard: list}
-export def "edit-message-media post" [
+export def "edit-message-media create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -547,6 +605,7 @@ export def "edit-message-media post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --chat-id: any # Required if *inline\_message\_id* is not specified. Unique identifier for the target chat or username of the target channel (in the format `@channelusername`)
   --inline-message-id: string # Required if *chat\_id* and *message\_id* are not specified. Identifier of the inline message
@@ -558,11 +617,13 @@ export def "edit-message-media post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/editMessageMedia")
-  let body = {chat_id: $chat_id, inline_message_id: $inline_message_id, media: $media, message_id: $message_id, reply_markup: $reply_markup} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"chat_id": $chat_id, "inline_message_id": $inline_message_id, "media": $media, "message_id": $message_id, "reply_markup": $reply_markup} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
+  let mp = (build-multipart-body $req_body [] $dry_run)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
 }
 
 # Use this method to edit only the reply markup of messages. On success, if the edited message is not an inline message, the edited [Message](https://core.telegram.org/bots/api/#message) is returned, otherwise *True* is returned.
@@ -570,7 +631,7 @@ export def "edit-message-media post" [
 # POST /editMessageReplyMarkup
 # Docs: https://core.telegram.org/bots/api/#editmessagereplymarkup
 # --reply_markup shape: {inline_keyboard: list}
-export def "edit-message-reply-markup post" [
+export def "edit-message-reply-markup create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -578,6 +639,7 @@ export def "edit-message-reply-markup post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --chat-id: any # Required if *inline\_message\_id* is not specified. Unique identifier for the target chat or username of the target channel (in the format `@channelusername`)
   --inline-message-id: string # Required if *chat\_id* and *message\_id* are not specified. Identifier of the inline message
@@ -588,11 +650,11 @@ export def "edit-message-reply-markup post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/editMessageReplyMarkup")
-  let body = {chat_id: $chat_id, inline_message_id: $inline_message_id, message_id: $message_id, reply_markup: $reply_markup} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"chat_id": $chat_id, "inline_message_id": $inline_message_id, "message_id": $message_id, "reply_markup": $reply_markup} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Use this method to edit text and [game](https://core.telegram.org/bots/api/#games) messages. On success, if the edited message is not an inline message, the edited [Message](https://core.telegram.org/bots/api/#message) is returned, otherwise *True* is returned.
@@ -601,7 +663,7 @@ export def "edit-message-reply-markup post" [
 # Docs: https://core.telegram.org/bots/api/#editmessagetext
 # --entities item shape: {language?: string, length: int, offset: int, type: "mention"|"hashtag"|"cashtag"|"bot_command"|"url"|"email"|"phone_number"|"bold"|"italic"|"underline"|"strikethrough"|"code"|"pre"|"text_link"|"text_mention", url?: string, user?: record}
 # --reply_markup shape: {inline_keyboard: list}
-export def "edit-message-text post" [
+export def "edit-message-text create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -609,6 +671,7 @@ export def "edit-message-text post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --chat-id: any # Required if *inline\_message\_id* is not specified. Unique identifier for the target chat or username of the target channel (in the format `@channelusername`)
   --disable-web-page-preview: oneof<nothing, bool> # Disables link previews for links in this message
@@ -623,18 +686,18 @@ export def "edit-message-text post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/editMessageText")
-  let body = {chat_id: $chat_id, disable_web_page_preview: $disable_web_page_preview, entities: $entities, inline_message_id: $inline_message_id, message_id: $message_id, parse_mode: $parse_mode, reply_markup: $reply_markup, text: $text} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"chat_id": $chat_id, "disable_web_page_preview": $disable_web_page_preview, "entities": $entities, "inline_message_id": $inline_message_id, "message_id": $message_id, "parse_mode": $parse_mode, "reply_markup": $reply_markup, "text": $text} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Use this method to generate a new invite link for a chat; any previously generated link is revoked. The bot must be an administrator in the chat for this to work and must have the appropriate admin rights. Returns the new invite link as *String* on success.
 #
 # POST /exportChatInviteLink
 # Docs: https://core.telegram.org/bots/api/#exportchatinvitelink
-export def "export-chat-invite-link post" [
+export def "export-chat-invite-link create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -642,6 +705,7 @@ export def "export-chat-invite-link post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   chat_id: any # Unique identifier for the target chat or username of the target channel (in the format `@channelusername`)
 ]: any -> record<ok: bool, result: string> {
@@ -649,18 +713,18 @@ export def "export-chat-invite-link post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/exportChatInviteLink")
-  let body = {chat_id: $chat_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"chat_id": $chat_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Use this method to forward messages of any kind. On success, the sent [Message](https://core.telegram.org/bots/api/#message) is returned.
 #
 # POST /forwardMessage
 # Docs: https://core.telegram.org/bots/api/#forwardmessage
-export def "forward-message post" [
+export def "forward-message create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -668,6 +732,7 @@ export def "forward-message post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   chat_id: any # Unique identifier for the target chat or username of the target channel (in the format `@channelusername`)
   --disable-notification: oneof<nothing, bool> # Sends the message [silently](https://telegram.org/blog/channels-2-0#silent-messages). Users will receive a notification with no sound.
@@ -678,18 +743,18 @@ export def "forward-message post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/forwardMessage")
-  let body = {chat_id: $chat_id, disable_notification: $disable_notification, from_chat_id: $from_chat_id, message_id: $message_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"chat_id": $chat_id, "disable_notification": $disable_notification, "from_chat_id": $from_chat_id, "message_id": $message_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Use this method to get up to date information about the chat (current name of the user for one-on-one conversations, current username of a user, group or channel, etc.). Returns a [Chat](https://core.telegram.org/bots/api/#chat) object on success.
 #
 # POST /getChat
 # Docs: https://core.telegram.org/bots/api/#getchat
-export def "get-chat post" [
+export def "get-chat create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -697,6 +762,7 @@ export def "get-chat post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   chat_id: any # Unique identifier for the target chat or username of the target supergroup or channel (in the format `@channelusername`)
 ]: any -> record<ok: bool, result: record<bio: string, can_set_sticker_set: bool, description: string, first_name: string, id: int, invite_link: string, last_name: string, linked_chat_id: int, location: record<address: string, location: record>, permissions: record<can_add_web_page_previews: bool, can_change_info: bool, can_invite_users: bool, can_pin_messages: bool, can_send_media_messages: bool, can_send_messages: bool, can_send_other_messages: bool, can_send_polls: bool>, photo: record<big_file_id: string, big_file_unique_id: string, small_file_id: string, small_file_unique_id: string>, pinned_message: record<animation: record, audio: record, author_signature: string, caption: string, caption_entities: list, channel_chat_created: bool, chat: any, connected_website: string, contact: record, date: int, delete_chat_photo: bool, dice: record, document: record, edit_date: int, entities: list, forward_date: int, forward_from: record, forward_from_chat: any, forward_from_message_id: int, forward_sender_name: string, forward_signature: string, from: record, game: record, group_chat_created: bool, invoice: record, left_chat_member: record, location: record, media_group_id: string, message_id: int, migrate_from_chat_id: int, migrate_to_chat_id: int, new_chat_members: list, new_chat_photo: list, new_chat_title: string, passport_data: record, photo: list, pinned_message: any, poll: record, proximity_alert_triggered: record, reply_markup: record, reply_to_message: any, sender_chat: any, sticker: record, successful_payment: record, supergroup_chat_created: bool, text: string, venue: record, via_bot: record, video: record, video_note: record, voice: record>, slow_mode_delay: int, sticker_set_name: string, title: string, type: string, username: string>> {
@@ -704,18 +770,18 @@ export def "get-chat post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/getChat")
-  let body = {chat_id: $chat_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"chat_id": $chat_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Use this method to get a list of administrators in a chat. On success, returns an Array of [ChatMember](https://core.telegram.org/bots/api/#chatmember) objects that contains information about all chat administrators except other bots. If the chat is a group or a supergroup and no administrators were appointed, only the creator will be returned.
 #
 # POST /getChatAdministrators
 # Docs: https://core.telegram.org/bots/api/#getchatadministrators
-export def "get-chat-administrators post" [
+export def "get-chat-administrators create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -723,6 +789,7 @@ export def "get-chat-administrators post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   chat_id: any # Unique identifier for the target chat or username of the target supergroup or channel (in the format `@channelusername`)
 ]: any -> record<ok: bool, result: table<can_add_web_page_previews: bool, can_be_edited: bool, can_change_info: bool, can_delete_messages: bool, can_edit_messages: bool, can_invite_users: bool, can_pin_messages: bool, can_post_messages: bool, can_promote_members: bool, can_restrict_members: bool, can_send_media_messages: bool, can_send_messages: bool, can_send_other_messages: bool, can_send_polls: bool, custom_title: string, is_anonymous: bool, is_member: bool, status: string, until_date: int, user: record>> {
@@ -730,18 +797,18 @@ export def "get-chat-administrators post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/getChatAdministrators")
-  let body = {chat_id: $chat_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"chat_id": $chat_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Use this method to get information about a member of a chat. Returns a [ChatMember](https://core.telegram.org/bots/api/#chatmember) object on success.
 #
 # POST /getChatMember
 # Docs: https://core.telegram.org/bots/api/#getchatmember
-export def "get-chat-member post" [
+export def "get-chat-member create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -749,6 +816,7 @@ export def "get-chat-member post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   chat_id: any # Unique identifier for the target chat or username of the target supergroup or channel (in the format `@channelusername`)
   user_id: int # Unique identifier of the target user
@@ -757,18 +825,18 @@ export def "get-chat-member post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/getChatMember")
-  let body = {chat_id: $chat_id, user_id: $user_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"chat_id": $chat_id, "user_id": $user_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Use this method to get the number of members in a chat. Returns *Int* on success.
 #
 # POST /getChatMembersCount
 # Docs: https://core.telegram.org/bots/api/#getchatmemberscount
-export def "get-chat-members-count post" [
+export def "get-chat-members-count create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -776,6 +844,7 @@ export def "get-chat-members-count post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   chat_id: any # Unique identifier for the target chat or username of the target supergroup or channel (in the format `@channelusername`)
 ]: any -> record<ok: bool, result: int> {
@@ -783,18 +852,18 @@ export def "get-chat-members-count post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/getChatMembersCount")
-  let body = {chat_id: $chat_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"chat_id": $chat_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
-# Use this method to get basic info about a file and prepare it for downloading. For the moment, bots can download files of up to 20MB in size. On success, a [File](https://core.telegram.org/bots/api/#file) object is returned. The file can then be downloaded via the link `https://api.telegram.org/file/bot<token>/<file_path>`, where `<file_path>` is taken from the response. It is guaranteed that the link will be valid for at least 1 hour. When the link expires, a new one can be requested by calling [getFile](https://core.telegram.org/bots/api/#getfile) again.
+# Use this method to get basic info about a file and prepare it for downloading. For the moment, bots can download files of up to 20MB in size. On success, a [File](https://core.telegram.org/bots/api/#file) object is returned. The file can then be downloaded via the link `https://api.telegram.org/file/bot/<file_path>`, where `<file_path>` is taken from the response. It is guaranteed that the link will be valid for at least 1 hour. When the link expires, a new one can be requested by calling [getFile](https://core.telegram.org/bots/api/#getfile) again.
 #
 # POST /getFile
 # Docs: https://core.telegram.org/bots/api/#getfile
-export def "get-file post" [
+export def "get-file create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -802,6 +871,7 @@ export def "get-file post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   file_id: string # File identifier to get info about
 ]: any -> record<ok: bool, result: record<file_id: string, file_path: string, file_size: int, file_unique_id: string>> {
@@ -809,18 +879,18 @@ export def "get-file post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/getFile")
-  let body = {file_id: $file_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"file_id": $file_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
-# Use this method to get data for high score tables. Will return the score of the specified user and several of their neighbors in a game. On success, returns an *Array* of [GameHighScore](https://core.telegram.org/bots/api/#gamehighscore) objects.  This method will currently return scores for the target user, plus two of their closest neighbors on each side. Will also return the top three users if the user and his neighbors are not among them. Please note that this behavior is subject to change.
+# Use this method to get data for high score tables. Will return the score of the specified user and several of their neighbors in a game. On success, returns an *Array* of [GameHighScore](https://core.telegram.org/bots/api/#gamehighscore) objects. This method will currently return scores for the target user, plus two of their closest neighbors on each side. Will also return the top three users if the user and his neighbors are not among them. Please note that this behavior is subject to change.
 #
 # POST /getGameHighScores
 # Docs: https://core.telegram.org/bots/api/#getgamehighscores
-export def "get-game-high-scores post" [
+export def "get-game-high-scores create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -828,6 +898,7 @@ export def "get-game-high-scores post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --chat-id: int # Required if *inline\_message\_id* is not specified. Unique identifier for the target chat
   --inline-message-id: string # Required if *chat\_id* and *message\_id* are not specified. Identifier of the inline message
@@ -838,18 +909,18 @@ export def "get-game-high-scores post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/getGameHighScores")
-  let body = {chat_id: $chat_id, inline_message_id: $inline_message_id, message_id: $message_id, user_id: $user_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"chat_id": $chat_id, "inline_message_id": $inline_message_id, "message_id": $message_id, "user_id": $user_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # A simple method for testing your bot's auth token. Requires no parameters. Returns basic information about the bot in form of a [User](https://core.telegram.org/bots/api/#user) object.
 #
 # POST /getMe
 # Docs: https://core.telegram.org/bots/api/#getme
-export def "get-me post" [
+export def "get-me create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -857,6 +928,7 @@ export def "get-me post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<ok: bool, result: record<can_join_groups: bool, can_read_all_group_messages: bool, first_name: string, id: int, is_bot: bool, language_code: string, last_name: string, supports_inline_queries: bool, username: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -864,14 +936,14 @@ export def "get-me post" [
   let full_url = (build-url $base "/getMe")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Use this method to get the current list of the bot's commands. Requires no parameters. Returns Array of [BotCommand](https://core.telegram.org/bots/api/#botcommand) on success.
 #
 # POST /getMyCommands
 # Docs: https://core.telegram.org/bots/api/#getmycommands
-export def "get-my-commands post" [
+export def "get-my-commands create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -879,6 +951,7 @@ export def "get-my-commands post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<ok: bool, result: table<command: string, description: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -886,14 +959,14 @@ export def "get-my-commands post" [
   let full_url = (build-url $base "/getMyCommands")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Use this method to get a sticker set. On success, a [StickerSet](https://core.telegram.org/bots/api/#stickerset) object is returned.
 #
 # POST /getStickerSet
 # Docs: https://core.telegram.org/bots/api/#getstickerset
-export def "get-sticker-set post" [
+export def "get-sticker-set create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -901,6 +974,7 @@ export def "get-sticker-set post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   name: string # Name of the sticker set
 ]: any -> record<ok: bool, result: record<contains_masks: bool, is_animated: bool, name: string, stickers: list<record>, thumb: record<file_id: string, file_size: int, file_unique_id: string, height: int, width: int>, title: string>> {
@@ -908,18 +982,18 @@ export def "get-sticker-set post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/getStickerSet")
-  let body = {name: $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Use this method to receive incoming updates using long polling ([wiki](https://en.wikipedia.org/wiki/Push_technology#Long_polling)). An Array of [Update](https://core.telegram.org/bots/api/#update) objects is returned.
 #
 # POST /getUpdates
 # Docs: https://core.telegram.org/bots/api/#getupdates
-export def "get-updates post" [
+export def "get-updates create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -927,8 +1001,9 @@ export def "get-updates post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --allowed-updates: list # A JSON-serialized list of the update types you want your bot to receive. For example, specify [“message”, “edited\_channel\_post”, “callback\_query”] to only receive updates of these types. See [Update](https://core.telegram.org/bots/api/#update) for a complete list of available update types. Specify an empty list to receive all updates regardless of type (default). If not specified, the previous setting will be used.    Please note that this parameter doesn't affect updates created before the call to the getUpdates, so unwanted updates may be received for a short period of time.
+  --allowed-updates: list<string> # A JSON-serialized list of the update types you want your bot to receive. For example, specify [“message”, “edited\_channel\_post”, “callback\_query”] to only receive updates of these types. See [Update](https://core.telegram.org/bots/api/#update) for a complete list of available update types. Specify an empty list to receive all updates regardless of type (default). If not specified, the previous setting will be used. Please note that this parameter doesn't affect updates created before the call to the getUpdates, so unwanted updates may be received for a short period of time.
   --limit: int # Limits the number of updates to be retrieved. Values between 1-100 are accepted. Defaults to 100. (default: 100)
   --offset: int # Identifier of the first update to be returned. Must be greater by one than the highest among the identifiers of previously received updates. By default, updates starting with the earliest unconfirmed update are returned. An update is considered confirmed as soon as [getUpdates](https://core.telegram.org/bots/api/#getupdates) is called with an *offset* higher than its *update\_id*. The negative offset can be specified to retrieve updates starting from *-offset* update from the end of the updates queue. All previous updates will forgotten.
   --timeout: int # Timeout in seconds for long polling. Defaults to 0, i.e. usual short polling. Should be positive, short polling should be used for testing purposes only. (default: 0)
@@ -937,18 +1012,18 @@ export def "get-updates post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/getUpdates")
-  let body = {allowed_updates: $allowed_updates, limit: $limit, offset: $offset, timeout: $timeout} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"allowed_updates": $allowed_updates, "limit": $limit, "offset": $offset, "timeout": $timeout} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Use this method to get a list of profile pictures for a user. Returns a [UserProfilePhotos](https://core.telegram.org/bots/api/#userprofilephotos) object.
 #
 # POST /getUserProfilePhotos
 # Docs: https://core.telegram.org/bots/api/#getuserprofilephotos
-export def "get-user-profile-photos post" [
+export def "get-user-profile-photos create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -956,6 +1031,7 @@ export def "get-user-profile-photos post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Limits the number of photos to be retrieved. Values between 1-100 are accepted. Defaults to 100. (default: 100)
   --offset: int # Sequential number of the first photo to be returned. By default, all photos are returned.
@@ -965,18 +1041,18 @@ export def "get-user-profile-photos post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/getUserProfilePhotos")
-  let body = {limit: $limit, offset: $offset, user_id: $user_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"limit": $limit, "offset": $offset, "user_id": $user_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Use this method to get current webhook status. Requires no parameters. On success, returns a [WebhookInfo](https://core.telegram.org/bots/api/#webhookinfo) object. If the bot is using [getUpdates](https://core.telegram.org/bots/api/#getupdates), will return an object with the *url* field empty.
 #
 # POST /getWebhookInfo
 # Docs: https://core.telegram.org/bots/api/#getwebhookinfo
-export def "get-webhook-info post" [
+export def "get-webhook-info create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -984,6 +1060,7 @@ export def "get-webhook-info post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<ok: bool, result: record<allowed_updates: list<string>, has_custom_certificate: bool, ip_address: string, last_error_date: int, last_error_message: string, max_connections: int, pending_update_count: int, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -991,14 +1068,14 @@ export def "get-webhook-info post" [
   let full_url = (build-url $base "/getWebhookInfo")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Use this method to kick a user from a group, a supergroup or a channel. In the case of supergroups and channels, the user will not be able to return to the group on their own using invite links, etc., unless [unbanned](https://core.telegram.org/bots/api/#unbanchatmember) first. The bot must be an administrator in the chat for this to work and must have the appropriate admin rights. Returns *True* on success.
 #
 # POST /kickChatMember
 # Docs: https://core.telegram.org/bots/api/#kickchatmember
-export def "kick-chat-member post" [
+export def "kick-chat-member create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1006,6 +1083,7 @@ export def "kick-chat-member post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   chat_id: any # Unique identifier for the target group or username of the target supergroup or channel (in the format `@channelusername`)
   --until-date: int # Date when the user will be unbanned, unix time. If user is banned for more than 366 days or less than 30 seconds from the current time they are considered to be banned forever
@@ -1015,18 +1093,18 @@ export def "kick-chat-member post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/kickChatMember")
-  let body = {chat_id: $chat_id, until_date: $until_date, user_id: $user_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"chat_id": $chat_id, "until_date": $until_date, "user_id": $user_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Use this method for your bot to leave a group, supergroup or channel. Returns *True* on success.
 #
 # POST /leaveChat
 # Docs: https://core.telegram.org/bots/api/#leavechat
-export def "leave-chat post" [
+export def "leave-chat create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1034,6 +1112,7 @@ export def "leave-chat post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   chat_id: any # Unique identifier for the target chat or username of the target supergroup or channel (in the format `@channelusername`)
 ]: any -> record<ok: bool, result: bool> {
@@ -1041,18 +1120,18 @@ export def "leave-chat post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/leaveChat")
-  let body = {chat_id: $chat_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"chat_id": $chat_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Use this method to log out from the cloud Bot API server before launching the bot locally. You **must** log out the bot before running it locally, otherwise there is no guarantee that the bot will receive updates. After a successful call, you can immediately log in on a local server, but will not be able to log in back to the cloud Bot API server for 10 minutes. Returns *True* on success. Requires no parameters.
 #
 # POST /logOut
 # Docs: https://core.telegram.org/bots/api/#logout
-export def "log-out post" [
+export def "log-out create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1060,6 +1139,7 @@ export def "log-out post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<ok: bool, result: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1067,14 +1147,14 @@ export def "log-out post" [
   let full_url = (build-url $base "/logOut")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Use this method to add a message to the list of pinned messages in a chat. If the chat is not a private chat, the bot must be an administrator in the chat for this to work and must have the 'can\_pin\_messages' admin right in a supergroup or 'can\_edit\_messages' admin right in a channel. Returns *True* on success.
 #
 # POST /pinChatMessage
 # Docs: https://core.telegram.org/bots/api/#pinchatmessage
-export def "pin-chat-message post" [
+export def "pin-chat-message create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1082,6 +1162,7 @@ export def "pin-chat-message post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   chat_id: any # Unique identifier for the target chat or username of the target channel (in the format `@channelusername`)
   --disable-notification: oneof<nothing, bool> # Pass *True*, if it is not necessary to send a notification to all chat members about the new pinned message. Notifications are always disabled in channels and private chats.
@@ -1091,18 +1172,18 @@ export def "pin-chat-message post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/pinChatMessage")
-  let body = {chat_id: $chat_id, disable_notification: $disable_notification, message_id: $message_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"chat_id": $chat_id, "disable_notification": $disable_notification, "message_id": $message_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Use this method to promote or demote a user in a supergroup or a channel. The bot must be an administrator in the chat for this to work and must have the appropriate admin rights. Pass *False* for all boolean parameters to demote a user. Returns *True* on success.
 #
 # POST /promoteChatMember
 # Docs: https://core.telegram.org/bots/api/#promotechatmember
-export def "promote-chat-member post" [
+export def "promote-chat-member create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1110,6 +1191,7 @@ export def "promote-chat-member post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --can-change-info: oneof<nothing, bool> # Pass True, if the administrator can change chat title, photo and other settings
   --can-delete-messages: oneof<nothing, bool> # Pass True, if the administrator can delete messages of other users
@@ -1127,11 +1209,11 @@ export def "promote-chat-member post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/promoteChatMember")
-  let body = {can_change_info: $can_change_info, can_delete_messages: $can_delete_messages, can_edit_messages: $can_edit_messages, can_invite_users: $can_invite_users, can_pin_messages: $can_pin_messages, can_post_messages: $can_post_messages, can_promote_members: $can_promote_members, can_restrict_members: $can_restrict_members, chat_id: $chat_id, is_anonymous: $is_anonymous, user_id: $user_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"can_change_info": $can_change_info, "can_delete_messages": $can_delete_messages, "can_edit_messages": $can_edit_messages, "can_invite_users": $can_invite_users, "can_pin_messages": $can_pin_messages, "can_post_messages": $can_post_messages, "can_promote_members": $can_promote_members, "can_restrict_members": $can_restrict_members, "chat_id": $chat_id, "is_anonymous": $is_anonymous, "user_id": $user_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Use this method to restrict a user in a supergroup. The bot must be an administrator in the supergroup for this to work and must have the appropriate admin rights. Pass *True* for all permissions to lift restrictions from a user. Returns *True* on success.
@@ -1139,7 +1221,7 @@ export def "promote-chat-member post" [
 # POST /restrictChatMember
 # Docs: https://core.telegram.org/bots/api/#restrictchatmember
 # --permissions shape: {can_add_web_page_previews?: bool, can_change_info?: bool, can_invite_users?: bool, can_pin_messages?: bool, can_send_media_messages?: bool, can_send_messages?: bool, can_send_other_messages?: bool, can_send_polls?: bool}
-export def "restrict-chat-member post" [
+export def "restrict-chat-member create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1147,6 +1229,7 @@ export def "restrict-chat-member post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   chat_id: any # Unique identifier for the target chat or username of the target supergroup (in the format `@supergroupusername`)
   permissions: record # Describes actions that a non-administrator user is allowed to take in a chat. — shape: {can_add_web_page_previews?: bool, can_change_info?: bool, can_invite_users?: bool, can_pin_messages?: bool, can_send_media_messages?: bool, can_send_messages?: bool, can_send_other_messages?: bool, can_send_polls?: bool}
@@ -1157,11 +1240,11 @@ export def "restrict-chat-member post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/restrictChatMember")
-  let body = {chat_id: $chat_id, permissions: $permissions, until_date: $until_date, user_id: $user_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"chat_id": $chat_id, "permissions": $permissions, "until_date": $until_date, "user_id": $user_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Use this method to send animation files (GIF or H.264/MPEG-4 AVC video without sound). On success, the sent [Message](https://core.telegram.org/bots/api/#message) is returned. Bots can currently send animation files of up to 50 MB in size, this limit may be changed in the future.
@@ -1169,7 +1252,7 @@ export def "restrict-chat-member post" [
 # POST /sendAnimation
 # Docs: https://core.telegram.org/bots/api/#sendanimation
 # --caption_entities item shape: {language?: string, length: int, offset: int, type: "mention"|"hashtag"|"cashtag"|"bot_command"|"url"|"email"|"phone_number"|"bold"|"italic"|"underline"|"strikethrough"|"code"|"pre"|"text_link"|"text_mention", url?: string, user?: record}
-export def "send-animation post" [
+export def "send-animation create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1177,6 +1260,7 @@ export def "send-animation post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --allow-sending-without-reply: oneof<nothing, bool> # Pass *True*, if the message should be sent even if the specified replied-to message is not found
   animation: any # Animation to send. Pass a file\_id as String to send an animation that exists on the Telegram servers (recommended), pass an HTTP URL as a String for Telegram to get an animation from the Internet, or upload a new animation using multipart/form-data. [More info on Sending Files »](https://core.telegram.org/bots/api/#sending-files)
@@ -1196,19 +1280,21 @@ export def "send-animation post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sendAnimation")
-  let body = {allow_sending_without_reply: $allow_sending_without_reply, animation: $animation, caption: $caption, caption_entities: $caption_entities, chat_id: $chat_id, disable_notification: $disable_notification, duration: $duration, height: $height, parse_mode: $parse_mode, reply_markup: $reply_markup, reply_to_message_id: $reply_to_message_id, thumb: $thumb, width: $width} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"allow_sending_without_reply": $allow_sending_without_reply, "animation": $animation, "caption": $caption, "caption_entities": $caption_entities, "chat_id": $chat_id, "disable_notification": $disable_notification, "duration": $duration, "height": $height, "parse_mode": $parse_mode, "reply_markup": $reply_markup, "reply_to_message_id": $reply_to_message_id, "thumb": $thumb, "width": $width} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
+  let mp = (build-multipart-body $req_body [] $dry_run)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
 }
 
-# Use this method to send audio files, if you want Telegram clients to display them in the music player. Your audio must be in the .MP3 or .M4A format. On success, the sent [Message](https://core.telegram.org/bots/api/#message) is returned. Bots can currently send audio files of up to 50 MB in size, this limit may be changed in the future.  For sending voice messages, use the [sendVoice](https://core.telegram.org/bots/api/#sendvoice) method instead.
+# Use this method to send audio files, if you want Telegram clients to display them in the music player. Your audio must be in the .MP3 or .M4A format. On success, the sent [Message](https://core.telegram.org/bots/api/#message) is returned. Bots can currently send audio files of up to 50 MB in size, this limit may be changed in the future. For sending voice messages, use the [sendVoice](https://core.telegram.org/bots/api/#sendvoice) method instead.
 #
 # POST /sendAudio
 # Docs: https://core.telegram.org/bots/api/#sendaudio
 # --caption_entities item shape: {language?: string, length: int, offset: int, type: "mention"|"hashtag"|"cashtag"|"bot_command"|"url"|"email"|"phone_number"|"bold"|"italic"|"underline"|"strikethrough"|"code"|"pre"|"text_link"|"text_mention", url?: string, user?: record}
-export def "send-audio post" [
+export def "send-audio create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1216,6 +1302,7 @@ export def "send-audio post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --allow-sending-without-reply: oneof<nothing, bool> # Pass *True*, if the message should be sent even if the specified replied-to message is not found
   audio: any # Audio file to send. Pass a file\_id as String to send an audio file that exists on the Telegram servers (recommended), pass an HTTP URL as a String for Telegram to get an audio file from the Internet, or upload a new one using multipart/form-data. [More info on Sending Files »](https://core.telegram.org/bots/api/#sending-files)
@@ -1235,18 +1322,20 @@ export def "send-audio post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sendAudio")
-  let body = {allow_sending_without_reply: $allow_sending_without_reply, audio: $audio, caption: $caption, caption_entities: $caption_entities, chat_id: $chat_id, disable_notification: $disable_notification, duration: $duration, parse_mode: $parse_mode, performer: $performer, reply_markup: $reply_markup, reply_to_message_id: $reply_to_message_id, thumb: $thumb, title: $title} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"allow_sending_without_reply": $allow_sending_without_reply, "audio": $audio, "caption": $caption, "caption_entities": $caption_entities, "chat_id": $chat_id, "disable_notification": $disable_notification, "duration": $duration, "parse_mode": $parse_mode, "performer": $performer, "reply_markup": $reply_markup, "reply_to_message_id": $reply_to_message_id, "thumb": $thumb, "title": $title} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
+  let mp = (build-multipart-body $req_body [] $dry_run)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
 }
 
-# Use this method when you need to tell the user that something is happening on the bot's side. The status is set for 5 seconds or less (when a message arrives from your bot, Telegram clients clear its typing status). Returns *True* on success.  Example: The [ImageBot](https://t.me/imagebot) needs some time to process a request and upload the image. Instead of sending a text message along the lines of “Retrieving image, please wait…”, the bot may use [sendChatAction](https://core.telegram.org/bots/api/#sendchataction) with *action* = *upload\_photo*. The user will see a “sending photo” status for the bot.  We only recommend using this method when a response from the bot will take a **noticeable** amount of time to arrive.
+# Use this method when you need to tell the user that something is happening on the bot's side. The status is set for 5 seconds or less (when a message arrives from your bot, Telegram clients clear its typing status). Returns *True* on success. Example: The [ImageBot](https://t.me/imagebot) needs some time to process a request and upload the image. Instead of sending a text message along the lines of “Retrieving image, please wait…”, the bot may use [sendChatAction](https://core.telegram.org/bots/api/#sendchataction) with *action* = *upload\_photo*. The user will see a “sending photo” status for the bot. We only recommend using this method when a response from the bot will take a **noticeable** amount of time to arrive.
 #
 # POST /sendChatAction
 # Docs: https://core.telegram.org/bots/api/#sendchataction
-export def "send-chat-action post" [
+export def "send-chat-action create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1254,6 +1343,7 @@ export def "send-chat-action post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   action: string # Type of action to broadcast. Choose one, depending on what the user is about to receive: *typing* for [text messages](https://core.telegram.org/bots/api/#sendmessage), *upload\_photo* for [photos](https://core.telegram.org/bots/api/#sendphoto), *record\_video* or *upload\_video* for [videos](https://core.telegram.org/bots/api/#sendvideo), *record\_voice* or *upload\_voice* for [voice notes](https://core.telegram.org/bots/api/#sendvoice), *upload\_document* for [general files](https://core.telegram.org/bots/api/#senddocument), *find\_location* for [location data](https://core.telegram.org/bots/api/#sendlocation), *record\_video\_note* or *upload\_video\_note* for [video notes](https://core.telegram.org/bots/api/#sendvideonote).
   chat_id: any # Unique identifier for the target chat or username of the target channel (in the format `@channelusername`)
@@ -1262,18 +1352,18 @@ export def "send-chat-action post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sendChatAction")
-  let body = {action: $action, chat_id: $chat_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"action": $action, "chat_id": $chat_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Use this method to send phone contacts. On success, the sent [Message](https://core.telegram.org/bots/api/#message) is returned.
 #
 # POST /sendContact
 # Docs: https://core.telegram.org/bots/api/#sendcontact
-export def "send-contact post" [
+export def "send-contact create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1281,6 +1371,7 @@ export def "send-contact post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --allow-sending-without-reply: oneof<nothing, bool> # Pass *True*, if the message should be sent even if the specified replied-to message is not found
   chat_id: any # Unique identifier for the target chat or username of the target channel (in the format `@channelusername`)
@@ -1296,18 +1387,18 @@ export def "send-contact post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sendContact")
-  let body = {allow_sending_without_reply: $allow_sending_without_reply, chat_id: $chat_id, disable_notification: $disable_notification, first_name: $first_name, last_name: $last_name, phone_number: $phone_number, reply_markup: $reply_markup, reply_to_message_id: $reply_to_message_id, vcard: $vcard} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"allow_sending_without_reply": $allow_sending_without_reply, "chat_id": $chat_id, "disable_notification": $disable_notification, "first_name": $first_name, "last_name": $last_name, "phone_number": $phone_number, "reply_markup": $reply_markup, "reply_to_message_id": $reply_to_message_id, "vcard": $vcard} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Use this method to send an animated emoji that will display a random value. On success, the sent [Message](https://core.telegram.org/bots/api/#message) is returned.
 #
 # POST /sendDice
 # Docs: https://core.telegram.org/bots/api/#senddice
-export def "send-dice post" [
+export def "send-dice create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1315,11 +1406,12 @@ export def "send-dice post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --allow-sending-without-reply: oneof<nothing, bool> # Pass *True*, if the message should be sent even if the specified replied-to message is not found
   chat_id: any # Unique identifier for the target chat or username of the target channel (in the format `@channelusername`)
   --disable-notification: oneof<nothing, bool> # Sends the message [silently](https://telegram.org/blog/channels-2-0#silent-messages). Users will receive a notification with no sound.
-  --emoji: string@emoji-completer # Emoji on which the dice throw animation is based. Currently, must be one of “<img alt="🎲" src="//telegram.org/img/emoji/40/F09F8EB2.png" height="20" width="20" />”, “<img alt="🎯" src="//telegram.org/img/emoji/40/F09F8EAF.png" height="20" width="20" />”, “<img alt="🏀" src="//telegram.org/img/emoji/40/F09F8F80.png" height="20" width="20" />”, “<img alt="⚽" src="//telegram.org/img/emoji/40/E29ABD.png" height="20" width="20" />”, or “<img alt="🎰" src="//telegram.org/img/emoji/40/F09F8EB0.png" height="20" width="20" />”. Dice can have values 1-6 for “<img alt="🎲" src="//telegram.org/img/emoji/40/F09F8EB2.png" height="20" width="20" />” and “<img alt="🎯" src="//telegram.org/img/emoji/40/F09F8EAF.png" height="20" width="20" />”, values 1-5 for “<img alt="🏀" src="//telegram.org/img/emoji/40/F09F8F80.png" height="20" width="20" />” and “<img alt="⚽" src="//telegram.org/img/emoji/40/E29ABD.png" height="20" width="20" />”, and values 1-64 for “<img alt="🎰" src="//telegram.org/img/emoji/40/F09F8EB0.png" height="20" width="20" />”. Defaults to “<img alt="🎲" src="//telegram.org/img/emoji/40/F09F8EB2.png" height="20" width="20" />” (default: 🎲)
+  --emoji: string@emoji-completer # Emoji on which the dice throw animation is based. Currently, must be one of “”, “”, “”, “”, or “”. Dice can have values 1-6 for “” and “”, values 1-5 for “” and “”, and values 1-64 for “”. Defaults to “” (default: 🎲)
   --reply-markup: any # Additional interface options. A JSON-serialized object for an [inline keyboard](https://core.telegram.org/bots#inline-keyboards-and-on-the-fly-updating), [custom reply keyboard](https://core.telegram.org/bots#keyboards), instructions to remove reply keyboard or to force a reply from the user.
   --reply-to-message-id: int # If the message is a reply, ID of the original message
 ]: any -> record<ok: bool, result: record<animation: record<duration: int, file_id: string, file_name: string, file_size: int, file_unique_id: string, height: int, mime_type: string, thumb: record, width: int>, audio: record<duration: int, file_id: string, file_name: string, file_size: int, file_unique_id: string, mime_type: string, performer: string, thumb: record, title: string>, author_signature: string, caption: string, caption_entities: list<record>, channel_chat_created: bool, chat: record<bio: string, can_set_sticker_set: bool, description: string, first_name: string, id: int, invite_link: string, last_name: string, linked_chat_id: int, location: record, permissions: record, photo: record, pinned_message: any, slow_mode_delay: int, sticker_set_name: string, title: string, type: string, username: string>, connected_website: string, contact: record<first_name: string, last_name: string, phone_number: string, user_id: int, vcard: string>, date: int, delete_chat_photo: bool, dice: record<emoji: string, value: int>, document: record<file_id: string, file_name: string, file_size: int, file_unique_id: string, mime_type: string, thumb: record>, edit_date: int, entities: list<record>, forward_date: int, forward_from: record<can_join_groups: bool, can_read_all_group_messages: bool, first_name: string, id: int, is_bot: bool, language_code: string, last_name: string, supports_inline_queries: bool, username: string>, forward_from_chat: record<bio: string, can_set_sticker_set: bool, description: string, first_name: string, id: int, invite_link: string, last_name: string, linked_chat_id: int, location: record, permissions: record, photo: record, pinned_message: any, slow_mode_delay: int, sticker_set_name: string, title: string, type: string, username: string>, forward_from_message_id: int, forward_sender_name: string, forward_signature: string, from: record<can_join_groups: bool, can_read_all_group_messages: bool, first_name: string, id: int, is_bot: bool, language_code: string, last_name: string, supports_inline_queries: bool, username: string>, game: record<animation: record, description: string, photo: list, text: string, text_entities: list, title: string>, group_chat_created: bool, invoice: record<currency: string, description: string, start_parameter: string, title: string, total_amount: int>, left_chat_member: record<can_join_groups: bool, can_read_all_group_messages: bool, first_name: string, id: int, is_bot: bool, language_code: string, last_name: string, supports_inline_queries: bool, username: string>, location: record<heading: int, horizontal_accuracy: float, latitude: float, live_period: int, longitude: float, proximity_alert_radius: int>, media_group_id: string, message_id: int, migrate_from_chat_id: int, migrate_to_chat_id: int, new_chat_members: list<record>, new_chat_photo: list<record>, new_chat_title: string, passport_data: record<credentials: record, data: list>, photo: list<record>, pinned_message: any, poll: record<allows_multiple_answers: bool, close_date: int, correct_option_id: int, explanation: string, explanation_entities: list, id: string, is_anonymous: bool, is_closed: bool, open_period: int, options: list, question: string, total_voter_count: int, type: string>, proximity_alert_triggered: record<distance: int, traveler: record, watcher: record>, reply_markup: record<inline_keyboard: list>, reply_to_message: any, sender_chat: record<bio: string, can_set_sticker_set: bool, description: string, first_name: string, id: int, invite_link: string, last_name: string, linked_chat_id: int, location: record, permissions: record, photo: record, pinned_message: any, slow_mode_delay: int, sticker_set_name: string, title: string, type: string, username: string>, sticker: record<emoji: string, file_id: string, file_size: int, file_unique_id: string, height: int, is_animated: bool, mask_position: record, set_name: string, thumb: record, width: int>, successful_payment: record<currency: string, invoice_payload: string, order_info: record, provider_payment_charge_id: string, shipping_option_id: string, telegram_payment_charge_id: string, total_amount: int>, supergroup_chat_created: bool, text: string, venue: record<address: string, foursquare_id: string, foursquare_type: string, google_place_id: string, google_place_type: string, location: record, title: string>, via_bot: record<can_join_groups: bool, can_read_all_group_messages: bool, first_name: string, id: int, is_bot: bool, language_code: string, last_name: string, supports_inline_queries: bool, username: string>, video: record<duration: int, file_id: string, file_name: string, file_size: int, file_unique_id: string, height: int, mime_type: string, thumb: record, width: int>, video_note: record<duration: int, file_id: string, file_size: int, file_unique_id: string, length: int, thumb: record>, voice: record<duration: int, file_id: string, file_size: int, file_unique_id: string, mime_type: string>>> {
@@ -1327,11 +1419,11 @@ export def "send-dice post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sendDice")
-  let body = {allow_sending_without_reply: $allow_sending_without_reply, chat_id: $chat_id, disable_notification: $disable_notification, emoji: $emoji, reply_markup: $reply_markup, reply_to_message_id: $reply_to_message_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"allow_sending_without_reply": $allow_sending_without_reply, "chat_id": $chat_id, "disable_notification": $disable_notification, "emoji": $emoji, "reply_markup": $reply_markup, "reply_to_message_id": $reply_to_message_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Use this method to send general files. On success, the sent [Message](https://core.telegram.org/bots/api/#message) is returned. Bots can currently send files of any type of up to 50 MB in size, this limit may be changed in the future.
@@ -1339,7 +1431,7 @@ export def "send-dice post" [
 # POST /sendDocument
 # Docs: https://core.telegram.org/bots/api/#senddocument
 # --caption_entities item shape: {language?: string, length: int, offset: int, type: "mention"|"hashtag"|"cashtag"|"bot_command"|"url"|"email"|"phone_number"|"bold"|"italic"|"underline"|"strikethrough"|"code"|"pre"|"text_link"|"text_mention", url?: string, user?: record}
-export def "send-document post" [
+export def "send-document create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1347,6 +1439,7 @@ export def "send-document post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --allow-sending-without-reply: oneof<nothing, bool> # Pass *True*, if the message should be sent even if the specified replied-to message is not found
   --caption: string # Document caption (may also be used when resending documents by *file\_id*), 0-1024 characters after entities parsing
@@ -1364,11 +1457,13 @@ export def "send-document post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sendDocument")
-  let body = {allow_sending_without_reply: $allow_sending_without_reply, caption: $caption, caption_entities: $caption_entities, chat_id: $chat_id, disable_content_type_detection: $disable_content_type_detection, disable_notification: $disable_notification, document: $document, parse_mode: $parse_mode, reply_markup: $reply_markup, reply_to_message_id: $reply_to_message_id, thumb: $thumb} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"allow_sending_without_reply": $allow_sending_without_reply, "caption": $caption, "caption_entities": $caption_entities, "chat_id": $chat_id, "disable_content_type_detection": $disable_content_type_detection, "disable_notification": $disable_notification, "document": $document, "parse_mode": $parse_mode, "reply_markup": $reply_markup, "reply_to_message_id": $reply_to_message_id, "thumb": $thumb} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
+  let mp = (build-multipart-body $req_body [] $dry_run)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
 }
 
 # Use this method to send a game. On success, the sent [Message](https://core.telegram.org/bots/api/#message) is returned.
@@ -1376,7 +1471,7 @@ export def "send-document post" [
 # POST /sendGame
 # Docs: https://core.telegram.org/bots/api/#sendgame
 # --reply_markup shape: {inline_keyboard: list}
-export def "send-game post" [
+export def "send-game create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1384,6 +1479,7 @@ export def "send-game post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --allow-sending-without-reply: oneof<nothing, bool> # Pass *True*, if the message should be sent even if the specified replied-to message is not found
   chat_id: int # Unique identifier for the target chat
@@ -1396,11 +1492,11 @@ export def "send-game post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sendGame")
-  let body = {allow_sending_without_reply: $allow_sending_without_reply, chat_id: $chat_id, disable_notification: $disable_notification, game_short_name: $game_short_name, reply_markup: $reply_markup, reply_to_message_id: $reply_to_message_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"allow_sending_without_reply": $allow_sending_without_reply, "chat_id": $chat_id, "disable_notification": $disable_notification, "game_short_name": $game_short_name, "reply_markup": $reply_markup, "reply_to_message_id": $reply_to_message_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Use this method to send invoices. On success, the sent [Message](https://core.telegram.org/bots/api/#message) is returned.
@@ -1409,7 +1505,7 @@ export def "send-game post" [
 # Docs: https://core.telegram.org/bots/api/#sendinvoice
 # --prices item shape: {amount: int, label: string}
 # --reply_markup shape: {inline_keyboard: list}
-export def "send-invoice post" [
+export def "send-invoice create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1417,6 +1513,7 @@ export def "send-invoice post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --allow-sending-without-reply: oneof<nothing, bool> # Pass *True*, if the message should be sent even if the specified replied-to message is not found
   chat_id: int # Unique identifier for the target private chat
@@ -1447,18 +1544,18 @@ export def "send-invoice post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sendInvoice")
-  let body = {allow_sending_without_reply: $allow_sending_without_reply, chat_id: $chat_id, currency: $currency, description: $description, disable_notification: $disable_notification, is_flexible: $is_flexible, need_email: $need_email, need_name: $need_name, need_phone_number: $need_phone_number, need_shipping_address: $need_shipping_address, payload: $payload, photo_height: $photo_height, photo_size: $photo_size, photo_url: $photo_url, photo_width: $photo_width, prices: $prices, provider_data: $provider_data, provider_token: $provider_token, reply_markup: $reply_markup, reply_to_message_id: $reply_to_message_id, send_email_to_provider: $send_email_to_provider, send_phone_number_to_provider: $send_phone_number_to_provider, start_parameter: $start_parameter, title: $title} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"allow_sending_without_reply": $allow_sending_without_reply, "chat_id": $chat_id, "currency": $currency, "description": $description, "disable_notification": $disable_notification, "is_flexible": $is_flexible, "need_email": $need_email, "need_name": $need_name, "need_phone_number": $need_phone_number, "need_shipping_address": $need_shipping_address, "payload": $payload, "photo_height": $photo_height, "photo_size": $photo_size, "photo_url": $photo_url, "photo_width": $photo_width, "prices": $prices, "provider_data": $provider_data, "provider_token": $provider_token, "reply_markup": $reply_markup, "reply_to_message_id": $reply_to_message_id, "send_email_to_provider": $send_email_to_provider, "send_phone_number_to_provider": $send_phone_number_to_provider, "start_parameter": $start_parameter, "title": $title} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Use this method to send point on the map. On success, the sent [Message](https://core.telegram.org/bots/api/#message) is returned.
 #
 # POST /sendLocation
 # Docs: https://core.telegram.org/bots/api/#sendlocation
-export def "send-location post" [
+export def "send-location create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1466,6 +1563,7 @@ export def "send-location post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --allow-sending-without-reply: oneof<nothing, bool> # Pass *True*, if the message should be sent even if the specified replied-to message is not found
   chat_id: any # Unique identifier for the target chat or username of the target channel (in the format `@channelusername`)
@@ -1483,18 +1581,18 @@ export def "send-location post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sendLocation")
-  let body = {allow_sending_without_reply: $allow_sending_without_reply, chat_id: $chat_id, disable_notification: $disable_notification, heading: $heading, horizontal_accuracy: $horizontal_accuracy, latitude: $latitude, live_period: $live_period, longitude: $longitude, proximity_alert_radius: $proximity_alert_radius, reply_markup: $reply_markup, reply_to_message_id: $reply_to_message_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"allow_sending_without_reply": $allow_sending_without_reply, "chat_id": $chat_id, "disable_notification": $disable_notification, "heading": $heading, "horizontal_accuracy": $horizontal_accuracy, "latitude": $latitude, "live_period": $live_period, "longitude": $longitude, "proximity_alert_radius": $proximity_alert_radius, "reply_markup": $reply_markup, "reply_to_message_id": $reply_to_message_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Use this method to send a group of photos, videos, documents or audios as an album. Documents and audio files can be only grouped in an album with messages of the same type. On success, an array of [Messages](https://core.telegram.org/bots/api/#message) that were sent is returned.
 #
 # POST /sendMediaGroup
 # Docs: https://core.telegram.org/bots/api/#sendmediagroup
-export def "send-media-group post" [
+export def "send-media-group create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1502,6 +1600,7 @@ export def "send-media-group post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --allow-sending-without-reply: oneof<nothing, bool> # Pass *True*, if the message should be sent even if the specified replied-to message is not found
   chat_id: any # Unique identifier for the target chat or username of the target channel (in the format `@channelusername`)
@@ -1513,11 +1612,13 @@ export def "send-media-group post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sendMediaGroup")
-  let body = {allow_sending_without_reply: $allow_sending_without_reply, chat_id: $chat_id, disable_notification: $disable_notification, media: $media, reply_to_message_id: $reply_to_message_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"allow_sending_without_reply": $allow_sending_without_reply, "chat_id": $chat_id, "disable_notification": $disable_notification, "media": $media, "reply_to_message_id": $reply_to_message_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
+  let mp = (build-multipart-body $req_body [] $dry_run)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
 }
 
 # Use this method to send text messages. On success, the sent [Message](https://core.telegram.org/bots/api/#message) is returned.
@@ -1525,7 +1626,7 @@ export def "send-media-group post" [
 # POST /sendMessage
 # Docs: https://core.telegram.org/bots/api/#sendmessage
 # --entities item shape: {language?: string, length: int, offset: int, type: "mention"|"hashtag"|"cashtag"|"bot_command"|"url"|"email"|"phone_number"|"bold"|"italic"|"underline"|"strikethrough"|"code"|"pre"|"text_link"|"text_mention", url?: string, user?: record}
-export def "send-message post" [
+export def "send-message create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1533,6 +1634,7 @@ export def "send-message post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --allow-sending-without-reply: oneof<nothing, bool> # Pass *True*, if the message should be sent even if the specified replied-to message is not found
   chat_id: any # Unique identifier for the target chat or username of the target channel (in the format `@channelusername`)
@@ -1548,11 +1650,11 @@ export def "send-message post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sendMessage")
-  let body = {allow_sending_without_reply: $allow_sending_without_reply, chat_id: $chat_id, disable_notification: $disable_notification, disable_web_page_preview: $disable_web_page_preview, entities: $entities, parse_mode: $parse_mode, reply_markup: $reply_markup, reply_to_message_id: $reply_to_message_id, text: $text} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"allow_sending_without_reply": $allow_sending_without_reply, "chat_id": $chat_id, "disable_notification": $disable_notification, "disable_web_page_preview": $disable_web_page_preview, "entities": $entities, "parse_mode": $parse_mode, "reply_markup": $reply_markup, "reply_to_message_id": $reply_to_message_id, "text": $text} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Use this method to send photos. On success, the sent [Message](https://core.telegram.org/bots/api/#message) is returned.
@@ -1560,7 +1662,7 @@ export def "send-message post" [
 # POST /sendPhoto
 # Docs: https://core.telegram.org/bots/api/#sendphoto
 # --caption_entities item shape: {language?: string, length: int, offset: int, type: "mention"|"hashtag"|"cashtag"|"bot_command"|"url"|"email"|"phone_number"|"bold"|"italic"|"underline"|"strikethrough"|"code"|"pre"|"text_link"|"text_mention", url?: string, user?: record}
-export def "send-photo post" [
+export def "send-photo create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1568,6 +1670,7 @@ export def "send-photo post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --allow-sending-without-reply: oneof<nothing, bool> # Pass *True*, if the message should be sent even if the specified replied-to message is not found
   --caption: string # Photo caption (may also be used when resending photos by *file\_id*), 0-1024 characters after entities parsing
@@ -1583,11 +1686,13 @@ export def "send-photo post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sendPhoto")
-  let body = {allow_sending_without_reply: $allow_sending_without_reply, caption: $caption, caption_entities: $caption_entities, chat_id: $chat_id, disable_notification: $disable_notification, parse_mode: $parse_mode, photo: $photo, reply_markup: $reply_markup, reply_to_message_id: $reply_to_message_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"allow_sending_without_reply": $allow_sending_without_reply, "caption": $caption, "caption_entities": $caption_entities, "chat_id": $chat_id, "disable_notification": $disable_notification, "parse_mode": $parse_mode, "photo": $photo, "reply_markup": $reply_markup, "reply_to_message_id": $reply_to_message_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
+  let mp = (build-multipart-body $req_body [] $dry_run)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
 }
 
 # Use this method to send a native poll. On success, the sent [Message](https://core.telegram.org/bots/api/#message) is returned.
@@ -1595,7 +1700,7 @@ export def "send-photo post" [
 # POST /sendPoll
 # Docs: https://core.telegram.org/bots/api/#sendpoll
 # --explanation_entities item shape: {language?: string, length: int, offset: int, type: "mention"|"hashtag"|"cashtag"|"bot_command"|"url"|"email"|"phone_number"|"bold"|"italic"|"underline"|"strikethrough"|"code"|"pre"|"text_link"|"text_mention", url?: string, user?: record}
-export def "send-poll post" [
+export def "send-poll create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1603,6 +1708,7 @@ export def "send-poll post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --allow-sending-without-reply: oneof<nothing, bool> # Pass *True*, if the message should be sent even if the specified replied-to message is not found
   --allows-multiple-answers: oneof<nothing, bool> # True, if the poll allows multiple answers, ignored for polls in quiz mode, defaults to *False*
@@ -1616,7 +1722,7 @@ export def "send-poll post" [
   --is-anonymous: oneof<nothing, bool> # True, if the poll needs to be anonymous, defaults to *True*
   --is-closed: oneof<nothing, bool> # Pass *True*, if the poll needs to be immediately closed. This can be useful for poll preview.
   --open-period: int # Amount of time in seconds the poll will be active after creation, 5-600. Can't be used together with *close\_date*.
-  options: list # A JSON-serialized list of answer options, 2-10 strings 1-100 characters each
+  options: list<string> # A JSON-serialized list of answer options, 2-10 strings 1-100 characters each
   question: string # Poll question, 1-300 characters
   --reply-markup: any # Additional interface options. A JSON-serialized object for an [inline keyboard](https://core.telegram.org/bots#inline-keyboards-and-on-the-fly-updating), [custom reply keyboard](https://core.telegram.org/bots#keyboards), instructions to remove reply keyboard or to force a reply from the user.
   --reply-to-message-id: int # If the message is a reply, ID of the original message
@@ -1626,18 +1732,18 @@ export def "send-poll post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sendPoll")
-  let body = {allow_sending_without_reply: $allow_sending_without_reply, allows_multiple_answers: $allows_multiple_answers, chat_id: $chat_id, close_date: $close_date, correct_option_id: $correct_option_id, disable_notification: $disable_notification, explanation: $explanation, explanation_entities: $explanation_entities, explanation_parse_mode: $explanation_parse_mode, is_anonymous: $is_anonymous, is_closed: $is_closed, open_period: $open_period, options: $options, question: $question, reply_markup: $reply_markup, reply_to_message_id: $reply_to_message_id, type: $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"allow_sending_without_reply": $allow_sending_without_reply, "allows_multiple_answers": $allows_multiple_answers, "chat_id": $chat_id, "close_date": $close_date, "correct_option_id": $correct_option_id, "disable_notification": $disable_notification, "explanation": $explanation, "explanation_entities": $explanation_entities, "explanation_parse_mode": $explanation_parse_mode, "is_anonymous": $is_anonymous, "is_closed": $is_closed, "open_period": $open_period, "options": $options, "question": $question, "reply_markup": $reply_markup, "reply_to_message_id": $reply_to_message_id, "type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Use this method to send static .WEBP or [animated](https://telegram.org/blog/animated-stickers) .TGS stickers. On success, the sent [Message](https://core.telegram.org/bots/api/#message) is returned.
 #
 # POST /sendSticker
 # Docs: https://core.telegram.org/bots/api/#sendsticker
-export def "send-sticker post" [
+export def "send-sticker create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1645,6 +1751,7 @@ export def "send-sticker post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --allow-sending-without-reply: oneof<nothing, bool> # Pass *True*, if the message should be sent even if the specified replied-to message is not found
   chat_id: any # Unique identifier for the target chat or username of the target channel (in the format `@channelusername`)
@@ -1657,18 +1764,20 @@ export def "send-sticker post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sendSticker")
-  let body = {allow_sending_without_reply: $allow_sending_without_reply, chat_id: $chat_id, disable_notification: $disable_notification, reply_markup: $reply_markup, reply_to_message_id: $reply_to_message_id, sticker: $sticker} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"allow_sending_without_reply": $allow_sending_without_reply, "chat_id": $chat_id, "disable_notification": $disable_notification, "reply_markup": $reply_markup, "reply_to_message_id": $reply_to_message_id, "sticker": $sticker} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
+  let mp = (build-multipart-body $req_body [] $dry_run)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
 }
 
 # Use this method to send information about a venue. On success, the sent [Message](https://core.telegram.org/bots/api/#message) is returned.
 #
 # POST /sendVenue
 # Docs: https://core.telegram.org/bots/api/#sendvenue
-export def "send-venue post" [
+export def "send-venue create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1676,6 +1785,7 @@ export def "send-venue post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   address: string # Address of the venue
   --allow-sending-without-reply: oneof<nothing, bool> # Pass *True*, if the message should be sent even if the specified replied-to message is not found
@@ -1695,11 +1805,11 @@ export def "send-venue post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sendVenue")
-  let body = {address: $address, allow_sending_without_reply: $allow_sending_without_reply, chat_id: $chat_id, disable_notification: $disable_notification, foursquare_id: $foursquare_id, foursquare_type: $foursquare_type, google_place_id: $google_place_id, google_place_type: $google_place_type, latitude: $latitude, longitude: $longitude, reply_markup: $reply_markup, reply_to_message_id: $reply_to_message_id, title: $title} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"address": $address, "allow_sending_without_reply": $allow_sending_without_reply, "chat_id": $chat_id, "disable_notification": $disable_notification, "foursquare_id": $foursquare_id, "foursquare_type": $foursquare_type, "google_place_id": $google_place_id, "google_place_type": $google_place_type, "latitude": $latitude, "longitude": $longitude, "reply_markup": $reply_markup, "reply_to_message_id": $reply_to_message_id, "title": $title} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Use this method to send video files, Telegram clients support mp4 videos (other formats may be sent as [Document](https://core.telegram.org/bots/api/#document)). On success, the sent [Message](https://core.telegram.org/bots/api/#message) is returned. Bots can currently send video files of up to 50 MB in size, this limit may be changed in the future.
@@ -1707,7 +1817,7 @@ export def "send-venue post" [
 # POST /sendVideo
 # Docs: https://core.telegram.org/bots/api/#sendvideo
 # --caption_entities item shape: {language?: string, length: int, offset: int, type: "mention"|"hashtag"|"cashtag"|"bot_command"|"url"|"email"|"phone_number"|"bold"|"italic"|"underline"|"strikethrough"|"code"|"pre"|"text_link"|"text_mention", url?: string, user?: record}
-export def "send-video post" [
+export def "send-video create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1715,6 +1825,7 @@ export def "send-video post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --allow-sending-without-reply: oneof<nothing, bool> # Pass *True*, if the message should be sent even if the specified replied-to message is not found
   --caption: string # Video caption (may also be used when resending videos by *file\_id*), 0-1024 characters after entities parsing
@@ -1735,18 +1846,20 @@ export def "send-video post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sendVideo")
-  let body = {allow_sending_without_reply: $allow_sending_without_reply, caption: $caption, caption_entities: $caption_entities, chat_id: $chat_id, disable_notification: $disable_notification, duration: $duration, height: $height, parse_mode: $parse_mode, reply_markup: $reply_markup, reply_to_message_id: $reply_to_message_id, supports_streaming: $supports_streaming, thumb: $thumb, video: $video, width: $width} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"allow_sending_without_reply": $allow_sending_without_reply, "caption": $caption, "caption_entities": $caption_entities, "chat_id": $chat_id, "disable_notification": $disable_notification, "duration": $duration, "height": $height, "parse_mode": $parse_mode, "reply_markup": $reply_markup, "reply_to_message_id": $reply_to_message_id, "supports_streaming": $supports_streaming, "thumb": $thumb, "video": $video, "width": $width} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
+  let mp = (build-multipart-body $req_body [] $dry_run)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
 }
 
 # As of [v.4.0](https://telegram.org/blog/video-messages-and-telescope), Telegram clients support rounded square mp4 videos of up to 1 minute long. Use this method to send video messages. On success, the sent [Message](https://core.telegram.org/bots/api/#message) is returned.
 #
 # POST /sendVideoNote
 # Docs: https://core.telegram.org/bots/api/#sendvideonote
-export def "send-video-note post" [
+export def "send-video-note create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1754,6 +1867,7 @@ export def "send-video-note post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --allow-sending-without-reply: oneof<nothing, bool> # Pass *True*, if the message should be sent even if the specified replied-to message is not found
   chat_id: any # Unique identifier for the target chat or username of the target channel (in the format `@channelusername`)
@@ -1769,11 +1883,13 @@ export def "send-video-note post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sendVideoNote")
-  let body = {allow_sending_without_reply: $allow_sending_without_reply, chat_id: $chat_id, disable_notification: $disable_notification, duration: $duration, length: $length, reply_markup: $reply_markup, reply_to_message_id: $reply_to_message_id, thumb: $thumb, video_note: $video_note} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"allow_sending_without_reply": $allow_sending_without_reply, "chat_id": $chat_id, "disable_notification": $disable_notification, "duration": $duration, "length": $length, "reply_markup": $reply_markup, "reply_to_message_id": $reply_to_message_id, "thumb": $thumb, "video_note": $video_note} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
+  let mp = (build-multipart-body $req_body [] $dry_run)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
 }
 
 # Use this method to send audio files, if you want Telegram clients to display the file as a playable voice message. For this to work, your audio must be in an .OGG file encoded with OPUS (other formats may be sent as [Audio](https://core.telegram.org/bots/api/#audio) or [Document](https://core.telegram.org/bots/api/#document)). On success, the sent [Message](https://core.telegram.org/bots/api/#message) is returned. Bots can currently send voice messages of up to 50 MB in size, this limit may be changed in the future.
@@ -1781,7 +1897,7 @@ export def "send-video-note post" [
 # POST /sendVoice
 # Docs: https://core.telegram.org/bots/api/#sendvoice
 # --caption_entities item shape: {language?: string, length: int, offset: int, type: "mention"|"hashtag"|"cashtag"|"bot_command"|"url"|"email"|"phone_number"|"bold"|"italic"|"underline"|"strikethrough"|"code"|"pre"|"text_link"|"text_mention", url?: string, user?: record}
-export def "send-voice post" [
+export def "send-voice create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1789,6 +1905,7 @@ export def "send-voice post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --allow-sending-without-reply: oneof<nothing, bool> # Pass *True*, if the message should be sent even if the specified replied-to message is not found
   --caption: string # Voice message caption, 0-1024 characters after entities parsing
@@ -1805,18 +1922,20 @@ export def "send-voice post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sendVoice")
-  let body = {allow_sending_without_reply: $allow_sending_without_reply, caption: $caption, caption_entities: $caption_entities, chat_id: $chat_id, disable_notification: $disable_notification, duration: $duration, parse_mode: $parse_mode, reply_markup: $reply_markup, reply_to_message_id: $reply_to_message_id, voice: $voice} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"allow_sending_without_reply": $allow_sending_without_reply, "caption": $caption, "caption_entities": $caption_entities, "chat_id": $chat_id, "disable_notification": $disable_notification, "duration": $duration, "parse_mode": $parse_mode, "reply_markup": $reply_markup, "reply_to_message_id": $reply_to_message_id, "voice": $voice} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
+  let mp = (build-multipart-body $req_body [] $dry_run)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
 }
 
 # Use this method to set a custom title for an administrator in a supergroup promoted by the bot. Returns *True* on success.
 #
 # POST /setChatAdministratorCustomTitle
 # Docs: https://core.telegram.org/bots/api/#setchatadministratorcustomtitle
-export def "set-chat-administrator-custom-title post" [
+export def "set-chat-administrator-custom-title create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1824,6 +1943,7 @@ export def "set-chat-administrator-custom-title post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   chat_id: any # Unique identifier for the target chat or username of the target supergroup (in the format `@supergroupusername`)
   custom_title: string # New custom title for the administrator; 0-16 characters, emoji are not allowed
@@ -1833,18 +1953,18 @@ export def "set-chat-administrator-custom-title post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/setChatAdministratorCustomTitle")
-  let body = {chat_id: $chat_id, custom_title: $custom_title, user_id: $user_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"chat_id": $chat_id, "custom_title": $custom_title, "user_id": $user_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Use this method to change the description of a group, a supergroup or a channel. The bot must be an administrator in the chat for this to work and must have the appropriate admin rights. Returns *True* on success.
 #
 # POST /setChatDescription
 # Docs: https://core.telegram.org/bots/api/#setchatdescription
-export def "set-chat-description post" [
+export def "set-chat-description create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1852,6 +1972,7 @@ export def "set-chat-description post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   chat_id: any # Unique identifier for the target chat or username of the target channel (in the format `@channelusername`)
   --description: string # New chat description, 0-255 characters
@@ -1860,11 +1981,11 @@ export def "set-chat-description post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/setChatDescription")
-  let body = {chat_id: $chat_id, description: $description} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"chat_id": $chat_id, "description": $description} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Use this method to set default chat permissions for all members. The bot must be an administrator in the group or a supergroup for this to work and must have the *can\_restrict\_members* admin rights. Returns *True* on success.
@@ -1872,7 +1993,7 @@ export def "set-chat-description post" [
 # POST /setChatPermissions
 # Docs: https://core.telegram.org/bots/api/#setchatpermissions
 # --permissions shape: {can_add_web_page_previews?: bool, can_change_info?: bool, can_invite_users?: bool, can_pin_messages?: bool, can_send_media_messages?: bool, can_send_messages?: bool, can_send_other_messages?: bool, can_send_polls?: bool}
-export def "set-chat-permissions post" [
+export def "set-chat-permissions create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1880,6 +2001,7 @@ export def "set-chat-permissions post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   chat_id: any # Unique identifier for the target chat or username of the target supergroup (in the format `@supergroupusername`)
   permissions: record # Describes actions that a non-administrator user is allowed to take in a chat. — shape: {can_add_web_page_previews?: bool, can_change_info?: bool, can_invite_users?: bool, can_pin_messages?: bool, can_send_media_messages?: bool, can_send_messages?: bool, can_send_other_messages?: bool, can_send_polls?: bool}
@@ -1888,18 +2010,18 @@ export def "set-chat-permissions post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/setChatPermissions")
-  let body = {chat_id: $chat_id, permissions: $permissions} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"chat_id": $chat_id, "permissions": $permissions} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Use this method to set a new profile photo for the chat. Photos can't be changed for private chats. The bot must be an administrator in the chat for this to work and must have the appropriate admin rights. Returns *True* on success.
 #
 # POST /setChatPhoto
 # Docs: https://core.telegram.org/bots/api/#setchatphoto
-export def "set-chat-photo post" [
+export def "set-chat-photo create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1907,6 +2029,7 @@ export def "set-chat-photo post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   chat_id: any # Unique identifier for the target chat or username of the target channel (in the format `@channelusername`)
   photo: any # This object represents the contents of a file to be uploaded. Must be posted using multipart/form-data in the usual way that files are uploaded via the browser.
@@ -1915,18 +2038,20 @@ export def "set-chat-photo post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/setChatPhoto")
-  let body = {chat_id: $chat_id, photo: $photo} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"chat_id": $chat_id, "photo": $photo} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
+  let mp = (build-multipart-body $req_body [] $dry_run)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
 }
 
 # Use this method to set a new group sticker set for a supergroup. The bot must be an administrator in the chat for this to work and must have the appropriate admin rights. Use the field *can\_set\_sticker\_set* optionally returned in [getChat](https://core.telegram.org/bots/api/#getchat) requests to check if the bot can use this method. Returns *True* on success.
 #
 # POST /setChatStickerSet
 # Docs: https://core.telegram.org/bots/api/#setchatstickerset
-export def "set-chat-sticker-set post" [
+export def "set-chat-sticker-set create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1934,6 +2059,7 @@ export def "set-chat-sticker-set post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   chat_id: any # Unique identifier for the target chat or username of the target supergroup (in the format `@supergroupusername`)
   sticker_set_name: string # Name of the sticker set to be set as the group sticker set
@@ -1942,18 +2068,18 @@ export def "set-chat-sticker-set post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/setChatStickerSet")
-  let body = {chat_id: $chat_id, sticker_set_name: $sticker_set_name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"chat_id": $chat_id, "sticker_set_name": $sticker_set_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Use this method to change the title of a chat. Titles can't be changed for private chats. The bot must be an administrator in the chat for this to work and must have the appropriate admin rights. Returns *True* on success.
 #
 # POST /setChatTitle
 # Docs: https://core.telegram.org/bots/api/#setchattitle
-export def "set-chat-title post" [
+export def "set-chat-title create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1961,6 +2087,7 @@ export def "set-chat-title post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   chat_id: any # Unique identifier for the target chat or username of the target channel (in the format `@channelusername`)
   title: string # New chat title, 1-255 characters
@@ -1969,18 +2096,18 @@ export def "set-chat-title post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/setChatTitle")
-  let body = {chat_id: $chat_id, title: $title} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"chat_id": $chat_id, "title": $title} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Use this method to set the score of the specified user in a game. On success, if the message was sent by the bot, returns the edited [Message](https://core.telegram.org/bots/api/#message), otherwise returns *True*. Returns an error, if the new score is not greater than the user's current score in the chat and *force* is *False*.
 #
 # POST /setGameScore
 # Docs: https://core.telegram.org/bots/api/#setgamescore
-export def "set-game-score post" [
+export def "set-game-score create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1988,6 +2115,7 @@ export def "set-game-score post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --chat-id: int # Required if *inline\_message\_id* is not specified. Unique identifier for the target chat
   --disable-edit-message: oneof<nothing, bool> # Pass True, if the game message should not be automatically edited to include the current scoreboard
@@ -2001,11 +2129,11 @@ export def "set-game-score post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/setGameScore")
-  let body = {chat_id: $chat_id, disable_edit_message: $disable_edit_message, force: $force, inline_message_id: $inline_message_id, message_id: $message_id, score: $score, user_id: $user_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"chat_id": $chat_id, "disable_edit_message": $disable_edit_message, "force": $force, "inline_message_id": $inline_message_id, "message_id": $message_id, "score": $score, "user_id": $user_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Use this method to change the list of the bot's commands. Returns *True* on success.
@@ -2013,7 +2141,7 @@ export def "set-game-score post" [
 # POST /setMyCommands
 # Docs: https://core.telegram.org/bots/api/#setmycommands
 # --commands item shape: {command: string, description: string}
-export def "set-my-commands post" [
+export def "set-my-commands create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2021,6 +2149,7 @@ export def "set-my-commands post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   commands: list # A JSON-serialized list of bot commands to be set as the list of the bot's commands. At most 100 commands can be specified. — item shape: {command: string, description: string}
 ]: any -> record<ok: bool, result: bool> {
@@ -2028,18 +2157,18 @@ export def "set-my-commands post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/setMyCommands")
-  let body = {commands: $commands} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"commands": $commands} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
-# Informs a user that some of the Telegram Passport elements they provided contains errors. The user will not be able to re-submit their Passport to you until the errors are fixed (the contents of the field for which you returned the error must change). Returns *True* on success.  Use this if the data submitted by the user doesn't satisfy the standards your service requires for any reason. For example, if a birthday date seems invalid, a submitted document is blurry, a scan shows evidence of tampering, etc. Supply some details in the error message to make sure the user knows how to correct the issues.
+# Informs a user that some of the Telegram Passport elements they provided contains errors. The user will not be able to re-submit their Passport to you until the errors are fixed (the contents of the field for which you returned the error must change). Returns *True* on success. Use this if the data submitted by the user doesn't satisfy the standards your service requires for any reason. For example, if a birthday date seems invalid, a submitted document is blurry, a scan shows evidence of tampering, etc. Supply some details in the error message to make sure the user knows how to correct the issues.
 #
 # POST /setPassportDataErrors
 # Docs: https://core.telegram.org/bots/api/#setpassportdataerrors
-export def "set-passport-data-errors post" [
+export def "set-passport-data-errors create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2047,6 +2176,7 @@ export def "set-passport-data-errors post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   errors: list # A JSON-serialized array describing the errors
   user_id: int # User identifier
@@ -2055,18 +2185,18 @@ export def "set-passport-data-errors post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/setPassportDataErrors")
-  let body = {errors: $errors, user_id: $user_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"errors": $errors, "user_id": $user_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Use this method to move a sticker in a set created by the bot to a specific position. Returns *True* on success.
 #
 # POST /setStickerPositionInSet
 # Docs: https://core.telegram.org/bots/api/#setstickerpositioninset
-export def "set-sticker-position-in-set post" [
+export def "set-sticker-position-in-set create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2074,6 +2204,7 @@ export def "set-sticker-position-in-set post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   position: int # New sticker position in the set, zero-based
   sticker: string # File identifier of the sticker
@@ -2082,18 +2213,18 @@ export def "set-sticker-position-in-set post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/setStickerPositionInSet")
-  let body = {position: $position, sticker: $sticker} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"position": $position, "sticker": $sticker} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Use this method to set the thumbnail of a sticker set. Animated thumbnails can be set for animated sticker sets only. Returns *True* on success.
 #
 # POST /setStickerSetThumb
 # Docs: https://core.telegram.org/bots/api/#setstickersetthumb
-export def "set-sticker-set-thumb post" [
+export def "set-sticker-set-thumb create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2101,6 +2232,7 @@ export def "set-sticker-set-thumb post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   name: string # Sticker set name
   --thumb: any # A **PNG** image with the thumbnail, must be up to 128 kilobytes in size and have width and height exactly 100px, or a **TGS** animation with the thumbnail up to 32 kilobytes in size; see [](https://core.telegram.org/animated_stickers#technical-requirements)[https://core.telegram.org/animated\_stickers#technical-requirements](https://core.telegram.org/animated_stickers#technical-requirements) for animated sticker technical requirements. Pass a *file\_id* as a String to send a file that already exists on the Telegram servers, pass an HTTP URL as a String for Telegram to get a file from the Internet, or upload a new one using multipart/form-data. [More info on Sending Files »](https://core.telegram.org/bots/api/#sending-files). Animated sticker set thumbnail can't be uploaded via HTTP URL.
@@ -2110,18 +2242,20 @@ export def "set-sticker-set-thumb post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/setStickerSetThumb")
-  let body = {name: $name, thumb: $thumb, user_id: $user_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"name": $name, "thumb": $thumb, "user_id": $user_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
+  let mp = (build-multipart-body $req_body [] $dry_run)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
 }
 
-# Use this method to specify a url and receive incoming updates via an outgoing webhook. Whenever there is an update for the bot, we will send an HTTPS POST request to the specified url, containing a JSON-serialized [Update](https://core.telegram.org/bots/api/#update). In case of an unsuccessful request, we will give up after a reasonable amount of attempts. Returns *True* on success.  If you'd like to make sure that the Webhook request comes from Telegram, we recommend using a secret path in the URL, e.g. `https://www.example.com/<token>`. Since nobody else knows your bot's token, you can be pretty sure it's us.
+# Use this method to specify a url and receive incoming updates via an outgoing webhook. Whenever there is an update for the bot, we will send an HTTPS POST request to the specified url, containing a JSON-serialized [Update](https://core.telegram.org/bots/api/#update). In case of an unsuccessful request, we will give up after a reasonable amount of attempts. Returns *True* on success. If you'd like to make sure that the Webhook request comes from Telegram, we recommend using a secret path in the URL, e.g. `https://www.example.com/`. Since nobody else knows your bot's token, you can be pretty sure it's us.
 #
 # POST /setWebhook
 # Docs: https://core.telegram.org/bots/api/#setwebhook
-export def "set-webhook post" [
+export def "set-webhook create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2129,23 +2263,26 @@ export def "set-webhook post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --allowed-updates: list # A JSON-serialized list of the update types you want your bot to receive. For example, specify [“message”, “edited\_channel\_post”, “callback\_query”] to only receive updates of these types. See [Update](https://core.telegram.org/bots/api/#update) for a complete list of available update types. Specify an empty list to receive all updates regardless of type (default). If not specified, the previous setting will be used.   Please note that this parameter doesn't affect updates created before the call to the setWebhook, so unwanted updates may be received for a short period of time.
+  --allowed-updates: list<string> # A JSON-serialized list of the update types you want your bot to receive. For example, specify [“message”, “edited\_channel\_post”, “callback\_query”] to only receive updates of these types. See [Update](https://core.telegram.org/bots/api/#update) for a complete list of available update types. Specify an empty list to receive all updates regardless of type (default). If not specified, the previous setting will be used. Please note that this parameter doesn't affect updates created before the call to the setWebhook, so unwanted updates may be received for a short period of time.
   --certificate: any # This object represents the contents of a file to be uploaded. Must be posted using multipart/form-data in the usual way that files are uploaded via the browser.
   --drop-pending-updates: oneof<nothing, bool> # Pass *True* to drop all pending updates
   --ip-address: string # The fixed IP address which will be used to send webhook requests instead of the IP address resolved through DNS
   --max-connections: int # Maximum allowed number of simultaneous HTTPS connections to the webhook for update delivery, 1-100. Defaults to *40*. Use lower values to limit the load on your bot's server, and higher values to increase your bot's throughput. (default: 40)
-  --body-url: string # HTTPS url to send updates to. Use an empty string to remove webhook integration
+  url: string # HTTPS url to send updates to. Use an empty string to remove webhook integration
 ]: any -> record<ok: bool, result: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/setWebhook")
-  let body = {allowed_updates: $allowed_updates, certificate: $certificate, drop_pending_updates: $drop_pending_updates, ip_address: $ip_address, max_connections: $max_connections, url: $body_url} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"allowed_updates": $allowed_updates, "certificate": $certificate, "drop_pending_updates": $drop_pending_updates, "ip_address": $ip_address, "max_connections": $max_connections, "url": $url} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
+  let mp = (build-multipart-body $req_body [] $dry_run)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
 }
 
 # Use this method to stop updating a live location message before *live\_period* expires. On success, if the message was sent by the bot, the sent [Message](https://core.telegram.org/bots/api/#message) is returned, otherwise *True* is returned.
@@ -2153,7 +2290,7 @@ export def "set-webhook post" [
 # POST /stopMessageLiveLocation
 # Docs: https://core.telegram.org/bots/api/#stopmessagelivelocation
 # --reply_markup shape: {inline_keyboard: list}
-export def "stop-message-live-location post" [
+export def "stop-message-live-location create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2161,6 +2298,7 @@ export def "stop-message-live-location post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --chat-id: any # Required if *inline\_message\_id* is not specified. Unique identifier for the target chat or username of the target channel (in the format `@channelusername`)
   --inline-message-id: string # Required if *chat\_id* and *message\_id* are not specified. Identifier of the inline message
@@ -2171,11 +2309,11 @@ export def "stop-message-live-location post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/stopMessageLiveLocation")
-  let body = {chat_id: $chat_id, inline_message_id: $inline_message_id, message_id: $message_id, reply_markup: $reply_markup} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"chat_id": $chat_id, "inline_message_id": $inline_message_id, "message_id": $message_id, "reply_markup": $reply_markup} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Use this method to stop a poll which was sent by the bot. On success, the stopped [Poll](https://core.telegram.org/bots/api/#poll) with the final results is returned.
@@ -2183,7 +2321,7 @@ export def "stop-message-live-location post" [
 # POST /stopPoll
 # Docs: https://core.telegram.org/bots/api/#stoppoll
 # --reply_markup shape: {inline_keyboard: list}
-export def "stop-poll post" [
+export def "stop-poll create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2191,6 +2329,7 @@ export def "stop-poll post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   chat_id: any # Unique identifier for the target chat or username of the target channel (in the format `@channelusername`)
   message_id: int # Identifier of the original message with the poll
@@ -2200,18 +2339,18 @@ export def "stop-poll post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/stopPoll")
-  let body = {chat_id: $chat_id, message_id: $message_id, reply_markup: $reply_markup} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"chat_id": $chat_id, "message_id": $message_id, "reply_markup": $reply_markup} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Use this method to unban a previously kicked user in a supergroup or channel. The user will **not** return to the group or channel automatically, but will be able to join via link, etc. The bot must be an administrator for this to work. By default, this method guarantees that after the call the user is not a member of the chat, but will be able to join it. So if the user is a member of the chat they will also be **removed** from the chat. If you don't want this, use the parameter *only\_if\_banned*. Returns *True* on success.
 #
 # POST /unbanChatMember
 # Docs: https://core.telegram.org/bots/api/#unbanchatmember
-export def "unban-chat-member post" [
+export def "unban-chat-member create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2219,6 +2358,7 @@ export def "unban-chat-member post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   chat_id: any # Unique identifier for the target group or username of the target supergroup or channel (in the format `@username`)
   --only-if-banned: oneof<nothing, bool> # Do nothing if the user is not banned
@@ -2228,18 +2368,18 @@ export def "unban-chat-member post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/unbanChatMember")
-  let body = {chat_id: $chat_id, only_if_banned: $only_if_banned, user_id: $user_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"chat_id": $chat_id, "only_if_banned": $only_if_banned, "user_id": $user_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Use this method to clear the list of pinned messages in a chat. If the chat is not a private chat, the bot must be an administrator in the chat for this to work and must have the 'can\_pin\_messages' admin right in a supergroup or 'can\_edit\_messages' admin right in a channel. Returns *True* on success.
 #
 # POST /unpinAllChatMessages
 # Docs: https://core.telegram.org/bots/api/#unpinallchatmessages
-export def "unpin-all-chat-messages post" [
+export def "unpin-all-chat-messages create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2247,6 +2387,7 @@ export def "unpin-all-chat-messages post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   chat_id: any # Unique identifier for the target chat or username of the target channel (in the format `@channelusername`)
 ]: any -> record<ok: bool, result: bool> {
@@ -2254,18 +2395,18 @@ export def "unpin-all-chat-messages post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/unpinAllChatMessages")
-  let body = {chat_id: $chat_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"chat_id": $chat_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Use this method to remove a message from the list of pinned messages in a chat. If the chat is not a private chat, the bot must be an administrator in the chat for this to work and must have the 'can\_pin\_messages' admin right in a supergroup or 'can\_edit\_messages' admin right in a channel. Returns *True* on success.
 #
 # POST /unpinChatMessage
 # Docs: https://core.telegram.org/bots/api/#unpinchatmessage
-export def "unpin-chat-message post" [
+export def "unpin-chat-message create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2273,6 +2414,7 @@ export def "unpin-chat-message post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   chat_id: any # Unique identifier for the target chat or username of the target channel (in the format `@channelusername`)
   --message-id: int # Identifier of a message to unpin. If not specified, the most recent pinned message (by sending date) will be unpinned.
@@ -2281,18 +2423,18 @@ export def "unpin-chat-message post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/unpinChatMessage")
-  let body = {chat_id: $chat_id, message_id: $message_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"chat_id": $chat_id, "message_id": $message_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Use this method to upload a .PNG file with a sticker for later use in *createNewStickerSet* and *addStickerToSet* methods (can be used multiple times). Returns the uploaded [File](https://core.telegram.org/bots/api/#file) on success.
 #
 # POST /uploadStickerFile
 # Docs: https://core.telegram.org/bots/api/#uploadstickerfile
-export def "upload-sticker-file post" [
+export def "upload-sticker-file create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2300,6 +2442,7 @@ export def "upload-sticker-file post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   png_sticker: any # This object represents the contents of a file to be uploaded. Must be posted using multipart/form-data in the usual way that files are uploaded via the browser.
   user_id: int # User identifier of sticker file owner
@@ -2308,9 +2451,11 @@ export def "upload-sticker-file post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/uploadStickerFile")
-  let body = {png_sticker: $png_sticker, user_id: $user_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"png_sticker": $png_sticker, "user_id": $user_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
+  let mp = (build-multipart-body $req_body [] $dry_run)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
 }

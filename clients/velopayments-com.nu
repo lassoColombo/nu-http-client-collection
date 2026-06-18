@@ -13,27 +13,39 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   match $scheme {
     "bearer" => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
     "basic" => { {headers: {Authorization: $"Basic ($token_val)"}, query: ""} }
+    "basic-credentials" => { {headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: ""} }
     "none" => { {headers: {}, query: ""} }
     _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
   }
 }
 
 # Serialize a single query parameter based on collection style
+# Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
+# ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = ($name | url encode)
+  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
-  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
-    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
-    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
+    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
+    _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
+}
+
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Build URL from base, path, and optional query string
@@ -45,7 +57,7 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
@@ -54,42 +66,70 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
     "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "put" => { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "patch" => { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
   if ($method in ["head" "options"]) { return $resp }
-  if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
+  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
+}
+
+# Build a `multipart/form-data` envelope per RFC 7578. `file_fields` lists
+# the field names whose value should be read from disk as bytes; every
+# other field is sent as a text part (records/lists JSON-stringified).
+# Returns {content_type, body} ready to pass to `do-request`.
+# When `$dry_run` is true, file fields are NOT read from disk — they emit
+# an empty-bytes placeholder so callers can inspect the request shape
+# without the file existing on disk (issue 11.B).
+def build-multipart-body [parts: record, file_fields: list<string>, dry_run: bool = false]: nothing -> record {
+  let boundary = $"----nu-(random chars --length 24)"
+  let crlf = "\r\n"
+  let chunks = ($parts | items {|name, val|
+    if $val == null { null } else if $name in $file_fields {
+      let filename = ($val | into string | path basename)
+      let bytes = if $dry_run { (0x[] | into binary) } else { (open --raw $val | into binary | collect) }
+      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"; filename=\"($filename)\"($crlf)Content-Type: application/octet-stream($crlf)($crlf)" | into binary)
+      $head ++ $bytes ++ ($crlf | into binary)
+    } else {
+      let dt = ($val | describe)
+      let s = if (($dt | str starts-with "record") or ($dt | str starts-with "list") or ($dt | str starts-with "table")) { ($val | to json --raw) } else { ($val | into string) }
+      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"($crlf)($crlf)" | into binary)
+      $head ++ ($"($s)($crlf)" | into binary)
+    }
+  } | compact)
+  let trailer = ($"--($boundary)--($crlf)" | into binary)
+  let body = ($chunks | reduce --fold (0x[] | into binary) {|chunk, acc| $acc ++ $chunk }) ++ $trailer
+  {content_type: $"multipart/form-data; boundary=($boundary)", body: $body}
 }
 
 def base-url-completer [] { ["https://api.sandbox.velopayments.com" "https://api.payouts.velopayments.com"] }
-def auth-scheme-completer [] { ["bearer" "basic"] }
+def auth-scheme-completer [] { ["bearer" "basic" "basic-credentials"] }
 
 # Completers for enum parameters
-def linkType-completer [] { ["PARENT_OF"] }
+def link-type-completer [] { ["PARENT_OF"] }
 def type-completer [] { ["FBO" "PRIVATE" "WUBS_DECOUPLED"] }
 def type-completer-1 [] { ["BACKOFFICE" "PAYEE" "PAYOR"] }
 def status-completer [] { ["DISABLED" "ENABLED" "PENDING"] }
-def payeeType-completer [] { ["COMPANY" "INDIVIDUAL"] }
-def mfaType-completer [] { ["SMS" "TOTP" "YUBIKEY"] }
-def userType-completer [] { ["BACKOFFICE" "PAYEE" "PAYOR"] }
-def mfaType-completer-1 [] { ["TOTP" "YUBIKEY"] }
-def tokenType-completer [] { ["INVITE_MFA_USER" "MFA_REGISTRATION"] }
-def payeeType-completer-1 [] { ["Company" "Individual"] }
+def payee-type-completer [] { ["COMPANY" "INDIVIDUAL"] }
+def mfa-type-completer [] { ["SMS" "TOTP" "YUBIKEY"] }
+def user-type-completer [] { ["BACKOFFICE" "PAYEE" "PAYOR"] }
+def mfa-type-completer-1 [] { ["TOTP" "YUBIKEY"] }
+def token-type-completer [] { ["INVITE_MFA_USER" "MFA_REGISTRATION"] }
+def payee-type-completer-1 [] { ["Company" "Individual"] }
 def status-completer-1 [] { ["ACCEPTED" "ACCEPTED_BY_RAILS" "AWAITING_FUNDS" "BANK_PAYMENT_REQUESTED" "CONFIRMED" "FAILED" "FUNDED" "REJECTED" "RETURNED" "UNFUNDED" "WITHDRAWN"] }
 def status-completer-2 [] { ["ACCEPTED" "COMPLETED" "CONFIRMED" "INCOMPLETE" "INSTRUCTED" "QUOTED" "REJECTED" "SUBMITTED" "WITHDRAWN"] }
 def status-completer-3 [] { ["ACCEPTED" "REJECTED" "WITHDRAWABLE" "WITHDRAWN"] }
-def transmissionType-completer [] { ["ACH" "SAME_DAY_ACH" "WIRE"] }
-def transmissionType-completer-1 [] { ["ACH" "GACHO" "LOCAL" "SAME_DAY_ACH" "WIRE"] }
-def scheduleStatus-completer [] { ["ANY" "EXECUTED" "FAILED" "SCHEDULED"] }
-def postInstructFxStatus-completer [] { ["ANY" "CANCELLED" "COMPLETED" "EXECUTED" "INITIATED" "REFUNDED" "RESUBMITTED" "RETURNED"] }
+def transmission-type-completer [] { ["ACH" "SAME_DAY_ACH" "WIRE"] }
+def transmission-type-completer-1 [] { ["ACH" "GACHO" "LOCAL" "SAME_DAY_ACH" "WIRE"] }
+def schedule-status-completer [] { ["ANY" "EXECUTED" "FAILED" "SCHEDULED"] }
+def post-instruct-fx-status-completer [] { ["ANY" "CANCELLED" "COMPLETED" "EXECUTED" "INITIATED" "REFUNDED" "RESUBMITTED" "RETURNED"] }
 def include-completer [] { ["payorAndDescendants" "payorOnly"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "authenticate veloAuth" } } | get name | first)
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "authenticate create-velo-auth" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -113,7 +153,7 @@ export def commands []: nothing -> table {
 #
 # POST /v1/authenticate
 # operationId: veloAuth
-export def "authenticate veloAuth" [
+export def "authenticate create-velo-auth" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -121,6 +161,7 @@ export def "authenticate veloAuth" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --grant-type: string # OAuth grant type. Should use 'client_credentials' (default: client_credentials)
 ]: nothing -> record<access_token: string, entityIds: list<string>, expires_in: float, refresh_token: string, scope: string, token_type: string> {
@@ -130,14 +171,14 @@ export def "authenticate veloAuth" [
   let full_url = (build-url $base "/v1/authenticate" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get Funding Audit Delta
 #
 # GET /v1/deltas/fundings
 # operationId: listFundingAuditDeltas
-export def "deltas-fundings listFundingAuditDeltas" [
+export def "deltas-fundings list-audit" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -145,19 +186,20 @@ export def "deltas-fundings listFundingAuditDeltas" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --payorId: string # format: uuid
-  --updatedSince: string # format: date-time
+  --payor-id: string # format: uuid
+  --updated-since: string # format: date-time
   --page: int # Page number. Default is 1. (format: int32, default: 1)
-  --pageSize: int # The number of results to return in a page (format: int32, default: 25)
+  --page-size: int # The number of results to return in a page (format: int32, default: 25)
 ]: nothing -> record<content: table<amount: int, currency: string, fundingId: string, status: string>, links: table<href: string, rel: string>, page: record<numberOfElements: int, page: int, pageSize: int, totalElements: int, totalPages: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "payorId" $payorId "scalar") (serialize-qp "updatedSince" $updatedSince "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $pageSize "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "payorId" $payor_id "scalar") (serialize-qp "updatedSince" $updated_since "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/deltas/fundings" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # V1 List Payment Changes
@@ -166,7 +208,7 @@ export def "deltas-fundings listFundingAuditDeltas" [
 # DEPRECATED
 # operationId: listPaymentChanges
 @deprecated
-export def "deltas-payments listPaymentChanges" [
+export def "deltas-payments list-changes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -174,19 +216,20 @@ export def "deltas-payments listPaymentChanges" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --payorId: string # The Payor ID to find associated Payments (format: uuid)
-  --updatedSince: string # The updatedSince filter in the format YYYY-MM-DDThh:mm:ss+hh:mm (format: date-time)
+  --payor-id: string # The Payor ID to find associated Payments (format: uuid)
+  --updated-since: string # The updatedSince filter in the format YYYY-MM-DDThh:mm:ss+hh:mm (format: date-time)
   --page: int # Page number. Default is 1. (format: int32, default: 1)
-  --pageSize: int # The number of results to return in a page (format: int32, default: 100)
+  --page-size: int # The number of results to return in a page (format: int32, default: 100)
 ]: nothing -> record<content: table<paymentAmount: int, paymentCurrency: string, paymentId: string, payorPaymentId: string, payoutId: string, sourceAmount: int, sourceCurrency: string, status: string>, links: table<href: string, rel: string>, page: record<numberOfElements: int, page: int, pageSize: int, totalElements: int, totalPages: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "payorId" $payorId "scalar") (serialize-qp "updatedSince" $updatedSince "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $pageSize "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "payorId" $payor_id "scalar") (serialize-qp "updatedSince" $updated_since "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/deltas/payments" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get Funding
@@ -194,7 +237,7 @@ export def "deltas-payments listPaymentChanges" [
 # GET /v1/fundings/{fundingId}
 # operationId: getFundingByIdV1
 export def "fundings get" [
-  fundingId: string
+  funding_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -202,21 +245,22 @@ export def "fundings get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<allocationDate: string, allocationType: string, amount: int, currency: string, detectedFundingRef: string, fundingAccountType: string, fundingId: string, hiddenDate: string, payorId: string, physicalAccountName: string, reason: string, sourceAccountId: string, status: string, text: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/fundings/($fundingId)")
+  let full_url = (build-url $base ({funding_id: (encode-path-segment $funding_id)} | format pattern "/v1/fundings/{funding_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Logout
 #
 # POST /v1/logout
 # operationId: logout
-export def "logout logout" [
+export def "logout create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -224,6 +268,7 @@ export def "logout logout" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -231,14 +276,14 @@ export def "logout logout" [
   let full_url = (build-url $base "/v1/logout")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Reset password
 #
 # POST /v1/password/reset
 # operationId: resetPassword
-export def "password-reset resetPassword" [
+export def "password-reset reset" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -246,6 +291,7 @@ export def "password-reset resetPassword" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   email: string # the email address of the user requesting the reset password (format: email, e.g. foo@example.com)
 ]: any -> any {
@@ -253,18 +299,18 @@ export def "password-reset resetPassword" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/password/reset")
-  let body = {email: $email} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"email": $email} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # List Payment Channel Country Rules
 #
 # GET /v1/paymentChannelRules
 # operationId: listPaymentChannelRulesV1
-export def "payment-channel-rules listPaymentChannelRulesV1" [
+export def "payment-channel-rules list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -272,6 +318,7 @@ export def "payment-channel-rules listPaymentChannelRulesV1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<bank: table<isoCountryCode: string, rules: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -279,7 +326,7 @@ export def "payment-channel-rules listPaymentChannelRulesV1" [
   let full_url = (build-url $base "/v1/paymentChannelRules")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # V1 Get Fundings for Payor
@@ -296,19 +343,20 @@ export def "paymentaudit-fundings get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --payorId: string # The account owner Payor ID (format: uuid)
+  --payor-id: string # The account owner Payor ID (format: uuid)
   --page: int # Page number. Default is 1. (format: int32, default: 1)
-  --pageSize: int # The number of results to return in a page (format: int32, default: 25)
+  --page-size: int # The number of results to return in a page (format: int32, default: 25)
   --qp-sort: string # List of sort fields. Example: ```?sort=destinationCurrency:asc,destinationAmount:asc``` Default is no sort. The supported sort fields are: dateTime and amount.
 ]: nothing -> record<content: table<amount: float, currency: string, dateTime: string, events: list, fundingAccountName: string, fundingType: string, sourceAccountName: string, status: string, topupType: string>, links: table<href: string, rel: string>, page: record<numberOfElements: int, page: int, pageSize: int, totalElements: int, totalPages: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "payorId" $payorId "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "payorId" $payor_id "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/paymentaudit/fundings" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # V1 Get Payout Statistics
@@ -317,7 +365,7 @@ export def "paymentaudit-fundings get" [
 # DEPRECATED
 # operationId: getPayoutStatsV1
 @deprecated
-export def "paymentaudit-payout-statistics get" [
+export def "paymentaudit-payout-statistics get-stats" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -325,24 +373,25 @@ export def "paymentaudit-payout-statistics get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --payorId: string # The account owner Payor ID. Required for external users. (format: uuid)
+  --payor-id: string # The account owner Payor ID. Required for external users. (format: uuid)
 ]: nothing -> record<thisMonthFailedPaymentsCount: int, thisMonthPayoutsCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "payorId" $payorId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "payorId" $payor_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/paymentaudit/payoutStatistics" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Withdraw a Payment
 #
 # POST /v1/payments/{paymentId}/withdraw
 # operationId: withdrawPayment
-export def "payments-withdraw withdrawPayment" [
-  paymentId: string
+export def "payments-withdraw create" [
+  payment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -350,25 +399,26 @@ export def "payments-withdraw withdrawPayment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   reason: string # Reason for withdrawal (e.g. Payment submitted in error)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/payments/($paymentId)/withdraw")
-  let body = {reason: $reason} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({payment_id: (encode-path-segment $payment_id)} | format pattern "/v1/payments/{payment_id}/withdraw"))
+  let req_body = {"reason": $reason} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # List Payor Links
 #
 # GET /v1/payorLinks
 # operationId: payorLinksV1
-export def "payor-links payorLinksV1" [
+export def "payor-links get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -376,25 +426,26 @@ export def "payor-links payorLinksV1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --descendantsOfPayor: string # The Payor ID from which to start the query to show all descendants (format: uuid)
-  --parentOfPayor: string # Query for the parent payor details for this payor id (format: uuid)
-  --fields: string # <p>List of additional Payor fields to include in the response for each Payor</p> <p>The values of payorId and payorName are always included for each Payor by default</p> <p>You can add fields to the response for each payor by including them in the fields parameter separated by commas</p> <p>The supported fields are any combination of: primaryContactEmail,kycState</p>
+  --descendants-of-payor: string # The Payor ID from which to start the query to show all descendants (format: uuid)
+  --parent-of-payor: string # Query for the parent payor details for this payor id (format: uuid)
+  --fields: string # List of additional Payor fields to include in the response for each Payor The values of payorId and payorName are always included for each Payor by default You can add fields to the response for each payor by including them in the fields parameter separated by commas The supported fields are any combination of: primaryContactEmail,kycState
 ]: nothing -> record<links: table<fromPayorId: string, linkId: string, linkType: string, toPayorId: string>, payors: table<kycState: string, payorId: string, payorName: string, primaryContactEmail: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "descendantsOfPayor" $descendantsOfPayor "scalar") (serialize-qp "parentOfPayor" $parentOfPayor "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "descendantsOfPayor" $descendants_of_payor "scalar") (serialize-qp "parentOfPayor" $parent_of_payor "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/payorLinks" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Create a Payor Link
 #
 # POST /v1/payorLinks
 # operationId: createPayorLinks
-export def "payor-links createPayorLinks" [
+export def "payor-links create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -402,20 +453,21 @@ export def "payor-links createPayorLinks" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  fromPayorId: string # format: uuid
-  linkType: string@linkType-completer
-  toPayorId: string # format: uuid
+  from_payor_id: string # format: uuid
+  link_type: string@link-type-completer
+  to_payor_id: string # format: uuid
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/payorLinks")
-  let body = {fromPayorId: $fromPayorId, linkType: $linkType, toPayorId: $toPayorId} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"fromPayorId": $from_payor_id, "linkType": $link_type, "toPayorId": $to_payor_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Get Payor
@@ -425,7 +477,7 @@ export def "payor-links createPayorLinks" [
 # operationId: getPayorByIdV1
 @deprecated
 export def "payors get-by-payorId" [
-  payorId: string
+  payor_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -433,22 +485,23 @@ export def "payors get-by-payorId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<address: record<city: string, country: string, countyOrProvince: string, line1: string, line2: string, line3: string, line4: string, zipOrPostcode: string>, allowsLanguageChoice: bool, collectiveAlias: string, dbaName: string, fundingAccountAccountName: string, fundingAccountAccountNumber: string, fundingAccountRoutingNumber: string, includesReports: bool, kycState: string, language: string, manualLockout: bool, maxMasterPayorAdmins: int, payeeGracePeriodDays: int, payeeGracePeriodProcessingEnabled: bool, payorId: string, payorName: string, primaryContactEmail: string, primaryContactName: string, primaryContactPhone: string, reminderEmailsOptOut: bool, supportContact: string, transmissionTypes: record<ACH: bool, SAME_DAY_ACH: bool, WIRE: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/payors/($payorId)")
+  let full_url = (build-url $base ({payor_id: (encode-path-segment $payor_id)} | format pattern "/v1/payors/{payor_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Create Application
 #
 # POST /v1/payors/{payorId}/applications
 # operationId: payorCreateApplicationV1
-export def "payors-applications payorCreateApplicationV1" [
-  payorId: string
+export def "payors-applications create" [
+  payor_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -456,6 +509,7 @@ export def "payors-applications payorCreateApplicationV1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --description: string # Description of the application. (nullable, e.g. SAP Application integration)
   name: string # The name of the application. (e.g. SAP)
@@ -463,21 +517,21 @@ export def "payors-applications payorCreateApplicationV1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/payors/($payorId)/applications")
-  let body = {description: $description, name: $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({payor_id: (encode-path-segment $payor_id)} | format pattern "/v1/payors/{payor_id}/applications"))
+  let req_body = {"description": $description, "name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Create API Key
 #
 # POST /v1/payors/{payorId}/applications/{applicationId}/keys
 # operationId: payorCreateApiKeyV1
-export def "payors-applications-keys payorCreateApiKeyV1" [
-  payorId: string
-  applicationId: string
+export def "payors-applications-keys create" [
+  payor_id: string
+  application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -485,28 +539,29 @@ export def "payors-applications-keys payorCreateApiKeyV1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --description: string # Description of the key. (nullable, e.g. Key for iOS mobile application)
   name: string # A name for the key. (e.g. iOS Key)
-  roles: list # <p>A role to assign to the key.</p> <p>If you want your API key to have write access then assign the role velo.payor.admin</p> <p>A later version will change this property from a list to string</p>  (e.g. [velo.payor.admin])
+  roles: list<string> # A role to assign to the key. If you want your API key to have write access then assign the role velo.payor.admin A later version will change this property from a list to string (e.g. [velo.payor.admin])
 ]: any -> record<apiKey: string, apiSecret: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/payors/($payorId)/applications/($applicationId)/keys")
-  let body = {description: $description, name: $name, roles: $roles} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({payor_id: (encode-path-segment $payor_id), application_id: (encode-path-segment $application_id)} | format pattern "/v1/payors/{payor_id}/applications/{application_id}/keys"))
+  let req_body = {"description": $description, "name": $name, "roles": $roles} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Get Branding
 #
 # GET /v1/payors/{payorId}/branding
 # operationId: payorGetBranding
-export def "payors-branding payorGetBranding" [
-  payorId: string
+export def "payors-branding get" [
+  payor_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -514,22 +569,23 @@ export def "payors-branding payorGetBranding" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<collectiveAlias: string, dbaName: string, logoUrl: string, payorName: string, supportContact: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/payors/($payorId)/branding")
+  let full_url = (build-url $base ({payor_id: (encode-path-segment $payor_id)} | format pattern "/v1/payors/{payor_id}/branding"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Add Logo
 #
 # POST /v1/payors/{payorId}/branding/logos
 # operationId: payorAddPayorLogoV1
-export def "payors-branding-logos payorAddPayorLogoV1" [
-  payorId: string
+export def "payors-branding-logos create" [
+  payor_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -537,26 +593,29 @@ export def "payors-branding-logos payorAddPayorLogoV1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --logo: string # format: binary
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/payors/($payorId)/branding/logos")
-  let body = {logo: $logo} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({payor_id: (encode-path-segment $payor_id)} | format pattern "/v1/payors/{payor_id}/branding/logos"))
+  let req_body = {"logo": $logo} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
+  let mp = (build-multipart-body $req_body ["logo"] $dry_run)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
 }
 
 # Reminder Email Opt-Out
 #
 # POST /v1/payors/{payorId}/reminderEmailsUpdate
 # operationId: payorEmailOptOut
-export def "payors-reminder-emails-update payorEmailOptOut" [
-  payorId: string
+export def "payors-reminder-emails-update create-opt-out" [
+  payor_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -564,18 +623,19 @@ export def "payors-reminder-emails-update payorEmailOptOut" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --reminderEmailsOptOut: oneof<nothing, bool>
+  --reminder-emails-opt-out: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/payors/($payorId)/reminderEmailsUpdate")
-  let body = {reminderEmailsOptOut: $reminderEmailsOptOut} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({payor_id: (encode-path-segment $payor_id)} | format pattern "/v1/payors/{payor_id}/reminderEmailsUpdate"))
+  let req_body = {"reminderEmailsOptOut": $reminder_emails_opt_out} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Set notifications
@@ -584,8 +644,8 @@ export def "payors-reminder-emails-update payorEmailOptOut" [
 # DEPRECATED
 # operationId: setNotificationsRequest
 @deprecated
-export def "source-accounts-notifications setNotificationsRequest" [
-  sourceAccountId: string
+export def "source-accounts-notifications update-request-by-sourceAccountId" [
+  source_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -593,18 +653,19 @@ export def "source-accounts-notifications setNotificationsRequest" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  minimumBalance: int # Amount to set as minimum balance in minor units (format: int64)
+  minimum_balance: int # Amount to set as minimum balance in minor units (format: int64)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/sourceAccounts/($sourceAccountId)/notifications")
-  let body = {minimumBalance: $minimumBalance} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({source_account_id: (encode-path-segment $source_account_id)} | format pattern "/v1/sourceAccounts/{source_account_id}/notifications"))
+  let req_body = {"minimumBalance": $minimum_balance} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # List Supported Countries
@@ -613,7 +674,7 @@ export def "source-accounts-notifications setNotificationsRequest" [
 # DEPRECATED
 # operationId: listSupportedCountriesV1
 @deprecated
-export def "supported-countries listSupportedCountriesV1" [
+export def "supported-countries list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -621,6 +682,7 @@ export def "supported-countries listSupportedCountriesV1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<countries: table<currencies: list, isoCountryCode: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -628,14 +690,14 @@ export def "supported-countries listSupportedCountriesV1" [
   let full_url = (build-url $base "/v1/supportedCountries")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # validate
 #
 # POST /v1/validate
 # operationId: validateAccessToken
-export def "validate validateAccessToken" [
+export def "validate validate-access-token" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -643,28 +705,29 @@ export def "validate validateAccessToken" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Authorization: string # Bearer token authorization leg of validate
+  --authorization: string # Bearer token authorization leg of validate
   otp: string # an OTP either sent via sms or generated by a registered MFA device (e.g. 123456)
 ]: any -> record<access_token: string, entityIds: list<string>, expires_in: int, refresh_token: string, scope: string, token_type: string, user_info: record<mfa_details: record<mfa_type: string, verified: bool>, userType: string, user_id: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/validate")
-  let body = {otp: $otp} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Authorization": $Authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"otp": $otp} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Authorization": $authorization} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # List the details about the webhooks for the given payor.
 #
 # GET /v1/webhooks
 # operationId: listWebhooksV1
-export def "webhooks listWebhooksV1" [
+export def "webhooks list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -672,25 +735,26 @@ export def "webhooks listWebhooksV1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Page number. Default is 1. (format: int32, default: 1)
-  --pageSize: int # The number of results to return in a page (format: int32, default: 25)
-  --payorId: string # The Payor ID (format: uuid)
+  --page-size: int # The number of results to return in a page (format: int32, default: 25)
+  --payor-id: string # The Payor ID (format: uuid)
 ]: nothing -> record<content: table<authorizationHeader: string, categories: list, enabled: bool, id: string, payorId: string, webhookUrl: string>, links: table<href: string, rel: string>, page: record<numberOfElements: int, page: int, pageSize: int, totalElements: int, totalPages: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "payorId" $payorId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "payorId" $payor_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/webhooks" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Create Webhook
 #
 # POST /v1/webhooks
 # operationId: createWebhookV1
-export def "webhooks createWebhookV1" [
+export def "webhooks create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -698,22 +762,23 @@ export def "webhooks createWebhookV1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorizationHeader: string # the authorization header to include with the notification.
-  --categories: list # the categories to enable.
+  --authorization-header: string # the authorization header to include with the notification.
+  --categories: list<string> # the categories to enable.
   --enabled: oneof<nothing, bool> # whether the webhook is enabled.
-  payorId: string # format: uuid
-  webhookUrl: string # the webhook URL to use.
+  payor_id: string # format: uuid
+  webhook_url: string # the webhook URL to use.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/webhooks")
-  let body = {authorizationHeader: $authorizationHeader, categories: $categories, enabled: $enabled, payorId: $payorId, webhookUrl: $webhookUrl} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"authorizationHeader": $authorization_header, "categories": $categories, "enabled": $enabled, "payorId": $payor_id, "webhookUrl": $webhook_url} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Get details about the given webhook.
@@ -721,7 +786,7 @@ export def "webhooks createWebhookV1" [
 # GET /v1/webhooks/{webhookId}
 # operationId: getWebhookV1
 export def "webhooks get" [
-  webhookId: string
+  webhook_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -729,22 +794,23 @@ export def "webhooks get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<authorizationHeader: string, categories: list<string>, enabled: bool, id: string, payorId: string, webhookUrl: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/webhooks/($webhookId)")
+  let full_url = (build-url $base ({webhook_id: (encode-path-segment $webhook_id)} | format pattern "/v1/webhooks/{webhook_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Update Webhook
 #
 # POST /v1/webhooks/{webhookId}
 # operationId: updateWebhookV1
-export def "webhooks updateWebhookV1" [
-  webhookId: string
+export def "webhooks update" [
+  webhook_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -752,28 +818,29 @@ export def "webhooks updateWebhookV1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorizationHeader: string # the authorization header to include with the notification. (nullable)
-  --categories: list # The notification categories to enable. (nullable)
+  --authorization-header: string # the authorization header to include with the notification. (nullable)
+  --categories: list<string> # The notification categories to enable. (nullable)
   --enabled: oneof<nothing, bool> # whether the webhook is enabled.
-  --webhookUrl: string # the webhook URL to use.
+  --webhook-url: string # the webhook URL to use.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/webhooks/($webhookId)")
-  let body = {authorizationHeader: $authorizationHeader, categories: $categories, enabled: $enabled, webhookUrl: $webhookUrl} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({webhook_id: (encode-path-segment $webhook_id)} | format pattern "/v1/webhooks/{webhook_id}"))
+  let req_body = {"authorizationHeader": $authorization_header, "categories": $categories, "enabled": $enabled, "webhookUrl": $webhook_url} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # POST /v1/webhooks/{webhookId}/ping
 #
 # operationId: pingWebhookV1
-export def "webhooks-ping pingWebhookV1" [
-  webhookId: string
+export def "webhooks-ping ping" [
+  webhook_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -781,21 +848,22 @@ export def "webhooks-ping pingWebhookV1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, webhookId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/webhooks/($webhookId)/ping")
+  let full_url = (build-url $base ({webhook_id: (encode-path-segment $webhook_id)} | format pattern "/v1/webhooks/{webhook_id}/ping"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # List Supported Currencies
 #
 # GET /v2/currencies
 # operationId: listSupportedCurrenciesV2
-export def "currencies listSupportedCurrenciesV2" [
+export def "currencies list-supported" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -803,6 +871,7 @@ export def "currencies listSupportedCurrenciesV2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<currencies: table<currency: string, maxPaymentAmount: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -810,7 +879,7 @@ export def "currencies listSupportedCurrenciesV2" [
   let full_url = (build-url $base "/v2/currencies")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get Funding Accounts
@@ -825,31 +894,32 @@ export def "funding-accounts list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --payorId: string # format: uuid
+  --payor-id: string # format: uuid
   --name: string # The descriptive funding account name
   --country: string # The 2 letter ISO 3166-1 country code (upper case) (e.g. US)
   --currency: string # The ISO 4217 currency code (e.g. USD)
   --type: string # The type of funding account. (e.g. FBO)
   --page: int # Page number. Default is 1. (format: int32, default: 1)
-  --pageSize: int # The number of results to return in a page (format: int32, default: 25)
+  --page-size: int # The number of results to return in a page (format: int32, default: 25)
   --qp-sort: string # List of sort fields (e.g. ?sort=accountName:asc,name:asc) Default is accountName:asc The supported sort fields are - accountName, name. (default: accountName:asc)
   --sensitive: oneof<nothing, bool> # default: false
 ]: nothing -> record<content: table<accountName: string, accountNumber: string, archived: bool, country: string, currency: string, id: string, name: string, payorId: string, routingNumber: string, type: string>, links: table<href: string, rel: string>, page: record<numberOfElements: int, page: int, pageSize: int, totalElements: int, totalPages: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "payorId" $payorId "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "currency" $currency "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "sensitive" $sensitive "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "payorId" $payor_id "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "currency" $currency "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "sensitive" $sensitive "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/fundingAccounts" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Create Funding Account
 #
 # POST /v2/fundingAccounts
 # operationId: createFundingAccountV2
-export def "funding-accounts createFundingAccountV2" [
+export def "funding-accounts create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -857,24 +927,25 @@ export def "funding-accounts createFundingAccountV2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accountName: string # Required if type is either FBO or PRIVATE
-  --accountNumber: string # Required if type is either FBO or PRIVATE
+  --account-name: string # Required if type is either FBO or PRIVATE
+  --account-number: string # Required if type is either FBO or PRIVATE
   --currency: string # ISO 4217 currency code, Required if type is either WUBS_DECOUPLED or PRIVATE (e.g. USD)
   name: string
-  payorId: string # format: uuid
-  --routingNumber: string # Required if type is either FBO or PRIVATE
+  payor_id: string # format: uuid
+  --routing-number: string # Required if type is either FBO or PRIVATE
   type: string@type-completer
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/fundingAccounts")
-  let body = {accountName: $accountName, accountNumber: $accountNumber, currency: $currency, name: $name, payorId: $payorId, routingNumber: $routingNumber, type: $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"accountName": $account_name, "accountNumber": $account_number, "currency": $currency, "name": $name, "payorId": $payor_id, "routingNumber": $routing_number, "type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Get Funding Account
@@ -882,7 +953,7 @@ export def "funding-accounts createFundingAccountV2" [
 # GET /v2/fundingAccounts/{fundingAccountId}
 # operationId: getFundingAccountV2
 export def "funding-accounts get" [
-  fundingAccountId: string
+  funding_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -890,16 +961,17 @@ export def "funding-accounts get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --sensitive: oneof<nothing, bool> # default: false
 ]: nothing -> record<accountName: string, accountNumber: string, archived: bool, country: string, currency: string, id: string, name: string, payorId: string, routingNumber: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "sensitive" $sensitive "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v2/fundingAccounts/($fundingAccountId)" $qp)
+  let full_url = (build-url $base ({funding_account_id: (encode-path-segment $funding_account_id)} | format pattern "/v2/fundingAccounts/{funding_account_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get Payor
@@ -907,7 +979,7 @@ export def "funding-accounts get" [
 # GET /v2/payors/{payorId}
 # operationId: getPayorByIdV2
 export def "payors get-by-payorId-1" [
-  payorId: string
+  payor_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -915,14 +987,15 @@ export def "payors get-by-payorId-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<address: record<city: string, country: string, countyOrProvince: string, line1: string, line2: string, line3: string, line4: string, zipOrPostcode: string>, allowsLanguageChoice: bool, collectiveAlias: string, dbaName: string, includesReports: bool, kycState: string, language: string, managingPayees: bool, manualLockout: bool, maxMasterPayorAdmins: int, openBankingEnabled: bool, payeeGracePeriodDays: int, payeeGracePeriodProcessingEnabled: bool, paymentRails: string, payorId: string, payorName: string, payorXid: string, primaryContactEmail: string, primaryContactName: string, primaryContactPhone: string, provider: string, reminderEmailsOptOut: bool, remoteSystemIds: list<string>, supportContact: string, transmissionTypes: record<ACH: bool, SAME_DAY_ACH: bool, WIRE: bool>, usdTxnValueReportingThreshold: int, wuCustomerId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/payors/($payorId)")
+  let full_url = (build-url $base ({payor_id: (encode-path-segment $payor_id)} | format pattern "/v2/payors/{payor_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get list of source accounts
@@ -939,22 +1012,23 @@ export def "source-accounts get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --physicalAccountName: string # Physical Account Name
-  --physicalAccountId: string # The physical account ID (format: uuid)
-  --payorId: string # The account owner Payor ID (format: uuid)
-  --fundingAccountId: string # The funding account ID (format: uuid)
+  --physical-account-name: string # Physical Account Name
+  --physical-account-id: string # The physical account ID (format: uuid)
+  --payor-id: string # The account owner Payor ID (format: uuid)
+  --funding-account-id: string # The funding account ID (format: uuid)
   --page: int # Page number. Default is 1. (format: int32, default: 1)
-  --pageSize: int # The number of results to return in a page (format: int32, default: 25)
-  --qp-sort: string # List of sort fields e.g. ?sort=name:asc Default is name:asc The supported sort fields are - fundingRef, name, balance  (default: fundingRef:asc)
+  --page-size: int # The number of results to return in a page (format: int32, default: 25)
+  --qp-sort: string # List of sort fields e.g. ?sort=name:asc Default is name:asc The supported sort fields are - fundingRef, name, balance (default: fundingRef:asc)
 ]: nothing -> record<content: table<accountType: string, autoTopUpConfig: record, balance: int, balanceVisible: bool, currency: string, customerId: string, fundingAccountId: string, fundingRef: string, id: string, name: string, notifications: record, payorId: string, physicalAccountId: string, physicalAccountName: string, pooled: bool, railsId: string>, links: table<href: string, rel: string>, page: record<numberOfElements: int, page: int, pageSize: int, totalElements: int, totalPages: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "physicalAccountName" $physicalAccountName "scalar") (serialize-qp "physicalAccountId" $physicalAccountId "scalar") (serialize-qp "payorId" $payorId "scalar") (serialize-qp "fundingAccountId" $fundingAccountId "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "physicalAccountName" $physical_account_name "scalar") (serialize-qp "physicalAccountId" $physical_account_id "scalar") (serialize-qp "payorId" $payor_id "scalar") (serialize-qp "fundingAccountId" $funding_account_id "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/sourceAccounts" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get Source Account
@@ -964,7 +1038,7 @@ export def "source-accounts get" [
 # operationId: getSourceAccountV2
 @deprecated
 export def "source-accounts get-by-sourceAccountId" [
-  sourceAccountId: string
+  source_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -972,14 +1046,15 @@ export def "source-accounts get-by-sourceAccountId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<accountType: string, autoTopUpConfig: record<enabled: bool, minBalance: int, targetBalance: int>, balance: int, balanceVisible: bool, currency: string, customerId: string, fundingAccountId: string, fundingRef: string, id: string, name: string, notifications: record<minimumBalance: int>, payorId: string, physicalAccountId: string, physicalAccountName: string, pooled: bool, railsId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/sourceAccounts/($sourceAccountId)")
+  let full_url = (build-url $base ({source_account_id: (encode-path-segment $source_account_id)} | format pattern "/v2/sourceAccounts/{source_account_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Create Funding Request
@@ -988,8 +1063,8 @@ export def "source-accounts get-by-sourceAccountId" [
 # DEPRECATED
 # operationId: createFundingRequestV2
 @deprecated
-export def "source-accounts-funding-request createFundingRequestV2" [
-  sourceAccountId: string
+export def "source-accounts-funding-request create-by-sourceAccountId" [
+  source_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -997,18 +1072,19 @@ export def "source-accounts-funding-request createFundingRequestV2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   amount: int # Amount to fund, decimal implied (format: int64)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/sourceAccounts/($sourceAccountId)/fundingRequest")
-  let body = {amount: $amount} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({source_account_id: (encode-path-segment $source_account_id)} | format pattern "/v2/sourceAccounts/{source_account_id}/fundingRequest"))
+  let req_body = {"amount": $amount} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Transfer Funds between source accounts
@@ -1017,8 +1093,8 @@ export def "source-accounts-funding-request createFundingRequestV2" [
 # DEPRECATED
 # operationId: transferFundsV2
 @deprecated
-export def "source-accounts-transfers transferFundsV2" [
-  sourceAccountId: string
+export def "source-accounts-transfers create-funds-by-sourceAccountId" [
+  source_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1026,27 +1102,28 @@ export def "source-accounts-transfers transferFundsV2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   amount: int # Amount to transfer, in minor units (format: int64)
   currency: string # e.g. USD
-  toSourceAccountId: string # The 'to' source account id, which will be credited (format: uuid)
+  to_source_account_id: string # The 'to' source account id, which will be credited (format: uuid)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/sourceAccounts/($sourceAccountId)/transfers")
-  let body = {amount: $amount, currency: $currency, toSourceAccountId: $toSourceAccountId} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({source_account_id: (encode-path-segment $source_account_id)} | format pattern "/v2/sourceAccounts/{source_account_id}/transfers"))
+  let req_body = {"amount": $amount, "currency": $currency, "toSourceAccountId": $to_source_account_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # List Supported Countries
 #
 # GET /v2/supportedCountries
 # operationId: listSupportedCountriesV2
-export def "supported-countries listSupportedCountriesV2" [
+export def "supported-countries list-1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1054,6 +1131,7 @@ export def "supported-countries listSupportedCountriesV2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<countries: table<currencies: list, isoCountryCode: string, regions: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1061,14 +1139,14 @@ export def "supported-countries listSupportedCountriesV2" [
   let full_url = (build-url $base "/v2/supportedCountries")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # List Users
 #
 # GET /v2/users
 # operationId: listUsers
-export def "users listUsers" [
+export def "users list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1076,29 +1154,30 @@ export def "users listUsers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --type: string@type-completer-1 # The Type of the User. (e.g. PAYOR)
   --status: string@status-completer # The status of the User. (e.g. ENABLED)
-  --entityId: string # The entityId of the User. (format: uuid)
-  --payeeType: string@payeeType-completer # The Type of the Payee entity. Either COMPANY or INDIVIDUAL. (e.g. COMPANY)
+  --entity-id: string # The entityId of the User. (format: uuid)
+  --payee-type: string@payee-type-completer # The Type of the Payee entity. Either COMPANY or INDIVIDUAL. (e.g. COMPANY)
   --page: int # Page number. Default is 1. (format: int32, default: 1)
-  --pageSize: int # The number of results to return in a page (format: int32, default: 25)
-  --qp-sort: string # List of sort fields (e.g. ?sort=email:asc,lastName:asc) Default is email:asc 'name' The supported sort fields are - email, lastNmae.  (default: email:asc)
+  --page-size: int # The number of results to return in a page (format: int32, default: 25)
+  --qp-sort: string # List of sort fields (e.g. ?sort=email:asc,lastName:asc) Default is email:asc 'name' The supported sort fields are - email, lastNmae. (default: email:asc)
 ]: nothing -> record<content: table<companyName: string, email: string, entityId: string, firstName: string, id: string, lastName: string, lockedOut: bool, lockedOutTimestamp: string, mfaStatus: string, mfaType: string, primaryContactNumber: string, roles: list, secondaryContactNumber: string, smsNumber: string, status: string, userType: string>, links: table<href: string, rel: string>, page: record<numberOfElements: int, page: int, pageSize: int, totalElements: int, totalPages: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "type" $type "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "entityId" $entityId "scalar") (serialize-qp "payeeType" $payeeType "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "type" $type "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "entityId" $entity_id "scalar") (serialize-qp "payeeType" $payee_type "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/users" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Invite a User
 #
 # POST /v2/users/invite
 # operationId: inviteUser
-export def "users-invite inviteUser" [
+export def "users-invite create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1106,35 +1185,36 @@ export def "users-invite inviteUser" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   email: string # the email address of the invited user (format: email, e.g. foo@example.com)
-  --entityId: string # The payorId or payeeId or null if the user is a backoffice admin  (nullable, format: uuid, e.g. 7fffa261-ac68-49e6-b605-d24a444d9206)
-  --firstName: string # e.g. John
-  --lastName: string # e.g. Doe
-  mfaType: string@mfaType-completer # <p>The MFA type that the user will use</p> <p>The type may be conditional on the role(s) the user has</p>  (e.g. TOTP)
-  primaryContactNumber: string # The main contact number for the user  (e.g. 11235555555)
-  roles: list # The role(s) for the user The role must exist The role can be a custom role or a system role but the invoker must have the permissions to assign the role System roles are: velo.backoffice.admin, velo.payor.master_admin, velo.payor.admin, velo.payor.support, velo.payee.admin, velo.payee.support  (e.g. [velo.payor.admin])
-  --secondaryContactNumber: string # The secondary contact number for the user  (nullable, e.g. 11235555550)
-  smsNumber: string # The phone number of a device that the user can receive sms messages on  (e.g. 11235555555)
-  --userType: string@userType-completer # Will default to PAYOR if not provided but entityId is provided (e.g. PAYEE)
-  --verificationCode: string # Optional property that MUST be suppied when manually verifying a user The user's smsNumber is registered via a separate endpoint and an OTP sent to them  (nullable, e.g. 123456)
+  --entity-id: string # The payorId or payeeId or null if the user is a backoffice admin (nullable, format: uuid, e.g. 7fffa261-ac68-49e6-b605-d24a444d9206)
+  --first-name: string # e.g. John
+  --last-name: string # e.g. Doe
+  mfa_type: string@mfa-type-completer # The MFA type that the user will use The type may be conditional on the role(s) the user has (e.g. TOTP)
+  primary_contact_number: string # The main contact number for the user (e.g. 11235555555)
+  roles: list<string> # The role(s) for the user The role must exist The role can be a custom role or a system role but the invoker must have the permissions to assign the role System roles are: velo.backoffice.admin, velo.payor.master_admin, velo.payor.admin, velo.payor.support, velo.payee.admin, velo.payee.support (e.g. [velo.payor.admin])
+  --secondary-contact-number: string # The secondary contact number for the user (nullable, e.g. 11235555550)
+  sms_number: string # The phone number of a device that the user can receive sms messages on (e.g. 11235555555)
+  --user-type: string@user-type-completer # Will default to PAYOR if not provided but entityId is provided (e.g. PAYEE)
+  --verification-code: string # Optional property that MUST be suppied when manually verifying a user The user's smsNumber is registered via a separate endpoint and an OTP sent to them (nullable, e.g. 123456)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/users/invite")
-  let body = {email: $email, entityId: $entityId, firstName: $firstName, lastName: $lastName, mfaType: $mfaType, primaryContactNumber: $primaryContactNumber, roles: $roles, secondaryContactNumber: $secondaryContactNumber, smsNumber: $smsNumber, userType: $userType, verificationCode: $verificationCode} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"email": $email, "entityId": $entity_id, "firstName": $first_name, "lastName": $last_name, "mfaType": $mfa_type, "primaryContactNumber": $primary_contact_number, "roles": $roles, "secondaryContactNumber": $secondary_contact_number, "smsNumber": $sms_number, "userType": $user_type, "verificationCode": $verification_code} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Register SMS Number
 #
 # POST /v2/users/registration/sms
 # operationId: registerSms
-export def "users-registration-sms registerSms" [
+export def "users-registration-sms create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1142,18 +1222,19 @@ export def "users-registration-sms registerSms" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  smsNumber: string # The phone number of a device that the user can receive sms messages on  (e.g. 11235555555)
+  sms_number: string # The phone number of a device that the user can receive sms messages on (e.g. 11235555555)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/users/registration/sms")
-  let body = {smsNumber: $smsNumber} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"smsNumber": $sms_number} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Get Self
@@ -1168,6 +1249,7 @@ export def "users-self get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<companyName: string, email: string, entityId: string, firstName: string, id: string, lastName: string, lockedOut: bool, lockedOutTimestamp: string, mfaStatus: string, mfaType: string, primaryContactNumber: string, roles: table<name: string>, secondaryContactNumber: string, smsNumber: string, status: string, userType: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1175,14 +1257,14 @@ export def "users-self get" [
   let full_url = (build-url $base "/v2/users/self")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Unregister MFA for Self
 #
 # POST /v2/users/self/mfa/unregister
 # operationId: unregisterMFAForSelf
-export def "users-self-mfa-unregister unregisterMFAForSelf" [
+export def "users-self-mfa-unregister delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1190,28 +1272,29 @@ export def "users-self-mfa-unregister unregisterMFAForSelf" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Authorization: string # Bearer token authorization leg of validate
-  mfaType: string@mfaType-completer # The type of the MFA device (e.g. TOTP)
+  --authorization: string # Bearer token authorization leg of validate
+  mfa_type: string@mfa-type-completer # The type of the MFA device (e.g. TOTP)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/users/self/mfa/unregister")
-  let body = {mfaType: $mfaType} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Authorization": $Authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"mfaType": $mfa_type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Authorization": $authorization} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Update Password for self
 #
 # POST /v2/users/self/password
 # operationId: updatePasswordSelf
-export def "users-self-password updatePasswordSelf" [
+export def "users-self-password update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1219,26 +1302,27 @@ export def "users-self-password updatePasswordSelf" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  newPassword: string # The new password (e.g. My_new_password)
-  oldPassword: string # The user's current password (e.g. My_current_password)
+  new_password: string # The new password (e.g. My_new_password)
+  old_password: string # The user's current password (e.g. My_current_password)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/users/self/password")
-  let body = {newPassword: $newPassword, oldPassword: $oldPassword} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"newPassword": $new_password, "oldPassword": $old_password} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Validate the proposed password
 #
 # POST /v2/users/self/password/validate
 # operationId: validatePasswordSelf
-export def "users-self-password-validate validatePasswordSelf" [
+export def "users-self-password-validate validate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1246,6 +1330,7 @@ export def "users-self-password-validate validatePasswordSelf" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   password: string # a password that passes validation (e.g. My_strong_password)
 ]: any -> record<score: int, suggestions: list<string>, valid: bool, warning: string> {
@@ -1253,18 +1338,18 @@ export def "users-self-password-validate validatePasswordSelf" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/users/self/password/validate")
-  let body = {password: $password} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"password": $password} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Update User Details for self
 #
 # POST /v2/users/self/userDetailsUpdate
 # operationId: userDetailsUpdateForSelf
-export def "users-self-user-details-update userDetailsUpdateForSelf" [
+export def "users-self-user-details-update update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1272,23 +1357,24 @@ export def "users-self-user-details-update userDetailsUpdateForSelf" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --email: string # the email address of the user (nullable, format: email, e.g. foo@example.com)
-  --firstName: string # nullable, e.g. John
-  --lastName: string # nullable, e.g. Doe
-  --primaryContactNumber: string # The main contact number for the user  (nullable, e.g. 11235555555)
-  --secondaryContactNumber: string # The secondary contact number for the user  (nullable, e.g. 11235555550)
-  --smsNumber: string # The phone number of a device that the user can receive sms messages on  (nullable, e.g. 11235555555)
+  --first-name: string # nullable, e.g. John
+  --last-name: string # nullable, e.g. Doe
+  --primary-contact-number: string # The main contact number for the user (nullable, e.g. 11235555555)
+  --secondary-contact-number: string # The secondary contact number for the user (nullable, e.g. 11235555550)
+  --sms-number: string # The phone number of a device that the user can receive sms messages on (nullable, e.g. 11235555555)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/users/self/userDetailsUpdate")
-  let body = {email: $email, firstName: $firstName, lastName: $lastName, primaryContactNumber: $primaryContactNumber, secondaryContactNumber: $secondaryContactNumber, smsNumber: $smsNumber} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"email": $email, "firstName": $first_name, "lastName": $last_name, "primaryContactNumber": $primary_contact_number, "secondaryContactNumber": $secondary_contact_number, "smsNumber": $sms_number} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Delete a User
@@ -1296,7 +1382,7 @@ export def "users-self-user-details-update userDetailsUpdateForSelf" [
 # DELETE /v2/users/{userId}
 # operationId: deleteUserByIdV2
 export def "users delete" [
-  userId: string
+  user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1304,14 +1390,15 @@ export def "users delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/users/($userId)")
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/v2/users/{user_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get User
@@ -1319,7 +1406,7 @@ export def "users delete" [
 # GET /v2/users/{userId}
 # operationId: getUserByIdV2
 export def "users get" [
-  userId: string
+  user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1327,22 +1414,23 @@ export def "users get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<companyName: string, email: string, entityId: string, firstName: string, id: string, lastName: string, lockedOut: bool, lockedOutTimestamp: string, mfaStatus: string, mfaType: string, primaryContactNumber: string, roles: table<name: string>, secondaryContactNumber: string, smsNumber: string, status: string, userType: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/users/($userId)")
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/v2/users/{user_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Disable a User
 #
 # POST /v2/users/{userId}/disable
 # operationId: disableUserV2
-export def "users-disable disableUserV2" [
-  userId: string
+export def "users-disable disable" [
+  user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1350,22 +1438,23 @@ export def "users-disable disableUserV2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/users/($userId)/disable")
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/v2/users/{user_id}/disable"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Enable a User
 #
 # POST /v2/users/{userId}/enable
 # operationId: enableUserV2
-export def "users-enable enableUserV2" [
-  userId: string
+export def "users-enable enable" [
+  user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1373,22 +1462,23 @@ export def "users-enable enableUserV2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/users/($userId)/enable")
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/v2/users/{user_id}/enable"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Unregister MFA for the user
 #
 # POST /v2/users/{userId}/mfa/unregister
 # operationId: unregisterMFA
-export def "users-mfa-unregister unregisterMFA" [
-  userId: string
+export def "users-mfa-unregister delete" [
+  user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1396,27 +1486,28 @@ export def "users-mfa-unregister unregisterMFA" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  mfaType: string@mfaType-completer-1 # The type of the MFA device (e.g. TOTP)
-  --verificationCode: string # <p>Optional property that MUST be suppied when manually verifying a user</p> <p>The user's smsNumber is registered via a separate endpoint and an OTP sent to them</p>  (nullable, e.g. 123456)
+  mfa_type: string@mfa-type-completer-1 # The type of the MFA device (e.g. TOTP)
+  --verification-code: string # Optional property that MUST be suppied when manually verifying a user The user's smsNumber is registered via a separate endpoint and an OTP sent to them (nullable, e.g. 123456)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/users/($userId)/mfa/unregister")
-  let body = {mfaType: $mfaType, verificationCode: $verificationCode} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/v2/users/{user_id}/mfa/unregister"))
+  let req_body = {"mfaType": $mfa_type, "verificationCode": $verification_code} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Update User Role
 #
 # POST /v2/users/{userId}/roleUpdate
 # operationId: roleUpdate
-export def "users-role-update roleUpdate" [
-  userId: string
+export def "users-role-update update" [
+  user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1424,27 +1515,28 @@ export def "users-role-update roleUpdate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  roles: list # <p>The role(s) for the user</p> <p>The role must exist</p> <p>The role can be a custom role or a system role but the invoker must have the permissions to assign the role</p> <p>System roles are: backoffice.admin, payor.master_admin, payor.admin, payor.support</p>  (e.g. [payor.admin])
-  --verificationCode: string # <p>Optional property that MUST be suppied when manually verifying a user</p> <p>The user's smsNumber is registered via a separate endpoint and an OTP sent to them</p>  (nullable, e.g. 123456)
+  roles: list<string> # The role(s) for the user The role must exist The role can be a custom role or a system role but the invoker must have the permissions to assign the role System roles are: backoffice.admin, payor.master_admin, payor.admin, payor.support (e.g. [payor.admin])
+  --verification-code: string # Optional property that MUST be suppied when manually verifying a user The user's smsNumber is registered via a separate endpoint and an OTP sent to them (nullable, e.g. 123456)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/users/($userId)/roleUpdate")
-  let body = {roles: $roles, verificationCode: $verificationCode} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/v2/users/{user_id}/roleUpdate"))
+  let req_body = {"roles": $roles, "verificationCode": $verification_code} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Resend a token
 #
 # POST /v2/users/{userId}/tokens
 # operationId: resendToken
-export def "users-tokens resendToken" [
-  userId: string
+export def "users-tokens resend" [
+  user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1452,27 +1544,28 @@ export def "users-tokens resendToken" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  tokenType: string@tokenType-completer # The type of the token to resend (e.g. INVITE_MFA_USER)
-  --verificationCode: string # <p>Optional property that MUST be suppied when manually verifying a user</p> <p>The user's smsNumber is registered via a separate endpoint and an OTP sent to them</p>  (nullable, e.g. 123456)
+  token_type: string@token-type-completer # The type of the token to resend (e.g. INVITE_MFA_USER)
+  --verification-code: string # Optional property that MUST be suppied when manually verifying a user The user's smsNumber is registered via a separate endpoint and an OTP sent to them (nullable, e.g. 123456)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/users/($userId)/tokens")
-  let body = {tokenType: $tokenType, verificationCode: $verificationCode} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/v2/users/{user_id}/tokens"))
+  let req_body = {"tokenType": $token_type, "verificationCode": $verification_code} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Unlock a User
 #
 # POST /v2/users/{userId}/unlock
 # operationId: unlockUserV2
-export def "users-unlock unlockUserV2" [
-  userId: string
+export def "users-unlock unlock" [
+  user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1480,22 +1573,23 @@ export def "users-unlock unlockUserV2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/users/($userId)/unlock")
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/v2/users/{user_id}/unlock"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Update User Details
 #
 # POST /v2/users/{userId}/userDetailsUpdate
 # operationId: userDetailsUpdate
-export def "users-user-details-update userDetailsUpdate" [
-  userId: string
+export def "users-user-details-update update" [
+  user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1503,25 +1597,26 @@ export def "users-user-details-update userDetailsUpdate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --email: string # the email address of the user (nullable, format: email, e.g. foo@example.com)
-  --firstName: string # nullable, e.g. John
-  --lastName: string # nullable, e.g. Doe
-  --mfaType: string@mfaType-completer # The type of the MFA device (nullable, e.g. TOTP)
-  --primaryContactNumber: string # The main contact number for the user  (nullable, e.g. 11235555555)
-  --secondaryContactNumber: string # The secondary contact number for the user  (nullable, e.g. 11235555550)
-  --smsNumber: string # The phone number of a device that the user can receive sms messages on  (nullable, e.g. 11235555555)
-  --verificationCode: string # <p>Optional property that MUST be suppied when manually verifying a user</p> <p>The user's smsNumber is registered via a separate endpoint and an OTP sent to them</p>  (nullable, e.g. 123456)
+  --first-name: string # nullable, e.g. John
+  --last-name: string # nullable, e.g. Doe
+  --mfa-type: string@mfa-type-completer # The type of the MFA device (nullable, e.g. TOTP)
+  --primary-contact-number: string # The main contact number for the user (nullable, e.g. 11235555555)
+  --secondary-contact-number: string # The secondary contact number for the user (nullable, e.g. 11235555550)
+  --sms-number: string # The phone number of a device that the user can receive sms messages on (nullable, e.g. 11235555555)
+  --verification-code: string # Optional property that MUST be suppied when manually verifying a user The user's smsNumber is registered via a separate endpoint and an OTP sent to them (nullable, e.g. 123456)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/users/($userId)/userDetailsUpdate")
-  let body = {email: $email, firstName: $firstName, lastName: $lastName, mfaType: $mfaType, primaryContactNumber: $primaryContactNumber, secondaryContactNumber: $secondaryContactNumber, smsNumber: $smsNumber, verificationCode: $verificationCode} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/v2/users/{user_id}/userDetailsUpdate"))
+  let req_body = {"email": $email, "firstName": $first_name, "lastName": $last_name, "mfaType": $mfa_type, "primaryContactNumber": $primary_contact_number, "secondaryContactNumber": $secondary_contact_number, "smsNumber": $sms_number, "verificationCode": $verification_code} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # List Payees
@@ -1530,7 +1625,7 @@ export def "users-user-details-update userDetailsUpdate" [
 # DEPRECATED
 # operationId: listPayeesV3
 @deprecated
-export def "payees listPayeesV3" [
+export def "payees list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1538,27 +1633,28 @@ export def "payees listPayeesV3" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --payorId: string # The account owner Payor ID (format: uuid)
-  --watchlistStatus: string # The watchlistStatus of the payees.
+  --payor-id: string # The account owner Payor ID (format: uuid)
+  --watchlist-status: string # The watchlistStatus of the payees.
   --disabled: oneof<nothing, bool> # Payee disabled
-  --onboardedStatus: string # The onboarded status of the payees.
+  --onboarded-status: string # The onboarded status of the payees.
   --email: string # Email address (format: email, e.g. bob@example.com)
-  --displayName: string # The display name of the payees. (e.g. Bob Smith)
-  --remoteId: string # The remote id of the payees. (e.g. remoteId123)
-  --payeeType: string # The onboarded status of the payees.
-  --payeeCountry: string # The country of the payee - 2 letter ISO 3166-1 country code (upper case) (e.g. US)
+  --display-name: string # The display name of the payees. (e.g. Bob Smith)
+  --remote-id: string # The remote id of the payees. (e.g. remoteId123)
+  --payee-type: string # The onboarded status of the payees.
+  --payee-country: string # The country of the payee - 2 letter ISO 3166-1 country code (upper case) (e.g. US)
   --page: int # Page number. Default is 1. (format: int32, default: 1, e.g. 1)
-  --pageSize: int # Page size. Default is 25. Max allowable is 100. (format: int32, default: 25, e.g. 25)
-  --qp-sort: string # List of sort fields (e.g. ?sort=onboardedStatus:asc,name:asc) Default is name:asc 'name' is treated as company name for companies - last name + ',' + firstName for individuals The supported sort fields are - payeeId, displayName, payoutStatus, onboardedStatus.  (default: displayName:asc, e.g. displayName:asc)
+  --page-size: int # Page size. Default is 25. Max allowable is 100. (format: int32, default: 25, e.g. 25)
+  --qp-sort: string # List of sort fields (e.g. ?sort=onboardedStatus:asc,name:asc) Default is name:asc 'name' is treated as company name for companies - last name + ',' + firstName for individuals The supported sort fields are - payeeId, displayName, payoutStatus, onboardedStatus. (default: displayName:asc, e.g. displayName:asc)
 ]: nothing -> record<content: table<company: record, country: string, created: string, disabled: bool, disabledComment: string, disabledUpdatedTimestamp: string, displayName: string, email: string, individual: record, language: string, onboardedStatus: string, payeeId: string, payeeType: string, payorRefs: list, watchlistOverrideComment: string, watchlistStatus: string, watchlistStatusUpdatedTimestamp: string>, links: table<href: string, rel: string>, page: record<numberOfElements: int, page: int, pageSize: int, totalElements: int, totalPages: int>, summary: record<totalInvitedCount: int, totalOnboardedCount: int, totalPayeesCount: int, totalRegisteredCount: int, totalWatchlistFailedCount: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "payorId" $payorId "scalar") (serialize-qp "watchlistStatus" $watchlistStatus "scalar") (serialize-qp "disabled" $disabled "scalar") (serialize-qp "onboardedStatus" $onboardedStatus "scalar") (serialize-qp "email" $email "scalar") (serialize-qp "displayName" $displayName "scalar") (serialize-qp "remoteId" $remoteId "scalar") (serialize-qp "payeeType" $payeeType "scalar") (serialize-qp "payeeCountry" $payeeCountry "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "payorId" $payor_id "scalar") (serialize-qp "watchlistStatus" $watchlist_status "scalar") (serialize-qp "disabled" $disabled "scalar") (serialize-qp "onboardedStatus" $onboarded_status "scalar") (serialize-qp "email" $email "scalar") (serialize-qp "displayName" $display_name "scalar") (serialize-qp "remoteId" $remote_id "scalar") (serialize-qp "payeeType" $payee_type "scalar") (serialize-qp "payeeCountry" $payee_country "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v3/payees" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Initiate Payee Creation
@@ -1568,7 +1664,7 @@ export def "payees listPayeesV3" [
 # operationId: createPayeeV3
 # --payees item shape: {address: record, challenge?: record, company?: record, email: string, individual?: record, language?: string, paymentChannel?: record, remoteId: string, type: string}
 @deprecated
-export def "payees createPayeeV3" [
+export def "payees create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1576,19 +1672,20 @@ export def "payees createPayeeV3" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   payees: list # item shape: {address: record, challenge?: record, company?: record, email: string, individual?: record, language?: string, paymentChannel?: record, remoteId: string, type: string}
-  payorId: string # e.g. 9ac75325-5dcd-42d5-b992-175d7e0a035e
+  payor_id: string # e.g. 9ac75325-5dcd-42d5-b992-175d7e0a035e
 ]: any -> record<batchId: string, rejectedCsvRows: table<lineNumber: int, message: string, rejectedContent: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v3/payees")
-  let body = {payees: $payees, payorId: $payorId} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"payees": $payees, "payorId": $payor_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Query Batch Status
@@ -1597,8 +1694,8 @@ export def "payees createPayeeV3" [
 # DEPRECATED
 # operationId: queryBatchStatusV3
 @deprecated
-export def "payees-batch queryBatchStatusV3" [
-  batchId: string
+export def "payees-batch list-status-by-batchId" [
+  batch_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1606,14 +1703,15 @@ export def "payees-batch queryBatchStatusV3" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<failureCount: int, failures: table<failedSubmission: record, failureMessage: string>, pendingCount: int, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v3/payees/batch/($batchId)")
+  let full_url = (build-url $base ({batch_id: (encode-path-segment $batch_id)} | format pattern "/v3/payees/batch/{batch_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # List Payee Changes
@@ -1622,7 +1720,7 @@ export def "payees-batch queryBatchStatusV3" [
 # DEPRECATED
 # operationId: listPayeeChangesV3
 @deprecated
-export def "payees-deltas listPayeeChangesV3" [
+export def "payees-deltas list-changes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1630,19 +1728,20 @@ export def "payees-deltas listPayeeChangesV3" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --payorId: string # The Payor ID to find associated Payees (format: uuid)
-  --updatedSince: string # The updatedSince filter in the format YYYY-MM-DDThh:mm:ss+hh:mm (format: date-time)
+  --payor-id: string # The Payor ID to find associated Payees (format: uuid)
+  --updated-since: string # The updatedSince filter in the format YYYY-MM-DDThh:mm:ss+hh:mm (format: date-time)
   --page: int # Page number. Default is 1. (format: int32, default: 1, e.g. 1)
-  --pageSize: int # Page size. Default is 100. Max allowable is 1000. (format: int32, default: 100, e.g. 100)
+  --page-size: int # Page size. Default is 100. Max allowable is 1000. (format: int32, default: 100, e.g. 100)
 ]: nothing -> record<content: table<dbaName: string, displayName: string, email: string, onboardedStatus: string, payeeCountry: string, payeeId: string, remoteId: string>, links: table<href: string, rel: string>, page: record<numberOfElements: int, page: int, pageSize: int, totalElements: int, totalPages: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "payorId" $payorId "scalar") (serialize-qp "updatedSince" $updatedSince "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $pageSize "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "payorId" $payor_id "scalar") (serialize-qp "updatedSince" $updated_since "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v3/payees/deltas" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get Payee Invitation Status
@@ -1652,7 +1751,7 @@ export def "payees-deltas listPayeeChangesV3" [
 # operationId: getPayeesInvitationStatusV3
 @deprecated
 export def "payees-payors-invitation-status get-by-payorId" [
-  payorId: string
+  payor_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1660,19 +1759,20 @@ export def "payees-payors-invitation-status get-by-payorId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --payeeId: string # The UUID of the payee. (format: uuid, e.g. 2aa5d7e0-2ecb-403f-8494-1865ed0454e9)
-  --invitationStatus: string # The invitation status of the payees.
+  --payee-id: string # The UUID of the payee. (format: uuid, e.g. 2aa5d7e0-2ecb-403f-8494-1865ed0454e9)
+  --invitation-status: string # The invitation status of the payees.
   --page: int # Page number. Default is 1. (format: int32, default: 1, e.g. 1)
-  --pageSize: int # Page size. Default is 25. Max allowable is 100. (format: int32, default: 25, e.g. 25)
+  --page-size: int # Page size. Default is 25. Max allowable is 100. (format: int32, default: 25, e.g. 25)
 ]: nothing -> record<content: table<gracePeriodEndDate: string, invitationStatus: string, payeeId: string>, links: table<href: string, rel: string>, page: record<numberOfElements: int, page: int, pageSize: int, totalElements: int, totalPages: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "payeeId" $payeeId "scalar") (serialize-qp "invitationStatus" $invitationStatus "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $pageSize "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v3/payees/payors/($payorId)/invitationStatus" $qp)
+  let qp = [(serialize-qp "payeeId" $payee_id "scalar") (serialize-qp "invitationStatus" $invitation_status "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({payor_id: (encode-path-segment $payor_id)} | format pattern "/v3/payees/payors/{payor_id}/invitationStatus") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Delete Payee by Id
@@ -1682,7 +1782,7 @@ export def "payees-payors-invitation-status get-by-payorId" [
 # operationId: deletePayeeByIdV3
 @deprecated
 export def "payees delete-by-payeeId" [
-  payeeId: string
+  payee_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1690,14 +1790,15 @@ export def "payees delete-by-payeeId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v3/payees/($payeeId)")
+  let full_url = (build-url $base ({payee_id: (encode-path-segment $payee_id)} | format pattern "/v3/payees/{payee_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get Payee by Id
@@ -1707,7 +1808,7 @@ export def "payees delete-by-payeeId" [
 # operationId: getPayeeByIdV3
 @deprecated
 export def "payees get-by-payeeId" [
-  payeeId: string
+  payee_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1715,16 +1816,17 @@ export def "payees get-by-payeeId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --sensitive: oneof<nothing, bool> # Optional. If omitted or set to false, any Personal Identifiable Information (PII) values are returned masked. If set to true, and you have permission, the PII values will be returned as their original unmasked values.
 ]: nothing -> record<acceptTermsAndConditionsTimestamp: string, address: record<city: string, country: string, countyOrProvince: string, line1: string, line2: string, line3: string, line4: string, zipOrPostcode: string>, cellphoneNumber: string, challenge: record<description: string, value: string>, company: record<name: string, operatingName: string, taxId: string>, country: string, created: string, disabled: bool, disabledComment: string, disabledUpdatedTimestamp: string, displayName: string, email: string, enhancedKycCompleted: bool, gracePeriodEndDate: string, individual: record<dateOfBirth: string, name: record<firstName: string, lastName: string, otherNames: string, title: string>, nationalIdentification: string>, kycCompletedTimestamp: string, language: string, marketingOptInDecision: bool, marketingOptInTimestamp: string, onboardedStatus: string, pausePayment: bool, pausePaymentTimestamp: string, payeeId: string, payeeType: string, payorRefs: table<invitationStatus: string, invitationStatusTimestamp: string, payableIssues: list, payableStatus: bool, paymentChannelId: string, payorId: string, remoteId: string>, watchlistOverrideComment: string, watchlistOverrideExpiresAtTimestamp: string, watchlistStatus: string, watchlistStatusUpdatedTimestamp: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "sensitive" $sensitive "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v3/payees/($payeeId)" $qp)
+  let full_url = (build-url $base ({payee_id: (encode-path-segment $payee_id)} | format pattern "/v3/payees/{payee_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Resend Payee Invite
@@ -1733,8 +1835,8 @@ export def "payees get-by-payeeId" [
 # DEPRECATED
 # operationId: resendPayeeInviteV3
 @deprecated
-export def "payees-invite resendPayeeInviteV3" [
-  payeeId: string
+export def "payees-invite resend-by-payeeId" [
+  payee_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1742,18 +1844,19 @@ export def "payees-invite resendPayeeInviteV3" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  payorId: string # format: uuid, e.g. 9ac75325-5dcd-42d5-b992-175d7e0a035e
+  payor_id: string # format: uuid, e.g. 9ac75325-5dcd-42d5-b992-175d7e0a035e
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v3/payees/($payeeId)/invite")
-  let body = {payorId: $payorId} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({payee_id: (encode-path-segment $payee_id)} | format pattern "/v3/payees/{payee_id}/invite"))
+  let req_body = {"payorId": $payor_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Update Payee Details
@@ -1766,8 +1869,8 @@ export def "payees-invite resendPayeeInviteV3" [
 # --company shape: {name: string, operatingName?: string, taxId?: string}
 # --individual shape: {name: any}
 @deprecated
-export def "payees-payee-details-update payeeDetailsUpdateV3" [
-  payeeId: string
+export def "payees-payee-details-update update-by-payeeId" [
+  payee_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1775,24 +1878,25 @@ export def "payees-payee-details-update payeeDetailsUpdateV3" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --address: record # e.g. {city: Key West, country: US, countyOrProvince: FL, line1: 500 Duval St, line2: line2, line3: line3, line4: line4, zipOrPostcode: 33945} — shape: {city: string, country: string, countyOrProvince?: string, line1: string, line2?: string, line3?: string, line4?: string, zipOrPostcode?: string}
   --challenge: record # e.g. {description: challenge description, value: challenge test} — shape: {description: string, value: string}
   --company: record # nullable, e.g. {name: ABC Group Plc, operatingName: ABC Co, taxId: 123123123} — shape: {name: string, operatingName?: string, taxId?: string}
   --email: string # nullable, format: email, e.g. bob@example.com
   --individual: record # e.g. {dateOfBirth: 1985-01-01, name: {firstName: Bob, lastName: Smith, otherNames: A, title: Mr}, nationalIdentification: AB123456C} — shape: {name: any}
-  --language: string # An IETF BCP 47 language code which has been configured for use within this Velo environment.<BR> See the /v1/supportedLanguages endpoint to list the available codes for an environment.  (e.g. en-US)
-  --payeeType: string@payeeType-completer-1 # The type of the payee
+  --language: string # An IETF BCP 47 language code which has been configured for use within this Velo environment. See the /v1/supportedLanguages endpoint to list the available codes for an environment. (e.g. en-US)
+  --payee-type: string@payee-type-completer-1 # The type of the payee
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v3/payees/($payeeId)/payeeDetailsUpdate")
-  let body = {address: $address, challenge: $challenge, company: $company, email: $email, individual: $individual, language: $language, payeeType: $payeeType} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({payee_id: (encode-path-segment $payee_id)} | format pattern "/v3/payees/{payee_id}/payeeDetailsUpdate"))
+  let req_body = {"address": $address, "challenge": $challenge, "company": $company, "email": $email, "individual": $individual, "language": $language, "payeeType": $payee_type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Update Payee Remote Id
@@ -1800,8 +1904,8 @@ export def "payees-payee-details-update payeeDetailsUpdateV3" [
 # POST /v3/payees/{payeeId}/remoteIdUpdate
 # DEPRECATED
 @deprecated
-export def "payees-remote-id-update post-by-payeeId" [
-  payeeId: string
+export def "payees-remote-id-update create-by-payeeId" [
+  payee_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1809,19 +1913,20 @@ export def "payees-remote-id-update post-by-payeeId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  payorId: string # format: uuid, e.g. 9ac75325-5dcd-42d5-b992-175d7e0a035e
-  remoteId: string # e.g. remoteId123
+  payor_id: string # format: uuid, e.g. 9ac75325-5dcd-42d5-b992-175d7e0a035e
+  remote_id: string # e.g. remoteId123
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v3/payees/($payeeId)/remoteIdUpdate")
-  let body = {payorId: $payorId, remoteId: $remoteId} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({payee_id: (encode-path-segment $payee_id)} | format pattern "/v3/payees/{payee_id}/remoteIdUpdate"))
+  let req_body = {"payorId": $payor_id, "remoteId": $remote_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # V3 Get List of Payments
@@ -1830,7 +1935,7 @@ export def "payees-remote-id-update post-by-payeeId" [
 # DEPRECATED
 # operationId: listPaymentsAuditV3
 @deprecated
-export def "paymentaudit-payments listPaymentsAuditV3" [
+export def "paymentaudit-payments list-audit" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1838,34 +1943,35 @@ export def "paymentaudit-payments listPaymentsAuditV3" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --payeeId: string # The UUID of the payee. (format: uuid)
-  --payorId: string # The account owner Payor Id. Required for external users. (format: uuid)
-  --payorName: string # The payor’s name. This filters via a case insensitive substring match.
-  --remoteId: string # The remote id of the payees.
+  --payee-id: string # The UUID of the payee. (format: uuid)
+  --payor-id: string # The account owner Payor Id. Required for external users. (format: uuid)
+  --payor-name: string # The payor’s name. This filters via a case insensitive substring match.
+  --remote-id: string # The remote id of the payees.
   --status: string@status-completer-1 # Payment Status
-  --sourceAccountName: string # The source account name filter. This filters via a case insensitive substring match.
-  --sourceAmountFrom: int # The source amount from range filter. Filters for sourceAmount >= sourceAmountFrom (format: int32)
-  --sourceAmountTo: int # The source amount to range filter. Filters for sourceAmount ⇐ sourceAmountTo (format: int32)
-  --sourceCurrency: string # The source currency filter. Filters based on an exact match on the currency.
-  --paymentAmountFrom: int # The payment amount from range filter. Filters for paymentAmount >= paymentAmountFrom (format: int32)
-  --paymentAmountTo: int # The payment amount to range filter. Filters for paymentAmount ⇐ paymentAmountTo (format: int32)
-  --paymentCurrency: string # The payment currency filter. Filters based on an exact match on the currency.
-  --submittedDateFrom: string # The submitted date from range filter. Format is yyyy-MM-dd. (format: date)
-  --submittedDateTo: string # The submitted date to range filter. Format is yyyy-MM-dd. (format: date)
-  --paymentMemo: string # The payment memo filter. This filters via a case insensitive substring match.
+  --source-account-name: string # The source account name filter. This filters via a case insensitive substring match.
+  --source-amount-from: int # The source amount from range filter. Filters for sourceAmount >= sourceAmountFrom (format: int32)
+  --source-amount-to: int # The source amount to range filter. Filters for sourceAmount ⇐ sourceAmountTo (format: int32)
+  --source-currency: string # The source currency filter. Filters based on an exact match on the currency.
+  --payment-amount-from: int # The payment amount from range filter. Filters for paymentAmount >= paymentAmountFrom (format: int32)
+  --payment-amount-to: int # The payment amount to range filter. Filters for paymentAmount ⇐ paymentAmountTo (format: int32)
+  --payment-currency: string # The payment currency filter. Filters based on an exact match on the currency.
+  --submitted-date-from: string # The submitted date from range filter. Format is yyyy-MM-dd. (format: date)
+  --submitted-date-to: string # The submitted date to range filter. Format is yyyy-MM-dd. (format: date)
+  --payment-memo: string # The payment memo filter. This filters via a case insensitive substring match.
   --page: int # Page number. Default is 1. (format: int32, default: 1)
-  --pageSize: int # The number of results to return in a page (format: int32, default: 25)
+  --page-size: int # The number of results to return in a page (format: int32, default: 25)
   --qp-sort: string # List of sort fields (e.g. ?sort=submittedDateTime:asc,status:asc). Default is sort by remoteId The supported sort fields are: sourceAmount, sourceCurrency, paymentAmount, paymentCurrency, routingNumber, accountNumber, remoteId, submittedDateTime and status
   --sensitive: oneof<nothing, bool> # Optional. If omitted or set to false, any Personal Identifiable Information (PII) values are returned masked. If set to true, and you have permission, the PII values will be returned as their original unmasked values.
 ]: nothing -> record<content: table<accountName: string, accountNumber: string, countryCode: string, events: list, filenameReference: string, fundingStatus: string, iban: string, individualIdentificationNumber: string, invertedRate: float, payeeId: string, paymentAmount: int, paymentChannelId: string, paymentChannelName: string, paymentCurrency: string, paymentId: string, paymentMemo: string, paymentScheme: string, payorId: string, payorName: string, payorPaymentId: string, quoteId: string, railsBatchId: string, railsId: string, railsPaymentId: string, rate: float, rejectionReason: string, remoteId: string, returnCost: int, returnReason: string, routingNumber: string, sourceAccountId: string, sourceAccountName: string, sourceAmount: int, sourceCurrency: string, status: string, submittedDateTime: string, traceNumber: string>, links: table<href: string, rel: string>, page: record<numberOfElements: int, page: int, pageSize: int, totalElements: int, totalPages: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "payeeId" $payeeId "scalar") (serialize-qp "payorId" $payorId "scalar") (serialize-qp "payorName" $payorName "scalar") (serialize-qp "remoteId" $remoteId "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "sourceAccountName" $sourceAccountName "scalar") (serialize-qp "sourceAmountFrom" $sourceAmountFrom "scalar") (serialize-qp "sourceAmountTo" $sourceAmountTo "scalar") (serialize-qp "sourceCurrency" $sourceCurrency "scalar") (serialize-qp "paymentAmountFrom" $paymentAmountFrom "scalar") (serialize-qp "paymentAmountTo" $paymentAmountTo "scalar") (serialize-qp "paymentCurrency" $paymentCurrency "scalar") (serialize-qp "submittedDateFrom" $submittedDateFrom "scalar") (serialize-qp "submittedDateTo" $submittedDateTo "scalar") (serialize-qp "paymentMemo" $paymentMemo "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "sensitive" $sensitive "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "payeeId" $payee_id "scalar") (serialize-qp "payorId" $payor_id "scalar") (serialize-qp "payorName" $payor_name "scalar") (serialize-qp "remoteId" $remote_id "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "sourceAccountName" $source_account_name "scalar") (serialize-qp "sourceAmountFrom" $source_amount_from "scalar") (serialize-qp "sourceAmountTo" $source_amount_to "scalar") (serialize-qp "sourceCurrency" $source_currency "scalar") (serialize-qp "paymentAmountFrom" $payment_amount_from "scalar") (serialize-qp "paymentAmountTo" $payment_amount_to "scalar") (serialize-qp "paymentCurrency" $payment_currency "scalar") (serialize-qp "submittedDateFrom" $submitted_date_from "scalar") (serialize-qp "submittedDateTo" $submitted_date_to "scalar") (serialize-qp "paymentMemo" $payment_memo "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "sensitive" $sensitive "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v3/paymentaudit/payments" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # V3 Get Payment
@@ -1874,8 +1980,8 @@ export def "paymentaudit-payments listPaymentsAuditV3" [
 # DEPRECATED
 # operationId: getPaymentDetailsV3
 @deprecated
-export def "paymentaudit-payments get-by-paymentId" [
-  paymentId: string
+export def "paymentaudit-payments get-details-by-paymentId" [
+  payment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1883,16 +1989,17 @@ export def "paymentaudit-payments get-by-paymentId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --sensitive: oneof<nothing, bool> # Optional. If omitted or set to false, any Personal Identifiable Information (PII) values are returned masked. If set to true, and you have permission, the PII values will be returned as their original unmasked values.
 ]: nothing -> record<accountName: string, accountNumber: string, countryCode: string, events: table<accountName: string, accountNumber: string, eventDateTime: string, eventId: string, eventType: string, iban: string, paymentAmount: int, paymentCurrency: string, principal: string, routingNumber: string, sourceAmount: int, sourceCurrency: string>, filenameReference: string, fundingStatus: string, iban: string, individualIdentificationNumber: string, invertedRate: float, payeeId: string, paymentAmount: int, paymentChannelId: string, paymentChannelName: string, paymentCurrency: string, paymentId: string, paymentMemo: string, paymentScheme: string, payorId: string, payorName: string, payorPaymentId: string, quoteId: string, railsBatchId: string, railsId: string, railsPaymentId: string, rate: float, rejectionReason: string, remoteId: string, returnCost: int, returnReason: string, routingNumber: string, sourceAccountId: string, sourceAccountName: string, sourceAmount: int, sourceCurrency: string, status: string, submittedDateTime: string, traceNumber: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "sensitive" $sensitive "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v3/paymentaudit/payments/($paymentId)" $qp)
+  let full_url = (build-url $base ({payment_id: (encode-path-segment $payment_id)} | format pattern "/v3/paymentaudit/payments/{payment_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # V3 Get Payouts for Payor
@@ -1901,7 +2008,7 @@ export def "paymentaudit-payments get-by-paymentId" [
 # DEPRECATED
 # operationId: getPayoutsForPayorV3
 @deprecated
-export def "paymentaudit-payouts get" [
+export def "paymentaudit-payouts get-for-payor" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1909,23 +2016,24 @@ export def "paymentaudit-payouts get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --payorId: string # The account owner Payor ID (format: uuid)
-  --payoutMemo: string # Payout Memo filter - case insensitive sub-string match
+  --payor-id: string # The account owner Payor ID (format: uuid)
+  --payout-memo: string # Payout Memo filter - case insensitive sub-string match
   --status: string@status-completer-2 # Payout Status
-  --submittedDateFrom: string # The submitted date from range filter. Format is yyyy-MM-dd. (format: date)
-  --submittedDateTo: string # The submitted date to range filter. Format is yyyy-MM-dd. (format: date)
+  --submitted-date-from: string # The submitted date from range filter. Format is yyyy-MM-dd. (format: date)
+  --submitted-date-to: string # The submitted date to range filter. Format is yyyy-MM-dd. (format: date)
   --page: int # Page number. Default is 1. (format: int32, default: 1)
-  --pageSize: int # The number of results to return in a page (format: int32, default: 25)
+  --page-size: int # The number of results to return in a page (format: int32, default: 25)
   --qp-sort: string # List of sort fields (e.g. ?sort=submittedDateTime:asc,instructedDateTime:asc,status:asc) Default is submittedDateTime:asc The supported sort fields are: submittedDateTime, instructedDateTime, status.
 ]: nothing -> record<content: table<fxSummaries: list, instructedDateTime: string, payorId: string, payoutId: string, payoutMemo: string, sourceAccountSummary: list, status: string, submittedDateTime: string, totalFailedPayments: int, totalIncompletePayments: int, totalPayments: int, withdrawnDateTime: string>, links: table<href: string, rel: string>, page: record<numberOfElements: int, page: int, pageSize: int, totalElements: int, totalPages: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "payorId" $payorId "scalar") (serialize-qp "payoutMemo" $payoutMemo "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "submittedDateFrom" $submittedDateFrom "scalar") (serialize-qp "submittedDateTo" $submittedDateTo "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "payorId" $payor_id "scalar") (serialize-qp "payoutMemo" $payout_memo "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "submittedDateFrom" $submitted_date_from "scalar") (serialize-qp "submittedDateTo" $submitted_date_to "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v3/paymentaudit/payouts" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # V3 Get Payments for Payout
@@ -1934,8 +2042,8 @@ export def "paymentaudit-payouts get" [
 # DEPRECATED
 # operationId: getPaymentsForPayout_PA_V3
 @deprecated
-export def "paymentaudit-payouts V3" [
-  payoutId: string
+export def "paymentaudit-payouts get-payments-for-pa" [
+  payout_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1943,27 +2051,28 @@ export def "paymentaudit-payouts V3" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --remoteId: string # The remote id of the payees.
+  --remote-id: string # The remote id of the payees.
   --status: string@status-completer-1 # Payment Status
-  --sourceAmountFrom: int # The source amount from range filter. Filters for sourceAmount >= sourceAmountFrom (format: int32)
-  --sourceAmountTo: int # The source amount to range filter. Filters for sourceAmount ⇐ sourceAmountTo (format: int32)
-  --paymentAmountFrom: int # The payment amount from range filter. Filters for paymentAmount >= paymentAmountFrom (format: int32)
-  --paymentAmountTo: int # The payment amount to range filter. Filters for paymentAmount ⇐ paymentAmountTo (format: int32)
-  --submittedDateFrom: string # The submitted date from range filter. Format is yyyy-MM-dd. (format: date)
-  --submittedDateTo: string # The submitted date to range filter. Format is yyyy-MM-dd. (format: date)
+  --source-amount-from: int # The source amount from range filter. Filters for sourceAmount >= sourceAmountFrom (format: int32)
+  --source-amount-to: int # The source amount to range filter. Filters for sourceAmount ⇐ sourceAmountTo (format: int32)
+  --payment-amount-from: int # The payment amount from range filter. Filters for paymentAmount >= paymentAmountFrom (format: int32)
+  --payment-amount-to: int # The payment amount to range filter. Filters for paymentAmount ⇐ paymentAmountTo (format: int32)
+  --submitted-date-from: string # The submitted date from range filter. Format is yyyy-MM-dd. (format: date)
+  --submitted-date-to: string # The submitted date to range filter. Format is yyyy-MM-dd. (format: date)
   --page: int # Page number. Default is 1. (format: int32, default: 1)
-  --pageSize: int # The number of results to return in a page (format: int32, default: 25)
-  --qp-sort: string # <p>List of sort fields (e.g. ?sort=submittedDateTime:asc,status:asc). Default is sort by remoteId</p> <p>The supported sort fields are: sourceAmount, sourceCurrency, paymentAmount, paymentCurrency, routingNumber, accountNumber, remoteId, submittedDateTime and status</p>
+  --page-size: int # The number of results to return in a page (format: int32, default: 25)
+  --qp-sort: string # List of sort fields (e.g. ?sort=submittedDateTime:asc,status:asc). Default is sort by remoteId The supported sort fields are: sourceAmount, sourceCurrency, paymentAmount, paymentCurrency, routingNumber, accountNumber, remoteId, submittedDateTime and status
   --sensitive: oneof<nothing, bool> # Optional. If omitted or set to false, any Personal Identifiable Information (PII) values are returned masked. If set to true, and you have permission, the PII values will be returned as their original unmasked values.
 ]: nothing -> record<content: table<accountName: string, accountNumber: string, countryCode: string, events: list, filenameReference: string, fundingStatus: string, iban: string, individualIdentificationNumber: string, invertedRate: float, payeeId: string, paymentAmount: int, paymentChannelId: string, paymentChannelName: string, paymentCurrency: string, paymentId: string, paymentMemo: string, paymentScheme: string, payorId: string, payorName: string, payorPaymentId: string, quoteId: string, railsBatchId: string, railsId: string, railsPaymentId: string, rate: float, rejectionReason: string, remoteId: string, returnCost: int, returnReason: string, routingNumber: string, sourceAccountId: string, sourceAccountName: string, sourceAmount: int, sourceCurrency: string, status: string, submittedDateTime: string, traceNumber: string>, links: table<href: string, rel: string>, page: record<numberOfElements: int, page: int, pageSize: int, totalElements: int, totalPages: int>, summary: record<confirmedPayments: int, failedPayments: int, incompletePayments: int, instructedDateTime: string, payoutMemo: string, payoutStatus: string, releasedPayments: int, submittedDateTime: string, totalPayments: int, withdrawnDateTime: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "remoteId" $remoteId "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "sourceAmountFrom" $sourceAmountFrom "scalar") (serialize-qp "sourceAmountTo" $sourceAmountTo "scalar") (serialize-qp "paymentAmountFrom" $paymentAmountFrom "scalar") (serialize-qp "paymentAmountTo" $paymentAmountTo "scalar") (serialize-qp "submittedDateFrom" $submittedDateFrom "scalar") (serialize-qp "submittedDateTo" $submittedDateTo "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "sensitive" $sensitive "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v3/paymentaudit/payouts/($payoutId)" $qp)
+  let qp = [(serialize-qp "remoteId" $remote_id "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "sourceAmountFrom" $source_amount_from "scalar") (serialize-qp "sourceAmountTo" $source_amount_to "scalar") (serialize-qp "paymentAmountFrom" $payment_amount_from "scalar") (serialize-qp "paymentAmountTo" $payment_amount_to "scalar") (serialize-qp "submittedDateFrom" $submitted_date_from "scalar") (serialize-qp "submittedDateTo" $submitted_date_to "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "sensitive" $sensitive "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({payout_id: (encode-path-segment $payout_id)} | format pattern "/v3/paymentaudit/payouts/{payout_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # V3 Export Transactions
@@ -1972,7 +2081,7 @@ export def "paymentaudit-payouts V3" [
 # DEPRECATED
 # operationId: exportTransactionsCSVV3
 @deprecated
-export def "paymentaudit-transactions exportTransactionsCSVV3" [
+export def "paymentaudit-transactions export-csvv3" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1980,18 +2089,19 @@ export def "paymentaudit-transactions exportTransactionsCSVV3" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --payorId: string # The Payor ID for whom you wish to run the report. For a Payor requesting the report, this could be their exact Payor, or it could be a child/descendant Payor.  (format: uuid)
-  --startDate: string # Start date, inclusive. Format is YYYY-MM-DD (format: date)
-  --endDate: string # End date, inclusive. Format is YYYY-MM-DD (format: date)
+  --payor-id: string # The Payor ID for whom you wish to run the report. For a Payor requesting the report, this could be their exact Payor, or it could be a child/descendant Payor. (format: uuid)
+  --start-date: string # Start date, inclusive. Format is YYYY-MM-DD (format: date)
+  --end-date: string # End date, inclusive. Format is YYYY-MM-DD (format: date)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "payorId" $payorId "scalar") (serialize-qp "startDate" $startDate "scalar") (serialize-qp "endDate" $endDate "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "payorId" $payor_id "scalar") (serialize-qp "startDate" $start_date "scalar") (serialize-qp "endDate" $end_date "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v3/paymentaudit/transactions" $qp)
   let accept_val = "application/csv"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Submit Payout
@@ -1999,7 +2109,7 @@ export def "paymentaudit-transactions exportTransactionsCSVV3" [
 # POST /v3/payouts
 # operationId: submitPayoutV3
 # --payments item shape: {amount: int, currency: string, paymentMemo?: string, paymentMetadata?: string, payorPaymentId?: string, remoteId: string, remoteSystemId?: string, sourceAccountName: string, transmissionType?: "SAME_DAY_ACH"|"WIRE"|"ACH"|"LOCAL"|"SWIFT"}
-export def "payouts submitPayoutV3" [
+export def "payouts submit" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2007,29 +2117,30 @@ export def "payouts submitPayoutV3" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   payments: list # item shape: {amount: int, currency: string, paymentMemo?: string, paymentMetadata?: string, payorPaymentId?: string, remoteId: string, remoteSystemId?: string, sourceAccountName: string, transmissionType?: "SAME_DAY_ACH"|"WIRE"|"ACH"|"LOCAL"|"SWIFT"}
-  --payoutFromPayorId: string # <p>The id of the payor whose source account(s) will be debited</p> <p>payoutFromPayorId and payoutToPayorId must be both supplied or both omitted</p>  (format: uuid, e.g. c4261044-13df-4a6c-b1d4-fa8be2b46f5a)
-  --payoutMemo: string # <p>Text applied to all payment memos unless specified explicitly on a payment</p> <p>This should be the reference field on the statement seen by the payee (but not via ACH)</p>  (e.g. Monthly Payment)
-  --payoutToPayorId: string # <p>The id of the payor whose payees will be paid</p> <p>payoutFromPayorId and payoutToPayorId must be both supplied or both omitted</p>  (format: uuid, e.g. 9afc6b39-de12-466a-a9ca-07c7a23b312d)
+  --payout-from-payor-id: string # The id of the payor whose source account(s) will be debited payoutFromPayorId and payoutToPayorId must be both supplied or both omitted (format: uuid, e.g. c4261044-13df-4a6c-b1d4-fa8be2b46f5a)
+  --payout-memo: string # Text applied to all payment memos unless specified explicitly on a payment This should be the reference field on the statement seen by the payee (but not via ACH) (e.g. Monthly Payment)
+  --payout-to-payor-id: string # The id of the payor whose payees will be paid payoutFromPayorId and payoutToPayorId must be both supplied or both omitted (format: uuid, e.g. 9afc6b39-de12-466a-a9ca-07c7a23b312d)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v3/payouts")
-  let body = {payments: $payments, payoutFromPayorId: $payoutFromPayorId, payoutMemo: $payoutMemo, payoutToPayorId: $payoutToPayorId} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"payments": $payments, "payoutFromPayorId": $payout_from_payor_id, "payoutMemo": $payout_memo, "payoutToPayorId": $payout_to_payor_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Withdraw Payout
 #
 # DELETE /v3/payouts/{payoutId}
 # operationId: withdrawPayoutV3
-export def "payouts withdrawPayoutV3" [
-  payoutId: string
+export def "payouts delete-withdraw" [
+  payout_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2037,22 +2148,23 @@ export def "payouts withdrawPayoutV3" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v3/payouts/($payoutId)")
+  let full_url = (build-url $base ({payout_id: (encode-path-segment $payout_id)} | format pattern "/v3/payouts/{payout_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get Payout Summary
 #
 # GET /v3/payouts/{payoutId}
 # operationId: getPayoutSummaryV3
-export def "payouts get" [
-  payoutId: string
+export def "payouts get-summary" [
+  payout_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2060,22 +2172,23 @@ export def "payouts get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<acceptedPayments: table<amount: int, currencyType: string, paymentMemo: string, paymentMetadata: string, payorPaymentId: string, railsId: string, remoteId: string, remoteSystemId: string, sourceAccountName: string>, accounts: table<currency: string, sourceAccountId: string, sourceAccountName: string, totalPayoutCost: int>, fxSummaries: table<creationTime: string, expiryTime: string, fundingStatus: string, invertedRate: float, paymentCurrency: string, quoteId: string, rate: float, sourceCurrency: string, status: string, totalPaymentAmount: int, totalSourceAmount: int>, paymentsAccepted: int, paymentsRejected: int, paymentsSubmitted: int, paymentsWithdrawn: int, payoutId: string, rejectedPayments: table<amount: int, currencyType: string, lineNumber: int, message: string, paymentMetadata: string, payorPaymentId: string, reason: string, reasonCode: string, remoteId: string, remoteSystemId: string, sourceAccountName: string>, schedule: record<notificationsEnabled: bool, scheduleStatus: string, scheduledAt: string, scheduledByPrincipalId: string, scheduledFor: string>, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v3/payouts/($payoutId)")
+  let full_url = (build-url $base ({payout_id: (encode-path-segment $payout_id)} | format pattern "/v3/payouts/{payout_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Instruct Payout
 #
 # POST /v3/payouts/{payoutId}
 # operationId: instructPayoutV3
-export def "payouts instructPayoutV3" [
-  payoutId: string
+export def "payouts create-instruct" [
+  payout_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2083,18 +2196,19 @@ export def "payouts instructPayoutV3" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fxRateDegredationThresholdPercentage: float # Halt instruction if the FX rates have become worse since the last quote (format: float)
+  --fx-rate-degredation-threshold-percentage: float # Halt instruction if the FX rates have become worse since the last quote (format: float)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v3/payouts/($payoutId)")
-  let body = {fxRateDegredationThresholdPercentage: $fxRateDegredationThresholdPercentage} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({payout_id: (encode-path-segment $payout_id)} | format pattern "/v3/payouts/{payout_id}"))
+  let req_body = {"fxRateDegredationThresholdPercentage": $fx_rate_degredation_threshold_percentage} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Retrieve payments for a payout
@@ -2102,7 +2216,7 @@ export def "payouts instructPayoutV3" [
 # GET /v3/payouts/{payoutId}/payments
 # operationId: getPaymentsForPayoutV3
 export def "payouts-payments get" [
-  payoutId: string
+  payout_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2110,31 +2224,32 @@ export def "payouts-payments get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --status: string@status-completer-3 # Payment Status * ACCEPTED: any payment which was accepted at submission time (status may have changed since) * REJECTED: any payment rejected by initial submission processing * WITHDRAWN: any payment which has been withdrawn * WITHDRAWABLE: any payment eligible for withdrawal
-  --remoteId: string # The remote id of the payees.
-  --payorPaymentId: string # Payor's Id of the Payment
-  --sourceAccountName: string # Physical Account Name
-  --transmissionType: string@transmissionType-completer # Transmission Type * ACH * SAME_DAY_ACH * WIRE
-  --paymentMemo: string # Payment Memo of the Payment
-  --pageSize: int # The number of results to return in a page (format: int32, default: 25)
+  --remote-id: string # The remote id of the payees.
+  --payor-payment-id: string # Payor's Id of the Payment
+  --source-account-name: string # Physical Account Name
+  --transmission-type: string@transmission-type-completer # Transmission Type * ACH * SAME_DAY_ACH * WIRE
+  --payment-memo: string # Payment Memo of the Payment
+  --page-size: int # The number of results to return in a page (format: int32, default: 25)
   --page: int # Page number. Default is 1. (format: int32, default: 1)
 ]: nothing -> record<content: table<amount: int, autoWithdrawnReasonCode: string, currency: string, payee: record, paymentId: string, paymentMemo: string, paymentMetadata: string, payorPaymentId: string, railsId: string, remoteId: string, remoteSystemId: string, sourceAccountName: string, status: string, transmissionType: string, withdrawable: bool>, links: table<href: string, rel: string>, page: record<numberOfElements: int, page: int, pageSize: int, totalElements: int, totalPages: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "status" $status "scalar") (serialize-qp "remoteId" $remoteId "scalar") (serialize-qp "payorPaymentId" $payorPaymentId "scalar") (serialize-qp "sourceAccountName" $sourceAccountName "scalar") (serialize-qp "transmissionType" $transmissionType "scalar") (serialize-qp "paymentMemo" $paymentMemo "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v3/payouts/($payoutId)/payments" $qp)
+  let qp = [(serialize-qp "status" $status "scalar") (serialize-qp "remoteId" $remote_id "scalar") (serialize-qp "payorPaymentId" $payor_payment_id "scalar") (serialize-qp "sourceAccountName" $source_account_name "scalar") (serialize-qp "transmissionType" $transmission_type "scalar") (serialize-qp "paymentMemo" $payment_memo "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({payout_id: (encode-path-segment $payout_id)} | format pattern "/v3/payouts/{payout_id}/payments") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Create a quote for the payout
 #
 # POST /v3/payouts/{payoutId}/quote
 # operationId: createQuoteForPayoutV3
-export def "payouts-quote createQuoteForPayoutV3" [
-  payoutId: string
+export def "payouts-quote create" [
+  payout_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2142,22 +2257,23 @@ export def "payouts-quote createQuoteForPayoutV3" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<fxSummaries: table<creationTime: string, expiryTime: string, fundingStatus: string, invertedRate: float, paymentCurrency: string, quoteId: string, rate: float, sourceCurrency: string, status: string, totalPaymentAmount: int, totalSourceAmount: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v3/payouts/($payoutId)/quote")
+  let full_url = (build-url $base ({payout_id: (encode-path-segment $payout_id)} | format pattern "/v3/payouts/{payout_id}/quote"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Deschedule a payout
 #
 # DELETE /v3/payouts/{payoutId}/schedule
 # operationId: deschedulePayout
-export def "payouts-schedule deschedulePayout" [
-  payoutId: string
+export def "payouts-schedule delete-deschedule" [
+  payout_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2165,22 +2281,23 @@ export def "payouts-schedule deschedulePayout" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v3/payouts/($payoutId)/schedule")
+  let full_url = (build-url $base ({payout_id: (encode-path-segment $payout_id)} | format pattern "/v3/payouts/{payout_id}/schedule"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Schedule a payout
 #
 # POST /v3/payouts/{payoutId}/schedule
 # operationId: scheduleForPayout
-export def "payouts-schedule scheduleForPayout" [
-  payoutId: string
+export def "payouts-schedule create" [
+  payout_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2188,19 +2305,20 @@ export def "payouts-schedule scheduleForPayout" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --notificationsEnabled: oneof<nothing, bool> # Flag to indicate whether to receive notifications when scheduled payout is processed
-  scheduledFor: string # UTC timestamp for instructing the payout. Format is ISO-8601. (format: date-time, e.g. 2025-01-01T10:00:00Z)
+  --notifications-enabled: oneof<nothing, bool> # Flag to indicate whether to receive notifications when scheduled payout is processed
+  scheduled_for: string # UTC timestamp for instructing the payout. Format is ISO-8601. (format: date-time, e.g. 2025-01-01T10:00:00Z)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v3/payouts/($payoutId)/schedule")
-  let body = {notificationsEnabled: $notificationsEnabled, scheduledFor: $scheduledFor} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({payout_id: (encode-path-segment $payout_id)} | format pattern "/v3/payouts/{payout_id}/schedule"))
+  let req_body = {"notificationsEnabled": $notifications_enabled, "scheduledFor": $scheduled_for} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Get list of source accounts
@@ -2215,24 +2333,25 @@ export def "source-accounts get-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --physicalAccountName: string # Physical Account Name
-  --physicalAccountId: string # The physical account ID (format: uuid)
-  --payorId: string # The account owner Payor ID (format: uuid)
-  --fundingAccountId: string # The funding account ID (format: uuid)
-  --includeUserDeleted: string # A filter for retrieving both active accounts and user deleted ones (format: boolean)
+  --physical-account-name: string # Physical Account Name
+  --physical-account-id: string # The physical account ID (format: uuid)
+  --payor-id: string # The account owner Payor ID (format: uuid)
+  --funding-account-id: string # The funding account ID (format: uuid)
+  --include-user-deleted: string # A filter for retrieving both active accounts and user deleted ones (format: boolean)
   --type: string # The type of source account.
   --page: int # Page number. Default is 1. (format: int32, default: 1)
-  --pageSize: int # The number of results to return in a page (format: int32, default: 25)
-  --qp-sort: string # List of sort fields e.g. ?sort=name:asc Default is name:asc The supported sort fields are - fundingRef, name, balance  (default: fundingRef:asc)
+  --page-size: int # The number of results to return in a page (format: int32, default: 25)
+  --qp-sort: string # List of sort fields e.g. ?sort=name:asc Default is name:asc The supported sort fields are - fundingRef, name, balance (default: fundingRef:asc)
 ]: nothing -> record<content: table<autoTopUpConfig: record, balance: int, country: string, currency: string, customerId: string, deleted: bool, deletedAt: string, fundingRef: string, id: string, name: string, notifications: record, payorId: string, physicalAccountId: string, physicalAccountName: string, pooled: bool, railsId: string, type: string, userDeleted: bool>, links: table<href: string, rel: string>, page: record<numberOfElements: int, page: int, pageSize: int, totalElements: int, totalPages: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "physicalAccountName" $physicalAccountName "scalar") (serialize-qp "physicalAccountId" $physicalAccountId "scalar") (serialize-qp "payorId" $payorId "scalar") (serialize-qp "fundingAccountId" $fundingAccountId "scalar") (serialize-qp "includeUserDeleted" $includeUserDeleted "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "physicalAccountName" $physical_account_name "scalar") (serialize-qp "physicalAccountId" $physical_account_id "scalar") (serialize-qp "payorId" $payor_id "scalar") (serialize-qp "fundingAccountId" $funding_account_id "scalar") (serialize-qp "includeUserDeleted" $include_user_deleted "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v3/sourceAccounts" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Delete a source account by ID
@@ -2240,7 +2359,7 @@ export def "source-accounts get-1" [
 # DELETE /v3/sourceAccounts/{sourceAccountId}
 # operationId: deleteSourceAccountV3
 export def "source-accounts delete" [
-  sourceAccountId: string
+  source_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2248,14 +2367,15 @@ export def "source-accounts delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v3/sourceAccounts/($sourceAccountId)")
+  let full_url = (build-url $base ({source_account_id: (encode-path-segment $source_account_id)} | format pattern "/v3/sourceAccounts/{source_account_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get details about given source account.
@@ -2263,7 +2383,7 @@ export def "source-accounts delete" [
 # GET /v3/sourceAccounts/{sourceAccountId}
 # operationId: getSourceAccountV3
 export def "source-accounts get-by-sourceAccountId-1" [
-  sourceAccountId: string
+  source_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2271,22 +2391,23 @@ export def "source-accounts get-by-sourceAccountId-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<autoTopUpConfig: record<enabled: bool, fundingAccountId: string, minBalance: int, targetBalance: int>, balance: int, country: string, currency: string, customerId: string, deleted: bool, deletedAt: string, fundingRef: string, id: string, name: string, notifications: record<minimumBalance: int>, payorId: string, physicalAccountId: string, physicalAccountName: string, pooled: bool, railsId: string, type: string, userDeleted: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v3/sourceAccounts/($sourceAccountId)")
+  let full_url = (build-url $base ({source_account_id: (encode-path-segment $source_account_id)} | format pattern "/v3/sourceAccounts/{source_account_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Create Funding Request
 #
 # POST /v3/sourceAccounts/{sourceAccountId}/fundingRequest
 # operationId: createFundingRequestV3
-export def "source-accounts-funding-request createFundingRequestV3" [
-  sourceAccountId: string
+export def "source-accounts-funding-request create-by-sourceAccountId-1" [
+  source_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2294,27 +2415,28 @@ export def "source-accounts-funding-request createFundingRequestV3" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   amount: int # Amount to fund in minor units (format: int64)
-  fundingAccountId: string # The funding account id (format: uuid)
+  funding_account_id: string # The funding account id (format: uuid)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v3/sourceAccounts/($sourceAccountId)/fundingRequest")
-  let body = {amount: $amount, fundingAccountId: $fundingAccountId} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({source_account_id: (encode-path-segment $source_account_id)} | format pattern "/v3/sourceAccounts/{source_account_id}/fundingRequest"))
+  let req_body = {"amount": $amount, "fundingAccountId": $funding_account_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Set notifications
 #
 # POST /v3/sourceAccounts/{sourceAccountId}/notifications
 # operationId: setNotificationsRequestV3
-export def "source-accounts-notifications setNotificationsRequestV3" [
-  sourceAccountId: string
+export def "source-accounts-notifications update-request-by-sourceAccountId-1" [
+  source_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2322,26 +2444,27 @@ export def "source-accounts-notifications setNotificationsRequestV3" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  minimumBalance: int # Amount to set as minimum balance for notifications in minor units (format: int64, e.g. 10000000)
+  minimum_balance: int # Amount to set as minimum balance for notifications in minor units (format: int64, e.g. 10000000)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v3/sourceAccounts/($sourceAccountId)/notifications")
-  let body = {minimumBalance: $minimumBalance} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({source_account_id: (encode-path-segment $source_account_id)} | format pattern "/v3/sourceAccounts/{source_account_id}/notifications"))
+  let req_body = {"minimumBalance": $minimum_balance} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Transfer Funds between source accounts
 #
 # POST /v3/sourceAccounts/{sourceAccountId}/transfers
 # operationId: transferFundsV3
-export def "source-accounts-transfers transferFundsV3" [
-  sourceAccountId: string
+export def "source-accounts-transfers create-funds-by-sourceAccountId-1" [
+  source_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2349,27 +2472,28 @@ export def "source-accounts-transfers transferFundsV3" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   amount: int # Amount to transfer, in minor units (format: int64)
-  currency: string # Valid ISO 4217 3 letter currency code. See the <a href="https://www.iso.org/iso-4217-currency-codes.html" target="_blank" a>ISO specification</a> for details. (e.g. USD)
-  toSourceAccountId: string # The 'to' source account id, which will be credited (format: uuid)
+  currency: string # Valid ISO 4217 3 letter currency code. See the ISO specification (https://www.iso.org/iso-4217-currency-codes.html) for details. (e.g. USD)
+  to_source_account_id: string # The 'to' source account id, which will be credited (format: uuid)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v3/sourceAccounts/($sourceAccountId)/transfers")
-  let body = {amount: $amount, currency: $currency, toSourceAccountId: $toSourceAccountId} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({source_account_id: (encode-path-segment $source_account_id)} | format pattern "/v3/sourceAccounts/{source_account_id}/transfers"))
+  let req_body = {"amount": $amount, "currency": $currency, "toSourceAccountId": $to_source_account_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # List Payees
 #
 # GET /v4/payees
 # operationId: listPayeesV4
-export def "payees listPayeesV4" [
+export def "payees list-1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2377,28 +2501,29 @@ export def "payees listPayeesV4" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --payorId: string # The account owner Payor ID (format: uuid)
-  --watchlistStatus: string # The watchlistStatus of the payees.
+  --payor-id: string # The account owner Payor ID (format: uuid)
+  --watchlist-status: string # The watchlistStatus of the payees.
   --disabled: oneof<nothing, bool> # Payee disabled
-  --onboardedStatus: string # The onboarded status of the payees.
+  --onboarded-status: string # The onboarded status of the payees.
   --email: string # Email address (format: email, e.g. bob@example.com)
-  --displayName: string # The display name of the payees. (e.g. Bob Smith)
-  --remoteId: string # The remote id of the payees. (e.g. remoteId123)
-  --payeeType: string # The onboarded status of the payees.
-  --payeeCountry: string # The country of the payee - 2 letter ISO 3166-1 country code (upper case) (e.g. US)
-  --ofacStatus: string # The ofacStatus of the payees.
+  --display-name: string # The display name of the payees. (e.g. Bob Smith)
+  --remote-id: string # The remote id of the payees. (e.g. remoteId123)
+  --payee-type: string # The onboarded status of the payees.
+  --payee-country: string # The country of the payee - 2 letter ISO 3166-1 country code (upper case) (e.g. US)
+  --ofac-status: string # The ofacStatus of the payees.
   --page: int # Page number. Default is 1. (format: int32, default: 1, e.g. 1)
-  --pageSize: int # Page size. Default is 25. Max allowable is 100. (format: int32, default: 25, e.g. 25)
-  --qp-sort: string # List of sort fields (e.g. ?sort=onboardedStatus:asc,name:asc) Default is name:asc 'name' is treated as company name for companies - last name + ',' + firstName for individuals The supported sort fields are - payeeId, displayName, payoutStatus, onboardedStatus.  (default: displayName:asc, e.g. displayName:asc)
+  --page-size: int # Page size. Default is 25. Max allowable is 100. (format: int32, default: 25, e.g. 25)
+  --qp-sort: string # List of sort fields (e.g. ?sort=onboardedStatus:asc,name:asc) Default is name:asc 'name' is treated as company name for companies - last name + ',' + firstName for individuals The supported sort fields are - payeeId, displayName, payoutStatus, onboardedStatus. (default: displayName:asc, e.g. displayName:asc)
 ]: nothing -> record<content: table<company: record, country: string, created: string, disabled: bool, disabledComment: string, disabledUpdatedTimestamp: string, displayName: string, email: string, individual: record, language: string, onboardedStatus: string, payeeId: string, payeeType: string, payorRefs: list, watchlistOverrideComment: string, watchlistStatus: string, watchlistStatusUpdatedTimestamp: string>, links: table<href: string, rel: string>, page: record<numberOfElements: int, page: int, pageSize: int, totalElements: int, totalPages: int>, summary: record<totalInvitedCount: int, totalOnboardedCount: int, totalPayeesCount: int, totalRegisteredCount: int, totalWatchlistFailedCount: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "payorId" $payorId "scalar") (serialize-qp "watchlistStatus" $watchlistStatus "scalar") (serialize-qp "disabled" $disabled "scalar") (serialize-qp "onboardedStatus" $onboardedStatus "scalar") (serialize-qp "email" $email "scalar") (serialize-qp "displayName" $displayName "scalar") (serialize-qp "remoteId" $remoteId "scalar") (serialize-qp "payeeType" $payeeType "scalar") (serialize-qp "payeeCountry" $payeeCountry "scalar") (serialize-qp "ofacStatus" $ofacStatus "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "payorId" $payor_id "scalar") (serialize-qp "watchlistStatus" $watchlist_status "scalar") (serialize-qp "disabled" $disabled "scalar") (serialize-qp "onboardedStatus" $onboarded_status "scalar") (serialize-qp "email" $email "scalar") (serialize-qp "displayName" $display_name "scalar") (serialize-qp "remoteId" $remote_id "scalar") (serialize-qp "payeeType" $payee_type "scalar") (serialize-qp "payeeCountry" $payee_country "scalar") (serialize-qp "ofacStatus" $ofac_status "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v4/payees" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Initiate Payee Creation
@@ -2406,7 +2531,7 @@ export def "payees listPayeesV4" [
 # POST /v4/payees
 # operationId: v4CreatePayee
 # --payees item shape: {address: record, challenge?: record, company?: record, email: string, individual?: record, language?: string, paymentChannel?: record, remoteId: string, type: "Individual"|"Company"}
-export def "payees v4CreatePayee" [
+export def "payees create-1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2414,27 +2539,28 @@ export def "payees v4CreatePayee" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   payees: list # item shape: {address: record, challenge?: record, company?: record, email: string, individual?: record, language?: string, paymentChannel?: record, remoteId: string, type: "Individual"|"Company"}
-  payorId: string # e.g. 9ac75325-5dcd-42d5-b992-175d7e0a035e
+  payor_id: string # e.g. 9ac75325-5dcd-42d5-b992-175d7e0a035e
 ]: any -> record<batchId: string, rejectedCsvRows: table<lineNumber: int, message: string, rejectedContent: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v4/payees")
-  let body = {payees: $payees, payorId: $payorId} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"payees": $payees, "payorId": $payor_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Query Batch Status
 #
 # GET /v4/payees/batch/{batchId}
 # operationId: queryBatchStatusV4
-export def "payees-batch queryBatchStatusV4" [
-  batchId: string
+export def "payees-batch list-status-by-batchId-1" [
+  batch_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2442,21 +2568,22 @@ export def "payees-batch queryBatchStatusV4" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<failureCount: int, failures: table<failedSubmission: record, failureMessage: string>, pendingCount: int, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v4/payees/batch/($batchId)")
+  let full_url = (build-url $base ({batch_id: (encode-path-segment $batch_id)} | format pattern "/v4/payees/batch/{batch_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # List Payee Changes
 #
 # GET /v4/payees/deltas
 # operationId: listPayeeChangesV4
-export def "payees-deltas listPayeeChangesV4" [
+export def "payees-deltas list-changes-1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2464,19 +2591,20 @@ export def "payees-deltas listPayeeChangesV4" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --payorId: string # The Payor ID to find associated Payees (format: uuid)
-  --updatedSince: string # The updatedSince filter in the format YYYY-MM-DDThh:mm:ss+hh:mm (format: date-time)
+  --payor-id: string # The Payor ID to find associated Payees (format: uuid)
+  --updated-since: string # The updatedSince filter in the format YYYY-MM-DDThh:mm:ss+hh:mm (format: date-time)
   --page: int # Page number. Default is 1. (format: int32, default: 1, e.g. 1)
-  --pageSize: int # Page size. Default is 100. Max allowable is 1000. (format: int32, default: 100, e.g. 100)
+  --page-size: int # Page size. Default is 100. Max allowable is 1000. (format: int32, default: 100, e.g. 100)
 ]: nothing -> record<content: table<dbaName: string, displayName: string, email: string, onboardedStatus: string, payeeCountry: string, payeeId: string, remoteId: string>, links: table<href: string, rel: string>, page: record<numberOfElements: int, page: int, pageSize: int, totalElements: int, totalPages: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "payorId" $payorId "scalar") (serialize-qp "updatedSince" $updatedSince "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $pageSize "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "payorId" $payor_id "scalar") (serialize-qp "updatedSince" $updated_since "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v4/payees/deltas" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get Payee Invitation Status
@@ -2484,7 +2612,7 @@ export def "payees-deltas listPayeeChangesV4" [
 # GET /v4/payees/payors/{payorId}/invitationStatus
 # operationId: getPayeesInvitationStatusV4
 export def "payees-payors-invitation-status get-by-payorId-1" [
-  payorId: string
+  payor_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2492,19 +2620,20 @@ export def "payees-payors-invitation-status get-by-payorId-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --payeeId: string # The UUID of the payee. (format: uuid, e.g. 2aa5d7e0-2ecb-403f-8494-1865ed0454e9)
-  --invitationStatus: string # The invitation status of the payees.
+  --payee-id: string # The UUID of the payee. (format: uuid, e.g. 2aa5d7e0-2ecb-403f-8494-1865ed0454e9)
+  --invitation-status: string # The invitation status of the payees.
   --page: int # Page number. Default is 1. (format: int32, default: 1, e.g. 1)
-  --pageSize: int # Page size. Default is 25. Max allowable is 100. (format: int32, default: 25, e.g. 25)
+  --page-size: int # Page size. Default is 25. Max allowable is 100. (format: int32, default: 25, e.g. 25)
 ]: nothing -> record<content: table<gracePeriodEndDate: string, invitationStatus: string, payeeId: string>, links: table<href: string, rel: string>, page: record<numberOfElements: int, page: int, pageSize: int, totalElements: int, totalPages: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "payeeId" $payeeId "scalar") (serialize-qp "invitationStatus" $invitationStatus "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $pageSize "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v4/payees/payors/($payorId)/invitationStatus" $qp)
+  let qp = [(serialize-qp "payeeId" $payee_id "scalar") (serialize-qp "invitationStatus" $invitation_status "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({payor_id: (encode-path-segment $payor_id)} | format pattern "/v4/payees/payors/{payor_id}/invitationStatus") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Delete Payee by Id
@@ -2512,7 +2641,7 @@ export def "payees-payors-invitation-status get-by-payorId-1" [
 # DELETE /v4/payees/{payeeId}
 # operationId: deletePayeeByIdV4
 export def "payees delete-by-payeeId-1" [
-  payeeId: string
+  payee_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2520,14 +2649,15 @@ export def "payees delete-by-payeeId-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v4/payees/($payeeId)")
+  let full_url = (build-url $base ({payee_id: (encode-path-segment $payee_id)} | format pattern "/v4/payees/{payee_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get Payee by Id
@@ -2535,7 +2665,7 @@ export def "payees delete-by-payeeId-1" [
 # GET /v4/payees/{payeeId}
 # operationId: getPayeeByIdV4
 export def "payees get-by-payeeId-1" [
-  payeeId: string
+  payee_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2543,24 +2673,25 @@ export def "payees get-by-payeeId-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --sensitive: oneof<nothing, bool> # Optional. If omitted or set to false, any Personal Identifiable Information (PII) values are returned masked. If set to true, and you have permission, the PII values will be returned as their original unmasked values.
 ]: nothing -> record<acceptTermsAndConditionsTimestamp: string, address: record<city: string, country: string, countyOrProvince: string, line1: string, line2: string, line3: string, line4: string, zipOrPostcode: string>, cellphoneNumber: string, challenge: record<description: string, value: string>, company: record<name: string, operatingName: string, taxId: string>, country: string, created: string, disabled: bool, disabledComment: string, disabledUpdatedTimestamp: string, displayName: string, email: string, enhancedKycCompleted: bool, gracePeriodEndDate: string, individual: record<dateOfBirth: string, name: record<firstName: string, lastName: string, otherNames: string, title: string>, nationalIdentification: string>, kycCompletedTimestamp: string, language: string, marketingOptInDecision: bool, marketingOptInTimestamp: string, onboardedStatus: string, pausePayment: bool, pausePaymentTimestamp: string, payeeId: string, payeeType: string, payorRefs: table<invitationStatus: string, invitationStatusTimestamp: string, payableIssues: list, payableStatus: bool, paymentChannelId: string, payorId: string, remoteId: string>, watchlistOverrideComment: string, watchlistOverrideExpiresAtTimestamp: string, watchlistStatus: string, watchlistStatusUpdatedTimestamp: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "sensitive" $sensitive "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v4/payees/($payeeId)" $qp)
+  let full_url = (build-url $base ({payee_id: (encode-path-segment $payee_id)} | format pattern "/v4/payees/{payee_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Resend Payee Invite
 #
 # POST /v4/payees/{payeeId}/invite
 # operationId: resendPayeeInviteV4
-export def "payees-invite resendPayeeInviteV4" [
-  payeeId: string
+export def "payees-invite resend-by-payeeId-1" [
+  payee_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2568,18 +2699,19 @@ export def "payees-invite resendPayeeInviteV4" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  payorId: string # format: uuid, e.g. 9ac75325-5dcd-42d5-b992-175d7e0a035e
+  payor_id: string # format: uuid, e.g. 9ac75325-5dcd-42d5-b992-175d7e0a035e
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v4/payees/($payeeId)/invite")
-  let body = {payorId: $payorId} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({payee_id: (encode-path-segment $payee_id)} | format pattern "/v4/payees/{payee_id}/invite"))
+  let req_body = {"payorId": $payor_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Update Payee Details
@@ -2590,8 +2722,8 @@ export def "payees-invite resendPayeeInviteV4" [
 # --challenge shape: {description: string, value: string}
 # --company shape: {name: string, operatingName?: string, taxId?: string}
 # --individual shape: {name: any}
-export def "payees-payee-details-update payeeDetailsUpdateV4" [
-  payeeId: string
+export def "payees-payee-details-update update-by-payeeId-1" [
+  payee_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2599,32 +2731,33 @@ export def "payees-payee-details-update payeeDetailsUpdateV4" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --address: record # e.g. {city: Key West, country: US, countyOrProvince: FL, line1: 500 Duval St, line2: line2, line3: line3, line4: line4, zipOrPostcode: 33945} — shape: {city: string, country: string, countyOrProvince?: string, line1: string, line2?: string, line3?: string, line4?: string, zipOrPostcode?: string}
-  --challenge: record # <p>Used to override the default challenge presented to the payee when they onboard</p> <p>Not used after the payee has onboarded</p>  (e.g. {description: challenge description, value: 11984567}) — shape: {description: string, value: string}
+  --challenge: record # Used to override the default challenge presented to the payee when they onboard Not used after the payee has onboarded (e.g. {description: challenge description, value: 11984567}) — shape: {description: string, value: string}
   --company: record # nullable, e.g. {name: ABC Group Plc, operatingName: ABC Co, taxId: 123123123} — shape: {name: string, operatingName?: string, taxId?: string}
-  --contactSmsNumber: string # The phone number of a device that the payee wishes to receive sms messages on  (e.g. 11235555555)
+  --contact-sms-number: string # The phone number of a device that the payee wishes to receive sms messages on (e.g. 11235555555)
   --email: string # nullable, format: email, e.g. bob@example.com
   --individual: record # e.g. {dateOfBirth: 1985-01-01, name: {firstName: Bob, lastName: Smith, otherNames: A, title: Mr}, nationalIdentification: AB123456C} — shape: {name: any}
-  --language: string # An IETF BCP 47 language code which has been configured for use within this Velo environment.<BR> See the /v1/supportedLanguages endpoint to list the available codes for an environment.  (e.g. en-US)
-  --payeeType: string@payeeType-completer-1 # The type of the payee
+  --language: string # An IETF BCP 47 language code which has been configured for use within this Velo environment. See the /v1/supportedLanguages endpoint to list the available codes for an environment. (e.g. en-US)
+  --payee-type: string@payee-type-completer-1 # The type of the payee
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v4/payees/($payeeId)/payeeDetailsUpdate")
-  let body = {address: $address, challenge: $challenge, company: $company, contactSmsNumber: $contactSmsNumber, email: $email, individual: $individual, language: $language, payeeType: $payeeType} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({payee_id: (encode-path-segment $payee_id)} | format pattern "/v4/payees/{payee_id}/payeeDetailsUpdate"))
+  let req_body = {"address": $address, "challenge": $challenge, "company": $company, "contactSmsNumber": $contact_sms_number, "email": $email, "individual": $individual, "language": $language, "payeeType": $payee_type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Update Payee Remote Id
 #
 # POST /v4/payees/{payeeId}/remoteIdUpdate
-export def "payees-remote-id-update post-by-payeeId-1" [
-  payeeId: string
+export def "payees-remote-id-update create-by-payeeId-1" [
+  payee_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2632,19 +2765,20 @@ export def "payees-remote-id-update post-by-payeeId-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  payorId: string # format: uuid, e.g. 9ac75325-5dcd-42d5-b992-175d7e0a035e
-  remoteId: string # e.g. remoteId123
+  payor_id: string # format: uuid, e.g. 9ac75325-5dcd-42d5-b992-175d7e0a035e
+  remote_id: string # e.g. remoteId123
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v4/payees/($payeeId)/remoteIdUpdate")
-  let body = {payorId: $payorId, remoteId: $remoteId} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({payee_id: (encode-path-segment $payee_id)} | format pattern "/v4/payees/{payee_id}/remoteIdUpdate"))
+  let req_body = {"payorId": $payor_id, "remoteId": $remote_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Get Fundings for Payor
@@ -2659,27 +2793,28 @@ export def "paymentaudit-fundings get-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --payorId: string # The account owner Payor ID (format: uuid)
-  --sourceAccountName: string # The source account name
+  --payor-id: string # The account owner Payor ID (format: uuid)
+  --source-account-name: string # The source account name
   --page: int # Page number. Default is 1. (format: int32, default: 1)
-  --pageSize: int # The number of results to return in a page (format: int32, default: 25)
+  --page-size: int # The number of results to return in a page (format: int32, default: 25)
   --qp-sort: string # List of sort fields. Example: ```?sort=destinationCurrency:asc,destinationAmount:asc``` Default is no sort. The supported sort fields are: dateTime and amount.
 ]: nothing -> record<content: table<amount: float, currency: string, dateTime: string, events: list, fundingAccountName: string, fundingType: string, sourceAccountName: string, status: string, topupType: string>, links: table<href: string, rel: string>, page: record<numberOfElements: int, page: int, pageSize: int, totalElements: int, totalPages: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "payorId" $payorId "scalar") (serialize-qp "sourceAccountName" $sourceAccountName "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "payorId" $payor_id "scalar") (serialize-qp "sourceAccountName" $source_account_name "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v4/paymentaudit/fundings" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get List of Payments
 #
 # GET /v4/paymentaudit/payments
 # operationId: listPaymentsAuditV4
-export def "paymentaudit-payments listPaymentsAuditV4" [
+export def "paymentaudit-payments list-audit-1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2687,49 +2822,50 @@ export def "paymentaudit-payments listPaymentsAuditV4" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --payeeId: string # The UUID of the payee. (format: uuid)
-  --payorId: string # The account owner Payor Id. Required for external users. (format: uuid)
-  --payorName: string # The payor’s name. This filters via a case insensitive substring match.
-  --remoteId: string # The remote id of the payees.
-  --remoteSystemId: string # The id of the remote system that is orchestrating payments
+  --payee-id: string # The UUID of the payee. (format: uuid)
+  --payor-id: string # The account owner Payor Id. Required for external users. (format: uuid)
+  --payor-name: string # The payor’s name. This filters via a case insensitive substring match.
+  --remote-id: string # The remote id of the payees.
+  --remote-system-id: string # The id of the remote system that is orchestrating payments
   --status: string@status-completer-1 # Payment Status
-  --transmissionType: string@transmissionType-completer-1 # Transmission Type * ACH * SAME_DAY_ACH * WIRE * GACHO
-  --sourceAccountName: string # The source account name filter. This filters via a case insensitive substring match.
-  --sourceAmountFrom: int # The source amount from range filter. Filters for sourceAmount >= sourceAmountFrom (format: int32)
-  --sourceAmountTo: int # The source amount to range filter. Filters for sourceAmount ⇐ sourceAmountTo (format: int32)
-  --sourceCurrency: string # The source currency filter. Filters based on an exact match on the currency.
-  --paymentAmountFrom: int # The payment amount from range filter. Filters for paymentAmount >= paymentAmountFrom (format: int32)
-  --paymentAmountTo: int # The payment amount to range filter. Filters for paymentAmount ⇐ paymentAmountTo (format: int32)
-  --paymentCurrency: string # The payment currency filter. Filters based on an exact match on the currency.
-  --submittedDateFrom: string # The submitted date from range filter. Format is yyyy-MM-dd. (format: date)
-  --submittedDateTo: string # The submitted date to range filter. Format is yyyy-MM-dd. (format: date)
-  --paymentMemo: string # The payment memo filter. This filters via a case insensitive substring match.
-  --railsId: string # Payout Rails ID filter - case insensitive match. Any value is allowed, but you should use one of the supported railsId values. To get this list of values, you should call the 'Get Supported Rails' endpoint.
-  --scheduledForDateFrom: string # Filter payouts scheduled to run on or after the given date. Format is yyyy-MM-dd. (format: date)
-  --scheduledForDateTo: string # Filter payouts scheduled to run on or before the given date. Format is yyyy-MM-dd. (format: date)
-  --scheduleStatus: string@scheduleStatus-completer # Payout Schedule Status
-  --postInstructFxStatus: string@postInstructFxStatus-completer # The status of the post instruct FX step if one was required for the payment
+  --transmission-type: string@transmission-type-completer-1 # Transmission Type * ACH * SAME_DAY_ACH * WIRE * GACHO
+  --source-account-name: string # The source account name filter. This filters via a case insensitive substring match.
+  --source-amount-from: int # The source amount from range filter. Filters for sourceAmount >= sourceAmountFrom (format: int32)
+  --source-amount-to: int # The source amount to range filter. Filters for sourceAmount ⇐ sourceAmountTo (format: int32)
+  --source-currency: string # The source currency filter. Filters based on an exact match on the currency.
+  --payment-amount-from: int # The payment amount from range filter. Filters for paymentAmount >= paymentAmountFrom (format: int32)
+  --payment-amount-to: int # The payment amount to range filter. Filters for paymentAmount ⇐ paymentAmountTo (format: int32)
+  --payment-currency: string # The payment currency filter. Filters based on an exact match on the currency.
+  --submitted-date-from: string # The submitted date from range filter. Format is yyyy-MM-dd. (format: date)
+  --submitted-date-to: string # The submitted date to range filter. Format is yyyy-MM-dd. (format: date)
+  --payment-memo: string # The payment memo filter. This filters via a case insensitive substring match.
+  --rails-id: string # Payout Rails ID filter - case insensitive match. Any value is allowed, but you should use one of the supported railsId values. To get this list of values, you should call the 'Get Supported Rails' endpoint.
+  --scheduled-for-date-from: string # Filter payouts scheduled to run on or after the given date. Format is yyyy-MM-dd. (format: date)
+  --scheduled-for-date-to: string # Filter payouts scheduled to run on or before the given date. Format is yyyy-MM-dd. (format: date)
+  --schedule-status: string@schedule-status-completer # Payout Schedule Status
+  --post-instruct-fx-status: string@post-instruct-fx-status-completer # The status of the post instruct FX step if one was required for the payment
   --page: int # Page number. Default is 1. (format: int32, default: 1)
-  --pageSize: int # The number of results to return in a page (format: int32, default: 25)
+  --page-size: int # The number of results to return in a page (format: int32, default: 25)
   --qp-sort: string # List of sort fields (e.g. ?sort=submittedDateTime:asc,status:asc). Default is sort by submittedDateTime:desc,paymentId:asc The supported sort fields are: sourceAmount, sourceCurrency, paymentAmount, paymentCurrency, routingNumber, accountNumber, remoteId, submittedDateTime, status and paymentId
   --sensitive: oneof<nothing, bool> # Optional. If omitted or set to false, any Personal Identifiable Information (PII) values are returned masked. If set to true, and you have permission, the PII values will be returned as their original unmasked values.
 ]: nothing -> record<content: table<accountName: string, accountNumber: string, autoWithdrawnReasonCode: string, countryCode: string, events: list, filenameReference: string, fundingStatus: string, iban: string, individualIdentificationNumber: string, invertedRate: float, isPaymentCcyBaseCcy: bool, payeeAddressCountryCode: string, payeeId: string, paymentAmount: int, paymentChannelId: string, paymentChannelName: string, paymentCurrency: string, paymentId: string, paymentMemo: string, paymentMetadata: string, paymentScheme: string, paymentTrackingReference: string, payorId: string, payorName: string, payorPaymentId: string, payout: record, postInstructFxInfo: record, quoteId: string, railsBatchId: string, railsId: string, railsPaymentId: string, rate: float, rejectionReason: string, remoteId: string, remoteSystemId: string, remoteSystemPaymentId: string, returnCost: int, returnReason: string, routingNumber: string, schedule: record, sourceAccountId: string, sourceAccountName: string, sourceAmount: int, sourceCurrency: string, status: string, submittedDateTime: string, traceNumber: string, transmissionType: string, withdrawable: bool, withdrawnReason: string>, links: table<href: string, rel: string>, page: record<numberOfElements: int, page: int, pageSize: int, totalElements: int, totalPages: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "payeeId" $payeeId "scalar") (serialize-qp "payorId" $payorId "scalar") (serialize-qp "payorName" $payorName "scalar") (serialize-qp "remoteId" $remoteId "scalar") (serialize-qp "remoteSystemId" $remoteSystemId "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "transmissionType" $transmissionType "scalar") (serialize-qp "sourceAccountName" $sourceAccountName "scalar") (serialize-qp "sourceAmountFrom" $sourceAmountFrom "scalar") (serialize-qp "sourceAmountTo" $sourceAmountTo "scalar") (serialize-qp "sourceCurrency" $sourceCurrency "scalar") (serialize-qp "paymentAmountFrom" $paymentAmountFrom "scalar") (serialize-qp "paymentAmountTo" $paymentAmountTo "scalar") (serialize-qp "paymentCurrency" $paymentCurrency "scalar") (serialize-qp "submittedDateFrom" $submittedDateFrom "scalar") (serialize-qp "submittedDateTo" $submittedDateTo "scalar") (serialize-qp "paymentMemo" $paymentMemo "scalar") (serialize-qp "railsId" $railsId "scalar") (serialize-qp "scheduledForDateFrom" $scheduledForDateFrom "scalar") (serialize-qp "scheduledForDateTo" $scheduledForDateTo "scalar") (serialize-qp "scheduleStatus" $scheduleStatus "scalar") (serialize-qp "postInstructFxStatus" $postInstructFxStatus "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "sensitive" $sensitive "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "payeeId" $payee_id "scalar") (serialize-qp "payorId" $payor_id "scalar") (serialize-qp "payorName" $payor_name "scalar") (serialize-qp "remoteId" $remote_id "scalar") (serialize-qp "remoteSystemId" $remote_system_id "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "transmissionType" $transmission_type "scalar") (serialize-qp "sourceAccountName" $source_account_name "scalar") (serialize-qp "sourceAmountFrom" $source_amount_from "scalar") (serialize-qp "sourceAmountTo" $source_amount_to "scalar") (serialize-qp "sourceCurrency" $source_currency "scalar") (serialize-qp "paymentAmountFrom" $payment_amount_from "scalar") (serialize-qp "paymentAmountTo" $payment_amount_to "scalar") (serialize-qp "paymentCurrency" $payment_currency "scalar") (serialize-qp "submittedDateFrom" $submitted_date_from "scalar") (serialize-qp "submittedDateTo" $submitted_date_to "scalar") (serialize-qp "paymentMemo" $payment_memo "scalar") (serialize-qp "railsId" $rails_id "scalar") (serialize-qp "scheduledForDateFrom" $scheduled_for_date_from "scalar") (serialize-qp "scheduledForDateTo" $scheduled_for_date_to "scalar") (serialize-qp "scheduleStatus" $schedule_status "scalar") (serialize-qp "postInstructFxStatus" $post_instruct_fx_status "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "sensitive" $sensitive "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v4/paymentaudit/payments" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get Payment
 #
 # GET /v4/paymentaudit/payments/{paymentId}
 # operationId: getPaymentDetailsV4
-export def "paymentaudit-payments get-by-paymentId-1" [
-  paymentId: string
+export def "paymentaudit-payments get-details-by-paymentId-1" [
+  payment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2737,23 +2873,24 @@ export def "paymentaudit-payments get-by-paymentId-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --sensitive: oneof<nothing, bool> # Optional. If omitted or set to false, any Personal Identifiable Information (PII) values are returned masked. If set to true, and you have permission, the PII values will be returned as their original unmasked values.
 ]: nothing -> record<accountName: string, accountNumber: string, autoWithdrawnReasonCode: string, countryCode: string, events: table<accountName: string, accountNumber: string, eventDateTime: string, eventId: string, eventType: string, iban: string, paymentAmount: int, paymentCurrency: string, principal: string, routingNumber: string, scheduledAt: string, scheduledBy: string, scheduledFor: string, sourceAmount: int, sourceCurrency: string>, filenameReference: string, fundingStatus: string, iban: string, individualIdentificationNumber: string, invertedRate: float, isPaymentCcyBaseCcy: bool, payeeAddressCountryCode: string, payeeId: string, paymentAmount: int, paymentChannelId: string, paymentChannelName: string, paymentCurrency: string, paymentId: string, paymentMemo: string, paymentMetadata: string, paymentScheme: string, paymentTrackingReference: string, payorId: string, payorName: string, payorPaymentId: string, payout: record<payoutFrom: record<dbaName: string, payorId: string, payorName: string, principal: string, principalId: string>, payoutId: string, payoutTo: record<dbaName: string, payorId: string, payorName: string, principal: string, principalId: string>>, postInstructFxInfo: record<fxMode: string, fxStatus: string, fxStatusUpdatedAt: string, fxTransactionReference: string>, quoteId: string, railsBatchId: string, railsId: string, railsPaymentId: string, rate: float, rejectionReason: string, remoteId: string, remoteSystemId: string, remoteSystemPaymentId: string, returnCost: int, returnReason: string, routingNumber: string, schedule: record<notificationsEnabled: bool, scheduleStatus: string, scheduledAt: string, scheduledBy: string, scheduledByPrincipalId: string, scheduledFor: string>, sourceAccountId: string, sourceAccountName: string, sourceAmount: int, sourceCurrency: string, status: string, submittedDateTime: string, traceNumber: string, transmissionType: string, withdrawable: bool, withdrawnReason: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "sensitive" $sensitive "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v4/paymentaudit/payments/($paymentId)" $qp)
+  let full_url = (build-url $base ({payment_id: (encode-path-segment $payment_id)} | format pattern "/v4/paymentaudit/payments/{payment_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get Payout Statistics
 #
 # GET /v4/paymentaudit/payoutStatistics
 # operationId: getPayoutStatsV4
-export def "paymentaudit-payout-statistics get-1" [
+export def "paymentaudit-payout-statistics get-stats-1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2761,23 +2898,24 @@ export def "paymentaudit-payout-statistics get-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --payorId: string # The account owner Payor ID. Required for external users. (format: uuid)
+  --payor-id: string # The account owner Payor ID. Required for external users. (format: uuid)
 ]: nothing -> record<thisMonthFailedPaymentsCount: int, thisMonthPayoutsCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "payorId" $payorId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "payorId" $payor_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v4/paymentaudit/payoutStatistics" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get Payouts for Payor
 #
 # GET /v4/paymentaudit/payouts
 # operationId: getPayoutsForPayorV4
-export def "paymentaudit-payouts get-1" [
+export def "paymentaudit-payouts get-for-payor-1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2785,35 +2923,36 @@ export def "paymentaudit-payouts get-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --payorId: string # The id (UUID) of the payor funding the payout or the payor whose payees are being paid. (format: uuid)
-  --payoutMemo: string # Payout Memo filter - case insensitive sub-string match
+  --payor-id: string # The id (UUID) of the payor funding the payout or the payor whose payees are being paid. (format: uuid)
+  --payout-memo: string # Payout Memo filter - case insensitive sub-string match
   --status: string@status-completer-2 # Payout Status
-  --submittedDateFrom: string # The submitted date from range filter. Format is yyyy-MM-dd. (format: date)
-  --submittedDateTo: string # The submitted date to range filter. Format is yyyy-MM-dd. (format: date)
-  --fromPayorName: string # The name of the payor whose payees are being paid. This filters via a case insensitive substring match.
-  --scheduledForDateFrom: string # Filter payouts scheduled to run on or after the given date. Format is yyyy-MM-dd. (format: date)
-  --scheduledForDateTo: string # Filter payouts scheduled to run on or before the given date. Format is yyyy-MM-dd. (format: date)
-  --scheduleStatus: string@scheduleStatus-completer # Payout Schedule Status
+  --submitted-date-from: string # The submitted date from range filter. Format is yyyy-MM-dd. (format: date)
+  --submitted-date-to: string # The submitted date to range filter. Format is yyyy-MM-dd. (format: date)
+  --from-payor-name: string # The name of the payor whose payees are being paid. This filters via a case insensitive substring match.
+  --scheduled-for-date-from: string # Filter payouts scheduled to run on or after the given date. Format is yyyy-MM-dd. (format: date)
+  --scheduled-for-date-to: string # Filter payouts scheduled to run on or before the given date. Format is yyyy-MM-dd. (format: date)
+  --schedule-status: string@schedule-status-completer # Payout Schedule Status
   --page: int # Page number. Default is 1. (format: int32, default: 1)
-  --pageSize: int # The number of results to return in a page (format: int32, default: 25)
+  --page-size: int # The number of results to return in a page (format: int32, default: 25)
   --qp-sort: string # List of sort fields (e.g. ?sort=submittedDateTime:asc,instructedDateTime:asc,status:asc) Default is submittedDateTime:asc The supported sort fields are: submittedDateTime, instructedDateTime, status, totalPayments, payoutId, scheduledFor
 ]: nothing -> record<content: table<dateTime: string, fxSummaries: list, instructedDateTime: string, payorId: string, payorName: string, payoutId: string, payoutMemo: string, payoutType: string, schedule: record, sourceAccountSummary: list, status: string, submittedDateTime: string, totalIncompletePayments: int, totalPayments: int, totalReturnedPayments: int, totalWithdrawnPayments: int, withdrawnDateTime: string>, links: table<href: string, rel: string>, page: record<numberOfElements: int, page: int, pageSize: int, totalElements: int, totalPages: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "payorId" $payorId "scalar") (serialize-qp "payoutMemo" $payoutMemo "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "submittedDateFrom" $submittedDateFrom "scalar") (serialize-qp "submittedDateTo" $submittedDateTo "scalar") (serialize-qp "fromPayorName" $fromPayorName "scalar") (serialize-qp "scheduledForDateFrom" $scheduledForDateFrom "scalar") (serialize-qp "scheduledForDateTo" $scheduledForDateTo "scalar") (serialize-qp "scheduleStatus" $scheduleStatus "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "payorId" $payor_id "scalar") (serialize-qp "payoutMemo" $payout_memo "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "submittedDateFrom" $submitted_date_from "scalar") (serialize-qp "submittedDateTo" $submitted_date_to "scalar") (serialize-qp "fromPayorName" $from_payor_name "scalar") (serialize-qp "scheduledForDateFrom" $scheduled_for_date_from "scalar") (serialize-qp "scheduledForDateTo" $scheduled_for_date_to "scalar") (serialize-qp "scheduleStatus" $schedule_status "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v4/paymentaudit/payouts" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get Payments for Payout
 #
 # GET /v4/paymentaudit/payouts/{payoutId}
 # operationId: getPaymentsForPayoutV4
-export def "paymentaudit-payouts get-by-payoutId" [
-  payoutId: string
+export def "paymentaudit-payouts get-payments" [
+  payout_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2821,36 +2960,37 @@ export def "paymentaudit-payouts get-by-payoutId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --remoteId: string # The remote id of the payees.
-  --remoteSystemId: string # The id of the remote system that is orchestrating payments
+  --remote-id: string # The remote id of the payees.
+  --remote-system-id: string # The id of the remote system that is orchestrating payments
   --status: string@status-completer-1 # Payment Status
-  --sourceAmountFrom: int # The source amount from range filter. Filters for sourceAmount >= sourceAmountFrom (format: int32)
-  --sourceAmountTo: int # The source amount to range filter. Filters for sourceAmount ⇐ sourceAmountTo (format: int32)
-  --paymentAmountFrom: int # The payment amount from range filter. Filters for paymentAmount >= paymentAmountFrom (format: int32)
-  --paymentAmountTo: int # The payment amount to range filter. Filters for paymentAmount ⇐ paymentAmountTo (format: int32)
-  --submittedDateFrom: string # The submitted date from range filter. Format is yyyy-MM-dd. (format: date)
-  --submittedDateTo: string # The submitted date to range filter. Format is yyyy-MM-dd. (format: date)
-  --transmissionType: string@transmissionType-completer-1 # Transmission Type * ACH * SAME_DAY_ACH * WIRE * GACHO
+  --source-amount-from: int # The source amount from range filter. Filters for sourceAmount >= sourceAmountFrom (format: int32)
+  --source-amount-to: int # The source amount to range filter. Filters for sourceAmount ⇐ sourceAmountTo (format: int32)
+  --payment-amount-from: int # The payment amount from range filter. Filters for paymentAmount >= paymentAmountFrom (format: int32)
+  --payment-amount-to: int # The payment amount to range filter. Filters for paymentAmount ⇐ paymentAmountTo (format: int32)
+  --submitted-date-from: string # The submitted date from range filter. Format is yyyy-MM-dd. (format: date)
+  --submitted-date-to: string # The submitted date to range filter. Format is yyyy-MM-dd. (format: date)
+  --transmission-type: string@transmission-type-completer-1 # Transmission Type * ACH * SAME_DAY_ACH * WIRE * GACHO
   --page: int # Page number. Default is 1. (format: int32, default: 1)
-  --pageSize: int # The number of results to return in a page (format: int32, default: 25)
+  --page-size: int # The number of results to return in a page (format: int32, default: 25)
   --qp-sort: string # List of sort fields (e.g. ?sort=submittedDateTime:asc,status:asc). Default is sort by remoteId The supported sort fields are: sourceAmount, sourceCurrency, paymentAmount, paymentCurrency, routingNumber, accountNumber, remoteId, submittedDateTime and status
   --sensitive: oneof<nothing, bool> # Optional. If omitted or set to false, any Personal Identifiable Information (PII) values are returned masked. If set to true, and you have permission, the PII values will be returned as their original unmasked values.
 ]: nothing -> record<content: table<accountName: string, accountNumber: string, autoWithdrawnReasonCode: string, countryCode: string, events: list, filenameReference: string, fundingStatus: string, iban: string, individualIdentificationNumber: string, invertedRate: float, isPaymentCcyBaseCcy: bool, payeeAddressCountryCode: string, payeeId: string, paymentAmount: int, paymentChannelId: string, paymentChannelName: string, paymentCurrency: string, paymentId: string, paymentMemo: string, paymentMetadata: string, paymentScheme: string, paymentTrackingReference: string, payorId: string, payorName: string, payorPaymentId: string, payout: record, postInstructFxInfo: record, quoteId: string, railsBatchId: string, railsId: string, railsPaymentId: string, rate: float, rejectionReason: string, remoteId: string, remoteSystemId: string, remoteSystemPaymentId: string, returnCost: int, returnReason: string, routingNumber: string, schedule: record, sourceAccountId: string, sourceAccountName: string, sourceAmount: int, sourceCurrency: string, status: string, submittedDateTime: string, traceNumber: string, transmissionType: string, withdrawable: bool, withdrawnReason: string>, links: table<href: string, rel: string>, page: record<numberOfElements: int, page: int, pageSize: int, totalElements: int, totalPages: int>, summary: record<confirmedPayments: int, incompletePayments: int, instructed: record<principal: string, principalId: string>, instructedDateTime: string, payoutFrom: record<dbaName: string, payorId: string, payorName: string, principal: string, principalId: string>, payoutMemo: string, payoutStatus: string, payoutTo: record<dbaName: string, payorId: string, payorName: string, principal: string, principalId: string>, payoutType: string, quoted: record<principal: string, principalId: string>, quotedDateTime: string, releasedPayments: int, returnedPayments: int, schedule: record<notificationsEnabled: bool, scheduleStatus: string, scheduledAt: string, scheduledBy: string, scheduledByPrincipalId: string, scheduledFor: string>, submittedDateTime: string, submitting: record<dbaName: string, payorId: string, payorName: string, principal: string, principalId: string>, totalPayments: int, withdrawn: record<principal: string, principalId: string>, withdrawnDateTime: string, withdrawnPayments: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "remoteId" $remoteId "scalar") (serialize-qp "remoteSystemId" $remoteSystemId "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "sourceAmountFrom" $sourceAmountFrom "scalar") (serialize-qp "sourceAmountTo" $sourceAmountTo "scalar") (serialize-qp "paymentAmountFrom" $paymentAmountFrom "scalar") (serialize-qp "paymentAmountTo" $paymentAmountTo "scalar") (serialize-qp "submittedDateFrom" $submittedDateFrom "scalar") (serialize-qp "submittedDateTo" $submittedDateTo "scalar") (serialize-qp "transmissionType" $transmissionType "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "sensitive" $sensitive "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v4/paymentaudit/payouts/($payoutId)" $qp)
+  let qp = [(serialize-qp "remoteId" $remote_id "scalar") (serialize-qp "remoteSystemId" $remote_system_id "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "sourceAmountFrom" $source_amount_from "scalar") (serialize-qp "sourceAmountTo" $source_amount_to "scalar") (serialize-qp "paymentAmountFrom" $payment_amount_from "scalar") (serialize-qp "paymentAmountTo" $payment_amount_to "scalar") (serialize-qp "submittedDateFrom" $submitted_date_from "scalar") (serialize-qp "submittedDateTo" $submitted_date_to "scalar") (serialize-qp "transmissionType" $transmission_type "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "sensitive" $sensitive "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({payout_id: (encode-path-segment $payout_id)} | format pattern "/v4/paymentaudit/payouts/{payout_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Export Transactions
 #
 # GET /v4/paymentaudit/transactions
 # operationId: exportTransactionsCSVV4
-export def "paymentaudit-transactions exportTransactionsCSVV4" [
+export def "paymentaudit-transactions export-csvv4" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2858,26 +2998,27 @@ export def "paymentaudit-transactions exportTransactionsCSVV4" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --payorId: string # <p>The Payor ID for whom you wish to run the report.</p> <p>For a Payor requesting the report, this could be their exact Payor, or it could be a child/descendant Payor.</p>  (format: uuid)
-  --startDate: string # Start date, inclusive. Format is YYYY-MM-DD (format: date)
-  --endDate: string # End date, inclusive. Format is YYYY-MM-DD (format: date)
-  --include: string@include-completer # <p>Mode to determine whether to include other Payor's data in the results.</p> <p>May only be used if payorId is specified.</p> <p>Can be omitted or set to 'payorOnly' or 'payorAndDescendants'.</p> <p>payorOnly: Only include results for the specified Payor. This is the default if 'include' is omitted.</p> <p>payorAndDescendants: Aggregate results for all descendant Payors of the specified Payor. Should only be used if the Payor with the specified payorId has at least one child Payor.</p> <p>Note when a Payor requests the report and include=payorAndDescendants is used, the following additional columns are included in the CSV: Payor Name, Payor Id</p>
+  --payor-id: string # The Payor ID for whom you wish to run the report. For a Payor requesting the report, this could be their exact Payor, or it could be a child/descendant Payor. (format: uuid)
+  --start-date: string # Start date, inclusive. Format is YYYY-MM-DD (format: date)
+  --end-date: string # End date, inclusive. Format is YYYY-MM-DD (format: date)
+  --include: string@include-completer # Mode to determine whether to include other Payor's data in the results. May only be used if payorId is specified. Can be omitted or set to 'payorOnly' or 'payorAndDescendants'. payorOnly: Only include results for the specified Payor. This is the default if 'include' is omitted. payorAndDescendants: Aggregate results for all descendant Payors of the specified Payor. Should only be used if the Payor with the specified payorId has at least one child Payor. Note when a Payor requests the report and include=payorAndDescendants is used, the following additional columns are included in the CSV: Payor Name, Payor Id
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "payorId" $payorId "scalar") (serialize-qp "startDate" $startDate "scalar") (serialize-qp "endDate" $endDate "scalar") (serialize-qp "include" $include "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "payorId" $payor_id "scalar") (serialize-qp "startDate" $start_date "scalar") (serialize-qp "endDate" $end_date "scalar") (serialize-qp "include" $include "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v4/paymentaudit/transactions" $qp)
   let accept_val = "application/csv"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # List Payment Changes
 #
 # GET /v4/payments/deltas
 # operationId: listPaymentChangesV4
-export def "payments-deltas listPaymentChangesV4" [
+export def "payments-deltas list-changes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2885,17 +3026,18 @@ export def "payments-deltas listPaymentChangesV4" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --payorId: string # The Payor ID to find associated Payments (format: uuid)
-  --updatedSince: string # The updatedSince filter in the format YYYY-MM-DDThh:mm:ss+hh:mm (format: date-time)
+  --payor-id: string # The Payor ID to find associated Payments (format: uuid)
+  --updated-since: string # The updatedSince filter in the format YYYY-MM-DDThh:mm:ss+hh:mm (format: date-time)
   --page: int # Page number. Default is 1. (format: int32, default: 1)
-  --pageSize: int # The number of results to return in a page (format: int32, default: 100)
+  --page-size: int # The number of results to return in a page (format: int32, default: 100)
 ]: nothing -> record<content: table<paymentAmount: int, paymentCurrency: string, paymentId: string, payorPaymentId: string, payoutId: string, sourceAmount: int, sourceCurrency: string, status: string>, links: table<href: string, rel: string>, page: record<numberOfElements: int, page: int, pageSize: int, totalElements: int, totalPages: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "payorId" $payorId "scalar") (serialize-qp "updatedSince" $updatedSince "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $pageSize "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "payorId" $payor_id "scalar") (serialize-qp "updatedSince" $updated_since "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v4/payments/deltas" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }

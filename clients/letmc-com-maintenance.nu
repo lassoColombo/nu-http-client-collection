@@ -13,27 +13,39 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   match $scheme {
     "apikey" => { {headers: {ApiKey: $token_val}, query: ""} }
     "basic" => { {headers: {Authorization: $"Basic ($token_val)"}, query: ""} }
+    "basic-credentials" => { {headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: ""} }
     "none" => { {headers: {}, query: ""} }
     _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
   }
 }
 
 # Serialize a single query parameter based on collection style
+# Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
+# ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = ($name | url encode)
+  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
-  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
-    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
-    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
+    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
+    _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
+}
+
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Build URL from base, path, and optional query string
@@ -45,7 +57,7 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
@@ -54,26 +66,26 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
     "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "put" => { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "patch" => { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
   if ($method in ["head" "options"]) { return $resp }
-  if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
+  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
 def base-url-completer [] { ["https://live-api.letmc.com"] }
-def auth-scheme-completer [] { ["apikey" "basic"] }
+def auth-scheme-completer [] { ["apikey" "basic" "basic-credentials"] }
 
 # Completers for enum parameters
-def IssuePriority-completer [] { ["High" "Low" "Medium"] }
+def issue-priority-completer [] { ["High" "Low" "Medium"] }
 def accept-completer [] { ["application/json" "application/xml" "text/json" "text/xml"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "maintenance-maintenance-createmaintenancejob CreateMaintenanceJob" } } | get name | first)
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "maintenance-maintenance-createmaintenancejob create-controller-job" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -98,9 +110,9 @@ export def commands []: nothing -> table {
 # POST /v3/maintenance/{shortName}/maintenance/{branchID}/createmaintenancejob
 # operationId: MaintenanceController_CreateMaintenanceJob
 # --Documents item shape: {MimeType?: string, URL?: string}
-export def "maintenance-maintenance-createmaintenancejob CreateMaintenanceJob" [
-  shortName: string
-  branchID: string
+export def "maintenance-maintenance-createmaintenancejob create-controller-job" [
+  short_name: string
+  branch_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -108,36 +120,37 @@ export def "maintenance-maintenance-createmaintenancejob CreateMaintenanceJob" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --Documents: list # Documents linked to a submitted maintenance job — item shape: {MimeType?: string, URL?: string}
-  --ExternalID: string # ID used externally to manage jobs before sending to the system. This has a 10 character limit.
-  --IssueFault: string # The fault title if applicable
-  --IssueNotes: string # Fault notes
-  --IssuePriority: string@IssuePriority-completer # The priority of the job (Defaults to 'Low' if incorrect value or empty)
-  --IssueTitle: string # The title of the issue
-  --PropertyAddress1: string # The first line of the property address
-  --PropertyAddress2: string # The second line of the property address
-  --PropertyAddress3: string # The third line of the property address
-  --PropertyAddress4: string # The forth line of the property address
-  --PropertyCountry: string # The country the property is located
-  --PropertyPostcode: string # The property postcode
-  --ReportedAt: string # The date the job was reported (format: date-time)
-  --TenantEMailAddress: string # The email address of the Tenant
-  --TenantForename: string # The forename of the Tenant
-  --TenantPhonePrimary: string # The primary phone number of the Tenant
-  --TenantPhoneSecondary: string # The secondary phone number of the Tenant
-  --TenantPresenceRequested: oneof<nothing, bool> # Is the Tenant’s presence requested during the maintenance visit? (Defaults to “false” if incorrect value or empty)
-  --TenantSurname: string # The surname of the Tenant
-  --TenantTitle: string # The title of the Tenant
+  --documents: list # Documents linked to a submitted maintenance job — item shape: {MimeType?: string, URL?: string}
+  --external-id: string # ID used externally to manage jobs before sending to the system. This has a 10 character limit.
+  --issue-fault: string # The fault title if applicable
+  --issue-notes: string # Fault notes
+  --issue-priority: string@issue-priority-completer # The priority of the job (Defaults to 'Low' if incorrect value or empty)
+  --issue-title: string # The title of the issue
+  --property-address1: string # The first line of the property address
+  --property-address2: string # The second line of the property address
+  --property-address3: string # The third line of the property address
+  --property-address4: string # The forth line of the property address
+  --property-country: string # The country the property is located
+  --property-postcode: string # The property postcode
+  --reported-at: string # The date the job was reported (format: date-time)
+  --tenant-e-mail-address: string # The email address of the Tenant
+  --tenant-forename: string # The forename of the Tenant
+  --tenant-phone-primary: string # The primary phone number of the Tenant
+  --tenant-phone-secondary: string # The secondary phone number of the Tenant
+  --tenant-presence-requested: oneof<nothing, bool> # Is the Tenant’s presence requested during the maintenance visit? (Defaults to “false” if incorrect value or empty)
+  --tenant-surname: string # The surname of the Tenant
+  --tenant-title: string # The title of the Tenant
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v3/maintenance/($shortName)/maintenance/($branchID)/createmaintenancejob")
-  let body = {Documents: $Documents, ExternalID: $ExternalID, IssueFault: $IssueFault, IssueNotes: $IssueNotes, IssuePriority: $IssuePriority, IssueTitle: $IssueTitle, PropertyAddress1: $PropertyAddress1, PropertyAddress2: $PropertyAddress2, PropertyAddress3: $PropertyAddress3, PropertyAddress4: $PropertyAddress4, PropertyCountry: $PropertyCountry, PropertyPostcode: $PropertyPostcode, ReportedAt: $ReportedAt, TenantEMailAddress: $TenantEMailAddress, TenantForename: $TenantForename, TenantPhonePrimary: $TenantPhonePrimary, TenantPhoneSecondary: $TenantPhoneSecondary, TenantPresenceRequested: $TenantPresenceRequested, TenantSurname: $TenantSurname, TenantTitle: $TenantTitle} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name), branch_id: (encode-path-segment $branch_id)} | format pattern "/v3/maintenance/{short_name}/maintenance/{branch_id}/createmaintenancejob"))
+  let req_body = {"Documents": $documents, "ExternalID": $external_id, "IssueFault": $issue_fault, "IssueNotes": $issue_notes, "IssuePriority": $issue_priority, "IssueTitle": $issue_title, "PropertyAddress1": $property_address1, "PropertyAddress2": $property_address2, "PropertyAddress3": $property_address3, "PropertyAddress4": $property_address4, "PropertyCountry": $property_country, "PropertyPostcode": $property_postcode, "ReportedAt": $reported_at, "TenantEMailAddress": $tenant_e_mail_address, "TenantForename": $tenant_forename, "TenantPhonePrimary": $tenant_phone_primary, "TenantPhoneSecondary": $tenant_phone_secondary, "TenantPresenceRequested": $tenant_presence_requested, "TenantSurname": $tenant_surname, "TenantTitle": $tenant_title} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }

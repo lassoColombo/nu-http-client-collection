@@ -12,27 +12,39 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {headers: {}, query: ""} }
   match $scheme {
     "basic" => { {headers: {Authorization: $"Basic ($token_val)"}, query: ""} }
+    "basic-credentials" => { {headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: ""} }
     "none" => { {headers: {}, query: ""} }
     _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
   }
 }
 
 # Serialize a single query parameter based on collection style
+# Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
+# ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = ($name | url encode)
+  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
-  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
-    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
-    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
+    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
+    _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
+}
+
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Build URL from base, path, and optional query string
@@ -44,7 +56,7 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
@@ -53,21 +65,21 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
     "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "put" => { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "patch" => { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
   if ($method in ["head" "options"]) { return $resp }
-  if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
+  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
 def base-url-completer [] { ["https://demo.pims.io/api/v1"] }
-def auth-scheme-completer [] { ["basic"] }
+def auth-scheme-completer [] { ["basic" "basic-credentials"] }
 
 # Completers for enum parameters
 def sort-completer [] { ["-label" "-order" "label" "order"] }
-def Accept-Language-completer [] { ["de" "en" "fr"] }
+def accept-language-completer [] { ["de" "en" "fr"] }
 def sort-completer-1 [] { ["-city" "-datetime" "-label" "-venue_label" "city" "datetime" "label" "venue_label"] }
 def sort-completer-2 [] { ["-date" "date"] }
 def sort-completer-3 [] { ["-date" "-total_cost" "date" "total_cost"] }
@@ -78,8 +90,8 @@ def sort-completer-5 [] { ["-city" "-country" "-label" "city" "country" "label"]
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "categories fetchAllCategories" } } | get name | first)
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "categories get-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -103,7 +115,7 @@ export def commands []: nothing -> table {
 #
 # GET /categories
 # operationId: fetchAllCategories
-export def "categories fetchAllCategories" [
+export def "categories get-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -111,29 +123,30 @@ export def "categories fetchAllCategories" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --label: string # Find only the categories whose label/short label contains this value.
   --show-ignored: oneof<nothing, bool> # If set to `false`, show only the categories which are not ignored. If set to `true`, show all categories. (default: false)
   --qp-sort: string@sort-completer # Sort the categories in the corresponding order. (default: order)
   --page-size: int # Pagination size, i.e. maximum number of items to be displayed in the response. (format: int32, default: 25)
-  --Accept-Language: string@Accept-Language-completer # Language used for the translatable labels.
+  --accept-language: string@accept-language-completer # Language used for the translatable labels.
 ]: nothing -> table<id: int, ignored: bool, label: string, last_update_timestamp: int, short_label: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "label" $label "scalar") (serialize-qp "show_ignored" $show_ignored "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/categories" $qp)
-  let extra_headers = {"Accept-Language": $Accept_Language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/hal+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"Accept-Language": $accept_language} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get one category by ID
 #
 # GET /categories/{category_id}
 # operationId: fetchOneCategory
-export def "categories fetchOneCategory" [
+export def "categories get-one" [
   category_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -142,24 +155,25 @@ export def "categories fetchOneCategory" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept-Language: string@Accept-Language-completer # Language used for the translatable labels.
+  --accept-language: string@accept-language-completer # Language used for the translatable labels.
 ]: nothing -> record<id: int, ignored: bool, label: string, last_update_timestamp: int, short_label: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/categories/($category_id)")
-  let extra_headers = {"Accept-Language": $Accept_Language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({category_id: (encode-path-segment $category_id)} | format pattern "/categories/{category_id}"))
   let accept_val = "application/hal+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"Accept-Language": $accept_language} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Find all channels
 #
 # GET /channels
 # operationId: fetchAllChannels
-export def "channels fetchAllChannels" [
+export def "channels get-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -167,29 +181,30 @@ export def "channels fetchAllChannels" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --label: string # Find only the channels whose label contains this value.
   --show-ignored: oneof<nothing, bool> # If set to `false`, show only the channels which are not ignored. If set to `true`, show all channels. (default: false)
   --qp-sort: string@sort-completer # Sort the channels in the corresponding order. (default: label)
   --page-size: int # Pagination size, i.e. maximum number of items to be displayed in the response. (format: int32, default: 25)
-  --Accept-Language: string@Accept-Language-completer # Language used for the translatable labels.
+  --accept-language: string@accept-language-completer # Language used for the translatable labels.
 ]: nothing -> table<id: int, ignored: bool, label: string, last_update_timestamp: int, short_label: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "label" $label "scalar") (serialize-qp "show_ignored" $show_ignored "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/channels" $qp)
-  let extra_headers = {"Accept-Language": $Accept_Language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/hal+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"Accept-Language": $accept_language} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get one channel by ID
 #
 # GET /channels/{channel_id}
 # operationId: fetchOneChannel
-export def "channels fetchOneChannel" [
+export def "channels get-one" [
   channel_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -198,24 +213,25 @@ export def "channels fetchOneChannel" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept-Language: string@Accept-Language-completer # Language used for the translatable labels.
+  --accept-language: string@accept-language-completer # Language used for the translatable labels.
 ]: nothing -> record<id: int, ignored: bool, label: string, last_update_timestamp: int, short_label: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/channels/($channel_id)")
-  let extra_headers = {"Accept-Language": $Accept_Language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({channel_id: (encode-path-segment $channel_id)} | format pattern "/channels/{channel_id}"))
   let accept_val = "application/hal+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"Accept-Language": $accept_language} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Find all events
 #
 # GET /events
 # operationId: fetchAllEvents
-export def "events fetchAllEvents" [
+export def "events get-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -223,6 +239,7 @@ export def "events fetchAllEvents" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --label: string # Find only the events whose label contains this value.
   --from-datetime: string # Find only the events starting after this date. (format: date)
@@ -230,24 +247,24 @@ export def "events fetchAllEvents" [
   --city: string # Find only the events whose venue city (or metropolitan area) contains this value.
   --qp-sort: string@sort-completer-1 # Sort the events in the corresponding order. (default: label)
   --page-size: int # Pagination size, i.e. maximum number of items to be displayed in the response. (format: int32, default: 25)
-  --Accept-Language: string@Accept-Language-completer # Language used for the translatable labels.
+  --accept-language: string@accept-language-completer # Language used for the translatable labels.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "label" $label "scalar") (serialize-qp "from_datetime" $from_datetime "scalar") (serialize-qp "to_datetime" $to_datetime "scalar") (serialize-qp "city" $city "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/events" $qp)
-  let extra_headers = {"Accept-Language": $Accept_Language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/hal+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"Accept-Language": $accept_language} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get one event by ID
 #
 # GET /events/{event_id}
 # operationId: fetchOneEvent
-export def "events fetchOneEvent" [
+export def "events get-one" [
   event_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -256,24 +273,25 @@ export def "events fetchOneEvent" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept-Language: string@Accept-Language-completer # Language used for the translatable labels.
+  --accept-language: string@accept-language-completer # Language used for the translatable labels.
 ]: nothing -> record<break_even: int, cancellation_date: string, contract: record<partner: record<id: int, label: string>, type: record<id: string, label: string>>, costing_capacity: int, creation_timestamp: int, currency: string, datetime: string, free: bool, general_sales_date: string, id: int, input_type: record<id: string, label: string>, label: string, last_update_timestamp: int, max_capacity: int, presales_date: string, series_id: int, sold_out_date: string, venue: record<alternative_labels: list<string>, city: string, country_code: string, creation_timestamp: int, first_address: string, id: int, label: string, last_update_timestamp: int, major_city: string, second_address: string, type: record<id: string, label: string>, zip_code: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/events/($event_id)")
-  let extra_headers = {"Accept-Language": $Accept_Language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({event_id: (encode-path-segment $event_id)} | format pattern "/events/{event_id}"))
   let accept_val = "application/hal+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"Accept-Language": $accept_language} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Find all capacities for one event
 #
 # GET /events/{event_id}/capacities
 # operationId: fetchAllEventsCapacities
-export def "events-capacities fetchAllEventsCapacities" [
+export def "events-capacities get-list" [
   event_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -282,6 +300,7 @@ export def "events-capacities fetchAllEventsCapacities" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --show-ignored: oneof<nothing, bool> # If set to `false`, show only the [event-]categories which are not ignored. If set to `true`, show everything. (default: false)
   --qp-sort: string@sort-completer-2 # Sort the capacities in the corresponding order. (default: date)
@@ -290,17 +309,17 @@ export def "events-capacities fetchAllEventsCapacities" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "show_ignored" $show_ignored "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/events/($event_id)/capacities" $qp)
+  let full_url = (build-url $base ({event_id: (encode-path-segment $event_id)} | format pattern "/events/{event_id}/capacities") $qp)
   let accept_val = "application/hal+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get one capacity by ID
 #
 # GET /events/{event_id}/capacities/{capacity_id}
 # operationId: fetchOneEventCapacity
-export def "events-capacities fetchOneEventCapacity" [
+export def "events-capacities get-one" [
   event_id: int
   capacity_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -310,23 +329,24 @@ export def "events-capacities fetchOneEventCapacity" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --show-ignored: oneof<nothing, bool> # If set to `false`, show only the [event-]categories which are not ignored. If set to `true`, show everything. (default: false)
 ]: nothing -> record<date: string, event_categories: table<comps: int, holds: int, id: int, kills: int, sellable_capacity: int, total_capacity: int>, id: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "show_ignored" $show_ignored "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/events/($event_id)/capacities/($capacity_id)" $qp)
+  let full_url = (build-url $base ({event_id: (encode-path-segment $event_id), capacity_id: (encode-path-segment $capacity_id)} | format pattern "/events/{event_id}/capacities/{capacity_id}") $qp)
   let accept_val = "application/hal+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Find all categories for one event
 #
 # GET /events/{event_id}/categories
 # operationId: fetchAllEventsCategories
-export def "events-categories fetchAllEventsCategories" [
+export def "events-categories get-list" [
   event_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -335,6 +355,7 @@ export def "events-categories fetchAllEventsCategories" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --show-ignored: oneof<nothing, bool> # If set to `false`, show only the [event-]categories/[event-]price ranges which are not ignored. If set to `true`, show everything. (default: false)
   --page-size: int # Pagination size, i.e. maximum number of items to be displayed in the response. (format: int32, default: 25)
@@ -342,17 +363,17 @@ export def "events-categories fetchAllEventsCategories" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "show_ignored" $show_ignored "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/events/($event_id)/categories" $qp)
+  let full_url = (build-url $base ({event_id: (encode-path-segment $event_id)} | format pattern "/events/{event_id}/categories") $qp)
   let accept_val = "application/hal+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get one event category by ID
 #
 # GET /events/{event_id}/categories/{category_id}
 # operationId: fetchOneEventCategory
-export def "events-categories fetchOneEventCategory" [
+export def "events-categories get-one" [
   event_id: int
   category_id: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -362,23 +383,24 @@ export def "events-categories fetchOneEventCategory" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --show-ignored: oneof<nothing, bool> # If set to `false`, show only the embedded [event-]price ranges which are not ignored. If set to `true`, show everything. (default: false)
 ]: nothing -> record<category: record<id: int, ignored: bool, label: string, last_update_timestamp: int, short_label: string>, event_price_ranges: table<base_price: float, currency: string, id: int, ignored: bool, price_range: record, public_price: float>, id: int, ignored: bool> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "show_ignored" $show_ignored "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/events/($event_id)/categories/($category_id)" $qp)
+  let full_url = (build-url $base ({event_id: (encode-path-segment $event_id), category_id: (encode-path-segment $category_id)} | format pattern "/events/{event_id}/categories/{category_id}") $qp)
   let accept_val = "application/hal+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Find all channels for one event
 #
 # GET /events/{event_id}/channels
 # operationId: fetchAllEventsChannels
-export def "events-channels fetchAllEventsChannels" [
+export def "events-channels get-list" [
   event_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -387,6 +409,7 @@ export def "events-channels fetchAllEventsChannels" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --show-ignored: oneof<nothing, bool> # If set to `false`, show only the [event-]channels which are not ignored. If set to `true`, show everything. (default: false)
   --page-size: int # Pagination size, i.e. maximum number of items to be displayed in the response. (format: int32, default: 25)
@@ -394,17 +417,17 @@ export def "events-channels fetchAllEventsChannels" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "show_ignored" $show_ignored "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/events/($event_id)/channels" $qp)
+  let full_url = (build-url $base ({event_id: (encode-path-segment $event_id)} | format pattern "/events/{event_id}/channels") $qp)
   let accept_val = "application/hal+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get one event channel by ID
 #
 # GET /events/{event_id}/channels/{channel_id}
 # operationId: fetchOneEventChannel
-export def "events-channels fetchOneEventChannel" [
+export def "events-channels get-one" [
   event_id: int
   channel_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -414,21 +437,22 @@ export def "events-channels fetchOneEventChannel" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<channel: record<id: int, ignored: bool, label: string, last_update_timestamp: int, short_label: string>, id: int, ignored: bool> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/events/($event_id)/channels/($channel_id)")
+  let full_url = (build-url $base ({event_id: (encode-path-segment $event_id), channel_id: (encode-path-segment $channel_id)} | format pattern "/events/{event_id}/channels/{channel_id}"))
   let accept_val = "application/hal+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Find all promotions for one event
 #
 # GET /events/{event_id}/promotions
 # operationId: fetchAllEventsPromotions
-export def "events-promotions fetchAllEventsPromotions" [
+export def "events-promotions get-list" [
   event_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -437,6 +461,7 @@ export def "events-promotions fetchAllEventsPromotions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --label: string # Find only the promotions whose label contains this value.
   --from-date: string # Find only the promotions starting after this date. (format: date)
@@ -445,24 +470,24 @@ export def "events-promotions fetchAllEventsPromotions" [
   --family: string # Find only the promotions whose family is equal to this value.
   --qp-sort: string@sort-completer-3 # Sort the promotions in the corresponding order. (default: date)
   --page-size: int # Pagination size, i.e. maximum number of items to be displayed in the response. (format: int32, default: 25)
-  --Accept-Language: string@Accept-Language-completer # Language used for the translatable labels.
+  --accept-language: string@accept-language-completer # Language used for the translatable labels.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "label" $label "scalar") (serialize-qp "from_date" $from_date "scalar") (serialize-qp "to_date" $to_date "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "family" $family "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/events/($event_id)/promotions" $qp)
-  let extra_headers = {"Accept-Language": $Accept_Language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({event_id: (encode-path-segment $event_id)} | format pattern "/events/{event_id}/promotions") $qp)
   let accept_val = "application/hal+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"Accept-Language": $accept_language} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Find all ticket counts for one event
 #
 # GET /events/{event_id}/ticket-counts
 # operationId: fetchAllTicketCounts
-export def "events-ticket-counts fetchAllTicketCounts" [
+export def "events-ticket-counts get-list" [
   event_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -471,6 +496,7 @@ export def "events-ticket-counts fetchAllTicketCounts" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --from-date: string # Find only the ticket counts after this date. (format: date)
   --to-date: string # Find only the ticket counts before this date. (format: date)
@@ -482,17 +508,17 @@ export def "events-ticket-counts fetchAllTicketCounts" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "from_date" $from_date "scalar") (serialize-qp "to_date" $to_date "scalar") (serialize-qp "show_ignored" $show_ignored "scalar") (serialize-qp "show_not_approved" $show_not_approved "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/events/($event_id)/ticket-counts" $qp)
+  let full_url = (build-url $base ({event_id: (encode-path-segment $event_id)} | format pattern "/events/{event_id}/ticket-counts") $qp)
   let accept_val = "application/hal+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Find all detailed ticket counts for one event
 #
 # GET /events/{event_id}/ticket-counts/detailed
 # operationId: fetchAllDetailedTicketCounts
-export def "events-ticket-counts-detailed fetchAllDetailedTicketCounts" [
+export def "events-ticket-counts-detailed get-list" [
   event_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -501,6 +527,7 @@ export def "events-ticket-counts-detailed fetchAllDetailedTicketCounts" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --from-date: string # Find only the ticket counts after this date. (format: date)
   --to-date: string # Find only the ticket counts before this date. (format: date)
@@ -512,17 +539,17 @@ export def "events-ticket-counts-detailed fetchAllDetailedTicketCounts" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "from_date" $from_date "scalar") (serialize-qp "to_date" $to_date "scalar") (serialize-qp "show_ignored" $show_ignored "scalar") (serialize-qp "show_not_approved" $show_not_approved "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/events/($event_id)/ticket-counts/detailed" $qp)
+  let full_url = (build-url $base ({event_id: (encode-path-segment $event_id)} | format pattern "/events/{event_id}/ticket-counts/detailed") $qp)
   let accept_val = "application/hal+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get one detailed ticket count by ID
 #
 # GET /events/{event_id}/ticket-counts/detailed/{ticket_count_id}
 # operationId: fetchOneDetailedTicketCount
-export def "events-ticket-counts-detailed fetchOneDetailedTicketCount" [
+export def "events-ticket-counts-detailed get-one" [
   event_id: int
   ticket_count_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -532,23 +559,24 @@ export def "events-ticket-counts-detailed fetchOneDetailedTicketCount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --show-ignored: oneof<nothing, bool> # If set to `false`, show only the [event-]categories/[event-]price ranges/[event]channels which are not ignored. If set to `true`, show everything. (default: false)
 ]: nothing -> record<approved: bool, comment: string, date: string, event_channels: table<event_categories: list, id: int>, final: bool, id: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "show_ignored" $show_ignored "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/events/($event_id)/ticket-counts/detailed/($ticket_count_id)" $qp)
+  let full_url = (build-url $base ({event_id: (encode-path-segment $event_id), ticket_count_id: (encode-path-segment $ticket_count_id)} | format pattern "/events/{event_id}/ticket-counts/detailed/{ticket_count_id}") $qp)
   let accept_val = "application/hal+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get one ticket count by ID
 #
 # GET /events/{event_id}/ticket-counts/{ticket_count_id}
 # operationId: fetchOneTicketCount
-export def "events-ticket-counts fetchOneTicketCount" [
+export def "events-ticket-counts get-one" [
   event_id: int
   ticket_count_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -558,23 +586,24 @@ export def "events-ticket-counts fetchOneTicketCount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --show-ignored: oneof<nothing, bool> # If set to `false`, show only the [event-]categories/[event-]price ranges/[event]channels which are not ignored. If set to `true`, show everything. (default: false)
 ]: nothing -> record<approved: bool, comment: string, currency: string, date: string, final: bool, gross: float, id: int, reservations: int, sales: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "show_ignored" $show_ignored "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/events/($event_id)/ticket-counts/($ticket_count_id)" $qp)
+  let full_url = (build-url $base ({event_id: (encode-path-segment $event_id), ticket_count_id: (encode-path-segment $ticket_count_id)} | format pattern "/events/{event_id}/ticket-counts/{ticket_count_id}") $qp)
   let accept_val = "application/hal+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Find all price ranges
 #
 # GET /price-ranges
 # operationId: fetchAllPriceRanges
-export def "price-ranges fetchAllPriceRanges" [
+export def "price-ranges get-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -582,29 +611,30 @@ export def "price-ranges fetchAllPriceRanges" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --label: string # Find only the price ranges whose label contains this value.
   --show-ignored: oneof<nothing, bool> # If set to `false`, show only the price ranges which are not ignored. If set to `true`, show all price ranges. (default: false)
   --qp-sort: string@sort-completer # Sort the price ranges in the corresponding order. (default: label)
   --page-size: int # Pagination size, i.e. maximum number of items to be displayed in the response. (format: int32, default: 25)
-  --Accept-Language: string@Accept-Language-completer # Language used for the translatable labels.
+  --accept-language: string@accept-language-completer # Language used for the translatable labels.
 ]: nothing -> table<id: int, ignored: bool, label: string, last_update_timestamp: int, short_label: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "label" $label "scalar") (serialize-qp "show_ignored" $show_ignored "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/price-ranges" $qp)
-  let extra_headers = {"Accept-Language": $Accept_Language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/hal+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"Accept-Language": $accept_language} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get one price range by ID
 #
 # GET /price-ranges/{price_range_id}
 # operationId: fetchOnePriceRange
-export def "price-ranges fetchOnePriceRange" [
+export def "price-ranges get-one" [
   price_range_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -613,24 +643,25 @@ export def "price-ranges fetchOnePriceRange" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept-Language: string@Accept-Language-completer # Language used for the translatable labels.
+  --accept-language: string@accept-language-completer # Language used for the translatable labels.
 ]: nothing -> record<alternative_labels: list<string>, city: string, country_code: string, creation_timestamp: int, first_address: string, id: int, label: string, last_update_timestamp: int, major_city: string, second_address: string, type: record<id: string, label: string>, zip_code: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/price-ranges/($price_range_id)")
-  let extra_headers = {"Accept-Language": $Accept_Language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({price_range_id: (encode-path-segment $price_range_id)} | format pattern "/price-ranges/{price_range_id}"))
   let accept_val = "application/hal+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"Accept-Language": $accept_language} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Find all promotions
 #
 # GET /promotions
 # operationId: fetchAllPromotions
-export def "promotions fetchAllPromotions" [
+export def "promotions get-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -638,6 +669,7 @@ export def "promotions fetchAllPromotions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --label: string # Find only the promotions whose label contains this value.
   --from-date: string # Find only the promotions starting after this date. (format: date)
@@ -646,24 +678,24 @@ export def "promotions fetchAllPromotions" [
   --family: string # Find only the promotions whose family is equal to this value.
   --qp-sort: string@sort-completer-3 # Sort the promotions in the corresponding order. (default: date)
   --page-size: int # Pagination size, i.e. maximum number of items to be displayed in the response. (format: int32, default: 25)
-  --Accept-Language: string@Accept-Language-completer # Language used for the translatable labels.
+  --accept-language: string@accept-language-completer # Language used for the translatable labels.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "label" $label "scalar") (serialize-qp "from_date" $from_date "scalar") (serialize-qp "to_date" $to_date "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "family" $family "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/promotions" $qp)
-  let extra_headers = {"Accept-Language": $Accept_Language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/hal+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"Accept-Language": $accept_language} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get one promotion by ID
 #
 # GET /promotions/{promotion_id}
 # operationId: fetchOnePromotion
-export def "promotions fetchOnePromotion" [
+export def "promotions get-one" [
   promotion_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -672,24 +704,25 @@ export def "promotions fetchOnePromotion" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept-Language: string@Accept-Language-completer # Language used for the translatable labels.
+  --accept-language: string@accept-language-completer # Language used for the translatable labels.
 ]: nothing -> record<applied_to: table<event_id: int, quantity: float, series_id: int, unit_cost: float, valorized_quantity: float, valorized_unit_cost: float>, comments: string, cost: record<currency: string, exchange: string, quantity: float, state: record<id: string, label: string>, type: record<id: string, label: string>, unit_cost: float, valorized_quantity: float, valorized_unit_cost: float>, end_date: string, file: string, id: int, label: string, start_date: string, supplier: record<id: int, label: string>, type: record<family: record<id: string, label: string>, id: string, label: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/promotions/($promotion_id)")
-  let extra_headers = {"Accept-Language": $Accept_Language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({promotion_id: (encode-path-segment $promotion_id)} | format pattern "/promotions/{promotion_id}"))
   let accept_val = "application/hal+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"Accept-Language": $accept_language} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Find all series
 #
 # GET /series
 # operationId: fetchAllSeries
-export def "series fetchAllSeries" [
+export def "series get-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -697,6 +730,7 @@ export def "series fetchAllSeries" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --label: string # Find only the venues whose label contains this value.
   --from-date: string # Find only the series starting after this date. (format: date)
@@ -704,24 +738,24 @@ export def "series fetchAllSeries" [
   --type: string@type-completer # Find only the series whose type is equal to this value.
   --qp-sort: string@sort-completer-4 # Sort the series in the corresponding order. (default: first_date)
   --page-size: int # Pagination size, i.e. maximum number of items to be displayed in the response. (format: int32, default: 25)
-  --Accept-Language: string@Accept-Language-completer # Language used for the translatable labels.
+  --accept-language: string@accept-language-completer # Language used for the translatable labels.
 ]: nothing -> table<contract: record<partner: record, type: record>, costing_capacity: int, creation_timestamp: int, first_date: string, id: int, label: string, last_date: string, last_update_timestamp: int, type: record<id: string, label: string>, venue: record<alternative_labels: list, city: string, country_code: string, creation_timestamp: int, first_address: string, id: int, label: string, last_update_timestamp: int, major_city: string, second_address: string, type: record, zip_code: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "label" $label "scalar") (serialize-qp "from_date" $from_date "scalar") (serialize-qp "to_date" $to_date "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/series" $qp)
-  let extra_headers = {"Accept-Language": $Accept_Language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/hal+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"Accept-Language": $accept_language} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get one series by ID
 #
 # GET /series/{series_id}
 # operationId: fetchOneSeries
-export def "series fetchOneSeries" [
+export def "series get-one" [
   series_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -730,24 +764,25 @@ export def "series fetchOneSeries" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept-Language: string@Accept-Language-completer # Language used for the translatable labels.
+  --accept-language: string@accept-language-completer # Language used for the translatable labels.
 ]: nothing -> record<contract: record<partner: record<id: int, label: string>, type: record<id: string, label: string>>, costing_capacity: int, creation_timestamp: int, first_date: string, id: int, label: string, last_date: string, last_update_timestamp: int, type: record<id: string, label: string>, venue: record<alternative_labels: list<string>, city: string, country_code: string, creation_timestamp: int, first_address: string, id: int, label: string, last_update_timestamp: int, major_city: string, second_address: string, type: record<id: string, label: string>, zip_code: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/series/($series_id)")
-  let extra_headers = {"Accept-Language": $Accept_Language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({series_id: (encode-path-segment $series_id)} | format pattern "/series/{series_id}"))
   let accept_val = "application/hal+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"Accept-Language": $accept_language} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Find all events for one series
 #
 # GET /series/{series_id}/events
 # operationId: fetchAllSeriesEvents
-export def "series-events fetchAllSeriesEvents" [
+export def "series-events get-list" [
   series_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -756,30 +791,31 @@ export def "series-events fetchAllSeriesEvents" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --from-datetime: string # Find only the events starting after this date. (format: date)
   --to-datetime: string # Find only the events starting before this date. (format: date)
   --city: string # Find only the events whose venue city (or metropolitan area) contains this value.
   --qp-sort: string@sort-completer-1 # Sort the events in the corresponding order. (default: label)
   --page-size: int # Pagination size, i.e. maximum number of items to be displayed in the response. (format: int32, default: 25)
-  --Accept-Language: string@Accept-Language-completer # Language used for the translatable labels.
+  --accept-language: string@accept-language-completer # Language used for the translatable labels.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "from_datetime" $from_datetime "scalar") (serialize-qp "to_datetime" $to_datetime "scalar") (serialize-qp "city" $city "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/series/($series_id)/events" $qp)
-  let extra_headers = {"Accept-Language": $Accept_Language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({series_id: (encode-path-segment $series_id)} | format pattern "/series/{series_id}/events") $qp)
   let accept_val = "application/hal+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"Accept-Language": $accept_language} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Find all promotions for one series
 #
 # GET /series/{series_id}/promotions
 # operationId: fetchAllSeriesPromotions
-export def "series-promotions fetchAllSeriesPromotions" [
+export def "series-promotions get-list" [
   series_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -788,6 +824,7 @@ export def "series-promotions fetchAllSeriesPromotions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --label: string # Find only the promotions whose label contains this value.
   --from-date: string # Find only the promotions starting after this date. (format: date)
@@ -796,24 +833,24 @@ export def "series-promotions fetchAllSeriesPromotions" [
   --family: string # Find only the promotions whose family is equal to this value.
   --qp-sort: string@sort-completer-3 # Sort the promotions in the corresponding order. (default: date)
   --page-size: int # Pagination size, i.e. maximum number of items to be displayed in the response. (format: int32, default: 25)
-  --Accept-Language: string@Accept-Language-completer # Language used for the translatable labels.
+  --accept-language: string@accept-language-completer # Language used for the translatable labels.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "label" $label "scalar") (serialize-qp "from_date" $from_date "scalar") (serialize-qp "to_date" $to_date "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "family" $family "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/series/($series_id)/promotions" $qp)
-  let extra_headers = {"Accept-Language": $Accept_Language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({series_id: (encode-path-segment $series_id)} | format pattern "/series/{series_id}/promotions") $qp)
   let accept_val = "application/hal+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"Accept-Language": $accept_language} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Find all venues
 #
 # GET /venues
 # operationId: fetchAllVenues
-export def "venues fetchAllVenues" [
+export def "venues get-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -821,6 +858,7 @@ export def "venues fetchAllVenues" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --label: string # Find only the venues whose label contains this value.
   --city: string # Find only the venues whose city contains this value.
@@ -828,24 +866,24 @@ export def "venues fetchAllVenues" [
   --type: string@type-completer-1 # Find only the venues whose type is equal to this value.
   --qp-sort: string@sort-completer-5 # Sort the venues in the corresponding order. (default: label)
   --page-size: int # Pagination size, i.e. maximum number of items to be displayed in the response. (format: int32, default: 25)
-  --Accept-Language: string@Accept-Language-completer # Language used for the translatable labels.
+  --accept-language: string@accept-language-completer # Language used for the translatable labels.
 ]: nothing -> table<alternative_labels: list<string>, city: string, country_code: string, creation_timestamp: int, first_address: string, id: int, label: string, last_update_timestamp: int, major_city: string, second_address: string, type: record<id: string, label: string>, zip_code: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "label" $label "scalar") (serialize-qp "city" $city "scalar") (serialize-qp "country_code" $country_code "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/venues" $qp)
-  let extra_headers = {"Accept-Language": $Accept_Language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/hal+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"Accept-Language": $accept_language} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get one venue by ID
 #
 # GET /venues/{venue_id}
 # operationId: fetchOneVenue
-export def "venues fetchOneVenue" [
+export def "venues get-one" [
   venue_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -854,24 +892,25 @@ export def "venues fetchOneVenue" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept-Language: string@Accept-Language-completer # Language used for the translatable labels.
+  --accept-language: string@accept-language-completer # Language used for the translatable labels.
 ]: nothing -> record<alternative_labels: list<string>, city: string, country_code: string, creation_timestamp: int, first_address: string, id: int, label: string, last_update_timestamp: int, major_city: string, second_address: string, type: record<id: string, label: string>, zip_code: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/venues/($venue_id)")
-  let extra_headers = {"Accept-Language": $Accept_Language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({venue_id: (encode-path-segment $venue_id)} | format pattern "/venues/{venue_id}"))
   let accept_val = "application/hal+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"Accept-Language": $accept_language} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Find all events for one venue
 #
 # GET /venues/{venue_id}/events
 # operationId: fetchAllVenuesEvents
-export def "venues-events fetchAllVenuesEvents" [
+export def "venues-events get-list" [
   venue_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -880,21 +919,22 @@ export def "venues-events fetchAllVenuesEvents" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --from-datetime: string # Find only the events starting after this date. (format: date)
   --to-datetime: string # Find only the events starting before this date. (format: date)
   --city: string # Find only the events whose venue city (or metropolitan area) contains this value.
   --qp-sort: string@sort-completer-1 # Sort the events in the corresponding order. (default: label)
   --page-size: int # Pagination size, i.e. maximum number of items to be displayed in the response. (format: int32, default: 25)
-  --Accept-Language: string@Accept-Language-completer # Language used for the translatable labels.
+  --accept-language: string@accept-language-completer # Language used for the translatable labels.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "from_datetime" $from_datetime "scalar") (serialize-qp "to_datetime" $to_datetime "scalar") (serialize-qp "city" $city "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/venues/($venue_id)/events" $qp)
-  let extra_headers = {"Accept-Language": $Accept_Language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({venue_id: (encode-path-segment $venue_id)} | format pattern "/venues/{venue_id}/events") $qp)
   let accept_val = "application/hal+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"Accept-Language": $accept_language} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }

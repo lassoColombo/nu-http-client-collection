@@ -18,21 +18,32 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 }
 
 # Serialize a single query parameter based on collection style
+# Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
+# ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = ($name | url encode)
+  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
-  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
-    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
-    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
+    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
+    _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
+}
+
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Build URL from base, path, and optional query string
@@ -44,7 +55,7 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
@@ -53,13 +64,13 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
     "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "put" => { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "patch" => { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
   if ($method in ["head" "options"]) { return $resp }
-  if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
+  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
 def base-url-completer [] { ["https://management.azure.com"] }
@@ -70,8 +81,8 @@ def protocol-completer [] { ["Http" "Https"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-providers-microsoft-network-application-gateway-available-request-headers ListAvailableRequestHeaders" } } | get name | first)
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-providers-microsoft-network-application-gateway-available-request-headers list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -95,8 +106,8 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Network/applicationGatewayAvailableRequestHeaders
 # operationId: ApplicationGateways_ListAvailableRequestHeaders
-export def "subscriptions-providers-microsoft-network-application-gateway-available-request-headers ListAvailableRequestHeaders" [
-  subscriptionId: any
+export def "subscriptions-providers-microsoft-network-application-gateway-available-request-headers list" [
+  subscription_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -104,22 +115,23 @@ export def "subscriptions-providers-microsoft-network-application-gateway-availa
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Network/applicationGatewayAvailableRequestHeaders")
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Network/applicationGatewayAvailableRequestHeaders"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Lists all available response headers.
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Network/applicationGatewayAvailableResponseHeaders
 # operationId: ApplicationGateways_ListAvailableResponseHeaders
-export def "subscriptions-providers-microsoft-network-application-gateway-available-response-headers ListAvailableResponseHeaders" [
-  subscriptionId: any
+export def "subscriptions-providers-microsoft-network-application-gateway-available-response-headers list" [
+  subscription_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -127,22 +139,23 @@ export def "subscriptions-providers-microsoft-network-application-gateway-availa
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Network/applicationGatewayAvailableResponseHeaders")
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Network/applicationGatewayAvailableResponseHeaders"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Lists all available server variables.
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Network/applicationGatewayAvailableServerVariables
 # operationId: ApplicationGateways_ListAvailableServerVariables
-export def "subscriptions-providers-microsoft-network-application-gateway-available-server-variables ListAvailableServerVariables" [
-  subscriptionId: any
+export def "subscriptions-providers-microsoft-network-application-gateway-available-server-variables list" [
+  subscription_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -150,22 +163,23 @@ export def "subscriptions-providers-microsoft-network-application-gateway-availa
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Network/applicationGatewayAvailableServerVariables")
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Network/applicationGatewayAvailableServerVariables"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Lists available Ssl options for configuring Ssl policy.
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Network/applicationGatewayAvailableSslOptions/default
 # operationId: ApplicationGateways_ListAvailableSslOptions
-export def "subscriptions-providers-microsoft-network-application-gateway-available-ssl-options-default ListAvailableSslOptions" [
-  subscriptionId: any
+export def "subscriptions-providers-microsoft-network-application-gateway-available-ssl-options-default list" [
+  subscription_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -173,22 +187,23 @@ export def "subscriptions-providers-microsoft-network-application-gateway-availa
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<properties: record<availableCipherSuites: list<string>, availableProtocols: list<string>, defaultPolicy: string, predefinedPolicies: list<any>>> {
+]: nothing -> record<properties: record<availableCipherSuites: list<string>, availableProtocols: list<string>, defaultPolicy: string, predefinedPolicies: list<record>>, id: string, location: string, name: string, tags: record, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Network/applicationGatewayAvailableSslOptions/default")
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Network/applicationGatewayAvailableSslOptions/default"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Lists all SSL predefined policies for configuring Ssl policy.
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Network/applicationGatewayAvailableSslOptions/default/predefinedPolicies
 # operationId: ApplicationGateways_ListAvailableSslPredefinedPolicies
-export def "subscriptions-providers-microsoft-network-application-gateway-available-ssl-options-default-predefined-policies ListAvailableSslPredefinedPolicies" [
-  subscriptionId: any
+export def "subscriptions-providers-microsoft-network-application-gateway-available-ssl-options-default-predefined-policies list" [
+  subscription_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -196,23 +211,24 @@ export def "subscriptions-providers-microsoft-network-application-gateway-availa
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<nextLink: string, value: table<name: string, properties: record>> {
+]: nothing -> record<nextLink: string, value: table<name: string, properties: record, id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Network/applicationGatewayAvailableSslOptions/default/predefinedPolicies")
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Network/applicationGatewayAvailableSslOptions/default/predefinedPolicies"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Gets Ssl predefined policy with the specified policy name.
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Network/applicationGatewayAvailableSslOptions/default/predefinedPolicies/{predefinedPolicyName}
 # operationId: ApplicationGateways_GetSslPredefinedPolicy
-export def "subscriptions-providers-microsoft-network-application-gateway-available-ssl-options-default-predefined-policies GetSslPredefinedPolicy" [
-  predefinedPolicyName: string
-  subscriptionId: any
+export def "subscriptions-providers-microsoft-network-application-gateway-available-ssl-options-default-predefined-policies get-policy" [
+  subscription_id: any
+  predefined_policy_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -220,22 +236,23 @@ export def "subscriptions-providers-microsoft-network-application-gateway-availa
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<name: string, properties: record<cipherSuites: list<string>, minProtocolVersion: string>> {
+]: nothing -> record<name: string, properties: record<cipherSuites: list<string>, minProtocolVersion: string>, id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Network/applicationGatewayAvailableSslOptions/default/predefinedPolicies/($predefinedPolicyName)")
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), predefined_policy_name: (encode-path-segment $predefined_policy_name)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Network/applicationGatewayAvailableSslOptions/default/predefinedPolicies/{predefined_policy_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Lists all available web application firewall rule sets.
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Network/applicationGatewayAvailableWafRuleSets
 # operationId: ApplicationGateways_ListAvailableWafRuleSets
-export def "subscriptions-providers-microsoft-network-application-gateway-available-waf-rule-sets ListAvailableWafRuleSets" [
-  subscriptionId: any
+export def "subscriptions-providers-microsoft-network-application-gateway-available-waf-rule-sets list" [
+  subscription_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -243,22 +260,23 @@ export def "subscriptions-providers-microsoft-network-application-gateway-availa
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<value: table<properties: record>> {
+]: nothing -> record<value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Network/applicationGatewayAvailableWafRuleSets")
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Network/applicationGatewayAvailableWafRuleSets"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Gets all the application gateways in a subscription.
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Network/applicationGateways
 # operationId: ApplicationGateways_ListAll
-export def "subscriptions-providers-microsoft-network-application-gateways ListAll" [
-  subscriptionId: any
+export def "subscriptions-providers-microsoft-network-application-gateways list-list" [
+  subscription_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -266,23 +284,24 @@ export def "subscriptions-providers-microsoft-network-application-gateways ListA
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<nextLink: string, value: table<etag: string, identity: record, properties: record, zones: list, id: string, location: string, name: string, tags: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Network/applicationGateways")
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Network/applicationGateways"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Lists all application gateways in a resource group.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/applicationGateways
 # operationId: ApplicationGateways_List
-export def "subscriptions-resource-groups-providers-microsoft-network-application-gateways List" [
-  resourceGroupName: string
-  subscriptionId: any
+export def "subscriptions-resource-groups-providers-microsoft-network-application-gateways list" [
+  subscription_id: any
+  resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -290,24 +309,25 @@ export def "subscriptions-resource-groups-providers-microsoft-network-applicatio
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<nextLink: string, value: table<etag: string, identity: record, properties: record, zones: list, id: string, location: string, name: string, tags: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/applicationGateways")
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/applicationGateways"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Deletes the specified application gateway.
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/applicationGateways/{applicationGatewayName}
 # operationId: ApplicationGateways_Delete
-export def "subscriptions-resource-groups-providers-microsoft-network-application-gateways Delete" [
-  resourceGroupName: string
-  applicationGatewayName: string
-  subscriptionId: any
+export def "subscriptions-resource-groups-providers-microsoft-network-application-gateways delete" [
+  subscription_id: any
+  resource_group_name: string
+  application_gateway_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -315,24 +335,25 @@ export def "subscriptions-resource-groups-providers-microsoft-network-applicatio
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/applicationGateways/($applicationGatewayName)")
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), application_gateway_name: (encode-path-segment $application_gateway_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/applicationGateways/{application_gateway_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Gets the specified application gateway.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/applicationGateways/{applicationGatewayName}
 # operationId: ApplicationGateways_Get
-export def "subscriptions-resource-groups-providers-microsoft-network-application-gateways Get" [
-  resourceGroupName: string
-  applicationGatewayName: string
-  subscriptionId: any
+export def "subscriptions-resource-groups-providers-microsoft-network-application-gateways get" [
+  subscription_id: any
+  resource_group_name: string
+  application_gateway_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -340,24 +361,25 @@ export def "subscriptions-resource-groups-providers-microsoft-network-applicatio
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<etag: string, identity: record<principalId: string, tenantId: string, type: string, userAssignedIdentities: record>, properties: record<authenticationCertificates: list<record>, autoscaleConfiguration: record<maxCapacity: int, minCapacity: int>, backendAddressPools: list<record>, backendHttpSettingsCollection: list<record>, customErrorConfigurations: list<record>, enableFips: bool, enableHttp2: bool, firewallPolicy: any, frontendIPConfigurations: list<record>, frontendPorts: list<record>, gatewayIPConfigurations: list<record>, httpListeners: list<record>, operationalState: string, probes: list<record>, provisioningState: any, redirectConfigurations: list<record>, requestRoutingRules: list<record>, resourceGuid: string, rewriteRuleSets: list<record>, sku: record<capacity: int, name: string, tier: string>, sslCertificates: list<record>, sslPolicy: record<cipherSuites: list, disabledSslProtocols: list, minProtocolVersion: string, policyName: string, policyType: string>, trustedRootCertificates: list<record>, urlPathMaps: list<record>, webApplicationFirewallConfiguration: record<disabledRuleGroups: list, enabled: bool, exclusions: list, fileUploadLimitInMb: int, firewallMode: string, maxRequestBodySize: int, maxRequestBodySizeInKb: int, requestBodyCheck: bool, ruleSetType: string, ruleSetVersion: string>>, zones: list<string>, id: string, location: string, name: string, tags: record, type: string> {
+]: nothing -> record<etag: string, identity: record<principalId: string, tenantId: string, type: string, userAssignedIdentities: record>, properties: record<authenticationCertificates: list<record>, autoscaleConfiguration: record<maxCapacity: int, minCapacity: int>, backendAddressPools: list<record>, backendHttpSettingsCollection: list<record>, customErrorConfigurations: list<record>, enableFips: bool, enableHttp2: bool, firewallPolicy: record<id: string>, frontendIPConfigurations: list<record>, frontendPorts: list<record>, gatewayIPConfigurations: list<record>, httpListeners: list<record>, operationalState: string, probes: list<record>, provisioningState: string, redirectConfigurations: list<record>, requestRoutingRules: list<record>, resourceGuid: string, rewriteRuleSets: list<record>, sku: record<capacity: int, name: string, tier: string>, sslCertificates: list<record>, sslPolicy: record<cipherSuites: list, disabledSslProtocols: list, minProtocolVersion: string, policyName: string, policyType: string>, trustedRootCertificates: list<record>, urlPathMaps: list<record>, webApplicationFirewallConfiguration: record<disabledRuleGroups: list, enabled: bool, exclusions: list, fileUploadLimitInMb: int, firewallMode: string, maxRequestBodySize: int, maxRequestBodySizeInKb: int, requestBodyCheck: bool, ruleSetType: string, ruleSetVersion: string>>, zones: list<string>, id: string, location: string, name: string, tags: record, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/applicationGateways/($applicationGatewayName)")
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), application_gateway_name: (encode-path-segment $application_gateway_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/applicationGateways/{application_gateway_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Updates the specified application gateway tags.
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/applicationGateways/{applicationGatewayName}
 # operationId: ApplicationGateways_UpdateTags
-export def "subscriptions-resource-groups-providers-microsoft-network-application-gateways UpdateTags" [
-  resourceGroupName: string
-  applicationGatewayName: string
-  subscriptionId: any
+export def "subscriptions-resource-groups-providers-microsoft-network-application-gateways update-tags" [
+  subscription_id: any
+  resource_group_name: string
+  application_gateway_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -365,18 +387,19 @@ export def "subscriptions-resource-groups-providers-microsoft-network-applicatio
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --tags: record # Resource tags.
-]: any -> record<etag: string, identity: record<principalId: string, tenantId: string, type: string, userAssignedIdentities: record>, properties: record<authenticationCertificates: list<record>, autoscaleConfiguration: record<maxCapacity: int, minCapacity: int>, backendAddressPools: list<record>, backendHttpSettingsCollection: list<record>, customErrorConfigurations: list<record>, enableFips: bool, enableHttp2: bool, firewallPolicy: any, frontendIPConfigurations: list<record>, frontendPorts: list<record>, gatewayIPConfigurations: list<record>, httpListeners: list<record>, operationalState: string, probes: list<record>, provisioningState: any, redirectConfigurations: list<record>, requestRoutingRules: list<record>, resourceGuid: string, rewriteRuleSets: list<record>, sku: record<capacity: int, name: string, tier: string>, sslCertificates: list<record>, sslPolicy: record<cipherSuites: list, disabledSslProtocols: list, minProtocolVersion: string, policyName: string, policyType: string>, trustedRootCertificates: list<record>, urlPathMaps: list<record>, webApplicationFirewallConfiguration: record<disabledRuleGroups: list, enabled: bool, exclusions: list, fileUploadLimitInMb: int, firewallMode: string, maxRequestBodySize: int, maxRequestBodySizeInKb: int, requestBodyCheck: bool, ruleSetType: string, ruleSetVersion: string>>, zones: list<string>, id: string, location: string, name: string, tags: record, type: string> {
+]: any -> record<etag: string, identity: record<principalId: string, tenantId: string, type: string, userAssignedIdentities: record>, properties: record<authenticationCertificates: list<record>, autoscaleConfiguration: record<maxCapacity: int, minCapacity: int>, backendAddressPools: list<record>, backendHttpSettingsCollection: list<record>, customErrorConfigurations: list<record>, enableFips: bool, enableHttp2: bool, firewallPolicy: record<id: string>, frontendIPConfigurations: list<record>, frontendPorts: list<record>, gatewayIPConfigurations: list<record>, httpListeners: list<record>, operationalState: string, probes: list<record>, provisioningState: string, redirectConfigurations: list<record>, requestRoutingRules: list<record>, resourceGuid: string, rewriteRuleSets: list<record>, sku: record<capacity: int, name: string, tier: string>, sslCertificates: list<record>, sslPolicy: record<cipherSuites: list, disabledSslProtocols: list, minProtocolVersion: string, policyName: string, policyType: string>, trustedRootCertificates: list<record>, urlPathMaps: list<record>, webApplicationFirewallConfiguration: record<disabledRuleGroups: list, enabled: bool, exclusions: list, fileUploadLimitInMb: int, firewallMode: string, maxRequestBodySize: int, maxRequestBodySizeInKb: int, requestBodyCheck: bool, ruleSetType: string, ruleSetVersion: string>>, zones: list<string>, id: string, location: string, name: string, tags: record, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/applicationGateways/($applicationGatewayName)")
-  let body = {tags: $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), application_gateway_name: (encode-path-segment $application_gateway_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/applicationGateways/{application_gateway_name}"))
+  let req_body = {"tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Creates or updates the specified application gateway.
@@ -384,11 +407,11 @@ export def "subscriptions-resource-groups-providers-microsoft-network-applicatio
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/applicationGateways/{applicationGatewayName}
 # operationId: ApplicationGateways_CreateOrUpdate
 # --identity shape: {type?: "SystemAssigned"|"UserAssigned"|"SystemAssigned, UserAssigned"|"None", userAssignedIdentities?: record}
-# --properties shape: {authenticationCertificates?: list, autoscaleConfiguration?: any, backendAddressPools?: list, backendHttpSettingsCollection?: list, customErrorConfigurations?: list, enableFips?: bool, enableHttp2?: bool, firewallPolicy?: any, frontendIPConfigurations?: list, frontendPorts?: list, gatewayIPConfigurations?: list, httpListeners?: list, probes?: list, provisioningState?: any, redirectConfigurations?: list, requestRoutingRules?: list, resourceGuid?: string, rewriteRuleSets?: list, sku?: any, sslCertificates?: list, sslPolicy?: any, trustedRootCertificates?: list, urlPathMaps?: list, webApplicationFirewallConfiguration?: any}
-export def "subscriptions-resource-groups-providers-microsoft-network-application-gateways CreateOrUpdate" [
-  resourceGroupName: string
-  applicationGatewayName: string
-  subscriptionId: any
+# --properties shape: {authenticationCertificates?: list, autoscaleConfiguration?: any, backendAddressPools?: list, backendHttpSettingsCollection?: list, customErrorConfigurations?: list, enableFips?: bool, enableHttp2?: bool, firewallPolicy?: any, frontendIPConfigurations?: list, frontendPorts?: list, gatewayIPConfigurations?: list, httpListeners?: list, probes?: list, redirectConfigurations?: list, requestRoutingRules?: list, resourceGuid?: string, rewriteRuleSets?: list, sku?: any, sslCertificates?: list, ... (4 more fields)}
+export def "subscriptions-resource-groups-providers-microsoft-network-application-gateways create-or-update" [
+  subscription_id: any
+  resource_group_name: string
+  application_gateway_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -396,34 +419,35 @@ export def "subscriptions-resource-groups-providers-microsoft-network-applicatio
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --etag: string # A unique read-only string that changes whenever the resource is updated.
   --identity: any # Identity for the resource. — shape: {type?: "SystemAssigned"|"UserAssigned"|"SystemAssigned, UserAssigned"|"None", userAssignedIdentities?: record}
-  --properties: any # Properties of the application gateway. — shape: {authenticationCertificates?: list, autoscaleConfiguration?: any, backendAddressPools?: list, backendHttpSettingsCollection?: list, customErrorConfigurations?: list, enableFips?: bool, enableHttp2?: bool, firewallPolicy?: any, frontendIPConfigurations?: list, frontendPorts?: list, gatewayIPConfigurations?: list, httpListeners?: list, probes?: list, provisioningState?: any, redirectConfigurations?: list, requestRoutingRules?: list, resourceGuid?: string, rewriteRuleSets?: list, sku?: any, sslCertificates?: list, sslPolicy?: any, trustedRootCertificates?: list, urlPathMaps?: list, webApplicationFirewallConfiguration?: any}
-  --zones: list # A list of availability zones denoting where the resource needs to come from.
+  --properties: any # Properties of the application gateway. — shape: {authenticationCertificates?: list, autoscaleConfiguration?: any, backendAddressPools?: list, backendHttpSettingsCollection?: list, customErrorConfigurations?: list, enableFips?: bool, enableHttp2?: bool, firewallPolicy?: any, frontendIPConfigurations?: list, frontendPorts?: list, gatewayIPConfigurations?: list, httpListeners?: list, probes?: list, redirectConfigurations?: list, requestRoutingRules?: list, resourceGuid?: string, rewriteRuleSets?: list, sku?: any, sslCertificates?: list, ... (4 more fields)}
+  --zones: list<string> # A list of availability zones denoting where the resource needs to come from.
   --id: string # Resource ID.
   --location: string # Resource location.
   --tags: record # Resource tags.
-]: any -> record<etag: string, identity: record<principalId: string, tenantId: string, type: string, userAssignedIdentities: record>, properties: record<authenticationCertificates: list<record>, autoscaleConfiguration: record<maxCapacity: int, minCapacity: int>, backendAddressPools: list<record>, backendHttpSettingsCollection: list<record>, customErrorConfigurations: list<record>, enableFips: bool, enableHttp2: bool, firewallPolicy: any, frontendIPConfigurations: list<record>, frontendPorts: list<record>, gatewayIPConfigurations: list<record>, httpListeners: list<record>, operationalState: string, probes: list<record>, provisioningState: any, redirectConfigurations: list<record>, requestRoutingRules: list<record>, resourceGuid: string, rewriteRuleSets: list<record>, sku: record<capacity: int, name: string, tier: string>, sslCertificates: list<record>, sslPolicy: record<cipherSuites: list, disabledSslProtocols: list, minProtocolVersion: string, policyName: string, policyType: string>, trustedRootCertificates: list<record>, urlPathMaps: list<record>, webApplicationFirewallConfiguration: record<disabledRuleGroups: list, enabled: bool, exclusions: list, fileUploadLimitInMb: int, firewallMode: string, maxRequestBodySize: int, maxRequestBodySizeInKb: int, requestBodyCheck: bool, ruleSetType: string, ruleSetVersion: string>>, zones: list<string>, id: string, location: string, name: string, tags: record, type: string> {
+]: any -> record<etag: string, identity: record<principalId: string, tenantId: string, type: string, userAssignedIdentities: record>, properties: record<authenticationCertificates: list<record>, autoscaleConfiguration: record<maxCapacity: int, minCapacity: int>, backendAddressPools: list<record>, backendHttpSettingsCollection: list<record>, customErrorConfigurations: list<record>, enableFips: bool, enableHttp2: bool, firewallPolicy: record<id: string>, frontendIPConfigurations: list<record>, frontendPorts: list<record>, gatewayIPConfigurations: list<record>, httpListeners: list<record>, operationalState: string, probes: list<record>, provisioningState: string, redirectConfigurations: list<record>, requestRoutingRules: list<record>, resourceGuid: string, rewriteRuleSets: list<record>, sku: record<capacity: int, name: string, tier: string>, sslCertificates: list<record>, sslPolicy: record<cipherSuites: list, disabledSslProtocols: list, minProtocolVersion: string, policyName: string, policyType: string>, trustedRootCertificates: list<record>, urlPathMaps: list<record>, webApplicationFirewallConfiguration: record<disabledRuleGroups: list, enabled: bool, exclusions: list, fileUploadLimitInMb: int, firewallMode: string, maxRequestBodySize: int, maxRequestBodySizeInKb: int, requestBodyCheck: bool, ruleSetType: string, ruleSetVersion: string>>, zones: list<string>, id: string, location: string, name: string, tags: record, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/applicationGateways/($applicationGatewayName)")
-  let body = {etag: $etag, identity: $identity, properties: $properties, zones: $zones, id: $id, location: $location, tags: $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), application_gateway_name: (encode-path-segment $application_gateway_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/applicationGateways/{application_gateway_name}"))
+  let req_body = {"etag": $etag, "identity": $identity, "properties": $properties, "zones": $zones, "id": $id, "location": $location, "tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Gets the backend health of the specified application gateway in a resource group.
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/applicationGateways/{applicationGatewayName}/backendhealth
 # operationId: ApplicationGateways_BackendHealth
-export def "subscriptions-resource-groups-providers-microsoft-network-application-gateways-backendhealth BackendHealth" [
-  resourceGroupName: string
-  applicationGatewayName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-network-application-gateways-backendhealth create-backend-health" [
+  subscription_id: string
+  resource_group_name: string
+  application_gateway_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -431,6 +455,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-applicatio
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version.
   --expand: string # Expands BackendAddressPool and BackendHttpSettings referenced in backend health.
@@ -438,21 +463,23 @@ export def "subscriptions-resource-groups-providers-microsoft-network-applicatio
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/applicationGateways/($applicationGatewayName)/backendhealth" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), application_gateway_name: (encode-path-segment $application_gateway_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/applicationGateways/{application_gateway_name}/backendhealth") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Gets the backend health for given combination of backend pool and http setting of the specified application gateway in a resource group.
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/applicationGateways/{applicationGatewayName}/getBackendHealthOnDemand
 # operationId: ApplicationGateways_BackendHealthOnDemand
-# --match shape: {body?: string, statusCodes?: list}
-export def "subscriptions-resource-groups-providers-microsoft-network-application-gateways-get-backend-health-on-demand BackendHealthOnDemand" [
-  resourceGroupName: string
-  applicationGatewayName: string
-  subscriptionId: any
+# --backendAddressPool shape: {id?: string}
+# --backendHttpSettings shape: {id?: string}
+# --match shape: {body?: string, statusCodes?: list<string>}
+export def "subscriptions-resource-groups-providers-microsoft-network-application-gateways-get-backend-health-on-demand create" [
+  subscription_id: any
+  resource_group_name: string
+  application_gateway_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -460,37 +487,38 @@ export def "subscriptions-resource-groups-providers-microsoft-network-applicatio
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # Expands BackendAddressPool and BackendHttpSettings referenced in backend health.
-  --backendAddressPool: any
-  --backendHttpSettings: any
+  --backend-address-pool: any # Reference to another subresource. — shape: {id?: string}
+  --backend-http-settings: any # Reference to another subresource. — shape: {id?: string}
   --host: string # Host name to send the probe to.
-  --body-match: any # Application gateway probe health response match. — shape: {body?: string, statusCodes?: list}
-  --path: string # Relative path of probe. Valid path starts from '/'. Probe is sent to <Protocol>://<host>:<port><path>.
-  --pickHostNameFromBackendHttpSettings: oneof<nothing, bool> # Whether the host header should be picked from the backend http settings. Default value is false.
+  --body-match: any # Application gateway probe health response match. — shape: {body?: string, statusCodes?: list<string>}
+  --path: string # Relative path of probe. Valid path starts from '/'. Probe is sent to ://:.
+  --pick-host-name-from-backend-http-settings: oneof<nothing, bool> # Whether the host header should be picked from the backend http settings. Default value is false.
   --protocol: string@protocol-completer # Application Gateway protocol.
   --timeout: int # The probe timeout in seconds. Probe marked as failed if valid response is not received with this timeout period. Acceptable values are from 1 second to 86400 seconds. (format: int32)
-]: any -> record<backendAddressPool: record<etag: string, name: string, properties: record<backendAddresses: list, backendIPConfigurations: list, provisioningState: any>, type: string>, backendHealthHttpSettings: record<backendHttpSettings: record<etag: string, name: string, properties: record, type: string>, servers: list<record>>> {
+]: any -> record<backendAddressPool: record<etag: string, name: string, properties: record<backendAddresses: list, backendIPConfigurations: list, provisioningState: string>, type: string, id: string>, backendHealthHttpSettings: record<backendHttpSettings: record<etag: string, name: string, properties: record, type: string, id: string>, servers: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/applicationGateways/($applicationGatewayName)/getBackendHealthOnDemand" $qp)
-  let body = {backendAddressPool: $backendAddressPool, backendHttpSettings: $backendHttpSettings, host: $host, match: $body_match, path: $path, pickHostNameFromBackendHttpSettings: $pickHostNameFromBackendHttpSettings, protocol: $protocol, timeout: $timeout} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), application_gateway_name: (encode-path-segment $application_gateway_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/applicationGateways/{application_gateway_name}/getBackendHealthOnDemand") $qp)
+  let req_body = {"backendAddressPool": $backend_address_pool, "backendHttpSettings": $backend_http_settings, "host": $host, "match": $body_match, "path": $path, "pickHostNameFromBackendHttpSettings": $pick_host_name_from_backend_http_settings, "protocol": $protocol, "timeout": $timeout} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Starts the specified application gateway.
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/applicationGateways/{applicationGatewayName}/start
 # operationId: ApplicationGateways_Start
-export def "subscriptions-resource-groups-providers-microsoft-network-application-gateways-start Start" [
-  resourceGroupName: string
-  applicationGatewayName: string
-  subscriptionId: any
+export def "subscriptions-resource-groups-providers-microsoft-network-application-gateways-start start" [
+  subscription_id: any
+  resource_group_name: string
+  application_gateway_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -498,24 +526,25 @@ export def "subscriptions-resource-groups-providers-microsoft-network-applicatio
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/applicationGateways/($applicationGatewayName)/start")
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), application_gateway_name: (encode-path-segment $application_gateway_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/applicationGateways/{application_gateway_name}/start"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Stops the specified application gateway in a resource group.
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/applicationGateways/{applicationGatewayName}/stop
 # operationId: ApplicationGateways_Stop
-export def "subscriptions-resource-groups-providers-microsoft-network-application-gateways-stop Stop" [
-  resourceGroupName: string
-  applicationGatewayName: string
-  subscriptionId: any
+export def "subscriptions-resource-groups-providers-microsoft-network-application-gateways-stop stop" [
+  subscription_id: any
+  resource_group_name: string
+  application_gateway_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -523,12 +552,13 @@ export def "subscriptions-resource-groups-providers-microsoft-network-applicatio
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/applicationGateways/($applicationGatewayName)/stop")
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), application_gateway_name: (encode-path-segment $application_gateway_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/applicationGateways/{application_gateway_name}/stop"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }

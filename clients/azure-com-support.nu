@@ -18,21 +18,32 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 }
 
 # Serialize a single query parameter based on collection style
+# Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
+# ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = ($name | url encode)
+  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
-  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
-    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
-    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
+    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
+    _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
+}
+
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Build URL from base, path, and optional query string
@@ -44,7 +55,7 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
@@ -53,13 +64,13 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
     "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "put" => { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "patch" => { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
   if ($method in ["head" "options"]) { return $resp }
-  if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
+  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
 def base-url-completer [] { ["https://management.azure.com"] }
@@ -71,8 +82,8 @@ def severity-completer [] { ["critical" "minimal" "moderate"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-support-operations List" } } | get name | first)
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-support-operations list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -96,7 +107,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.Support/operations
 # operationId: Operations_List
-export def "providers-microsoft-support-operations List" [
+export def "providers-microsoft-support-operations list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -104,6 +115,7 @@ export def "providers-microsoft-support-operations List" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Api version
 ]: nothing -> record<value: table<display: record, name: string>> {
@@ -113,14 +125,14 @@ export def "providers-microsoft-support-operations List" [
   let full_url = (build-url $base "/providers/Microsoft.Support/operations" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
-# Lists all the Azure services available for support ticket creation. Here are the Service Ids for **Billing**, **Subscription Management**, and **Service and subscription limits (Quotas)** issues: <br/><table><tr><td><u>Issue type</u></td><td><u>Service Id</u></td></tr><tr><td>Billing</td><td>'/providers/Microsoft.Support/services/517f2da6-78fd-0498-4e22-ad26996b1dfc'</td></tr><tr><td>Subscription Management</td><td>'/providers/Microsoft.Support/services/f3dc5421-79ef-1efa-41a5-42bf3cbb52c6'</td></tr><tr><td>Quota</td><td>'/providers/Microsoft.Support/services/06bfd9d3-516b-d5c6-5802-169c800dec89'</td></tr></table> <br/><br/> For **Technical** issues, select the Service Id that maps to the Azure service/product as displayed in the **Services** drop-down list on the Azure portal's <a target='_blank' href='https://portal.azure.com/#blade/Microsoft_Azure_Support/HelpAndSupportBlade/overview'>New support request</a> page. <br/><br/> Always use the service and it's corresponding problem classification(s) obtained programmatically for support ticket creation. This practice ensures that you always have the most recent set of service and problem classification Ids.
+# Lists all the Azure services available for support ticket creation. Here are the Service Ids for **Billing**, **Subscription Management**, and **Service and subscription limits (Quotas)** issues: Issue typeService IdBilling'/providers/Microsoft.Support/services/517f2da6-78fd-0498-4e22-ad26996b1dfc'Subscription Management'/providers/Microsoft.Support/services/f3dc5421-79ef-1efa-41a5-42bf3cbb52c6'Quota'/providers/Microsoft.Support/services/06bfd9d3-516b-d5c6-5802-169c800dec89' For **Technical** issues, select the Service Id that maps to the Azure service/product as displayed in the **Services** drop-down list on the Azure portal's New support request page. Always use the service and it's corresponding problem classification(s) obtained programmatically for support ticket creation. This practice ensures that you always have the most recent set of service and problem classification Ids.
 #
 # GET /providers/Microsoft.Support/services
 # operationId: Services_List
-export def "providers-microsoft-support-services List" [
+export def "providers-microsoft-support-services list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -128,6 +140,7 @@ export def "providers-microsoft-support-services List" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Api version
 ]: nothing -> record<value: table<id: string, name: string, properties: record, type: string>> {
@@ -137,15 +150,15 @@ export def "providers-microsoft-support-services List" [
   let full_url = (build-url $base "/providers/Microsoft.Support/services" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Gets a specific Azure service for support ticket creation.
 #
 # GET /providers/Microsoft.Support/services/{serviceName}
 # operationId: Services_Get
-export def "providers-microsoft-support-services Get" [
-  serviceName: string
+export def "providers-microsoft-support-services get" [
+  service_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -153,24 +166,25 @@ export def "providers-microsoft-support-services Get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Api version
 ]: nothing -> record<id: string, name: string, properties: record<displayName: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/providers/Microsoft.Support/services/($serviceName)" $qp)
+  let full_url = (build-url $base ({service_name: (encode-path-segment $service_name)} | format pattern "/providers/Microsoft.Support/services/{service_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
-# Lists all the problem classifications (categories) available for a specific Azure service.<br/><br/> Always use the service and problem classifications obtained programmatically. This practice ensures that you always have the most recent set of service and problem classification Ids.
+# Lists all the problem classifications (categories) available for a specific Azure service. Always use the service and problem classifications obtained programmatically. This practice ensures that you always have the most recent set of service and problem classification Ids.
 #
 # GET /providers/Microsoft.Support/services/{serviceName}/problemClassifications
 # operationId: ProblemClassifications_List
-export def "providers-microsoft-support-services-problem-classifications List" [
-  serviceName: string
+export def "providers-microsoft-support-services-problem-classifications list" [
+  service_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -178,25 +192,26 @@ export def "providers-microsoft-support-services-problem-classifications List" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Api version
 ]: nothing -> record<value: table<id: string, name: string, properties: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/providers/Microsoft.Support/services/($serviceName)/problemClassifications" $qp)
+  let full_url = (build-url $base ({service_name: (encode-path-segment $service_name)} | format pattern "/providers/Microsoft.Support/services/{service_name}/problemClassifications") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Gets the details of a specific problem classification for a specific Azure service.
 #
 # GET /providers/Microsoft.Support/services/{serviceName}/problemClassifications/{problemClassificationName}
 # operationId: ProblemClassifications_Get
-export def "providers-microsoft-support-services-problem-classifications Get" [
-  serviceName: string
-  problemClassificationName: string
+export def "providers-microsoft-support-services-problem-classifications get" [
+  service_name: string
+  problem_classification_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -204,24 +219,25 @@ export def "providers-microsoft-support-services-problem-classifications Get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Api version
 ]: nothing -> record<id: string, name: string, properties: record<displayName: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/providers/Microsoft.Support/services/($serviceName)/problemClassifications/($problemClassificationName)" $qp)
+  let full_url = (build-url $base ({service_name: (encode-path-segment $service_name), problem_classification_name: (encode-path-segment $problem_classification_name)} | format pattern "/providers/Microsoft.Support/services/{service_name}/problemClassifications/{problem_classification_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Check the availability of a resource name. This API should to be used to check the uniqueness of the name for support ticket creation for the selected subscription.
 #
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.Support/checkNameAvailability
 # operationId: SupportTickets_CheckNameAvailability
-export def "subscriptions-providers-microsoft-support-check-name-availability CheckNameAvailability" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-support-check-name-availability check-tickets" [
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -229,6 +245,7 @@ export def "subscriptions-providers-microsoft-support-check-name-availability Ch
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Api version
   name: string # The resource name to validate
@@ -238,20 +255,20 @@ export def "subscriptions-providers-microsoft-support-check-name-availability Ch
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Support/checkNameAvailability" $qp)
-  let body = {name: $name, type: $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Support/checkNameAvailability") $qp)
+  let req_body = {"name": $name, "type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
-# Lists all the support tickets for an Azure subscription. <br/><br/>You can also filter the support tickets by <i>Status</i> or <i>CreatedDate</i> using the $filter parameter. Output will be a paged result with <i>nextLink</i>, using which you can retrieve the next set of support tickets. <br/><br/>Support ticket data is available for 12 months after ticket creation. If a ticket was created more than 12 months ago, a request for data might cause an error.
+# Lists all the support tickets for an Azure subscription. You can also filter the support tickets by Status or CreatedDate using the $filter parameter. Output will be a paged result with nextLink, using which you can retrieve the next set of support tickets. Support ticket data is available for 12 months after ticket creation. If a ticket was created more than 12 months ago, a request for data might cause an error.
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Support/supportTickets
 # operationId: SupportTickets_List
-export def "subscriptions-providers-microsoft-support-support-tickets List" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-support-support-tickets list" [
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -259,27 +276,28 @@ export def "subscriptions-providers-microsoft-support-support-tickets List" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --top: int # The number of values to return in the collection. Default is 25 and max is 100.
-  --filter: string # The filter to apply on the operation. We support 'odata v4.0' filter semantics. <a target='_blank' href='https://docs.microsoft.com/odata/concepts/queryoptions-overview'>Learn more</a> <br/><i>Status</i> filter can only be used with 'eq' operator. For <i>CreatedDate</i> filter, the supported operators are 'gt' and 'ge'. When using both filters, combine them using the logical 'AND'.
+  --filter: string # The filter to apply on the operation. We support 'odata v4.0' filter semantics. Learn more Status filter can only be used with 'eq' operator. For CreatedDate filter, the supported operators are 'gt' and 'ge'. When using both filters, combine them using the logical 'AND'.
   --api-version: string # Api version
 ]: nothing -> record<nextLink: string, value: table<id: string, name: string, properties: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$top" $top "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Support/supportTickets" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Support/supportTickets") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
-# Gets details for a specific support ticket in an Azure subscription. <br/><br/>Support ticket data is available for 12 months after ticket creation. If a ticket was created more than 12 months ago, a request for data might cause an error.
+# Gets details for a specific support ticket in an Azure subscription. Support ticket data is available for 12 months after ticket creation. If a ticket was created more than 12 months ago, a request for data might cause an error.
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Support/supportTickets/{supportTicketName}
 # operationId: SupportTickets_Get
-export def "subscriptions-providers-microsoft-support-support-tickets Get" [
-  supportTicketName: string
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-support-support-tickets get" [
+  subscription_id: string
+  support_ticket_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -287,26 +305,27 @@ export def "subscriptions-providers-microsoft-support-support-tickets Get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Api version
 ]: nothing -> record<id: string, name: string, properties: record<contactDetails: record<additionalEmailAddresses: list, country: string, firstName: string, lastName: string, phoneNumber: string, preferredContactMethod: string, preferredSupportLanguage: string, preferredTimeZone: string, primaryEmailAddress: string>, createdDate: string, description: string, enrollmentId: string, modifiedDate: string, problemClassificationDisplayName: string, problemClassificationId: string, problemStartTime: string, productionOutage: bool, quotaTicketDetails: record<quotaChangeRequestSubType: string, quotaChangeRequestVersion: string, quotaChangeRequests: list>, require24X7Response: bool, serviceDisplayName: string, serviceId: string, serviceLevelAgreement: record<expirationTime: string, slaMinutes: int, startTime: string>, severity: string, status: string, supportEngineer: record<emailAddress: string>, supportPlanType: string, supportTicketId: string, technicalTicketDetails: record<resourceId: string>, title: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Support/supportTickets/($supportTicketName)" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), support_ticket_name: (encode-path-segment $support_ticket_name)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Support/supportTickets/{support_ticket_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
-# This API allows you to update the severity level or your contact information in the support ticket. <br/><br/> Note: The severity levels cannot be changed if a support ticket is actively being worked upon by an Azure support engineer. In such a case, contact your support engineer to request severity update by adding a new communication using the Communications API.
+# This API allows you to update the severity level or your contact information in the support ticket. Note: The severity levels cannot be changed if a support ticket is actively being worked upon by an Azure support engineer. In such a case, contact your support engineer to request severity update by adding a new communication using the Communications API.
 #
 # PATCH /subscriptions/{subscriptionId}/providers/Microsoft.Support/supportTickets/{supportTicketName}
 # operationId: SupportTickets_Update
-# --contactDetails shape: {additionalEmailAddresses?: list, country?: string, firstName?: string, lastName?: string, phoneNumber?: string, preferredContactMethod?: "email"|"phone", preferredSupportLanguage?: string, preferredTimeZone?: string, primaryEmailAddress?: string}
-export def "subscriptions-providers-microsoft-support-support-tickets Update" [
-  supportTicketName: string
-  subscriptionId: string
+# --contactDetails shape: {additionalEmailAddresses?: list<string>, country?: string, firstName?: string, lastName?: string, phoneNumber?: string, preferredContactMethod?: "email"|"phone", preferredSupportLanguage?: string, preferredTimeZone?: string, primaryEmailAddress?: string}
+export def "subscriptions-providers-microsoft-support-support-tickets update" [
+  subscription_id: string
+  support_ticket_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -314,31 +333,32 @@ export def "subscriptions-providers-microsoft-support-support-tickets Update" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Api version
-  --contactDetails: record # Contact information associated with the support ticket. — shape: {additionalEmailAddresses?: list, country?: string, firstName?: string, lastName?: string, phoneNumber?: string, preferredContactMethod?: "email"|"phone", preferredSupportLanguage?: string, preferredTimeZone?: string, primaryEmailAddress?: string}
+  --contact-details: record # Contact information associated with the support ticket. — shape: {additionalEmailAddresses?: list<string>, country?: string, firstName?: string, lastName?: string, phoneNumber?: string, preferredContactMethod?: "email"|"phone", preferredSupportLanguage?: string, preferredTimeZone?: string, primaryEmailAddress?: string}
   --severity: string@severity-completer # Severity level
 ]: any -> record<id: string, name: string, properties: record<contactDetails: record<additionalEmailAddresses: list, country: string, firstName: string, lastName: string, phoneNumber: string, preferredContactMethod: string, preferredSupportLanguage: string, preferredTimeZone: string, primaryEmailAddress: string>, createdDate: string, description: string, enrollmentId: string, modifiedDate: string, problemClassificationDisplayName: string, problemClassificationId: string, problemStartTime: string, productionOutage: bool, quotaTicketDetails: record<quotaChangeRequestSubType: string, quotaChangeRequestVersion: string, quotaChangeRequests: list>, require24X7Response: bool, serviceDisplayName: string, serviceId: string, serviceLevelAgreement: record<expirationTime: string, slaMinutes: int, startTime: string>, severity: string, status: string, supportEngineer: record<emailAddress: string>, supportPlanType: string, supportTicketId: string, technicalTicketDetails: record<resourceId: string>, title: string>, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Support/supportTickets/($supportTicketName)" $qp)
-  let body = {contactDetails: $contactDetails, severity: $severity} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), support_ticket_name: (encode-path-segment $support_ticket_name)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Support/supportTickets/{support_ticket_name}") $qp)
+  let req_body = {"contactDetails": $contact_details, "severity": $severity} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
-# Creates a new support ticket for Quota increase, Technical, Billing, and Subscription Management issues for the specified subscription. <br/><br/>A paid technical support plan is required to create a support ticket using this API. <a href='https://aka.ms/supportticketAPI'>Learn more</a> <br/><br/> Use the Services API to map the right Service Id to the issue type. For example: For billing tickets set *serviceId* to *'/providers/Microsoft.Support/services/517f2da6-78fd-0498-4e22-ad26996b1dfc'*. <br/> For Technical issues, the Service id will map to the Azure service you want to raise a support ticket for. <br/><br/>Always call the Services and ProblemClassifications API to get the most recent set of services and problem categories required for support ticket creation.
+# Creates a new support ticket for Quota increase, Technical, Billing, and Subscription Management issues for the specified subscription. A paid technical support plan is required to create a support ticket using this API. Learn more Use the Services API to map the right Service Id to the issue type. For example: For billing tickets set *serviceId* to *'/providers/Microsoft.Support/services/517f2da6-78fd-0498-4e22-ad26996b1dfc'*. For Technical issues, the Service id will map to the Azure service you want to raise a support ticket for. Always call the Services and ProblemClassifications API to get the most recent set of services and problem categories required for support ticket creation.
 #
 # PUT /subscriptions/{subscriptionId}/providers/Microsoft.Support/supportTickets/{supportTicketName}
 # operationId: SupportTickets_Create
 # --properties shape: {contactDetails: record, description: string, problemClassificationId: string, problemStartTime?: string, quotaTicketDetails?: record, require24X7Response?: bool, serviceId: string, serviceLevelAgreement?: record, severity: "minimal"|"moderate"|"critical", supportEngineer?: record, supportTicketId?: string, technicalTicketDetails?: record, title: string}
-export def "subscriptions-providers-microsoft-support-support-tickets Create" [
-  supportTicketName: string
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-support-support-tickets create" [
+  subscription_id: string
+  support_ticket_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -346,6 +366,7 @@ export def "subscriptions-providers-microsoft-support-support-tickets Create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Api version
   --properties: record # Describes the properties of a support ticket. — shape: {contactDetails: record, description: string, problemClassificationId: string, problemStartTime?: string, quotaTicketDetails?: record, require24X7Response?: bool, serviceId: string, serviceLevelAgreement?: record, severity: "minimal"|"moderate"|"critical", supportEngineer?: record, supportTicketId?: string, technicalTicketDetails?: record, title: string}
@@ -354,21 +375,21 @@ export def "subscriptions-providers-microsoft-support-support-tickets Create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Support/supportTickets/($supportTicketName)" $qp)
-  let body = {properties: $properties} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), support_ticket_name: (encode-path-segment $support_ticket_name)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Support/supportTickets/{support_ticket_name}") $qp)
+  let req_body = {"properties": $properties} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Check the availability of a resource name. This API should to be used to check the uniqueness of the name for adding a new communication to the support ticket.
 #
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.Support/supportTickets/{supportTicketName}/checkNameAvailability
 # operationId: Communications_CheckNameAvailability
-export def "subscriptions-providers-microsoft-support-support-tickets-check-name-availability CheckNameAvailability" [
-  supportTicketName: string
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-support-support-tickets-check-name-availability check-communications" [
+  subscription_id: string
+  support_ticket_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -376,6 +397,7 @@ export def "subscriptions-providers-microsoft-support-support-tickets-check-name
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Api version
   name: string # The resource name to validate
@@ -385,21 +407,21 @@ export def "subscriptions-providers-microsoft-support-support-tickets-check-name
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Support/supportTickets/($supportTicketName)/checkNameAvailability" $qp)
-  let body = {name: $name, type: $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), support_ticket_name: (encode-path-segment $support_ticket_name)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Support/supportTickets/{support_ticket_name}/checkNameAvailability") $qp)
+  let req_body = {"name": $name, "type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
-# Lists all communications (attachments not included) for a support ticket. <br/></br> You can also filter support ticket communications by <i>CreatedDate</i>�or <i>CommunicationType</i> using the $filter parameter. The only type of communication supported today is <i>Web</i>. Output will be a paged result with <i>nextLink</i>, using which you can retrieve the next set of Communication results. <br/><br/> Support ticket data is available for 12 months after ticket creation. If a ticket was created more than 12 months ago, a request for data might cause an error.
+# Lists all communications (attachments not included) for a support ticket. You can also filter support ticket communications by CreatedDate�or CommunicationType using the $filter parameter. The only type of communication supported today is Web. Output will be a paged result with nextLink, using which you can retrieve the next set of Communication results. Support ticket data is available for 12 months after ticket creation. If a ticket was created more than 12 months ago, a request for data might cause an error.
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Support/supportTickets/{supportTicketName}/communications
 # operationId: Communications_List
-export def "subscriptions-providers-microsoft-support-support-tickets-communications List" [
-  supportTicketName: string
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-support-support-tickets-communications list" [
+  subscription_id: string
+  support_ticket_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -407,6 +429,7 @@ export def "subscriptions-providers-microsoft-support-support-tickets-communicat
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --top: int # The number of values to return in the collection. Default is 10 and max is 10.
   --filter: string # The filter to apply on the operation. You can filter by communicationType and createdDate properties. CommunicationType supports Equals ('eq') operator and createdDate supports Greater Than ('gt') and Greater Than or Equals ('ge') operators. You may combine the CommunicationType and CreatedDate filters by Logical And ('and') operator.
@@ -415,20 +438,20 @@ export def "subscriptions-providers-microsoft-support-support-tickets-communicat
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$top" $top "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Support/supportTickets/($supportTicketName)/communications" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), support_ticket_name: (encode-path-segment $support_ticket_name)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Support/supportTickets/{support_ticket_name}/communications") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Returns details of a specific communication in a support ticket.
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Support/supportTickets/{supportTicketName}/communications/{communicationName}
 # operationId: Communications_Get
-export def "subscriptions-providers-microsoft-support-support-tickets-communications Get" [
-  supportTicketName: string
-  communicationName: string
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-support-support-tickets-communications get" [
+  subscription_id: string
+  support_ticket_name: string
+  communication_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -436,27 +459,28 @@ export def "subscriptions-providers-microsoft-support-support-tickets-communicat
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Api version
 ]: nothing -> record<id: string, name: string, properties: record<body: string, communicationDirection: string, communicationType: string, createdDate: string, sender: string, subject: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Support/supportTickets/($supportTicketName)/communications/($communicationName)" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), support_ticket_name: (encode-path-segment $support_ticket_name), communication_name: (encode-path-segment $communication_name)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Support/supportTickets/{support_ticket_name}/communications/{communication_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
-# Adds a new customer communication to an Azure support ticket. Adding attachments are not currently supported via the API. <br/>To add a file to a support ticket, visit the <a target='_blank' href='https://portal.azure.com/#blade/Microsoft_Azure_Support/HelpAndSupportBlade/managesupportrequest'>Manage support ticket</a> page in the Azure portal, select the support ticket, and use the file upload control to add a new file.
+# Adds a new customer communication to an Azure support ticket. Adding attachments are not currently supported via the API. To add a file to a support ticket, visit the Manage support ticket page in the Azure portal, select the support ticket, and use the file upload control to add a new file.
 #
 # PUT /subscriptions/{subscriptionId}/providers/Microsoft.Support/supportTickets/{supportTicketName}/communications/{communicationName}
 # operationId: Communications_Create
 # --properties shape: {body: string, sender?: string, subject: string}
-export def "subscriptions-providers-microsoft-support-support-tickets-communications Create" [
-  supportTicketName: string
-  communicationName: string
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-support-support-tickets-communications create" [
+  subscription_id: string
+  support_ticket_name: string
+  communication_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -464,6 +488,7 @@ export def "subscriptions-providers-microsoft-support-support-tickets-communicat
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Api version
   --properties: record # Describes the properties of a communication resource. — shape: {body: string, sender?: string, subject: string}
@@ -472,10 +497,10 @@ export def "subscriptions-providers-microsoft-support-support-tickets-communicat
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Support/supportTickets/($supportTicketName)/communications/($communicationName)" $qp)
-  let body = {properties: $properties} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), support_ticket_name: (encode-path-segment $support_ticket_name), communication_name: (encode-path-segment $communication_name)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Support/supportTickets/{support_ticket_name}/communications/{communication_name}") $qp)
+  let req_body = {"properties": $properties} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }

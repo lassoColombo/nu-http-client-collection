@@ -14,27 +14,39 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
     "basic" => { {headers: {Authorization: $"Basic ($token_val)"}, query: ""} }
     "bearer" => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
     "mutual" => { {headers: {Authorization: $"Mutual ($token_val)"}, query: ""} }
+    "basic-credentials" => { {headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: ""} }
     "none" => { {headers: {}, query: ""} }
     _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
   }
 }
 
 # Serialize a single query parameter based on collection style
+# Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
+# ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = ($name | url encode)
+  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
-  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
-    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
-    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
+    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
+    _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
+}
+
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Build URL from base, path, and optional query string
@@ -46,7 +58,7 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
@@ -55,26 +67,26 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
     "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "put" => { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "patch" => { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
   if ($method in ["head" "options"]) { return $resp }
-  if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
+  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
 def base-url-completer [] { ["http://conjur.local" "http://localhost"] }
-def auth-scheme-completer [] { ["basic" "bearer" "mutual"] }
+def auth-scheme-completer [] { ["basic" "bearer" "mutual" "basic-credentials"] }
 
 # Completers for enum parameters
-def Accept-Encoding-completer [] { ["application/json" "base64"] }
-def Accept-Encoding-completer-1 [] { ["base64"] }
+def accept-encoding-completer [] { ["application/json" "base64"] }
+def accept-encoding-completer-1 [] { ["base64"] }
 def accept-completer [] { ["application/json" "application/x-pem-file"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "authenticators get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -107,24 +119,25 @@ export def "authenticators get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Request-Id: string # Add an ID to the request being made so it can be tracked in Conjur. If not provided the server will automatically generate one.  (e.g. test-id)
+  --x-request-id: string # Add an ID to the request being made so it can be tracked in Conjur. If not provided the server will automatically generate one. (e.g. test-id)
 ]: nothing -> record<configured: list<string>, enabled: list<string>, installed: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/authenticators")
-  let extra_headers = {"X-Request-Id": $X_Request_Id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"X-Request-Id": $x_request_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Gets a short-lived access token for applications running in Azure.
 #
 # POST /authn-azure/{service_id}/{account}/{login}/authenticate
 # operationId: getAccessTokenViaAzure
-export def "authn-azure-authenticate post" [
+export def "authn-azure-authenticate get-access-token-via" [
   service_id: string
   account: string
   login: string
@@ -135,28 +148,30 @@ export def "authn-azure-authenticate post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept-Encoding: string@Accept-Encoding-completer # Setting the Accept-Encoding header to base64 will return a pre-encoded access token
+  --accept-encoding: string@accept-encoding-completer # Setting the Accept-Encoding header to base64 will return a pre-encoded access token
   --jwt: string
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/authn-azure/($service_id)/($account)/($login)/authenticate")
-  let body = {jwt: $jwt} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept-Encoding": $Accept_Encoding} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({service_id: (encode-path-segment $service_id), account: (encode-path-segment $account), login: (encode-path-segment $login)} | format pattern "/authn-azure/{service_id}/{account}/{login}/authenticate"))
+  let req_body = {"jwt": $jwt} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let extra_headers = {"Accept-Encoding": $accept_encoding} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # Gets a short-lived access token for applications running in Google Cloud Platform.
 #
 # POST /authn-gcp/{account}/authenticate
 # operationId: getAccessTokenViaGCP
-export def "authn-gcp-authenticate post" [
+export def "authn-gcp-authenticate get-access-token-via" [
   account: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -165,29 +180,31 @@ export def "authn-gcp-authenticate post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Request-Id: string # Add an ID to the request being made so it can be tracked in Conjur. If not provided the server will automatically generate one.  (e.g. test-id)
-  --Accept-Encoding: string@Accept-Encoding-completer-1 # Setting the Accept-Encoding header to base64 will return a pre-encoded access token
+  --x-request-id: string # Add an ID to the request being made so it can be tracked in Conjur. If not provided the server will automatically generate one. (e.g. test-id)
+  --accept-encoding: string@accept-encoding-completer-1 # Setting the Accept-Encoding header to base64 will return a pre-encoded access token
   --jwt: string
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/authn-gcp/($account)/authenticate")
-  let body = {jwt: $jwt} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Request-Id": $X_Request_Id, "Accept-Encoding": $Accept_Encoding} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({account: (encode-path-segment $account)} | format pattern "/authn-gcp/{account}/authenticate"))
+  let req_body = {"jwt": $jwt} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let extra_headers = {"X-Request-Id": $x_request_id, "Accept-Encoding": $accept_encoding} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # Details whether an authentication service has been configured properly
 #
 # GET /authn-gcp/{account}/status
 # operationId: getGCPAuthenticatorStatus
-export def "authn-gcp-status get" [
+export def "authn-gcp-status get-authenticator" [
   account: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -196,24 +213,25 @@ export def "authn-gcp-status get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Request-Id: string # Add an ID to the request being made so it can be tracked in Conjur. If not provided the server will automatically generate one.  (e.g. test-id)
+  --x-request-id: string # Add an ID to the request being made so it can be tracked in Conjur. If not provided the server will automatically generate one. (e.g. test-id)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/authn-gcp/($account)/status")
-  let extra_headers = {"X-Request-Id": $X_Request_Id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({account: (encode-path-segment $account)} | format pattern "/authn-gcp/{account}/status"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"X-Request-Id": $x_request_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get a short-lived access token for applications running in AWS.
 #
 # POST /authn-iam/{service_id}/{account}/{login}/authenticate
 # operationId: getAccessTokenViaAWS
-export def "authn-iam-authenticate post" [
+export def "authn-iam-authenticate get-access-token-via-aws" [
   service_id: string
   account: string
   login: string
@@ -224,29 +242,31 @@ export def "authn-iam-authenticate post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept-Encoding: string@Accept-Encoding-completer # Setting the Accept-Encoding header to base64 will return a pre-encoded access token
-  --body: record
+  --accept-encoding: string@accept-encoding-completer # Setting the Accept-Encoding header to base64 will return a pre-encoded access token
+  --body: string
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/authn-iam/($service_id)/($account)/($login)/authenticate")
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept-Encoding": $Accept_Encoding} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({service_id: (encode-path-segment $service_id), account: (encode-path-segment $account), login: (encode-path-segment $login)} | format pattern "/authn-iam/{service_id}/{account}/{login}/authenticate"))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "text/plain" $body
+  let extra_headers = {"Accept-Encoding": $accept_encoding} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "text/plain" $req_body
 }
 
 # Gets a short-lived access token for applications using JSON Web Token (JWT) to access the Conjur API.
 #
 # POST /authn-jwt/{service_id}/{account}/authenticate
 # operationId: getAccessTokenViaJWT
-export def "authn-jwt-authenticate post-by-account-service_id" [
-  account: string
+export def "authn-jwt-authenticate get-access-token-via-by-service_id-account" [
   service_id: string
+  account: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -254,28 +274,30 @@ export def "authn-jwt-authenticate post-by-account-service_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --jwt: string
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/authn-jwt/($service_id)/($account)/authenticate")
-  let body = {jwt: $jwt} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({service_id: (encode-path-segment $service_id), account: (encode-path-segment $account)} | format pattern "/authn-jwt/{service_id}/{account}/authenticate"))
+  let req_body = {"jwt": $jwt} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # Gets a short-lived access token for applications using JSON Web Token (JWT) to access the Conjur API. Covers the case of use of optional URL parameter "ID"
 #
 # POST /authn-jwt/{service_id}/{account}/{id}/authenticate
 # operationId: getAccessTokenViaJWTWithId
-export def "authn-jwt-authenticate post-by-account-id-service_id" [
+export def "authn-jwt-authenticate get-access-token-via-by-service_id-account-id" [
+  service_id: string
   account: string
   id: string
-  service_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -283,24 +305,27 @@ export def "authn-jwt-authenticate post-by-account-id-service_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/authn-jwt/($service_id)/($account)/($id)/authenticate")
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({service_id: (encode-path-segment $service_id), account: (encode-path-segment $account), id: (encode-path-segment $id)} | format pattern "/authn-jwt/{service_id}/{account}/{id}/authenticate"))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # For applications running in Kubernetes; sends Conjur a certificate signing request (CSR) and requests a client certificate injected into the application's Kubernetes pod.
 #
 # POST /authn-k8s/{service_id}/inject_client_cert
 # operationId: k8sInjectClientCert
-export def "authn-k8s-inject-client-cert k8sInjectClientCert" [
+export def "authn-k8s-inject-client-cert create" [
   service_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -309,27 +334,29 @@ export def "authn-k8s-inject-client-cert k8sInjectClientCert" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Host-Id-Prefix: string # Dot-separated policy tree, prefixed by `host.`, where the application identity is defined (e.g. host/conjur/authn-k8s/my-authenticator-id/apps)
-  --body: record
+  --host-id-prefix: string # Dot-separated policy tree, prefixed by `host.`, where the application identity is defined (e.g. host/conjur/authn-k8s/my-authenticator-id/apps)
+  --body: string
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/authn-k8s/($service_id)/inject_client_cert")
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Host-Id-Prefix": $Host_Id_Prefix} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({service_id: (encode-path-segment $service_id)} | format pattern "/authn-k8s/{service_id}/inject_client_cert"))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "text/plain" $body
+  let extra_headers = {"Host-Id-Prefix": $host_id_prefix} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "text/plain" $req_body
 }
 
 # Gets a short-lived access token for applications running in Kubernetes.
 #
 # POST /authn-k8s/{service_id}/{account}/{login}/authenticate
 # operationId: getAccessTokenViaKubernetes
-export def "authn-k8s-authenticate post" [
+export def "authn-k8s-authenticate get-access-token-via-kubernetes" [
   service_id: string
   account: string
   login: string
@@ -340,24 +367,25 @@ export def "authn-k8s-authenticate post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept-Encoding: string@Accept-Encoding-completer # Setting the Accept-Encoding header to base64 will return a pre-encoded access token
+  --accept-encoding: string@accept-encoding-completer # Setting the Accept-Encoding header to base64 will return a pre-encoded access token
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "mutual"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/authn-k8s/($service_id)/($account)/($login)/authenticate")
-  let extra_headers = {"Accept-Encoding": $Accept_Encoding} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({service_id: (encode-path-segment $service_id), account: (encode-path-segment $account), login: (encode-path-segment $login)} | format pattern "/authn-k8s/{service_id}/{account}/{login}/authenticate"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"Accept-Encoding": $accept_encoding} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Gets the Conjur API key of a user given the LDAP username and password via HTTP Basic Authentication.
 #
 # GET /authn-ldap/{service_id}/{account}/login
 # operationId: getAPIKeyViaLDAP
-export def "authn-ldap-login get" [
+export def "authn-ldap-login get-key-via" [
   service_id: string
   account: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -367,21 +395,22 @@ export def "authn-ldap-login get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/authn-ldap/($service_id)/($account)/login")
+  let full_url = (build-url $base ({service_id: (encode-path-segment $service_id), account: (encode-path-segment $account)} | format pattern "/authn-ldap/{service_id}/{account}/login"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Gets a short-lived access token for users and hosts using their LDAP identity to access the Conjur API.
 #
 # POST /authn-ldap/{service_id}/{account}/{login}/authenticate
 # operationId: getAccessTokenViaLDAP
-export def "authn-ldap-authenticate post" [
+export def "authn-ldap-authenticate get-access-token-via" [
   service_id: string
   account: string
   login: string
@@ -392,27 +421,29 @@ export def "authn-ldap-authenticate post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept-Encoding: string@Accept-Encoding-completer # Setting the Accept-Encoding header to base64 will return a pre-encoded access token
-  --body: record
+  --accept-encoding: string@accept-encoding-completer # Setting the Accept-Encoding header to base64 will return a pre-encoded access token
+  --body: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/authn-ldap/($service_id)/($account)/($login)/authenticate")
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept-Encoding": $Accept_Encoding} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({service_id: (encode-path-segment $service_id), account: (encode-path-segment $account), login: (encode-path-segment $login)} | format pattern "/authn-ldap/{service_id}/{account}/{login}/authenticate"))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "text/plain" $body
+  let extra_headers = {"Accept-Encoding": $accept_encoding} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "text/plain" $req_body
 }
 
 # Gets a short-lived access token for applications using OpenID Connect (OIDC) to access the Conjur API.
 #
 # POST /authn-oidc/{service_id}/{account}/authenticate
 # operationId: getAccessTokenViaOIDC
-export def "authn-oidc-authenticate post" [
+export def "authn-oidc-authenticate get-access-token-via" [
   service_id: string
   account: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -422,25 +453,27 @@ export def "authn-oidc-authenticate post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --id-token: string
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/authn-oidc/($service_id)/($account)/authenticate")
-  let body = {id_token: $id_token} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({service_id: (encode-path-segment $service_id), account: (encode-path-segment $account)} | format pattern "/authn-oidc/{service_id}/{account}/authenticate"))
+  let req_body = {"id_token": $id_token} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # Rotates a role's API key.
 #
 # PUT /authn/{account}/api_key
 # operationId: rotateApiKey
-export def "authn-api-key rotateApiKey" [
+export def "authn-api-key update-rotate" [
   account: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -449,26 +482,27 @@ export def "authn-api-key rotateApiKey" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --role: string # (**Optional**) role specifier in `{kind}:{identifier}` format  ##### Permissions required  `update` privilege on the role whose API key is being rotated.
-  --X-Request-Id: string # Add an ID to the request being made so it can be tracked in Conjur. If not provided the server will automatically generate one.  (e.g. test-id)
+  --role: string # (**Optional**) role specifier in `{kind}:{identifier}` format ##### Permissions required `update` privilege on the role whose API key is being rotated.
+  --x-request-id: string # Add an ID to the request being made so it can be tracked in Conjur. If not provided the server will automatically generate one. (e.g. test-id)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "role" $role "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/authn/($account)/api_key" $qp)
-  let extra_headers = {"X-Request-Id": $X_Request_Id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({account: (encode-path-segment $account)} | format pattern "/authn/{account}/api_key") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"X-Request-Id": $x_request_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Gets the API key of a user given the username and password via HTTP Basic Authentication.
 #
 # GET /authn/{account}/login
 # operationId: getAPIKey
-export def "authn-login get" [
+export def "authn-login get-key" [
   account: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -477,24 +511,25 @@ export def "authn-login get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Request-Id: string # Add an ID to the request being made so it can be tracked in Conjur. If not provided the server will automatically generate one.  (e.g. test-id)
+  --x-request-id: string # Add an ID to the request being made so it can be tracked in Conjur. If not provided the server will automatically generate one. (e.g. test-id)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/authn/($account)/login")
-  let extra_headers = {"X-Request-Id": $X_Request_Id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({account: (encode-path-segment $account)} | format pattern "/authn/{account}/login"))
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"X-Request-Id": $x_request_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Changes a user’s password.
 #
 # PUT /authn/{account}/password
 # operationId: changePassword
-export def "authn-password changePassword" [
+export def "authn-password update-change" [
   account: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -503,27 +538,29 @@ export def "authn-password changePassword" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Request-Id: string # Add an ID to the request being made so it can be tracked in Conjur. If not provided the server will automatically generate one.  (e.g. test-id)
-  --body: record
+  --x-request-id: string # Add an ID to the request being made so it can be tracked in Conjur. If not provided the server will automatically generate one. (e.g. test-id)
+  --body: string
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/authn/($account)/password")
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Request-Id": $X_Request_Id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({account: (encode-path-segment $account)} | format pattern "/authn/{account}/password"))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "text/plain" $body
+  let extra_headers = {"X-Request-Id": $x_request_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "text/plain" $req_body
 }
 
 # Gets a short-lived access token, which is required in the header of most subsequent API requests.
 #
 # POST /authn/{account}/{login}/authenticate
 # operationId: getAccessToken
-export def "authn-authenticate post" [
+export def "authn-authenticate get-access-token" [
   account: string
   login: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -533,28 +570,30 @@ export def "authn-authenticate post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Request-Id: string # Add an ID to the request being made so it can be tracked in Conjur. If not provided the server will automatically generate one.  (e.g. test-id)
-  --Accept-Encoding: string@Accept-Encoding-completer # Setting the Accept-Encoding header to base64 will return a pre-encoded access token
-  --body: record
+  --x-request-id: string # Add an ID to the request being made so it can be tracked in Conjur. If not provided the server will automatically generate one. (e.g. test-id)
+  --accept-encoding: string@accept-encoding-completer # Setting the Accept-Encoding header to base64 will return a pre-encoded access token
+  --body: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/authn/($account)/($login)/authenticate")
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Request-Id": $X_Request_Id, "Accept-Encoding": $Accept_Encoding} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({account: (encode-path-segment $account), login: (encode-path-segment $login)} | format pattern "/authn/{account}/{login}/authenticate"))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "text/plain" $body
+  let extra_headers = {"X-Request-Id": $x_request_id, "Accept-Encoding": $accept_encoding} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "text/plain" $req_body
 }
 
 # Gets a signed certificate from the configured Certificate Authority service.
 #
 # POST /ca/{account}/{service_id}/sign
 # operationId: sign
-export def "ca-sign sign" [
+export def "ca-sign create" [
   account: string
   service_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -564,31 +603,33 @@ export def "ca-sign sign" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --X-Request-Id: string # Add an ID to the request being made so it can be tracked in Conjur. If not provided the server will automatically generate one.  (e.g. test-id)
-  --Accept: string # Setting the Accept header to `application/x-pem-file` allows Conjur to respond with a formatted certificate (e.g. application/x-pem-file)
+  --x-request-id: string # Add an ID to the request being made so it can be tracked in Conjur. If not provided the server will automatically generate one. (e.g. test-id)
+  --hdr-accept: string # Setting the Accept header to `application/x-pem-file` allows Conjur to respond with a formatted certificate (e.g. application/x-pem-file)
   csr: string
   ttl: string
 ]: any -> record<certificate: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/ca/($account)/($service_id)/sign")
-  let body = {csr: $csr, ttl: $ttl} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Request-Id": $X_Request_Id, "Accept": $Accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({account: (encode-path-segment $account), service_id: (encode-path-segment $service_id)} | format pattern "/ca/{account}/{service_id}/sign"))
+  let req_body = {"csr": $csr, "ttl": $ttl} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let extra_headers = {"X-Request-Id": $x_request_id, "Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # Health info about conjur
 #
 # GET /health
 # operationId: health
-export def "health health" [
+export def "health get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -596,6 +637,7 @@ export def "health health" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -603,14 +645,14 @@ export def "health health" [
   let full_url = (build-url $base "/health")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Creates a Host using the Host Factory.
 #
 # POST /host_factories/hosts
 # operationId: createHost
-export def "host-factories-hosts createHost" [
+export def "host-factories-hosts create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -618,8 +660,9 @@ export def "host-factories-hosts createHost" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Request-Id: string # Add an ID to the request being made so it can be tracked in Conjur. If not provided the server will automatically generate one.  (e.g. test-id)
+  --x-request-id: string # Add an ID to the request being made so it can be tracked in Conjur. If not provided the server will automatically generate one. (e.g. test-id)
   --annotations: record # Annotations to apply to the new host (e.g. {description: new db host, puppet: true})
   id: string # Identifier of the host to be created. It will be created within the account of the host factory. (e.g. my-new-host)
 ]: any -> record<annotations: list<string>, api_key: string, created_at: string, id: string, owner: string, permissions: list<string>> {
@@ -627,20 +670,21 @@ export def "host-factories-hosts createHost" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/host_factories/hosts")
-  let body = {annotations: $annotations, id: $id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Request-Id": $X_Request_Id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"annotations": $annotations, "id": $id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let extra_headers = {"X-Request-Id": $x_request_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # Creates one or more host identity tokens.
 #
 # POST /host_factory_tokens
 # operationId: createToken
-export def "host-factory-tokens createToken" [
+export def "host-factory-tokens create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -648,9 +692,10 @@ export def "host-factory-tokens createToken" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Request-Id: string # Add an ID to the request being made so it can be tracked in Conjur. If not provided the server will automatically generate one.  (e.g. test-id)
-  --cidr: list # Number of host tokens to create (e.g. [127.0.0.1/32])
+  --x-request-id: string # Add an ID to the request being made so it can be tracked in Conjur. If not provided the server will automatically generate one. (e.g. test-id)
+  --cidr: list<string> # Number of host tokens to create (e.g. [127.0.0.1/32])
   --count: int # Number of host tokens to create (e.g. 2)
   expiration: string # `ISO 8601 datetime` denoting a requested expiration time. (e.g. 2017-08-04T22:27:20+00:00)
   host_factory: string # Fully qualified host factory ID (e.g. myorg:host_factory:hf-db)
@@ -659,21 +704,22 @@ export def "host-factory-tokens createToken" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/host_factory_tokens")
-  let body = {cidr: $cidr, count: $count, expiration: $expiration, host_factory: $host_factory} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Request-Id": $X_Request_Id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"cidr": $cidr, "count": $count, "expiration": $expiration, "host_factory": $host_factory} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let extra_headers = {"X-Request-Id": $x_request_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # Revokes a token, immediately disabling it.
 #
 # DELETE /host_factory_tokens/{token}
 # operationId: revokeToken
-export def "host-factory-tokens revokeToken" [
-  token: string
+export def "host-factory-tokens delete" [
+  token_arg: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -681,24 +727,25 @@ export def "host-factory-tokens revokeToken" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Request-Id: string # Add an ID to the request being made so it can be tracked in Conjur. If not provided the server will automatically generate one.  (e.g. test-id)
+  --x-request-id: string # Add an ID to the request being made so it can be tracked in Conjur. If not provided the server will automatically generate one. (e.g. test-id)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/host_factory_tokens/($token)")
-  let extra_headers = {"X-Request-Id": $X_Request_Id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({token_arg: (encode-path-segment $token_arg)} | format pattern "/host_factory_tokens/{token_arg}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"X-Request-Id": $x_request_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Basic information about the Conjur Enterprise server
 #
 # GET /info
 # operationId: info
-export def "info info" [
+export def "info get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -706,6 +753,7 @@ export def "info info" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<authenticators: record<configured: list<string>, enabled: list<string>, installed: list<string>>, configuration: record, container: string, release: string, role: string, services: record, version: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -713,14 +761,14 @@ export def "info info" [
   let full_url = (build-url $base "/info")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Modifies an existing Conjur policy.
 #
 # PATCH /policies/{account}/policy/{identifier}
 # operationId: updatePolicy
-export def "policies-policy updatePolicy" [
+export def "policies-policy update-by-account-identifier" [
   account: string
   identifier: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -730,27 +778,29 @@ export def "policies-policy updatePolicy" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Request-Id: string # Add an ID to the request being made so it can be tracked in Conjur. If not provided the server will automatically generate one.  (e.g. test-id)
-  --body: record
+  --x-request-id: string # Add an ID to the request being made so it can be tracked in Conjur. If not provided the server will automatically generate one. (e.g. test-id)
+  --body: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/policies/($account)/policy/($identifier)")
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Request-Id": $X_Request_Id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({account: (encode-path-segment $account), identifier: (encode-path-segment $identifier)} | format pattern "/policies/{account}/policy/{identifier}"))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-yaml" $body
+  let extra_headers = {"X-Request-Id": $x_request_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-yaml" $req_body
 }
 
 # Adds data to the existing Conjur policy.
 #
 # POST /policies/{account}/policy/{identifier}
 # operationId: loadPolicy
-export def "policies-policy loadPolicy" [
+export def "policies-policy create-load" [
   account: string
   identifier: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -760,27 +810,29 @@ export def "policies-policy loadPolicy" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Request-Id: string # Add an ID to the request being made so it can be tracked in Conjur. If not provided the server will automatically generate one.  (e.g. test-id)
-  --body: record
+  --x-request-id: string # Add an ID to the request being made so it can be tracked in Conjur. If not provided the server will automatically generate one. (e.g. test-id)
+  --body: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/policies/($account)/policy/($identifier)")
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Request-Id": $X_Request_Id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({account: (encode-path-segment $account), identifier: (encode-path-segment $identifier)} | format pattern "/policies/{account}/policy/{identifier}"))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-yaml" $body
+  let extra_headers = {"X-Request-Id": $x_request_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-yaml" $req_body
 }
 
 # Loads or replaces a Conjur policy document.
 #
 # PUT /policies/{account}/policy/{identifier}
 # operationId: replacePolicy
-export def "policies-policy replacePolicy" [
+export def "policies-policy update-by-account-identifier-1" [
   account: string
   identifier: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -790,27 +842,29 @@ export def "policies-policy replacePolicy" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Request-Id: string # Add an ID to the request being made so it can be tracked in Conjur. If not provided the server will automatically generate one.  (e.g. test-id)
-  --body: record
+  --x-request-id: string # Add an ID to the request being made so it can be tracked in Conjur. If not provided the server will automatically generate one. (e.g. test-id)
+  --body: any
 ]: any -> record<created_roles: record, version: float> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/policies/($account)/policy/($identifier)")
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Request-Id": $X_Request_Id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({account: (encode-path-segment $account), identifier: (encode-path-segment $identifier)} | format pattern "/policies/{account}/policy/{identifier}"))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-yaml" $body
+  let extra_headers = {"X-Request-Id": $x_request_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-yaml" $req_body
 }
 
 # Shows all public keys for a resource.
 #
 # GET /public_keys/{account}/{kind}/{identifier}
 # operationId: showPublicKeys
-export def "public-keys showPublicKeys" [
+export def "public-keys get-show" [
   account: string
   kind: string
   identifier: string
@@ -821,24 +875,25 @@ export def "public-keys showPublicKeys" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Request-Id: string # Add an ID to the request being made so it can be tracked in Conjur. If not provided the server will automatically generate one.  (e.g. test-id)
+  --x-request-id: string # Add an ID to the request being made so it can be tracked in Conjur. If not provided the server will automatically generate one. (e.g. test-id)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/public_keys/($account)/($kind)/($identifier)")
-  let extra_headers = {"X-Request-Id": $X_Request_Id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({account: (encode-path-segment $account), kind: (encode-path-segment $kind), identifier: (encode-path-segment $identifier)} | format pattern "/public_keys/{account}/{kind}/{identifier}"))
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"X-Request-Id": $x_request_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Health info about a given Conjur Enterprise server
 #
 # GET /remote_health/{remote}
 # operationId: remoteHealth
-export def "remote-health remoteHealth" [
+export def "remote-health get" [
   remote: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -847,21 +902,22 @@ export def "remote-health remoteHealth" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/remote_health/($remote)")
+  let full_url = (build-url $base ({remote: (encode-path-segment $remote)} | format pattern "/remote_health/{remote}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Lists resources within an organization account.
 #
 # GET /resources
 # operationId: showResourcesForAllAccounts
-export def "resources showResourcesForAllAccounts" [
+export def "resources list-show-for-accounts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -869,6 +925,7 @@ export def "resources showResourcesForAllAccounts" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --account: string # Organization account name (e.g. default)
   --kind: string # Type of resource (e.g. variable)
@@ -878,24 +935,24 @@ export def "resources showResourcesForAllAccounts" [
   --count: oneof<nothing, bool> # When listing resources, if `true`, return only the count of the results. (e.g. true)
   --role: string # Retrieves the resources list for a different role if the authenticated role has access (e.g. myorg:host:host1)
   --acting-as: string # Retrieves the resources list for a different role if the authenticated role has access (e.g. myorg:host:host1)
-  --X-Request-Id: string # Add an ID to the request being made so it can be tracked in Conjur. If not provided the server will automatically generate one.  (e.g. test-id)
+  --x-request-id: string # Add an ID to the request being made so it can be tracked in Conjur. If not provided the server will automatically generate one. (e.g. test-id)
 ]: nothing -> table<annotations: list<string>, created_at: string, id: string, owner: string, permissions: list<record>, policy: string, policy_versions: list<record>, restricted_to: list<string>, secrets: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "account" $account "scalar") (serialize-qp "kind" $kind "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "role" $role "scalar") (serialize-qp "acting_as" $acting_as "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/resources" $qp)
-  let extra_headers = {"X-Request-Id": $X_Request_Id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"X-Request-Id": $x_request_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Lists resources within an organization account.
 #
 # GET /resources/{account}
 # operationId: showResourcesForAccount
-export def "resources showResourcesForAccount" [
+export def "resources get-show-by-account" [
   account: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -904,32 +961,33 @@ export def "resources showResourcesForAccount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --kind: string # Type of resource (e.g. variable)
-  --search: string # Filter resources based on this value by name (e.g. db)
+  --search: string # Filter resources based on this value by name (e.g. password)
   --offset: int # When listing resources, start at this item number. (e.g. 20)
   --limit: int # When listing resources, return up to this many results. (e.g. 10)
   --count: oneof<nothing, bool> # When listing resources, if `true`, return only the count of the results. (e.g. true)
   --role: string # Retrieves the resources list for a different role if the authenticated role has access (e.g. myorg:host:host1)
   --acting-as: string # Retrieves the resources list for a different role if the authenticated role has access (e.g. myorg:host:host1)
-  --X-Request-Id: string # Add an ID to the request being made so it can be tracked in Conjur. If not provided the server will automatically generate one.  (e.g. test-id)
+  --x-request-id: string # Add an ID to the request being made so it can be tracked in Conjur. If not provided the server will automatically generate one. (e.g. test-id)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "kind" $kind "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "role" $role "scalar") (serialize-qp "acting_as" $acting_as "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/resources/($account)" $qp)
-  let extra_headers = {"X-Request-Id": $X_Request_Id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({account: (encode-path-segment $account)} | format pattern "/resources/{account}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"X-Request-Id": $x_request_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Lists resources of the same kind within an organization account.
 #
 # GET /resources/{account}/{kind}
 # operationId: showResourcesForKind
-export def "resources showResourcesForKind" [
+export def "resources get-show-by-account-kind" [
   account: string
   kind: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -939,31 +997,32 @@ export def "resources showResourcesForKind" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --search: string # Filter resources based on this value by name (e.g. db)
+  --search: string # Filter resources based on this value by name (e.g. password)
   --offset: int # When listing resources, start at this item number. (e.g. 20)
   --limit: int # When listing resources, return up to this many results. (e.g. 10)
   --count: oneof<nothing, bool> # When listing resources, if `true`, return only the count of the results. (e.g. true)
   --role: string # Retrieves the resources list for a different role if the authenticated role has access (e.g. myorg:host:host1)
   --acting-as: string # Retrieves the resources list for a different role if the authenticated role has access (e.g. myorg:host:host1)
-  --X-Request-Id: string # Add an ID to the request being made so it can be tracked in Conjur. If not provided the server will automatically generate one.  (e.g. test-id)
+  --x-request-id: string # Add an ID to the request being made so it can be tracked in Conjur. If not provided the server will automatically generate one. (e.g. test-id)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "search" $search "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "role" $role "scalar") (serialize-qp "acting_as" $acting_as "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/resources/($account)/($kind)" $qp)
-  let extra_headers = {"X-Request-Id": $X_Request_Id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({account: (encode-path-segment $account), kind: (encode-path-segment $kind)} | format pattern "/resources/{account}/{kind}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"X-Request-Id": $x_request_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Shows a description of a single resource.
 #
 # GET /resources/{account}/{kind}/{identifier}
 # operationId: showResource
-export def "resources showResource" [
+export def "resources get-show-by-account-kind-identifier" [
   account: string
   kind: string
   identifier: string
@@ -974,29 +1033,30 @@ export def "resources showResource" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --permitted-roles: oneof<nothing, bool> # Lists the roles which have the named privilege on a resource. (e.g. true)
   --privilege: string # Level of privilege to filter on. Can only be used in combination with `permitted_roles` or `check` parameter. (e.g. execute)
   --check: oneof<nothing, bool> # Check whether a role has a privilege on a resource. (e.g. true)
   --role: string # Role to check privilege on. Can only be used in combination with `check` parameter. (e.g. myorg:host:host1)
-  --X-Request-Id: string # Add an ID to the request being made so it can be tracked in Conjur. If not provided the server will automatically generate one.  (e.g. test-id)
-]: nothing -> any {
+  --x-request-id: string # Add an ID to the request being made so it can be tracked in Conjur. If not provided the server will automatically generate one. (e.g. test-id)
+]: nothing -> record<annotations: list<string>, created_at: string, id: string, owner: string, permissions: table<policy: string, privilege: string, role: string>, policy: string, policy_versions: table<client_ip: string, created_at: string, finished_at: string, id: string, policy_sha256: string, policy_text: string, role: string, version: float>, restricted_to: list<string>, secrets: table<expires_at: string, version: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "permitted_roles" $permitted_roles "scalar") (serialize-qp "privilege" $privilege "scalar") (serialize-qp "check" $check "scalar") (serialize-qp "role" $role "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/resources/($account)/($kind)/($identifier)" $qp)
-  let extra_headers = {"X-Request-Id": $X_Request_Id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({account: (encode-path-segment $account), kind: (encode-path-segment $kind), identifier: (encode-path-segment $identifier)} | format pattern "/resources/{account}/{kind}/{identifier}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"X-Request-Id": $x_request_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Deletes an existing role membership
 #
 # DELETE /roles/{account}/{kind}/{identifier}
 # operationId: removeMemberFromRole
-export def "roles removeMemberFromRole" [
+export def "roles delete-member" [
   account: string
   kind: string
   identifier: string
@@ -1007,27 +1067,28 @@ export def "roles removeMemberFromRole" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --members: string # Returns a list of the Role's members.
   --member: string # The identifier of the Role to be added as a member.
-  --X-Request-Id: string # Add an ID to the request being made so it can be tracked in Conjur. If not provided the server will automatically generate one.  (e.g. test-id)
+  --x-request-id: string # Add an ID to the request being made so it can be tracked in Conjur. If not provided the server will automatically generate one. (e.g. test-id)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "members" $members "scalar") (serialize-qp "member" $member "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/roles/($account)/($kind)/($identifier)" $qp)
-  let extra_headers = {"X-Request-Id": $X_Request_Id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({account: (encode-path-segment $account), kind: (encode-path-segment $kind), identifier: (encode-path-segment $identifier)} | format pattern "/roles/{account}/{kind}/{identifier}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"X-Request-Id": $x_request_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get role information
 #
 # GET /roles/{account}/{kind}/{identifier}
 # operationId: showRole
-export def "roles showRole" [
+export def "roles get-show" [
   account: string
   kind: string
   identifier: string
@@ -1038,6 +1099,7 @@ export def "roles showRole" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --all: string # Returns an array of Role IDs representing all role memberships, expanded recursively.
   --memberships: string # Returns all direct role memberships (members not expanded recursively).
@@ -1047,24 +1109,24 @@ export def "roles showRole" [
   --count: oneof<nothing, bool> # When listing members, if `true`, return only the count of members. (e.g. true)
   --search: string # When listing members, the results will be narrowed to only those matching the provided string (e.g. user)
   --graph: string # If included in the query returns a graph view of the role (e.g. )
-  --X-Request-Id: string # Add an ID to the request being made so it can be tracked in Conjur. If not provided the server will automatically generate one.  (e.g. test-id)
+  --x-request-id: string # Add an ID to the request being made so it can be tracked in Conjur. If not provided the server will automatically generate one. (e.g. test-id)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "all" $all "scalar") (serialize-qp "memberships" $memberships "scalar") (serialize-qp "members" $members "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "graph" $graph "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/roles/($account)/($kind)/($identifier)" $qp)
-  let extra_headers = {"X-Request-Id": $X_Request_Id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({account: (encode-path-segment $account), kind: (encode-path-segment $kind), identifier: (encode-path-segment $identifier)} | format pattern "/roles/{account}/{kind}/{identifier}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"X-Request-Id": $x_request_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Update or modify an existing role membership
 #
 # POST /roles/{account}/{kind}/{identifier}
 # operationId: addMemberToRole
-export def "roles addMemberToRole" [
+export def "roles create-member" [
   account: string
   kind: string
   identifier: string
@@ -1075,20 +1137,21 @@ export def "roles addMemberToRole" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --members: string # Returns a list of the Role's members.
   --member: string # The identifier of the Role to be added as a member.
-  --X-Request-Id: string # Add an ID to the request being made so it can be tracked in Conjur. If not provided the server will automatically generate one.  (e.g. test-id)
+  --x-request-id: string # Add an ID to the request being made so it can be tracked in Conjur. If not provided the server will automatically generate one. (e.g. test-id)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "members" $members "scalar") (serialize-qp "member" $member "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/roles/($account)/($kind)/($identifier)" $qp)
-  let extra_headers = {"X-Request-Id": $X_Request_Id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({account: (encode-path-segment $account), kind: (encode-path-segment $kind), identifier: (encode-path-segment $identifier)} | format pattern "/roles/{account}/{kind}/{identifier}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"X-Request-Id": $x_request_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Fetch multiple secrets
@@ -1103,20 +1166,21 @@ export def "secrets get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --variable-ids: string # Comma-delimited, URL-encoded resource IDs of the variables. (e.g. myorg:variable:secret1,myorg:variable:secret1)
-  --X-Request-Id: string # Add an ID to the request being made so it can be tracked in Conjur. If not provided the server will automatically generate one.  (e.g. test-id)
-  --Accept-Encoding: string@Accept-Encoding-completer-1 # Set the encoding of the response object
+  --x-request-id: string # Add an ID to the request being made so it can be tracked in Conjur. If not provided the server will automatically generate one. (e.g. test-id)
+  --accept-encoding: string@accept-encoding-completer-1 # Set the encoding of the response object
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "variable_ids" $variable_ids "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/secrets" $qp)
-  let extra_headers = {"X-Request-Id": $X_Request_Id, "Accept-Encoding": $Accept_Encoding} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"X-Request-Id": $x_request_id, "Accept-Encoding": $accept_encoding} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Fetches the value of a secret from the specified Secret.
@@ -1134,26 +1198,27 @@ export def "secrets get-by-account-kind-identifier" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --version: int # (**Optional**) Version you want to retrieve (Conjur keeps the last 20 versions of a secret) (e.g. 1)
-  --X-Request-Id: string # Add an ID to the request being made so it can be tracked in Conjur. If not provided the server will automatically generate one.  (e.g. test-id)
+  --x-request-id: string # Add an ID to the request being made so it can be tracked in Conjur. If not provided the server will automatically generate one. (e.g. test-id)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "version" $version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/secrets/($account)/($kind)/($identifier)" $qp)
-  let extra_headers = {"X-Request-Id": $X_Request_Id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({account: (encode-path-segment $account), kind: (encode-path-segment $kind), identifier: (encode-path-segment $identifier)} | format pattern "/secrets/{account}/{kind}/{identifier}") $qp)
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"X-Request-Id": $x_request_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Creates a secret value within the specified variable.
 #
 # POST /secrets/{account}/{kind}/{identifier}
 # operationId: createSecret
-export def "secrets createSecret" [
+export def "secrets create" [
   account: string
   kind: string
   identifier: string
@@ -1164,29 +1229,31 @@ export def "secrets createSecret" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --expirations: string # Tells the server to reset the variables expiration date
-  --X-Request-Id: string # Add an ID to the request being made so it can be tracked in Conjur. If not provided the server will automatically generate one.  (e.g. test-id)
-  --body: record
+  --x-request-id: string # Add an ID to the request being made so it can be tracked in Conjur. If not provided the server will automatically generate one. (e.g. test-id)
+  --body: string
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expirations" $expirations "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/secrets/($account)/($kind)/($identifier)" $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Request-Id": $X_Request_Id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({account: (encode-path-segment $account), kind: (encode-path-segment $kind), identifier: (encode-path-segment $identifier)} | format pattern "/secrets/{account}/{kind}/{identifier}") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/octet-stream" $body
+  let extra_headers = {"X-Request-Id": $x_request_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/octet-stream" $req_body
 }
 
 # Provides information about the client making an API request.
 #
 # GET /whoami
 # operationId: whoAmI
-export def "whoami whoAmI" [
+export def "whoami get-who-am-i" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1194,24 +1261,25 @@ export def "whoami whoAmI" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Request-Id: string # Add an ID to the request being made so it can be tracked in Conjur. If not provided the server will automatically generate one.  (e.g. test-id)
+  --x-request-id: string # Add an ID to the request being made so it can be tracked in Conjur. If not provided the server will automatically generate one. (e.g. test-id)
 ]: nothing -> record<account: string, client_ip: string, token_issued_at: string, user_agent: string, username: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/whoami")
-  let extra_headers = {"X-Request-Id": $X_Request_Id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"X-Request-Id": $x_request_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Enables or disables authenticator defined without service_id.
 #
 # PATCH /{authenticator}/{account}
 # operationId: enableAuthenticator
-export def "authentication enableAuthenticator" [
+export def "authentication enable" [
   authenticator: string
   account: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1221,28 +1289,30 @@ export def "authentication enableAuthenticator" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Request-Id: string # Add an ID to the request being made so it can be tracked in Conjur. If not provided the server will automatically generate one.  (e.g. test-id)
+  --x-request-id: string # Add an ID to the request being made so it can be tracked in Conjur. If not provided the server will automatically generate one. (e.g. test-id)
   --enabled: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($authenticator)/($account)")
-  let body = {enabled: $enabled} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Request-Id": $X_Request_Id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({authenticator: (encode-path-segment $authenticator), account: (encode-path-segment $account)} | format pattern "/{authenticator}/{account}"))
+  let req_body = {"enabled": $enabled} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let extra_headers = {"X-Request-Id": $x_request_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # Enables or disables authenticator service instances.
 #
 # PATCH /{authenticator}/{service_id}/{account}
 # operationId: enableAuthenticatorInstance
-export def "authentication enableAuthenticatorInstance" [
+export def "authentication enable-instance" [
   authenticator: string
   service_id: string
   account: string
@@ -1253,17 +1323,20 @@ export def "authentication enableAuthenticatorInstance" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($authenticator)/($service_id)/($account)")
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({authenticator: (encode-path-segment $authenticator), service_id: (encode-path-segment $service_id), account: (encode-path-segment $account)} | format pattern "/{authenticator}/{service_id}/{account}"))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # Details whether an authentication service has been configured properly
@@ -1281,12 +1354,13 @@ export def "status get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<error: string, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($authenticator)/($service_id)/($account)/status")
+  let full_url = (build-url $base ({authenticator: (encode-path-segment $authenticator), service_id: (encode-path-segment $service_id), account: (encode-path-segment $account)} | format pattern "/{authenticator}/{service_id}/{account}/status"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }

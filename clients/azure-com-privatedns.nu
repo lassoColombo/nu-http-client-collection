@@ -18,21 +18,32 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 }
 
 # Serialize a single query parameter based on collection style
+# Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
+# ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = ($name | url encode)
+  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
-  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
-    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
-    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
+    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
+    _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
+}
+
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Build URL from base, path, and optional query string
@@ -44,7 +55,7 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
@@ -53,13 +64,13 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
     "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "put" => { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "patch" => { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
   if ($method in ["head" "options"]) { return $resp }
-  if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
+  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
 def base-url-completer [] { ["https://management.azure.com"] }
@@ -68,8 +79,8 @@ def auth-scheme-completer [] { ["bearer"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-providers-microsoft-network-private-dns-zones List" } } | get name | first)
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-providers-microsoft-network-private-dns-zones list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -93,8 +104,8 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Network/privateDnsZones
 # operationId: PrivateZones_List
-export def "subscriptions-providers-microsoft-network-private-dns-zones List" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-network-private-dns-zones list" [
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -102,6 +113,7 @@ export def "subscriptions-providers-microsoft-network-private-dns-zones List" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --top: int # The maximum number of Private DNS zones to return. If not specified, returns up to 100 zones. (format: int32)
   --api-version: string # Client Api Version.
@@ -109,19 +121,19 @@ export def "subscriptions-providers-microsoft-network-private-dns-zones List" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$top" $top "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Network/privateDnsZones" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Network/privateDnsZones") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Lists the Private DNS zones within a resource group.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/privateDnsZones
 # operationId: PrivateZones_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-network-private-dns-zones ListByResourceGroup" [
-  resourceGroupName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-network-private-dns-zones list" [
+  subscription_id: string
+  resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -129,6 +141,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-private-dn
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --top: int # The maximum number of record sets to return. If not specified, returns up to 100 record sets. (format: int32)
   --api-version: string # Client Api Version.
@@ -136,20 +149,20 @@ export def "subscriptions-resource-groups-providers-microsoft-network-private-dn
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$top" $top "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/privateDnsZones" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/privateDnsZones") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Deletes a Private DNS zone. WARNING: All DNS records in the zone will also be deleted. This operation cannot be undone. Private DNS zone cannot be deleted unless all virtual network links to it are removed.
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/privateDnsZones/{privateZoneName}
 # operationId: PrivateZones_Delete
-export def "subscriptions-resource-groups-providers-microsoft-network-private-dns-zones Delete-by-resourceGroupName-privateZoneName-subscriptionId" [
-  resourceGroupName: string
-  privateZoneName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-network-private-dns-zones delete" [
+  subscription_id: string
+  resource_group_name: string
+  private_zone_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -157,29 +170,30 @@ export def "subscriptions-resource-groups-providers-microsoft-network-private-dn
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
-  --If-Match: string # The ETag of the Private DNS zone. Omit this value to always delete the current zone. Specify the last-seen ETag value to prevent accidentally deleting any concurrent changes.
+  --if-match: string # The ETag of the Private DNS zone. Omit this value to always delete the current zone. Specify the last-seen ETag value to prevent accidentally deleting any concurrent changes.
 ]: nothing -> record<error: record<code: string, details: list<any>, message: string, target: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/privateDnsZones/($privateZoneName)" $qp)
-  let extra_headers = {"If-Match": $If_Match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), private_zone_name: (encode-path-segment $private_zone_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/privateDnsZones/{private_zone_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"If-Match": $if_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Gets a Private DNS zone. Retrieves the zone properties, but not the virtual networks links or the record sets within the zone.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/privateDnsZones/{privateZoneName}
 # operationId: PrivateZones_Get
-export def "subscriptions-resource-groups-providers-microsoft-network-private-dns-zones Get-by-resourceGroupName-privateZoneName-subscriptionId" [
-  resourceGroupName: string
-  privateZoneName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-network-private-dns-zones get" [
+  subscription_id: string
+  resource_group_name: string
+  private_zone_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -187,26 +201,27 @@ export def "subscriptions-resource-groups-providers-microsoft-network-private-dn
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
 ]: nothing -> record<etag: string, properties: record<maxNumberOfRecordSets: int, maxNumberOfVirtualNetworkLinks: int, maxNumberOfVirtualNetworkLinksWithRegistration: int, numberOfRecordSets: int, numberOfVirtualNetworkLinks: int, numberOfVirtualNetworkLinksWithRegistration: int, provisioningState: string>, location: string, tags: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/privateDnsZones/($privateZoneName)" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), private_zone_name: (encode-path-segment $private_zone_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/privateDnsZones/{private_zone_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Updates a Private DNS zone. Does not modify virtual network links or DNS records within the zone.
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/privateDnsZones/{privateZoneName}
 # operationId: PrivateZones_Update
-export def "subscriptions-resource-groups-providers-microsoft-network-private-dns-zones Update-by-resourceGroupName-privateZoneName-subscriptionId" [
-  resourceGroupName: string
-  privateZoneName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-network-private-dns-zones update" [
+  subscription_id: string
+  resource_group_name: string
+  private_zone_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -214,9 +229,10 @@ export def "subscriptions-resource-groups-providers-microsoft-network-private-dn
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
-  --If-Match: string # The ETag of the Private DNS zone. Omit this value to always overwrite the current zone. Specify the last-seen ETag value to prevent accidentally overwriting any concurrent changes.
+  --if-match: string # The ETag of the Private DNS zone. Omit this value to always overwrite the current zone. Specify the last-seen ETag value to prevent accidentally overwriting any concurrent changes.
   --etag: string # The ETag of the zone.
   --properties: any # Represents the properties of the Private DNS zone.
   --location: string # The Azure Region where the resource lives
@@ -226,24 +242,24 @@ export def "subscriptions-resource-groups-providers-microsoft-network-private-dn
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/privateDnsZones/($privateZoneName)" $qp)
-  let body = {etag: $etag, properties: $properties, location: $location, tags: $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"If-Match": $If_Match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), private_zone_name: (encode-path-segment $private_zone_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/privateDnsZones/{private_zone_name}") $qp)
+  let req_body = {"etag": $etag, "properties": $properties, "location": $location, "tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"If-Match": $if_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Creates or updates a Private DNS zone. Does not modify Links to virtual networks or DNS records within the zone.
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/privateDnsZones/{privateZoneName}
 # operationId: PrivateZones_CreateOrUpdate
-export def "subscriptions-resource-groups-providers-microsoft-network-private-dns-zones CreateOrUpdate-by-resourceGroupName-privateZoneName-subscriptionId" [
-  resourceGroupName: string
-  privateZoneName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-network-private-dns-zones create-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  private_zone_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -251,10 +267,11 @@ export def "subscriptions-resource-groups-providers-microsoft-network-private-dn
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
-  --If-Match: string # The ETag of the Private DNS zone. Omit this value to always overwrite the current zone. Specify the last-seen ETag value to prevent accidentally overwriting any concurrent changes.
-  --If-None-Match: string # Set to '*' to allow a new Private DNS zone to be created, but to prevent updating an existing zone. Other values will be ignored.
+  --if-match: string # The ETag of the Private DNS zone. Omit this value to always overwrite the current zone. Specify the last-seen ETag value to prevent accidentally overwriting any concurrent changes.
+  --if-none-match: string # Set to '*' to allow a new Private DNS zone to be created, but to prevent updating an existing zone. Other values will be ignored.
   --etag: string # The ETag of the zone.
   --properties: any # Represents the properties of the Private DNS zone.
   --location: string # The Azure Region where the resource lives
@@ -264,24 +281,24 @@ export def "subscriptions-resource-groups-providers-microsoft-network-private-dn
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/privateDnsZones/($privateZoneName)" $qp)
-  let body = {etag: $etag, properties: $properties, location: $location, tags: $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"If-Match": $If_Match, "If-None-Match": $If_None_Match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), private_zone_name: (encode-path-segment $private_zone_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/privateDnsZones/{private_zone_name}") $qp)
+  let req_body = {"etag": $etag, "properties": $properties, "location": $location, "tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"If-Match": $if_match, "If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Lists all record sets in a Private DNS zone.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/privateDnsZones/{privateZoneName}/ALL
 # operationId: RecordSets_List
-export def "subscriptions-resource-groups-providers-microsoft-network-private-dns-zones-all List" [
-  resourceGroupName: string
-  privateZoneName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-network-private-dns-zones-all list-record-sets" [
+  subscription_id: string
+  resource_group_name: string
+  private_zone_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -289,28 +306,29 @@ export def "subscriptions-resource-groups-providers-microsoft-network-private-dn
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --top: int # The maximum number of record sets to return. If not specified, returns up to 100 record sets. (format: int32)
-  --recordsetnamesuffix: string # The suffix label of the record set name to be used to filter the record set enumeration. If this parameter is specified, the returned enumeration will only contain records that end with ".<recordsetnamesuffix>".
+  --recordsetnamesuffix: string # The suffix label of the record set name to be used to filter the record set enumeration. If this parameter is specified, the returned enumeration will only contain records that end with ".".
   --api-version: string # Client Api Version.
 ]: nothing -> record<nextLink: string, value: table<etag: string, id: string, name: string, properties: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$top" $top "scalar") (serialize-qp "$recordsetnamesuffix" $recordsetnamesuffix "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/privateDnsZones/($privateZoneName)/ALL" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), private_zone_name: (encode-path-segment $private_zone_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/privateDnsZones/{private_zone_name}/ALL") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Lists the virtual network links to the specified Private DNS zone.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/privateDnsZones/{privateZoneName}/virtualNetworkLinks
 # operationId: VirtualNetworkLinks_List
-export def "subscriptions-resource-groups-providers-microsoft-network-private-dns-zones-virtual-network-links List" [
-  resourceGroupName: string
-  privateZoneName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-network-private-dns-zones-virtual-network-links list" [
+  subscription_id: string
+  resource_group_name: string
+  private_zone_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -318,6 +336,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-private-dn
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --top: int # The maximum number of virtual network links to return. If not specified, returns up to 100 virtual network links. (format: int32)
   --api-version: string # Client Api Version.
@@ -325,21 +344,21 @@ export def "subscriptions-resource-groups-providers-microsoft-network-private-dn
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$top" $top "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/privateDnsZones/($privateZoneName)/virtualNetworkLinks" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), private_zone_name: (encode-path-segment $private_zone_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/privateDnsZones/{private_zone_name}/virtualNetworkLinks") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Deletes a virtual network link to the specified Private DNS zone. WARNING: In case of a registration virtual network, all auto-registered DNS records in the zone for the virtual network will also be deleted. This operation cannot be undone.
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/privateDnsZones/{privateZoneName}/virtualNetworkLinks/{virtualNetworkLinkName}
 # operationId: VirtualNetworkLinks_Delete
-export def "subscriptions-resource-groups-providers-microsoft-network-private-dns-zones-virtual-network-links Delete" [
-  resourceGroupName: string
-  privateZoneName: string
-  virtualNetworkLinkName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-network-private-dns-zones-virtual-network-links delete" [
+  subscription_id: string
+  resource_group_name: string
+  private_zone_name: string
+  virtual_network_link_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -347,30 +366,31 @@ export def "subscriptions-resource-groups-providers-microsoft-network-private-dn
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
-  --If-Match: string # The ETag of the virtual network link to the Private DNS zone. Omit this value to always delete the current zone. Specify the last-seen ETag value to prevent accidentally deleting any concurrent changes.
+  --if-match: string # The ETag of the virtual network link to the Private DNS zone. Omit this value to always delete the current zone. Specify the last-seen ETag value to prevent accidentally deleting any concurrent changes.
 ]: nothing -> record<error: record<code: string, details: list<any>, message: string, target: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/privateDnsZones/($privateZoneName)/virtualNetworkLinks/($virtualNetworkLinkName)" $qp)
-  let extra_headers = {"If-Match": $If_Match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), private_zone_name: (encode-path-segment $private_zone_name), virtual_network_link_name: (encode-path-segment $virtual_network_link_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/privateDnsZones/{private_zone_name}/virtualNetworkLinks/{virtual_network_link_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"If-Match": $if_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Gets a virtual network link to the specified Private DNS zone.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/privateDnsZones/{privateZoneName}/virtualNetworkLinks/{virtualNetworkLinkName}
 # operationId: VirtualNetworkLinks_Get
-export def "subscriptions-resource-groups-providers-microsoft-network-private-dns-zones-virtual-network-links Get" [
-  resourceGroupName: string
-  privateZoneName: string
-  virtualNetworkLinkName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-network-private-dns-zones-virtual-network-links get" [
+  subscription_id: string
+  resource_group_name: string
+  private_zone_name: string
+  virtual_network_link_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -378,16 +398,17 @@ export def "subscriptions-resource-groups-providers-microsoft-network-private-dn
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
 ]: nothing -> record<etag: string, properties: record<provisioningState: string, registrationEnabled: bool, virtualNetwork: record<id: string>, virtualNetworkLinkState: string>, location: string, tags: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/privateDnsZones/($privateZoneName)/virtualNetworkLinks/($virtualNetworkLinkName)" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), private_zone_name: (encode-path-segment $private_zone_name), virtual_network_link_name: (encode-path-segment $virtual_network_link_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/privateDnsZones/{private_zone_name}/virtualNetworkLinks/{virtual_network_link_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Updates a virtual network link to the specified Private DNS zone.
@@ -395,11 +416,11 @@ export def "subscriptions-resource-groups-providers-microsoft-network-private-dn
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/privateDnsZones/{privateZoneName}/virtualNetworkLinks/{virtualNetworkLinkName}
 # operationId: VirtualNetworkLinks_Update
 # --properties shape: {registrationEnabled?: bool, virtualNetwork?: any}
-export def "subscriptions-resource-groups-providers-microsoft-network-private-dns-zones-virtual-network-links Update" [
-  resourceGroupName: string
-  privateZoneName: string
-  virtualNetworkLinkName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-network-private-dns-zones-virtual-network-links update" [
+  subscription_id: string
+  resource_group_name: string
+  private_zone_name: string
+  virtual_network_link_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -407,9 +428,10 @@ export def "subscriptions-resource-groups-providers-microsoft-network-private-dn
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
-  --If-Match: string # The ETag of the virtual network link to the Private DNS zone. Omit this value to always overwrite the current virtual network link. Specify the last-seen ETag value to prevent accidentally overwriting any concurrent changes.
+  --if-match: string # The ETag of the virtual network link to the Private DNS zone. Omit this value to always overwrite the current virtual network link. Specify the last-seen ETag value to prevent accidentally overwriting any concurrent changes.
   --etag: string # The ETag of the virtual network link.
   --properties: any # Represents the properties of the Private DNS zone. — shape: {registrationEnabled?: bool, virtualNetwork?: any}
   --location: string # The Azure Region where the resource lives
@@ -419,14 +441,14 @@ export def "subscriptions-resource-groups-providers-microsoft-network-private-dn
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/privateDnsZones/($privateZoneName)/virtualNetworkLinks/($virtualNetworkLinkName)" $qp)
-  let body = {etag: $etag, properties: $properties, location: $location, tags: $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"If-Match": $If_Match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), private_zone_name: (encode-path-segment $private_zone_name), virtual_network_link_name: (encode-path-segment $virtual_network_link_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/privateDnsZones/{private_zone_name}/virtualNetworkLinks/{virtual_network_link_name}") $qp)
+  let req_body = {"etag": $etag, "properties": $properties, "location": $location, "tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"If-Match": $if_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Creates or updates a virtual network link to the specified Private DNS zone.
@@ -434,11 +456,11 @@ export def "subscriptions-resource-groups-providers-microsoft-network-private-dn
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/privateDnsZones/{privateZoneName}/virtualNetworkLinks/{virtualNetworkLinkName}
 # operationId: VirtualNetworkLinks_CreateOrUpdate
 # --properties shape: {registrationEnabled?: bool, virtualNetwork?: any}
-export def "subscriptions-resource-groups-providers-microsoft-network-private-dns-zones-virtual-network-links CreateOrUpdate" [
-  resourceGroupName: string
-  privateZoneName: string
-  virtualNetworkLinkName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-network-private-dns-zones-virtual-network-links create-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  private_zone_name: string
+  virtual_network_link_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -446,10 +468,11 @@ export def "subscriptions-resource-groups-providers-microsoft-network-private-dn
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
-  --If-Match: string # The ETag of the virtual network link to the Private DNS zone. Omit this value to always overwrite the current virtual network link. Specify the last-seen ETag value to prevent accidentally overwriting any concurrent changes.
-  --If-None-Match: string # Set to '*' to allow a new virtual network link to the Private DNS zone to be created, but to prevent updating an existing link. Other values will be ignored.
+  --if-match: string # The ETag of the virtual network link to the Private DNS zone. Omit this value to always overwrite the current virtual network link. Specify the last-seen ETag value to prevent accidentally overwriting any concurrent changes.
+  --if-none-match: string # Set to '*' to allow a new virtual network link to the Private DNS zone to be created, but to prevent updating an existing link. Other values will be ignored.
   --etag: string # The ETag of the virtual network link.
   --properties: any # Represents the properties of the Private DNS zone. — shape: {registrationEnabled?: bool, virtualNetwork?: any}
   --location: string # The Azure Region where the resource lives
@@ -459,25 +482,25 @@ export def "subscriptions-resource-groups-providers-microsoft-network-private-dn
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/privateDnsZones/($privateZoneName)/virtualNetworkLinks/($virtualNetworkLinkName)" $qp)
-  let body = {etag: $etag, properties: $properties, location: $location, tags: $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"If-Match": $If_Match, "If-None-Match": $If_None_Match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), private_zone_name: (encode-path-segment $private_zone_name), virtual_network_link_name: (encode-path-segment $virtual_network_link_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/privateDnsZones/{private_zone_name}/virtualNetworkLinks/{virtual_network_link_name}") $qp)
+  let req_body = {"etag": $etag, "properties": $properties, "location": $location, "tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"If-Match": $if_match, "If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Lists the record sets of a specified type in a Private DNS zone.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/privateDnsZones/{privateZoneName}/{recordType}
 # operationId: RecordSets_ListByType
-export def "subscriptions-resource-groups-providers-microsoft-network-private-dns-zones ListByType" [
-  resourceGroupName: string
-  privateZoneName: string
-  recordType: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-network-private-dns-zones list-record-sets-by-type" [
+  subscription_id: string
+  resource_group_name: string
+  private_zone_name: string
+  record_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -485,30 +508,31 @@ export def "subscriptions-resource-groups-providers-microsoft-network-private-dn
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --top: int # The maximum number of record sets to return. If not specified, returns up to 100 record sets. (format: int32)
-  --recordsetnamesuffix: string # The suffix label of the record set name to be used to filter the record set enumeration. If this parameter is specified, the returned enumeration will only contain records that end with ".<recordsetnamesuffix>".
+  --recordsetnamesuffix: string # The suffix label of the record set name to be used to filter the record set enumeration. If this parameter is specified, the returned enumeration will only contain records that end with ".".
   --api-version: string # Client Api Version.
 ]: nothing -> record<nextLink: string, value: table<etag: string, id: string, name: string, properties: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$top" $top "scalar") (serialize-qp "$recordsetnamesuffix" $recordsetnamesuffix "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/privateDnsZones/($privateZoneName)/($recordType)" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), private_zone_name: (encode-path-segment $private_zone_name), record_type: (encode-path-segment $record_type)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/privateDnsZones/{private_zone_name}/{record_type}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Deletes a record set from a Private DNS zone. This operation cannot be undone.
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/privateDnsZones/{privateZoneName}/{recordType}/{relativeRecordSetName}
 # operationId: RecordSets_Delete
-export def "subscriptions-resource-groups-providers-microsoft-network-private-dns-zones Delete-by-resourceGroupName-privateZoneName-recordType-relativeRecordSetName-subscriptionId" [
-  resourceGroupName: string
-  privateZoneName: string
-  recordType: string
-  relativeRecordSetName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-network-private-dns-zones delete-record-sets" [
+  subscription_id: string
+  resource_group_name: string
+  private_zone_name: string
+  record_type: string
+  relative_record_set_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -516,31 +540,32 @@ export def "subscriptions-resource-groups-providers-microsoft-network-private-dn
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
-  --If-Match: string # The ETag of the record set. Omit this value to always delete the current record set. Specify the last-seen ETag value to prevent accidentally deleting any concurrent changes.
+  --if-match: string # The ETag of the record set. Omit this value to always delete the current record set. Specify the last-seen ETag value to prevent accidentally deleting any concurrent changes.
 ]: nothing -> record<error: record<code: string, details: list<any>, message: string, target: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/privateDnsZones/($privateZoneName)/($recordType)/($relativeRecordSetName)" $qp)
-  let extra_headers = {"If-Match": $If_Match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), private_zone_name: (encode-path-segment $private_zone_name), record_type: (encode-path-segment $record_type), relative_record_set_name: (encode-path-segment $relative_record_set_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/privateDnsZones/{private_zone_name}/{record_type}/{relative_record_set_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"If-Match": $if_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Gets a record set.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/privateDnsZones/{privateZoneName}/{recordType}/{relativeRecordSetName}
 # operationId: RecordSets_Get
-export def "subscriptions-resource-groups-providers-microsoft-network-private-dns-zones Get-by-resourceGroupName-privateZoneName-recordType-relativeRecordSetName-subscriptionId" [
-  resourceGroupName: string
-  privateZoneName: string
-  recordType: string
-  relativeRecordSetName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-network-private-dns-zones get-record-sets" [
+  subscription_id: string
+  resource_group_name: string
+  private_zone_name: string
+  record_type: string
+  relative_record_set_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -548,16 +573,17 @@ export def "subscriptions-resource-groups-providers-microsoft-network-private-dn
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
 ]: nothing -> record<etag: string, id: string, name: string, properties: record<aRecords: list<record>, aaaaRecords: list<record>, cnameRecord: record<cname: string>, fqdn: string, isAutoRegistered: bool, metadata: record, mxRecords: list<record>, ptrRecords: list<record>, soaRecord: record<email: string, expireTime: int, host: string, minimumTtl: int, refreshTime: int, retryTime: int, serialNumber: int>, srvRecords: list<record>, ttl: int, txtRecords: list<record>>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/privateDnsZones/($privateZoneName)/($recordType)/($relativeRecordSetName)" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), private_zone_name: (encode-path-segment $private_zone_name), record_type: (encode-path-segment $record_type), relative_record_set_name: (encode-path-segment $relative_record_set_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/privateDnsZones/{private_zone_name}/{record_type}/{relative_record_set_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Updates a record set within a Private DNS zone.
@@ -565,12 +591,12 @@ export def "subscriptions-resource-groups-providers-microsoft-network-private-dn
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/privateDnsZones/{privateZoneName}/{recordType}/{relativeRecordSetName}
 # operationId: RecordSets_Update
 # --properties shape: {aRecords?: list, aaaaRecords?: list, cnameRecord?: any, metadata?: record, mxRecords?: list, ptrRecords?: list, soaRecord?: any, srvRecords?: list, ttl?: int, txtRecords?: list}
-export def "subscriptions-resource-groups-providers-microsoft-network-private-dns-zones Update-by-resourceGroupName-privateZoneName-recordType-relativeRecordSetName-subscriptionId" [
-  resourceGroupName: string
-  privateZoneName: string
-  recordType: string
-  relativeRecordSetName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-network-private-dns-zones update-record-sets" [
+  subscription_id: string
+  resource_group_name: string
+  private_zone_name: string
+  record_type: string
+  relative_record_set_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -578,9 +604,10 @@ export def "subscriptions-resource-groups-providers-microsoft-network-private-dn
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
-  --If-Match: string # The ETag of the record set. Omit this value to always overwrite the current record set. Specify the last-seen ETag value to prevent accidentally overwriting concurrent changes.
+  --if-match: string # The ETag of the record set. Omit this value to always overwrite the current record set. Specify the last-seen ETag value to prevent accidentally overwriting concurrent changes.
   --etag: string # The ETag of the record set.
   --properties: any # Represents the properties of the records in the record set. — shape: {aRecords?: list, aaaaRecords?: list, cnameRecord?: any, metadata?: record, mxRecords?: list, ptrRecords?: list, soaRecord?: any, srvRecords?: list, ttl?: int, txtRecords?: list}
 ]: any -> record<etag: string, id: string, name: string, properties: record<aRecords: list<record>, aaaaRecords: list<record>, cnameRecord: record<cname: string>, fqdn: string, isAutoRegistered: bool, metadata: record, mxRecords: list<record>, ptrRecords: list<record>, soaRecord: record<email: string, expireTime: int, host: string, minimumTtl: int, refreshTime: int, retryTime: int, serialNumber: int>, srvRecords: list<record>, ttl: int, txtRecords: list<record>>, type: string> {
@@ -588,14 +615,14 @@ export def "subscriptions-resource-groups-providers-microsoft-network-private-dn
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/privateDnsZones/($privateZoneName)/($recordType)/($relativeRecordSetName)" $qp)
-  let body = {etag: $etag, properties: $properties} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"If-Match": $If_Match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), private_zone_name: (encode-path-segment $private_zone_name), record_type: (encode-path-segment $record_type), relative_record_set_name: (encode-path-segment $relative_record_set_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/privateDnsZones/{private_zone_name}/{record_type}/{relative_record_set_name}") $qp)
+  let req_body = {"etag": $etag, "properties": $properties} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"If-Match": $if_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Creates or updates a record set within a Private DNS zone.
@@ -603,12 +630,12 @@ export def "subscriptions-resource-groups-providers-microsoft-network-private-dn
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/privateDnsZones/{privateZoneName}/{recordType}/{relativeRecordSetName}
 # operationId: RecordSets_CreateOrUpdate
 # --properties shape: {aRecords?: list, aaaaRecords?: list, cnameRecord?: any, metadata?: record, mxRecords?: list, ptrRecords?: list, soaRecord?: any, srvRecords?: list, ttl?: int, txtRecords?: list}
-export def "subscriptions-resource-groups-providers-microsoft-network-private-dns-zones CreateOrUpdate-by-resourceGroupName-privateZoneName-recordType-relativeRecordSetName-subscriptionId" [
-  resourceGroupName: string
-  privateZoneName: string
-  recordType: string
-  relativeRecordSetName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-network-private-dns-zones create-record-sets-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  private_zone_name: string
+  record_type: string
+  relative_record_set_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -616,10 +643,11 @@ export def "subscriptions-resource-groups-providers-microsoft-network-private-dn
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
-  --If-Match: string # The ETag of the record set. Omit this value to always overwrite the current record set. Specify the last-seen ETag value to prevent accidentally overwriting any concurrent changes.
-  --If-None-Match: string # Set to '*' to allow a new record set to be created, but to prevent updating an existing record set. Other values will be ignored.
+  --if-match: string # The ETag of the record set. Omit this value to always overwrite the current record set. Specify the last-seen ETag value to prevent accidentally overwriting any concurrent changes.
+  --if-none-match: string # Set to '*' to allow a new record set to be created, but to prevent updating an existing record set. Other values will be ignored.
   --etag: string # The ETag of the record set.
   --properties: any # Represents the properties of the records in the record set. — shape: {aRecords?: list, aaaaRecords?: list, cnameRecord?: any, metadata?: record, mxRecords?: list, ptrRecords?: list, soaRecord?: any, srvRecords?: list, ttl?: int, txtRecords?: list}
 ]: any -> record<etag: string, id: string, name: string, properties: record<aRecords: list<record>, aaaaRecords: list<record>, cnameRecord: record<cname: string>, fqdn: string, isAutoRegistered: bool, metadata: record, mxRecords: list<record>, ptrRecords: list<record>, soaRecord: record<email: string, expireTime: int, host: string, minimumTtl: int, refreshTime: int, retryTime: int, serialNumber: int>, srvRecords: list<record>, ttl: int, txtRecords: list<record>>, type: string> {
@@ -627,12 +655,12 @@ export def "subscriptions-resource-groups-providers-microsoft-network-private-dn
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/privateDnsZones/($privateZoneName)/($recordType)/($relativeRecordSetName)" $qp)
-  let body = {etag: $etag, properties: $properties} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"If-Match": $If_Match, "If-None-Match": $If_None_Match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), private_zone_name: (encode-path-segment $private_zone_name), record_type: (encode-path-segment $record_type), relative_record_set_name: (encode-path-segment $relative_record_set_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/privateDnsZones/{private_zone_name}/{record_type}/{relative_record_set_name}") $qp)
+  let req_body = {"etag": $etag, "properties": $properties} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"If-Match": $if_match, "If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }

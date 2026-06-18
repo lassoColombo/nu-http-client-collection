@@ -17,21 +17,32 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 }
 
 # Serialize a single query parameter based on collection style
+# Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
+# ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = ($name | url encode)
+  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
-  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
-    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
-    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
+    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
+    _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
+}
+
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Build URL from base, path, and optional query string
@@ -43,7 +54,7 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
@@ -52,13 +63,13 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
     "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "put" => { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "patch" => { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
   if ($method in ["head" "options"]) { return $resp }
-  if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
+  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
 def base-url-completer [] { [""] }
@@ -70,8 +81,8 @@ def particle-completer-1 [] { ["alpha" "e+" "e-" "gamma" "mu+" "mu-" "neutron" "
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "cari7-ambient-dose dose" } } | get name | first)
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "cari7-ambient-dose get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -95,7 +106,7 @@ export def commands []: nothing -> table {
 #
 # GET /cari7/ambient_dose
 # operationId: app.api_cari7.endpoints.CARI7.ambient_dose
-export def "cari7-ambient-dose dose" [
+export def "cari7-ambient-dose get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -103,6 +114,7 @@ export def "cari7-ambient-dose dose" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --altitude: float # Altitude (in km). The minimum is 0 m, the maximum is 47 km (the upper limit of the stratosphere). (e.g. 11)
   --latitude: float # Latitude. -90 (S) to 90 (N). (e.g. 30)
@@ -111,7 +123,7 @@ export def "cari7-ambient-dose dose" [
   --month: int # Month in MM. (e.g. 12)
   --day: int # Day in DD. (e.g. 1)
   --utc: int # Hour in 24 hour time. (e.g. 3)
-  --particle: string@particle-completer # The particle type as a string. Specifying 'total' returns the dose for all particle types.  (e.g. total)
+  --particle: string@particle-completer # The particle type as a string. Specifying 'total' returns the dose for all particle types. (e.g. total)
 ]: nothing -> record<dose_rate: record<units: string, value: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -119,14 +131,14 @@ export def "cari7-ambient-dose dose" [
   let full_url = (build-url $base "/cari7/ambient_dose" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # The effective dose rate calculated for a single particle type, or accumulated over all particle types.
 #
 # GET /cari7/effective_dose
 # operationId: app.api_cari7.endpoints.CARI7.effective_dose
-export def "cari7-effective-dose dose" [
+export def "cari7-effective-dose get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -134,6 +146,7 @@ export def "cari7-effective-dose dose" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --altitude: float # Altitude (in km). The minimum is 0 m, the maximum is 47 km (the upper limit of the stratosphere). (e.g. 11)
   --latitude: float # Latitude. -90 (S) to 90 (N). (e.g. 30)
@@ -142,7 +155,7 @@ export def "cari7-effective-dose dose" [
   --month: int # Month in MM. (e.g. 12)
   --day: int # Day in DD. (e.g. 1)
   --utc: int # Hour in 24 hour time. (e.g. 3)
-  --particle: string@particle-completer # The particle type as a string. Specifying 'total' returns the dose for all particle types.  (e.g. total)
+  --particle: string@particle-completer # The particle type as a string. Specifying 'total' returns the dose for all particle types. (e.g. total)
 ]: nothing -> record<dose_rate: record<units: string, value: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -150,14 +163,14 @@ export def "cari7-effective-dose dose" [
   let full_url = (build-url $base "/cari7/effective_dose" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # The ambient dose equivalent rate calculated for a single particle type, or accumulated over all particle types.
 #
 # GET /parma/ambient_dose
 # operationId: app.api_parma.endpoints.PARMA.ambient_dose
-export def "parma-ambient-dose dose" [
+export def "parma-ambient-dose get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -165,15 +178,16 @@ export def "parma-ambient-dose dose" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --altitude: float # Altitude (in km). The minimum is 0 m, the maximum is 47 km (the upper limit of the stratosphere). (e.g. 11)
-  --atmospheric-depth: float # Atmospheric depth from the top of the atmosphere (in units of g/cm2). The minimum is 0.913 g/cm2, the maximum is 1032.66 g/cm2. WARNING: you can specify either altitude OR atmospheric depth, not both.  (e.g. 0.92)
+  --atmospheric-depth: float # Atmospheric depth from the top of the atmosphere (in units of g/cm2). The minimum is 0.913 g/cm2, the maximum is 1032.66 g/cm2. WARNING: you can specify either altitude OR atmospheric depth, not both. (e.g. 0.92)
   --latitude: float # Latitude. -90 (S) to 90 (N). (e.g. 30)
   --longitude: float # Longitude. -180 (W) to 180 (E). (e.g. 30)
   --year: int # Year in YYYY. (e.g. 2019)
   --month: int # Month in MM. (e.g. 12)
   --day: int # Day in DD. (e.g. 1)
-  --particle: string@particle-completer-1 # The particle type as a string. Specifying 'total', only used for the dose calculation, returns the dose for all particle types.  (e.g. proton)
+  --particle: string@particle-completer-1 # The particle type as a string. Specifying 'total', only used for the dose calculation, returns the dose for all particle types. (e.g. proton)
 ]: nothing -> record<dose_rate: record<units: string, value: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -181,14 +195,14 @@ export def "parma-ambient-dose dose" [
   let full_url = (build-url $base "/parma/ambient_dose" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # The energy differential intensity of a particle at a given zenith angle.
 #
 # GET /parma/differential_intensity
 # operationId: app.api_parma.endpoints.PARMA.differential_intensity
-export def "parma-differential-intensity intensity" [
+export def "parma-differential-intensity get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -196,15 +210,16 @@ export def "parma-differential-intensity intensity" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --altitude: float # Altitude (in km). The minimum is 0 m, the maximum is 47 km (the upper limit of the stratosphere). (e.g. 11)
-  --atmospheric-depth: float # Atmospheric depth from the top of the atmosphere (in units of g/cm2). The minimum is 0.913 g/cm2, the maximum is 1032.66 g/cm2. WARNING: you can specify either altitude OR atmospheric depth, not both.  (e.g. 0.92)
+  --atmospheric-depth: float # Atmospheric depth from the top of the atmosphere (in units of g/cm2). The minimum is 0.913 g/cm2, the maximum is 1032.66 g/cm2. WARNING: you can specify either altitude OR atmospheric depth, not both. (e.g. 0.92)
   --latitude: float # Latitude. -90 (S) to 90 (N). (e.g. 30)
   --longitude: float # Longitude. -180 (W) to 180 (E). (e.g. 30)
   --year: int # Year in YYYY. (e.g. 2019)
   --month: int # Month in MM. (e.g. 12)
   --day: int # Day in DD. (e.g. 1)
-  --particle: string@particle-completer-1 # The particle type as a string. Specifying 'total', only used for the dose calculation, returns the dose for all particle types.  (e.g. proton)
+  --particle: string@particle-completer-1 # The particle type as a string. Specifying 'total', only used for the dose calculation, returns the dose for all particle types. (e.g. proton)
   --angle: float # Direction cosine. 1.0 is in the downward direction. (e.g. 1)
 ]: nothing -> record<energies: record<data: list<float>, units: string>, intensities: record<data: list<float>, units: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -213,14 +228,14 @@ export def "parma-differential-intensity intensity" [
   let full_url = (build-url $base "/parma/differential_intensity" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # The effective dose rate calculated for a single particle type, or accumulated over all particle types.
 #
 # GET /parma/effective_dose
 # operationId: app.api_parma.endpoints.PARMA.effective_dose
-export def "parma-effective-dose dose" [
+export def "parma-effective-dose get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -228,15 +243,16 @@ export def "parma-effective-dose dose" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --altitude: float # Altitude (in km). The minimum is 0 m, the maximum is 47 km (the upper limit of the stratosphere). (e.g. 11)
-  --atmospheric-depth: float # Atmospheric depth from the top of the atmosphere (in units of g/cm2). The minimum is 0.913 g/cm2, the maximum is 1032.66 g/cm2. WARNING: you can specify either altitude OR atmospheric depth, not both.  (e.g. 0.92)
+  --atmospheric-depth: float # Atmospheric depth from the top of the atmosphere (in units of g/cm2). The minimum is 0.913 g/cm2, the maximum is 1032.66 g/cm2. WARNING: you can specify either altitude OR atmospheric depth, not both. (e.g. 0.92)
   --latitude: float # Latitude. -90 (S) to 90 (N). (e.g. 30)
   --longitude: float # Longitude. -180 (W) to 180 (E). (e.g. 30)
   --year: int # Year in YYYY. (e.g. 2019)
   --month: int # Month in MM. (e.g. 12)
   --day: int # Day in DD. (e.g. 1)
-  --particle: string@particle-completer-1 # The particle type as a string. Specifying 'total', only used for the dose calculation, returns the dose for all particle types.  (e.g. proton)
+  --particle: string@particle-completer-1 # The particle type as a string. Specifying 'total', only used for the dose calculation, returns the dose for all particle types. (e.g. proton)
 ]: nothing -> record<dose_rate: record<units: string, value: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -244,14 +260,14 @@ export def "parma-effective-dose dose" [
   let full_url = (build-url $base "/parma/effective_dose" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Calculate the ambient equivalent dose along a great circle flight route.
 #
 # GET /route/ambient_dose
 # operationId: app.api_icaro.endpoints.ICARO.ambient_dose
-export def "route-ambient-dose dose" [
+export def "route-ambient-dose get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -259,15 +275,16 @@ export def "route-ambient-dose dose" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --origin: string # The ICAO code or IATA code or latitude,longitude pair (in decimal degrees) of the origin airport. (e.g. YSSY)
   --destination: string # The ICAO code or IATA code or latitude,longitude pair (in decimal degrees) of the destination airport. (e.g. 33.94250107,-118.4079971)
   --altitude: float # Altitude (in km). The minimum is 0 m, the maximum is 20 km. (e.g. 10.1)
   --duration: float # The flight duration in hours. The minimum is 0, the maximum is 20 hrs. (e.g. 5)
   --initial-altitude: float # Initial altitude (in km). The minimum is 0 m, the maximum is 20 km. (e.g. 0)
-  --cruising-altitudes: list # Cruising altitudes (in km). The minimum is 0 m, the maximum is 20 km. (e.g. [10, 15])
-  --climb-times: list # Climb times for each cruising altitude (hours). (e.g. [0.1, 0.5])
-  --cruising-times: list # Cruising times at each cruising altitude (hours). (e.g. [1, 2])
+  --cruising-altitudes: list<float> # Cruising altitudes (in km). The minimum is 0 m, the maximum is 20 km. (e.g. [10, 15])
+  --climb-times: list<float> # Climb times for each cruising altitude (hours). (e.g. [0.1, 0.5])
+  --cruising-times: list<float> # Cruising times at each cruising altitude (hours). (e.g. [1, 2])
   --descent-time: float # Descent time from last cruising altitude to final altitude (hours). (e.g. 0.5)
   --final-altitude: float # Final altitude (in km). (e.g. 0)
   --year: int # Year in YYYY. (e.g. 2019)
@@ -280,14 +297,14 @@ export def "route-ambient-dose dose" [
   let full_url = (build-url $base "/route/ambient_dose" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Calculate the total effective dose along a great circle flight route.
 #
 # GET /route/effective_dose
 # operationId: app.api_icaro.endpoints.ICARO.effective_dose
-export def "route-effective-dose dose" [
+export def "route-effective-dose get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -295,15 +312,16 @@ export def "route-effective-dose dose" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --origin: string # The ICAO code or IATA code or latitude,longitude pair (in decimal degrees) of the origin airport. (e.g. YSSY)
   --destination: string # The ICAO code or IATA code or latitude,longitude pair (in decimal degrees) of the destination airport. (e.g. 33.94250107,-118.4079971)
   --altitude: float # Altitude (in km). The minimum is 0 m, the maximum is 20 km. (e.g. 10.1)
   --duration: float # The flight duration in hours. The minimum is 0, the maximum is 20 hrs. (e.g. 5)
   --initial-altitude: float # Initial altitude (in km). The minimum is 0 m, the maximum is 20 km. (e.g. 0)
-  --cruising-altitudes: list # Cruising altitudes (in km). The minimum is 0 m, the maximum is 20 km. (e.g. [10, 15])
-  --climb-times: list # Climb times for each cruising altitude (hours). (e.g. [0.1, 0.5])
-  --cruising-times: list # Cruising times at each cruising altitude (hours). (e.g. [1, 2])
+  --cruising-altitudes: list<float> # Cruising altitudes (in km). The minimum is 0 m, the maximum is 20 km. (e.g. [10, 15])
+  --climb-times: list<float> # Climb times for each cruising altitude (hours). (e.g. [0.1, 0.5])
+  --cruising-times: list<float> # Cruising times at each cruising altitude (hours). (e.g. [1, 2])
   --descent-time: float # Descent time from last cruising altitude to final altitude (hours). (e.g. 0.5)
   --final-altitude: float # Final altitude (in km). (e.g. 0)
   --year: int # Year in YYYY. (e.g. 2019)
@@ -316,5 +334,5 @@ export def "route-effective-dose dose" [
   let full_url = (build-url $base "/route/effective_dose" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }

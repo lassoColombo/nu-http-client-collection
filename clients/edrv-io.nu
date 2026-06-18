@@ -18,21 +18,32 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 }
 
 # Serialize a single query parameter based on collection style
+# Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
+# ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = ($name | url encode)
+  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
-  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
-    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
-    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
+    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
+    _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
+}
+
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Build URL from base, path, and optional query string
@@ -44,7 +55,7 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
@@ -53,13 +64,13 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
     "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "put" => { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "patch" => { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
   if ($method in ["head" "options"]) { return $resp }
-  if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
+  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
 def base-url-completer [] { ["http://localhost//api.edrv.io"] }
@@ -75,8 +86,8 @@ def action-completer [] { ["START" "STOP"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "chargestations list" } } | get name | first)
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "chargestations get-charge-stations" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -100,7 +111,7 @@ export def commands []: nothing -> table {
 #
 # GET /v1/chargestations
 # operationId: getChargeStations
-export def "chargestations list" [
+export def "chargestations get-charge-stations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -108,6 +119,7 @@ export def "chargestations list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --organization: string # Filter by Org. Id
   --location: string # Filter by Location Id
@@ -119,28 +131,28 @@ export def "chargestations list" [
   --paginate-enabled: oneof<nothing, bool> # Enable pagination (default: true)
   --sort-by: string # Sort data by this key (default: createdAt)
   --sort-order: string@sort-order-completer # asc to sort ascending (default is desc - descending) (default: desc)
-  --createdAtgte: string # Date as ISO String (format: date-time)
-  --createdAtlte: string # Date as ISO String (format: date-time)
-  --updatedAtgte: string # Date as ISO String (format: date-time)
-  --updatedAtlte: string # Date as ISO String (format: date-time)
+  --created-at-gte: string # Date as ISO String (format: date-time)
+  --created-at-lte: string # Date as ISO String (format: date-time)
+  --updated-at-gte: string # Date as ISO String (format: date-time)
+  --updated-at-lte: string # Date as ISO String (format: date-time)
   --include-location: oneof<nothing, bool> # Populate location
   --include-evses: oneof<nothing, bool> # Populate evses
   --include-organization: oneof<nothing, bool> # Populate organization
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "organization" $organization "scalar") (serialize-qp "location" $location "scalar") (serialize-qp "online" $online "scalar") (serialize-qp "active" $active "scalar") (serialize-qp "public" $public "scalar") (serialize-qp "paginate_limit" $paginate_limit "scalar") (serialize-qp "paginate_page" $paginate_page "scalar") (serialize-qp "paginate_enabled" $paginate_enabled "scalar") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "sort_order" $sort_order "scalar") (serialize-qp "createdAt[$gte]" $createdAtgte "scalar") (serialize-qp "createdAt[$lte]" $createdAtlte "scalar") (serialize-qp "updatedAt[$gte]" $updatedAtgte "scalar") (serialize-qp "updatedAt[$lte]" $updatedAtlte "scalar") (serialize-qp "include_location" $include_location "scalar") (serialize-qp "include_evses" $include_evses "scalar") (serialize-qp "include_organization" $include_organization "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "organization" $organization "scalar") (serialize-qp "location" $location "scalar") (serialize-qp "online" $online "scalar") (serialize-qp "active" $active "scalar") (serialize-qp "public" $public "scalar") (serialize-qp "paginate_limit" $paginate_limit "scalar") (serialize-qp "paginate_page" $paginate_page "scalar") (serialize-qp "paginate_enabled" $paginate_enabled "scalar") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "sort_order" $sort_order "scalar") (serialize-qp "createdAt[$gte]" $created_at_gte "scalar") (serialize-qp "createdAt[$lte]" $created_at_lte "scalar") (serialize-qp "updatedAt[$gte]" $updated_at_gte "scalar") (serialize-qp "updatedAt[$lte]" $updated_at_lte "scalar") (serialize-qp "include_location" $include_location "scalar") (serialize-qp "include_evses" $include_evses "scalar") (serialize-qp "include_organization" $include_organization "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/chargestations" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Create a new charge station
 #
 # POST /v1/chargestations
 # operationId: postChargeStations
-export def "chargestations post" [
+export def "chargestations create-charge-stations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -148,6 +160,7 @@ export def "chargestations post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --location: string
   --manufacturer: string
@@ -159,18 +172,18 @@ export def "chargestations post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/chargestations")
-  let body = {location: $location, manufacturer: $manufacturer, model: $model, protocol: $protocol, public: $public} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"location": $location, "manufacturer": $manufacturer, "model": $model, "protocol": $protocol, "public": $public} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Use to delete a charge station
 #
 # DELETE /v1/chargestations/{id}
 # operationId: deleteChargeStation
-export def "chargestations delete" [
+export def "chargestations delete-charge-station" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -179,21 +192,22 @@ export def "chargestations delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/chargestations/($id)")
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/chargestations/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get a single charge station's data
 #
 # GET /v1/chargestations/{id}
 # operationId: getChargeStation
-export def "chargestations get" [
+export def "chargestations get-charge-station" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -202,6 +216,7 @@ export def "chargestations get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --include-location: oneof<nothing, bool> # Populate location
   --include-evses: oneof<nothing, bool> # Populate evses
@@ -210,17 +225,17 @@ export def "chargestations get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "include_location" $include_location "scalar") (serialize-qp "include_evses" $include_evses "scalar") (serialize-qp "include_organization" $include_organization "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/chargestations/($id)" $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/chargestations/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Update a charge station's data
 #
 # PATCH /v1/chargestations/{id}
 # operationId: patchChargeStation
-export def "chargestations patch" [
+export def "chargestations update-charge-station" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -229,6 +244,7 @@ export def "chargestations patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --location: string
   --manufacturer: string
@@ -239,19 +255,19 @@ export def "chargestations patch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/chargestations/($id)")
-  let body = {location: $location, manufacturer: $manufacturer, model: $model, protocol: $protocol, public: $public} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/chargestations/{id}"))
+  let req_body = {"location": $location, "manufacturer": $manufacturer, "model": $model, "protocol": $protocol, "public": $public} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # List connectors for a chargestation
 #
 # GET /v1/chargestations/{id}/connectors
 # operationId: getChargeStationConnectors
-export def "chargestations-connectors get" [
+export def "chargestations-connectors get-charge-station" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -260,6 +276,7 @@ export def "chargestations-connectors get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --include-evse: oneof<nothing, bool> # Populate evse
   --include-organization: oneof<nothing, bool> # Populate organization
@@ -267,10 +284,10 @@ export def "chargestations-connectors get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "include_evse" $include_evse "scalar") (serialize-qp "include_organization" $include_organization "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/chargestations/($id)/connectors" $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/chargestations/{id}/connectors") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get Commands data
@@ -285,16 +302,17 @@ export def "commands get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --paginate-limit: int # Number of results per page (default: 20)
   --paginate-page: string # The queried page index
   --paginate-enabled: oneof<nothing, bool> # Enable pagination (default: true)
   --sort-by: string # Sort data by this key (default: createdAt)
   --sort-order: string@sort-order-completer # asc to sort ascending (default is desc - descending) (default: desc)
-  --createdAtgte: string # Date as ISO String (format: date-time)
-  --createdAtlte: string # Date as ISO String (format: date-time)
-  --updatedAtgte: string # Date as ISO String (format: date-time)
-  --updatedAtlte: string # Date as ISO String (format: date-time)
+  --created-at-gte: string # Date as ISO String (format: date-time)
+  --created-at-lte: string # Date as ISO String (format: date-time)
+  --updated-at-gte: string # Date as ISO String (format: date-time)
+  --updated-at-lte: string # Date as ISO String (format: date-time)
   --include-chargestation: oneof<nothing, bool> # Populate chargestation
   --include-driver: oneof<nothing, bool> # Populate driver
   --include-transaction: oneof<nothing, bool> # Populate transaction
@@ -302,18 +320,18 @@ export def "commands get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "paginate_limit" $paginate_limit "scalar") (serialize-qp "paginate_page" $paginate_page "scalar") (serialize-qp "paginate_enabled" $paginate_enabled "scalar") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "sort_order" $sort_order "scalar") (serialize-qp "createdAt[$gte]" $createdAtgte "scalar") (serialize-qp "createdAt[$lte]" $createdAtlte "scalar") (serialize-qp "updatedAt[$gte]" $updatedAtgte "scalar") (serialize-qp "updatedAt[$lte]" $updatedAtlte "scalar") (serialize-qp "include_chargestation" $include_chargestation "scalar") (serialize-qp "include_driver" $include_driver "scalar") (serialize-qp "include_transaction" $include_transaction "scalar") (serialize-qp "include_organization" $include_organization "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "paginate_limit" $paginate_limit "scalar") (serialize-qp "paginate_page" $paginate_page "scalar") (serialize-qp "paginate_enabled" $paginate_enabled "scalar") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "sort_order" $sort_order "scalar") (serialize-qp "createdAt[$gte]" $created_at_gte "scalar") (serialize-qp "createdAt[$lte]" $created_at_lte "scalar") (serialize-qp "updatedAt[$gte]" $updated_at_gte "scalar") (serialize-qp "updatedAt[$lte]" $updated_at_lte "scalar") (serialize-qp "include_chargestation" $include_chargestation "scalar") (serialize-qp "include_driver" $include_driver "scalar") (serialize-qp "include_transaction" $include_transaction "scalar") (serialize-qp "include_organization" $include_organization "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/commands" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Use to request a delete an existing reservation. The request will wait for the charge station to process the command. It will timeout after 60 seconds.
 #
 # POST /v1/commands/cancelreservation
 # operationId: cancelreservation
-export def "commands-cancelreservation cancelreservation" [
+export def "commands-cancelreservation create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -321,6 +339,7 @@ export def "commands-cancelreservation cancelreservation" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --reservation: string
 ]: any -> record<message: string, ok: bool, result: record> {
@@ -328,18 +347,18 @@ export def "commands-cancelreservation cancelreservation" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/commands/cancelreservation")
-  let body = {reservation: $reservation} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"reservation": $reservation} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Delete a smart charging schedule
 #
 # DELETE /v1/commands/chargingschedule
 # operationId: deletechargingschedule
-export def "commands-chargingschedule deletechargingschedule" [
+export def "commands-chargingschedule delete-deletechargingschedule" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -347,6 +366,7 @@ export def "commands-chargingschedule deletechargingschedule" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --id: string
 ]: any -> record<command: record, message: string, ok: bool> {
@@ -354,11 +374,11 @@ export def "commands-chargingschedule deletechargingschedule" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/commands/chargingschedule")
-  let body = {id: $id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"id": $id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Set one of charging power or current of a specific chargestation connector
@@ -366,7 +386,7 @@ export def "commands-chargingschedule deletechargingschedule" [
 # POST /v1/commands/chargingschedule
 # operationId: setchargingschedule
 # --schedule item shape: {endDate?: string, limit?: float, startDate?: string, unit?: string}
-export def "commands-chargingschedule setchargingschedule" [
+export def "commands-chargingschedule create-setchargingschedule" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -374,6 +394,7 @@ export def "commands-chargingschedule setchargingschedule" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --connector: string
   --schedule: list # item shape: {endDate?: string, limit?: float, startDate?: string, unit?: string}
@@ -382,18 +403,18 @@ export def "commands-chargingschedule setchargingschedule" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/commands/chargingschedule")
-  let body = {connector: $connector, schedule: $schedule} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"connector": $connector, "schedule": $schedule} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Use to request a remote start command. The request will wait for the charge station to process the command. It will timeout after 60 seconds.
 #
 # POST /v1/commands/remotestart
 # operationId: remotestart
-export def "commands-remotestart remotestart" [
+export def "commands-remotestart create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -401,6 +422,7 @@ export def "commands-remotestart remotestart" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --chargestation: string
   --connector: string
@@ -411,18 +433,18 @@ export def "commands-remotestart remotestart" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/commands/remotestart")
-  let body = {chargestation: $chargestation, connector: $connector, driver: $driver, token: $body_token} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"chargestation": $chargestation, "connector": $connector, "driver": $driver, "token": $body_token} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Use to request a remote stop command. The request will wait for the charge station to process the command. It will timeout after 60 seconds.
 #
 # POST /v1/commands/remotestop
 # operationId: remotestop
-export def "commands-remotestop remotestop" [
+export def "commands-remotestop create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -430,6 +452,7 @@ export def "commands-remotestop remotestop" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --chargestation: string
   --driver: string
@@ -439,18 +462,18 @@ export def "commands-remotestop remotestop" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/commands/remotestop")
-  let body = {chargestation: $chargestation, driver: $driver, transaction: $transaction} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"chargestation": $chargestation, "driver": $driver, "transaction": $transaction} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Use to request a reserve command. The request will wait for the charge station to process the command. It will timeout after 60 seconds.
 #
 # POST /v1/commands/reserve
 # operationId: reserve
-export def "commands-reserve reserve" [
+export def "commands-reserve create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -458,22 +481,23 @@ export def "commands-reserve reserve" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --chargestation: string
   --connector: string
   --driver: string
-  --endDate: string
+  --end-date: string
   --body-token: string
 ]: any -> record<command: record, message: string, ok: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/commands/reserve")
-  let body = {chargestation: $chargestation, connector: $connector, driver: $driver, endDate: $endDate, token: $body_token} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"chargestation": $chargestation, "connector": $connector, "driver": $driver, "endDate": $end_date, "token": $body_token} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Use to request a reset command. The request will wait for the charge station to process the command. It will timeout after 60 seconds.
@@ -488,6 +512,7 @@ export def "commands-reset reset" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --chargestation: string
   --type: string
@@ -496,18 +521,18 @@ export def "commands-reset reset" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/commands/reset")
-  let body = {chargestation: $chargestation, type: $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"chargestation": $chargestation, "type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Use to request an unlock command for a connector. The request will wait for the charge station to process the command. It will timeout after 60 seconds.
 #
 # POST /v1/commands/unlockconnector
 # operationId: unlockconnector
-export def "commands-unlockconnector unlockconnector" [
+export def "commands-unlockconnector create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -515,6 +540,7 @@ export def "commands-unlockconnector unlockconnector" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --chargestation: string
   --connector: string
@@ -523,11 +549,11 @@ export def "commands-unlockconnector unlockconnector" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/commands/unlockconnector")
-  let body = {chargestation: $chargestation, connector: $connector} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"chargestation": $chargestation, "connector": $connector} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Get a charge station's config variables
@@ -543,21 +569,22 @@ export def "commands-variables get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/commands/($id)/variables")
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/commands/{id}/variables"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Update config variables for a chargestation
 #
 # PATCH /v1/commands/{id}/variables
 # operationId: patchChargeStationVariable
-export def "commands-variables patch" [
+export def "commands-variables update-charge-station" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -566,6 +593,7 @@ export def "commands-variables patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --value: string
   --variable: string@variable-completer
@@ -573,12 +601,12 @@ export def "commands-variables patch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/commands/($id)/variables")
-  let body = {value: $value, variable: $variable} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/commands/{id}/variables"))
+  let req_body = {"value": $value, "variable": $variable} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Get Configurations data
@@ -593,31 +621,32 @@ export def "configurations list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --paginate-limit: int # Number of results per page (default: 20)
   --paginate-page: string # The queried page index
   --paginate-enabled: oneof<nothing, bool> # Enable pagination (default: true)
   --sort-by: string # Sort data by this key (default: createdAt)
   --sort-order: string@sort-order-completer # asc to sort ascending (default is desc - descending) (default: desc)
-  --createdAtgte: string # Date as ISO String (format: date-time)
-  --createdAtlte: string # Date as ISO String (format: date-time)
-  --updatedAtgte: string # Date as ISO String (format: date-time)
-  --updatedAtlte: string # Date as ISO String (format: date-time)
+  --created-at-gte: string # Date as ISO String (format: date-time)
+  --created-at-lte: string # Date as ISO String (format: date-time)
+  --updated-at-gte: string # Date as ISO String (format: date-time)
+  --updated-at-lte: string # Date as ISO String (format: date-time)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "paginate_limit" $paginate_limit "scalar") (serialize-qp "paginate_page" $paginate_page "scalar") (serialize-qp "paginate_enabled" $paginate_enabled "scalar") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "sort_order" $sort_order "scalar") (serialize-qp "createdAt[$gte]" $createdAtgte "scalar") (serialize-qp "createdAt[$lte]" $createdAtlte "scalar") (serialize-qp "updatedAt[$gte]" $updatedAtgte "scalar") (serialize-qp "updatedAt[$lte]" $updatedAtlte "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "paginate_limit" $paginate_limit "scalar") (serialize-qp "paginate_page" $paginate_page "scalar") (serialize-qp "paginate_enabled" $paginate_enabled "scalar") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "sort_order" $sort_order "scalar") (serialize-qp "createdAt[$gte]" $created_at_gte "scalar") (serialize-qp "createdAt[$lte]" $created_at_lte "scalar") (serialize-qp "updatedAt[$gte]" $updated_at_gte "scalar") (serialize-qp "updatedAt[$lte]" $updated_at_lte "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/configurations" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Create connector with parameters
 #
 # POST /v1/configurations
 # operationId: postConfigurations
-export def "configurations post" [
+export def "configurations create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -625,6 +654,7 @@ export def "configurations post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string
   --value: string
@@ -633,11 +663,11 @@ export def "configurations post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/configurations")
-  let body = {key: $key, value: $value} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"key": $key, "value": $value} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Get one Configuration data
@@ -653,14 +683,15 @@ export def "configurations get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/configurations/($id)")
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/configurations/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # List connectors
@@ -675,34 +706,35 @@ export def "connectors list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --paginate-limit: int # Number of results per page (default: 20)
   --paginate-page: string # The queried page index
   --paginate-enabled: oneof<nothing, bool> # Enable pagination (default: true)
   --sort-by: string # Sort data by this key (default: createdAt)
   --sort-order: string@sort-order-completer # asc to sort ascending (default is desc - descending) (default: desc)
-  --createdAtgte: string # Date as ISO String (format: date-time)
-  --createdAtlte: string # Date as ISO String (format: date-time)
-  --updatedAtgte: string # Date as ISO String (format: date-time)
-  --updatedAtlte: string # Date as ISO String (format: date-time)
+  --created-at-gte: string # Date as ISO String (format: date-time)
+  --created-at-lte: string # Date as ISO String (format: date-time)
+  --updated-at-gte: string # Date as ISO String (format: date-time)
+  --updated-at-lte: string # Date as ISO String (format: date-time)
   --include-evse: oneof<nothing, bool> # Populate evse
   --include-organization: oneof<nothing, bool> # Populate organization
   --include-rate: oneof<nothing, bool> # Populate rate
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "paginate_limit" $paginate_limit "scalar") (serialize-qp "paginate_page" $paginate_page "scalar") (serialize-qp "paginate_enabled" $paginate_enabled "scalar") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "sort_order" $sort_order "scalar") (serialize-qp "createdAt[$gte]" $createdAtgte "scalar") (serialize-qp "createdAt[$lte]" $createdAtlte "scalar") (serialize-qp "updatedAt[$gte]" $updatedAtgte "scalar") (serialize-qp "updatedAt[$lte]" $updatedAtlte "scalar") (serialize-qp "include_evse" $include_evse "scalar") (serialize-qp "include_organization" $include_organization "scalar") (serialize-qp "include_rate" $include_rate "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "paginate_limit" $paginate_limit "scalar") (serialize-qp "paginate_page" $paginate_page "scalar") (serialize-qp "paginate_enabled" $paginate_enabled "scalar") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "sort_order" $sort_order "scalar") (serialize-qp "createdAt[$gte]" $created_at_gte "scalar") (serialize-qp "createdAt[$lte]" $created_at_lte "scalar") (serialize-qp "updatedAt[$gte]" $updated_at_gte "scalar") (serialize-qp "updatedAt[$lte]" $updated_at_lte "scalar") (serialize-qp "include_evse" $include_evse "scalar") (serialize-qp "include_organization" $include_organization "scalar") (serialize-qp "include_rate" $include_rate "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/connectors" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Create a new connector
 #
 # POST /v1/connectors
 # operationId: postConnectors
-export def "connectors post" [
+export def "connectors create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -710,6 +742,7 @@ export def "connectors post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --chargestation: string
   --format: string
@@ -722,11 +755,11 @@ export def "connectors post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/connectors")
-  let body = {chargestation: $chargestation, format: $format, power: $power, power_type: $power_type, rate: $rate, type: $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"chargestation": $chargestation, "format": $format, "power": $power, "power_type": $power_type, "rate": $rate, "type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Delete a connector
@@ -742,14 +775,15 @@ export def "connectors delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/connectors/($id)")
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/connectors/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get a connector
@@ -765,6 +799,7 @@ export def "connectors get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --include-evse: oneof<nothing, bool> # Populate evse
   --include-organization: oneof<nothing, bool> # Populate organization
@@ -773,17 +808,17 @@ export def "connectors get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "include_evse" $include_evse "scalar") (serialize-qp "include_organization" $include_organization "scalar") (serialize-qp "include_rate" $include_rate "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/connectors/($id)" $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/connectors/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Update a connector's data
 #
 # PATCH /v1/connectors/{id}
 # operationId: patchConnector
-export def "connectors patch" [
+export def "connectors update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -792,6 +827,7 @@ export def "connectors patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --chargestation: string
   --format: string
@@ -803,12 +839,12 @@ export def "connectors patch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/connectors/($id)")
-  let body = {chargestation: $chargestation, format: $format, power: $power, power_type: $power_type, rate: $rate, type: $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/connectors/{id}"))
+  let req_body = {"chargestation": $chargestation, "format": $format, "power": $power, "power_type": $power_type, "rate": $rate, "type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # List all drivers
@@ -823,6 +859,7 @@ export def "drivers list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --active: oneof<nothing, bool> # Get a list of active drivers
   --paginate-limit: int # Number of results per page (default: 20)
@@ -830,21 +867,21 @@ export def "drivers list" [
   --paginate-enabled: oneof<nothing, bool> # Enable pagination (default: true)
   --sort-by: string # Sort data by this key (default: createdAt)
   --sort-order: string@sort-order-completer # asc to sort ascending (default is desc - descending) (default: desc)
-  --createdAtgte: string # Date as ISO String (format: date-time)
-  --createdAtlte: string # Date as ISO String (format: date-time)
-  --updatedAtgte: string # Date as ISO String (format: date-time)
-  --updatedAtlte: string # Date as ISO String (format: date-time)
+  --created-at-gte: string # Date as ISO String (format: date-time)
+  --created-at-lte: string # Date as ISO String (format: date-time)
+  --updated-at-gte: string # Date as ISO String (format: date-time)
+  --updated-at-lte: string # Date as ISO String (format: date-time)
   --include-tokens: oneof<nothing, bool> # Populate tokens
   --include-group: oneof<nothing, bool> # Populate group
   --include-organization: oneof<nothing, bool> # Populate organization
 ]: nothing -> record<message: string, ok: bool, result: list<any>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "active" $active "scalar") (serialize-qp "paginate_limit" $paginate_limit "scalar") (serialize-qp "paginate_page" $paginate_page "scalar") (serialize-qp "paginate_enabled" $paginate_enabled "scalar") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "sort_order" $sort_order "scalar") (serialize-qp "createdAt[$gte]" $createdAtgte "scalar") (serialize-qp "createdAt[$lte]" $createdAtlte "scalar") (serialize-qp "updatedAt[$gte]" $updatedAtgte "scalar") (serialize-qp "updatedAt[$lte]" $updatedAtlte "scalar") (serialize-qp "include_tokens" $include_tokens "scalar") (serialize-qp "include_group" $include_group "scalar") (serialize-qp "include_organization" $include_organization "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "active" $active "scalar") (serialize-qp "paginate_limit" $paginate_limit "scalar") (serialize-qp "paginate_page" $paginate_page "scalar") (serialize-qp "paginate_enabled" $paginate_enabled "scalar") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "sort_order" $sort_order "scalar") (serialize-qp "createdAt[$gte]" $created_at_gte "scalar") (serialize-qp "createdAt[$lte]" $created_at_lte "scalar") (serialize-qp "updatedAt[$gte]" $updated_at_gte "scalar") (serialize-qp "updatedAt[$lte]" $updated_at_lte "scalar") (serialize-qp "include_tokens" $include_tokens "scalar") (serialize-qp "include_group" $include_group "scalar") (serialize-qp "include_organization" $include_organization "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/drivers" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Create a new driver
@@ -853,7 +890,7 @@ export def "drivers list" [
 # operationId: postDrivers
 # --address shape: {city?: string, country?: string, postalCode?: string, streetAndNumber?: string}
 # --phone shape: {home?: string, mobile?: string, work?: string}
-export def "drivers post" [
+export def "drivers create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -861,6 +898,7 @@ export def "drivers post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --active: oneof<nothing, bool> # default: true
   --address: record # shape: {city?: string, country?: string, postalCode?: string, streetAndNumber?: string}
@@ -874,11 +912,11 @@ export def "drivers post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/drivers")
-  let body = {active: $active, address: $address, email: $email, firstname: $firstname, lastname: $lastname, phone: $phone, source: $body_source} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"active": $active, "address": $address, "email": $email, "firstname": $firstname, "lastname": $lastname, "phone": $phone, "source": $body_source} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Delete a driver
@@ -894,14 +932,15 @@ export def "drivers delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/drivers/($id)")
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/drivers/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get a driver's data
@@ -917,6 +956,7 @@ export def "drivers get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --include-tokens: oneof<nothing, bool> # Populate tokens
   --include-group: oneof<nothing, bool> # Populate group
@@ -925,10 +965,10 @@ export def "drivers get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "include_tokens" $include_tokens "scalar") (serialize-qp "include_group" $include_group "scalar") (serialize-qp "include_organization" $include_organization "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/drivers/($id)" $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/drivers/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Update a driver's data
@@ -937,7 +977,7 @@ export def "drivers get" [
 # operationId: patchDriver
 # --address shape: {city?: string, country?: string, postalCode?: string, streetAndNumber?: string}
 # --phone shape: {home?: string, mobile?: string, work?: string}
-export def "drivers patch" [
+export def "drivers update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -946,6 +986,7 @@ export def "drivers patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --active: oneof<nothing, bool>
   --address: record # shape: {city?: string, country?: string, postalCode?: string, streetAndNumber?: string}
@@ -959,12 +1000,12 @@ export def "drivers patch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/drivers/($id)")
-  let body = {active: $active, address: $address, email: $email, firstname: $firstname, lastname: $lastname, phone: $phone, source: $body_source, tokens: $tokens} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/drivers/{id}"))
+  let req_body = {"active": $active, "address": $address, "email": $email, "firstname": $firstname, "lastname": $lastname, "phone": $phone, "source": $body_source, "tokens": $tokens} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Delete a location
@@ -980,14 +1021,15 @@ export def "location delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/location/($id)")
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/location/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get a location's data
@@ -1003,6 +1045,7 @@ export def "location get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --include-chargestations: oneof<nothing, bool> # Populate chargestations
   --include-organization: oneof<nothing, bool> # Populate organization
@@ -1010,10 +1053,10 @@ export def "location get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "include_chargestations" $include_chargestations "scalar") (serialize-qp "include_organization" $include_organization "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/location/($id)" $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/location/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Update a location's data
@@ -1023,7 +1066,7 @@ export def "location get" [
 # --address shape: {city?: string, country?: string, postalCode?: string, state?: string, streetAndNumber?: string}
 # --coordinates shape: {latitude?: float, longitude?: float}
 # --openingHours shape: {0?: list, 1?: list, 2?: list, 3?: list, 4?: list, 5?: list, 6?: list}
-export def "location patch" [
+export def "location update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1032,24 +1075,25 @@ export def "location patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --active: oneof<nothing, bool> # default: true
   --address: record # shape: {city?: string, country?: string, postalCode?: string, state?: string, streetAndNumber?: string}
   --chargestations: list
   --coordinates: record # shape: {latitude?: float, longitude?: float}
-  --openingHours: record # shape: {0?: list, 1?: list, 2?: list, 3?: list, 4?: list, 5?: list, 6?: list}
-  --operatorName: string
+  --opening-hours: record # shape: {0?: list, 1?: list, 2?: list, 3?: list, 4?: list, 5?: list, 6?: list}
+  --operator-name: string
   --timezone: string
 ]: any -> record<message: string, ok: bool, result: list<any>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/location/($id)")
-  let body = {active: $active, address: $address, chargestations: $chargestations, coordinates: $coordinates, openingHours: $openingHours, operatorName: $operatorName, timezone: $timezone} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/location/{id}"))
+  let req_body = {"active": $active, "address": $address, "chargestations": $chargestations, "coordinates": $coordinates, "openingHours": $opening_hours, "operatorName": $operator_name, "timezone": $timezone} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Get Locations data
@@ -1064,25 +1108,26 @@ export def "locations get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --paginate-limit: int # Number of results per page (default: 20)
   --paginate-page: string # The queried page index
   --paginate-enabled: oneof<nothing, bool> # Enable pagination (default: true)
   --sort-by: string # Sort data by this key (default: createdAt)
   --sort-order: string@sort-order-completer # asc to sort ascending (default is desc - descending) (default: desc)
-  --createdAtgte: string # Date as ISO String (format: date-time)
-  --createdAtlte: string # Date as ISO String (format: date-time)
-  --updatedAtgte: string # Date as ISO String (format: date-time)
-  --updatedAtlte: string # Date as ISO String (format: date-time)
+  --created-at-gte: string # Date as ISO String (format: date-time)
+  --created-at-lte: string # Date as ISO String (format: date-time)
+  --updated-at-gte: string # Date as ISO String (format: date-time)
+  --updated-at-lte: string # Date as ISO String (format: date-time)
   --include-organization: oneof<nothing, bool> # Populate organization
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "paginate_limit" $paginate_limit "scalar") (serialize-qp "paginate_page" $paginate_page "scalar") (serialize-qp "paginate_enabled" $paginate_enabled "scalar") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "sort_order" $sort_order "scalar") (serialize-qp "createdAt[$gte]" $createdAtgte "scalar") (serialize-qp "createdAt[$lte]" $createdAtlte "scalar") (serialize-qp "updatedAt[$gte]" $updatedAtgte "scalar") (serialize-qp "updatedAt[$lte]" $updatedAtlte "scalar") (serialize-qp "include_organization" $include_organization "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "paginate_limit" $paginate_limit "scalar") (serialize-qp "paginate_page" $paginate_page "scalar") (serialize-qp "paginate_enabled" $paginate_enabled "scalar") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "sort_order" $sort_order "scalar") (serialize-qp "createdAt[$gte]" $created_at_gte "scalar") (serialize-qp "createdAt[$lte]" $created_at_lte "scalar") (serialize-qp "updatedAt[$gte]" $updated_at_gte "scalar") (serialize-qp "updatedAt[$lte]" $updated_at_lte "scalar") (serialize-qp "include_organization" $include_organization "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/locations" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Create a new location
@@ -1091,7 +1136,7 @@ export def "locations get" [
 # operationId: postLocations
 # --address shape: {city?: string, country?: string, postalCode?: string, streetAndNumber?: string}
 # --coordinates shape: {latitude?: float, longitude?: float}
-export def "locations post" [
+export def "locations create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1099,22 +1144,23 @@ export def "locations post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --active: oneof<nothing, bool> # default: true
   address: record # shape: {city?: string, country?: string, postalCode?: string, streetAndNumber?: string}
   --chargestations: list
   coordinates: record # shape: {latitude?: float, longitude?: float}
-  operatorName: string
+  operator_name: string
 ]: any -> record<message: string, ok: bool, result: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/locations")
-  let body = {active: $active, address: $address, chargestations: $chargestations, coordinates: $coordinates, operatorName: $operatorName} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"active": $active, "address": $address, "chargestations": $chargestations, "coordinates": $coordinates, "operatorName": $operator_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Get an array of all Organizations
@@ -1129,25 +1175,26 @@ export def "organizations list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --paginate-limit: int # Number of results per page (default: 20)
   --paginate-page: string # The queried page index
   --paginate-enabled: oneof<nothing, bool> # Enable pagination (default: true)
   --sort-by: string # Sort data by this key (default: createdAt)
   --sort-order: string@sort-order-completer # asc to sort ascending (default is desc - descending) (default: desc)
-  --createdAtgte: string # Date as ISO String (format: date-time)
-  --createdAtlte: string # Date as ISO String (format: date-time)
-  --updatedAtgte: string # Date as ISO String (format: date-time)
-  --updatedAtlte: string # Date as ISO String (format: date-time)
+  --created-at-gte: string # Date as ISO String (format: date-time)
+  --created-at-lte: string # Date as ISO String (format: date-time)
+  --updated-at-gte: string # Date as ISO String (format: date-time)
+  --updated-at-lte: string # Date as ISO String (format: date-time)
   --include-locations: oneof<nothing, bool> # Populate locations
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "paginate_limit" $paginate_limit "scalar") (serialize-qp "paginate_page" $paginate_page "scalar") (serialize-qp "paginate_enabled" $paginate_enabled "scalar") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "sort_order" $sort_order "scalar") (serialize-qp "createdAt[$gte]" $createdAtgte "scalar") (serialize-qp "createdAt[$lte]" $createdAtlte "scalar") (serialize-qp "updatedAt[$gte]" $updatedAtgte "scalar") (serialize-qp "updatedAt[$lte]" $updatedAtlte "scalar") (serialize-qp "include_locations" $include_locations "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "paginate_limit" $paginate_limit "scalar") (serialize-qp "paginate_page" $paginate_page "scalar") (serialize-qp "paginate_enabled" $paginate_enabled "scalar") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "sort_order" $sort_order "scalar") (serialize-qp "createdAt[$gte]" $created_at_gte "scalar") (serialize-qp "createdAt[$lte]" $created_at_lte "scalar") (serialize-qp "updatedAt[$gte]" $updated_at_gte "scalar") (serialize-qp "updatedAt[$lte]" $updated_at_lte "scalar") (serialize-qp "include_locations" $include_locations "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/organizations" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get one organization's data by id
@@ -1163,16 +1210,17 @@ export def "organizations get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --include-locations: oneof<nothing, bool> # Populate locations
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "include_locations" $include_locations "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/organizations/($id)" $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/organizations/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Update an organization's data
@@ -1186,7 +1234,7 @@ export def "organizations get" [
 # --support shape: {business_hours?: string, chat?: record, contact_number?: string, email?: string}
 # --supportChat shape: {id?: string, name?: string}
 # --theme shape: {colors?: record}
-export def "organizations patch" [
+export def "organizations update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1195,6 +1243,7 @@ export def "organizations patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --active: oneof<nothing, bool>
   --address: record # shape: {city?: string, country?: string, postalCode?: string, streetAndNumber?: string}
@@ -1210,18 +1259,18 @@ export def "organizations patch" [
   --stripe-currency: string
   --stripe-reserve-amount: int
   --support: record # shape: {business_hours?: string, chat?: record, contact_number?: string, email?: string}
-  --supportChat: record # shape: {id?: string, name?: string}
+  --support-chat: record # shape: {id?: string, name?: string}
   --theme: record # shape: {colors?: record}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/organizations/($id)")
-  let body = {active: $active, address: $address, channels: $channels, configurations: $configurations, links: $links, locations: $locations, logo: $logo, name: $name, otp: $otp, stripe_connected_account_id: $stripe_connected_account_id, stripe_country: $stripe_country, stripe_currency: $stripe_currency, stripe_reserve_amount: $stripe_reserve_amount, support: $support, supportChat: $supportChat, theme: $theme} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/organizations/{id}"))
+  let req_body = {"active": $active, "address": $address, "channels": $channels, "configurations": $configurations, "links": $links, "locations": $locations, "logo": $logo, "name": $name, "otp": $otp, "stripe_connected_account_id": $stripe_connected_account_id, "stripe_country": $stripe_country, "stripe_currency": $stripe_currency, "stripe_reserve_amount": $stripe_reserve_amount, "support": $support, "supportChat": $support_chat, "theme": $theme} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Use to request a Websockets handshake
@@ -1236,17 +1285,18 @@ export def "realtime get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --sec-websocket-protocol: string # The JWT token to use for auth
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/realtime")
-  let extra_headers = {"sec-websocket-protocol": $sec_websocket_protocol} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"sec-websocket-protocol": $sec_websocket_protocol} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get Reservations data
@@ -1261,26 +1311,27 @@ export def "reservations list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --paginate-limit: int # Number of results per page (default: 20)
   --paginate-page: string # The queried page index
   --paginate-enabled: oneof<nothing, bool> # Enable pagination (default: true)
   --sort-by: string # Sort data by this key (default: createdAt)
   --sort-order: string@sort-order-completer # asc to sort ascending (default is desc - descending) (default: desc)
-  --createdAtgte: string # Date as ISO String (format: date-time)
-  --createdAtlte: string # Date as ISO String (format: date-time)
-  --updatedAtgte: string # Date as ISO String (format: date-time)
-  --updatedAtlte: string # Date as ISO String (format: date-time)
+  --created-at-gte: string # Date as ISO String (format: date-time)
+  --created-at-lte: string # Date as ISO String (format: date-time)
+  --updated-at-gte: string # Date as ISO String (format: date-time)
+  --updated-at-lte: string # Date as ISO String (format: date-time)
   --include-chargestation: oneof<nothing, bool> # Populate chargestation
   --include-organization: oneof<nothing, bool> # Populate organization
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "paginate_limit" $paginate_limit "scalar") (serialize-qp "paginate_page" $paginate_page "scalar") (serialize-qp "paginate_enabled" $paginate_enabled "scalar") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "sort_order" $sort_order "scalar") (serialize-qp "createdAt[$gte]" $createdAtgte "scalar") (serialize-qp "createdAt[$lte]" $createdAtlte "scalar") (serialize-qp "updatedAt[$gte]" $updatedAtgte "scalar") (serialize-qp "updatedAt[$lte]" $updatedAtlte "scalar") (serialize-qp "include_chargestation" $include_chargestation "scalar") (serialize-qp "include_organization" $include_organization "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "paginate_limit" $paginate_limit "scalar") (serialize-qp "paginate_page" $paginate_page "scalar") (serialize-qp "paginate_enabled" $paginate_enabled "scalar") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "sort_order" $sort_order "scalar") (serialize-qp "createdAt[$gte]" $created_at_gte "scalar") (serialize-qp "createdAt[$lte]" $created_at_lte "scalar") (serialize-qp "updatedAt[$gte]" $updated_at_gte "scalar") (serialize-qp "updatedAt[$lte]" $updated_at_lte "scalar") (serialize-qp "include_chargestation" $include_chargestation "scalar") (serialize-qp "include_organization" $include_organization "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/reservations" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get one reservation data
@@ -1296,6 +1347,7 @@ export def "reservations get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --include-chargestation: oneof<nothing, bool> # Populate chargestation
   --include-organization: oneof<nothing, bool> # Populate organization
@@ -1303,17 +1355,17 @@ export def "reservations get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "include_chargestation" $include_chargestation "scalar") (serialize-qp "include_organization" $include_organization "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/reservations/($id)" $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/reservations/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Use to request a update an existing reservation. The request will wait for the charge station to process the command. It will timeout after 60 seconds.
 #
 # PATCH /v1/reservations/{id}
 # operationId: updatereservation
-export def "reservations updatereservation" [
+export def "reservations update-updatereservation" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1322,21 +1374,22 @@ export def "reservations updatereservation" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --connector: int
   --driver: string
-  --endDate: string
+  --end-date: string
   --evse: int
 ]: any -> record<message: string, ok: bool, result: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/reservations/($id)")
-  let body = {connector: $connector, driver: $driver, endDate: $endDate, evse: $evse} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/reservations/{id}"))
+  let req_body = {"connector": $connector, "driver": $driver, "endDate": $end_date, "evse": $evse} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # List tokens
@@ -1351,33 +1404,34 @@ export def "tokens list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --paginate-limit: int # Number of results per page (default: 20)
   --paginate-page: string # The queried page index
   --paginate-enabled: oneof<nothing, bool> # Enable pagination (default: true)
   --sort-by: string # Sort data by this key (default: createdAt)
   --sort-order: string@sort-order-completer # asc to sort ascending (default is desc - descending) (default: desc)
-  --createdAtgte: string # Date as ISO String (format: date-time)
-  --createdAtlte: string # Date as ISO String (format: date-time)
-  --updatedAtgte: string # Date as ISO String (format: date-time)
-  --updatedAtlte: string # Date as ISO String (format: date-time)
+  --created-at-gte: string # Date as ISO String (format: date-time)
+  --created-at-lte: string # Date as ISO String (format: date-time)
+  --updated-at-gte: string # Date as ISO String (format: date-time)
+  --updated-at-lte: string # Date as ISO String (format: date-time)
   --include-driver: oneof<nothing, bool> # Populate driver
   --include-organization: oneof<nothing, bool> # Populate organization
 ]: nothing -> record<message: string, ok: bool, result: list<any>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "paginate_limit" $paginate_limit "scalar") (serialize-qp "paginate_page" $paginate_page "scalar") (serialize-qp "paginate_enabled" $paginate_enabled "scalar") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "sort_order" $sort_order "scalar") (serialize-qp "createdAt[$gte]" $createdAtgte "scalar") (serialize-qp "createdAt[$lte]" $createdAtlte "scalar") (serialize-qp "updatedAt[$gte]" $updatedAtgte "scalar") (serialize-qp "updatedAt[$lte]" $updatedAtlte "scalar") (serialize-qp "include_driver" $include_driver "scalar") (serialize-qp "include_organization" $include_organization "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "paginate_limit" $paginate_limit "scalar") (serialize-qp "paginate_page" $paginate_page "scalar") (serialize-qp "paginate_enabled" $paginate_enabled "scalar") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "sort_order" $sort_order "scalar") (serialize-qp "createdAt[$gte]" $created_at_gte "scalar") (serialize-qp "createdAt[$lte]" $created_at_lte "scalar") (serialize-qp "updatedAt[$gte]" $updated_at_gte "scalar") (serialize-qp "updatedAt[$lte]" $updated_at_lte "scalar") (serialize-qp "include_driver" $include_driver "scalar") (serialize-qp "include_organization" $include_organization "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/tokens" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Create a new token
 #
 # POST /v1/tokens
 # operationId: postTokens
-export def "tokens post" [
+export def "tokens create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1385,22 +1439,23 @@ export def "tokens post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --active: oneof<nothing, bool> # default: true
   channel: string@channel-completer
   driver: string
-  physicalId: string
+  physical_id: string
   --type: string
 ]: any -> record<message: string, ok: bool, result: list<any>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/tokens")
-  let body = {active: $active, channel: $channel, driver: $driver, physicalId: $physicalId, type: $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"active": $active, "channel": $channel, "driver": $driver, "physicalId": $physical_id, "type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Use to delete a token
@@ -1416,14 +1471,15 @@ export def "tokens delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/tokens/($id)")
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/tokens/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get a single token's data
@@ -1439,6 +1495,7 @@ export def "tokens get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --include-driver: oneof<nothing, bool> # Populate driver
   --include-organization: oneof<nothing, bool> # Populate organization
@@ -1446,17 +1503,17 @@ export def "tokens get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "include_driver" $include_driver "scalar") (serialize-qp "include_organization" $include_organization "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/tokens/($id)" $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/tokens/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Update a token
 #
 # PATCH /v1/tokens/{id}
 # operationId: patchToken
-export def "tokens patch" [
+export def "tokens update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1465,22 +1522,23 @@ export def "tokens patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --active: oneof<nothing, bool> # default: true
   --channel: string@channel-completer
   --driver: string
-  --physicalId: string
+  --physical-id: string
   --type: string
 ]: any -> record<message: string, ok: bool, result: list<any>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/tokens/($id)")
-  let body = {active: $active, channel: $channel, driver: $driver, physicalId: $physicalId, type: $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/tokens/{id}"))
+  let req_body = {"active": $active, "channel": $channel, "driver": $driver, "physicalId": $physical_id, "type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Get a list of transactions
@@ -1495,6 +1553,7 @@ export def "transactions list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --status: string@status-completer # Started to get only active transactions
   --paginate-limit: int # Number of results per page (default: 20)
@@ -1502,10 +1561,10 @@ export def "transactions list" [
   --paginate-enabled: oneof<nothing, bool> # Enable pagination (default: true)
   --sort-by: string # Sort data by this key (default: createdAt)
   --sort-order: string@sort-order-completer # asc to sort ascending (default is desc - descending) (default: desc)
-  --createdAtgte: string # Date as ISO String (format: date-time)
-  --createdAtlte: string # Date as ISO String (format: date-time)
-  --updatedAtgte: string # Date as ISO String (format: date-time)
-  --updatedAtlte: string # Date as ISO String (format: date-time)
+  --created-at-gte: string # Date as ISO String (format: date-time)
+  --created-at-lte: string # Date as ISO String (format: date-time)
+  --updated-at-gte: string # Date as ISO String (format: date-time)
+  --updated-at-lte: string # Date as ISO String (format: date-time)
   --include-chargestation: oneof<nothing, bool> # Populate chargestation
   --include-evse: oneof<nothing, bool> # Populate evse
   --include-connector: oneof<nothing, bool> # Populate connector
@@ -1517,11 +1576,11 @@ export def "transactions list" [
 ]: nothing -> record<hasNext: bool, hasPrevious: bool, message: string, ok: bool, result: list<any>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "status" $status "scalar") (serialize-qp "paginate_limit" $paginate_limit "scalar") (serialize-qp "paginate_page" $paginate_page "scalar") (serialize-qp "paginate_enabled" $paginate_enabled "scalar") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "sort_order" $sort_order "scalar") (serialize-qp "createdAt[$gte]" $createdAtgte "scalar") (serialize-qp "createdAt[$lte]" $createdAtlte "scalar") (serialize-qp "updatedAt[$gte]" $updatedAtgte "scalar") (serialize-qp "updatedAt[$lte]" $updatedAtlte "scalar") (serialize-qp "include_chargestation" $include_chargestation "scalar") (serialize-qp "include_evse" $include_evse "scalar") (serialize-qp "include_connector" $include_connector "scalar") (serialize-qp "include_driver" $include_driver "scalar") (serialize-qp "include_token" $include_token "scalar") (serialize-qp "include_reservation" $include_reservation "scalar") (serialize-qp "include_organization" $include_organization "scalar") (serialize-qp "include_rate" $include_rate "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "status" $status "scalar") (serialize-qp "paginate_limit" $paginate_limit "scalar") (serialize-qp "paginate_page" $paginate_page "scalar") (serialize-qp "paginate_enabled" $paginate_enabled "scalar") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "sort_order" $sort_order "scalar") (serialize-qp "createdAt[$gte]" $created_at_gte "scalar") (serialize-qp "createdAt[$lte]" $created_at_lte "scalar") (serialize-qp "updatedAt[$gte]" $updated_at_gte "scalar") (serialize-qp "updatedAt[$lte]" $updated_at_lte "scalar") (serialize-qp "include_chargestation" $include_chargestation "scalar") (serialize-qp "include_evse" $include_evse "scalar") (serialize-qp "include_connector" $include_connector "scalar") (serialize-qp "include_driver" $include_driver "scalar") (serialize-qp "include_token" $include_token "scalar") (serialize-qp "include_reservation" $include_reservation "scalar") (serialize-qp "include_organization" $include_organization "scalar") (serialize-qp "include_rate" $include_rate "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/transactions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get a specific transaction
@@ -1537,6 +1596,7 @@ export def "transactions get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --include-chargestation: oneof<nothing, bool> # Populate chargestation
   --include-evse: oneof<nothing, bool> # Populate evse
@@ -1550,10 +1610,10 @@ export def "transactions get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "include_chargestation" $include_chargestation "scalar") (serialize-qp "include_evse" $include_evse "scalar") (serialize-qp "include_connector" $include_connector "scalar") (serialize-qp "include_driver" $include_driver "scalar") (serialize-qp "include_token" $include_token "scalar") (serialize-qp "include_reservation" $include_reservation "scalar") (serialize-qp "include_organization" $include_organization "scalar") (serialize-qp "include_rate" $include_rate "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/transactions/($id)" $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/transactions/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get a specific transaction's cost
@@ -1569,14 +1629,15 @@ export def "transactions-cost get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/transactions/($id)/cost")
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/transactions/{id}/cost"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # List all vehicles
@@ -1591,6 +1652,7 @@ export def "vehicles list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --active: oneof<nothing, bool> # Get a list of active vehicles
   --paginate-limit: int # Number of results per page (default: 20)
@@ -1598,21 +1660,21 @@ export def "vehicles list" [
   --paginate-enabled: oneof<nothing, bool> # Enable pagination (default: true)
   --sort-by: string # Sort data by this key (default: createdAt)
   --sort-order: string@sort-order-completer # asc to sort ascending (default is desc - descending) (default: desc)
-  --createdAtgte: string # Date as ISO String (format: date-time)
-  --createdAtlte: string # Date as ISO String (format: date-time)
-  --updatedAtgte: string # Date as ISO String (format: date-time)
-  --updatedAtlte: string # Date as ISO String (format: date-time)
+  --created-at-gte: string # Date as ISO String (format: date-time)
+  --created-at-lte: string # Date as ISO String (format: date-time)
+  --updated-at-gte: string # Date as ISO String (format: date-time)
+  --updated-at-lte: string # Date as ISO String (format: date-time)
   --include-driver: oneof<nothing, bool> # Populate driver
   --include-token: oneof<nothing, bool> # Populate token
   --include-organization: oneof<nothing, bool> # Populate organization
 ]: nothing -> record<message: string, ok: bool, result: list<any>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "active" $active "scalar") (serialize-qp "paginate_limit" $paginate_limit "scalar") (serialize-qp "paginate_page" $paginate_page "scalar") (serialize-qp "paginate_enabled" $paginate_enabled "scalar") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "sort_order" $sort_order "scalar") (serialize-qp "createdAt[$gte]" $createdAtgte "scalar") (serialize-qp "createdAt[$lte]" $createdAtlte "scalar") (serialize-qp "updatedAt[$gte]" $updatedAtgte "scalar") (serialize-qp "updatedAt[$lte]" $updatedAtlte "scalar") (serialize-qp "include_driver" $include_driver "scalar") (serialize-qp "include_token" $include_token "scalar") (serialize-qp "include_organization" $include_organization "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "active" $active "scalar") (serialize-qp "paginate_limit" $paginate_limit "scalar") (serialize-qp "paginate_page" $paginate_page "scalar") (serialize-qp "paginate_enabled" $paginate_enabled "scalar") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "sort_order" $sort_order "scalar") (serialize-qp "createdAt[$gte]" $created_at_gte "scalar") (serialize-qp "createdAt[$lte]" $created_at_lte "scalar") (serialize-qp "updatedAt[$gte]" $updated_at_gte "scalar") (serialize-qp "updatedAt[$lte]" $updated_at_lte "scalar") (serialize-qp "include_driver" $include_driver "scalar") (serialize-qp "include_token" $include_token "scalar") (serialize-qp "include_organization" $include_organization "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/vehicles" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get a vehicle's data
@@ -1628,6 +1690,7 @@ export def "vehicles get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --include-driver: oneof<nothing, bool> # Populate driver
   --include-token: oneof<nothing, bool> # Populate token
@@ -1636,10 +1699,10 @@ export def "vehicles get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "include_driver" $include_driver "scalar") (serialize-qp "include_token" $include_token "scalar") (serialize-qp "include_organization" $include_organization "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/vehicles/($id)" $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/vehicles/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get a vehicle's battery
@@ -1655,14 +1718,15 @@ export def "vehicles-battery get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/vehicles/($id)/battery")
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/vehicles/{id}/battery"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get a vehicle's charge
@@ -1678,21 +1742,22 @@ export def "vehicles-charge get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/vehicles/($id)/charge")
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/vehicles/{id}/charge"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Change charge
 #
 # POST /v1/vehicles/{id}/charge
 # operationId: postCharge
-export def "vehicles-charge post" [
+export def "vehicles-charge create" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1701,18 +1766,19 @@ export def "vehicles-charge post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   action: string@action-completer
 ]: any -> record<message: string, ok: bool, result: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/vehicles/($id)/charge")
-  let body = {action: $action} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/vehicles/{id}/charge"))
+  let req_body = {"action": $action} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Get a vehicle's location
@@ -1728,14 +1794,15 @@ export def "vehicles-location get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/vehicles/($id)/location")
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/vehicles/{id}/location"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get a vehicle's odometer
@@ -1751,12 +1818,13 @@ export def "vehicles-odometer get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/vehicles/($id)/odometer")
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/vehicles/{id}/odometer"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }

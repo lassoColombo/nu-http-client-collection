@@ -20,21 +20,32 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 }
 
 # Serialize a single query parameter based on collection style
+# Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
+# ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = ($name | url encode)
+  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
-  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
-    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
-    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
+    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
+    _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
+}
+
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Build URL from base, path, and optional query string
@@ -46,7 +57,7 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
@@ -55,13 +66,13 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
     "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "put" => { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "patch" => { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
   if ($method in ["head" "options"]) { return $resp }
-  if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
+  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
 def base-url-completer [] { ["https://production.plaid.com" "https://development.plaid.com" "https://sandbox.plaid.com"] }
@@ -98,8 +109,8 @@ def status-completer [] { ["cleared" "pending_review" "rejected"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "accounts-balance-get accountsBalanceGet" } } | get name | first)
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "accounts-balance-get get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -124,8 +135,8 @@ export def commands []: nothing -> table {
 # POST /accounts/balance/get
 # Docs: /api/products/balance/#accountsbalanceget
 # operationId: accountsBalanceGet
-# --options shape: {account_ids?: list, min_last_updated_datetime?: string}
-export def "accounts-balance-get accountsBalanceGet" [
+# --options shape: {account_ids?: list<string>, min_last_updated_datetime?: string}
+export def "accounts-balance-get get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -133,21 +144,22 @@ export def "accounts-balance-get accountsBalanceGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   access_token: string # The access token associated with the Item data is being requested for.
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
-  --options: record # An optional object to filter `/accounts/balance/get` results. — shape: {account_ids?: list, min_last_updated_datetime?: string}
+  --options: record # An optional object to filter `/accounts/balance/get` results. — shape: {account_ids?: list<string>, min_last_updated_datetime?: string}
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
 ]: any -> record<accounts: table<account_id: string, balances: record, mask: string, name: string, official_name: string, persistent_account_id: string, subtype: string, type: string, verification_status: string>, item: record<available_products: list<string>, billed_products: list<string>, consent_expiration_time: string, consented_products: list<string>, error: record<causes: list, display_message: string, documentation_url: string, error_code: string, error_message: string, error_type: string, request_id: string, status: float, suggested_action: string>, institution_id: string, item_id: string, products: list<string>, update_type: string, webhook: string>, request_id: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/accounts/balance/get")
-  let body = {access_token: $access_token, client_id: $client_id, options: $options, secret: $secret} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"access_token": $access_token, "client_id": $client_id, "options": $options, "secret": $secret} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Retrieve accounts
@@ -155,8 +167,8 @@ export def "accounts-balance-get accountsBalanceGet" [
 # POST /accounts/get
 # Docs: /api/accounts/#accountsget
 # operationId: accountsGet
-# --options shape: {account_ids?: list}
-export def "accounts-get accountsGet" [
+# --options shape: {account_ids?: list<string>}
+export def "accounts-get get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -164,28 +176,29 @@ export def "accounts-get accountsGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   access_token: string # The access token associated with the Item data is being requested for.
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
-  --options: record # An optional object to filter `/accounts/get` results. — shape: {account_ids?: list}
+  --options: record # An optional object to filter `/accounts/get` results. — shape: {account_ids?: list<string>}
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
 ]: any -> record<accounts: table<account_id: string, balances: record, mask: string, name: string, official_name: string, persistent_account_id: string, subtype: string, type: string, verification_status: string>, item: record<available_products: list<string>, billed_products: list<string>, consent_expiration_time: string, consented_products: list<string>, error: record<causes: list, display_message: string, documentation_url: string, error_code: string, error_message: string, error_type: string, request_id: string, status: float, suggested_action: string>, institution_id: string, item_id: string, products: list<string>, update_type: string, webhook: string>, request_id: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/accounts/get")
-  let body = {access_token: $access_token, client_id: $client_id, options: $options, secret: $secret} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"access_token": $access_token, "client_id": $client_id, "options": $options, "secret": $secret} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Retrieve information about a Plaid application
 #
 # POST /application/get
 # operationId: applicationGet
-export def "application-get applicationGet" [
+export def "application-get get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -193,6 +206,7 @@ export def "application-get applicationGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   application_id: string # This field will map to the application ID that is returned from /item/applications/list, or provided to the institution in an oauth redirect.
   client_id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
@@ -202,11 +216,11 @@ export def "application-get applicationGet" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/application/get")
-  let body = {application_id: $application_id, client_id: $client_id, secret: $secret} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"application_id": $application_id, "client_id": $client_id, "secret": $secret} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Create Asset Report Audit Copy
@@ -214,7 +228,7 @@ export def "application-get applicationGet" [
 # POST /asset_report/audit_copy/create
 # Docs: /api/products/assets/#asset_reportaudit_copycreate
 # operationId: assetReportAuditCopyCreate
-export def "asset-report-audit-copy-create assetReportAuditCopyCreate" [
+export def "asset-report-audit-copy-create copy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -222,6 +236,7 @@ export def "asset-report-audit-copy-create assetReportAuditCopyCreate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   asset_report_token: string # A token that can be provided to endpoints such as `/asset_report/get` or `/asset_report/pdf/get` to fetch or update an Asset Report.
   --auditor-id: string # The `auditor_id` of the third party with whom you would like to share the Asset Report.
@@ -232,11 +247,11 @@ export def "asset-report-audit-copy-create assetReportAuditCopyCreate" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/asset_report/audit_copy/create")
-  let body = {asset_report_token: $asset_report_token, auditor_id: $auditor_id, client_id: $client_id, secret: $secret} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"asset_report_token": $asset_report_token, "auditor_id": $auditor_id, "client_id": $client_id, "secret": $secret} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Retrieve an Asset Report Audit Copy
@@ -244,7 +259,7 @@ export def "asset-report-audit-copy-create assetReportAuditCopyCreate" [
 # POST /asset_report/audit_copy/get
 # Docs: /none/
 # operationId: assetReportAuditCopyGet
-export def "asset-report-audit-copy-get assetReportAuditCopyGet" [
+export def "asset-report-audit-copy-get copy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -252,6 +267,7 @@ export def "asset-report-audit-copy-get assetReportAuditCopyGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   audit_copy_token: string # The `audit_copy_token` granting access to the Audit Copy you would like to get.
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
@@ -261,11 +277,11 @@ export def "asset-report-audit-copy-get assetReportAuditCopyGet" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/asset_report/audit_copy/get")
-  let body = {audit_copy_token: $audit_copy_token, client_id: $client_id, secret: $secret} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"audit_copy_token": $audit_copy_token, "client_id": $client_id, "secret": $secret} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Remove Asset Report Audit Copy
@@ -273,7 +289,7 @@ export def "asset-report-audit-copy-get assetReportAuditCopyGet" [
 # POST /asset_report/audit_copy/remove
 # Docs: /api/products/assets/#asset_reportaudit_copyremove
 # operationId: assetReportAuditCopyRemove
-export def "asset-report-audit-copy-remove assetReportAuditCopyRemove" [
+export def "asset-report-audit-copy-remove copy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -281,6 +297,7 @@ export def "asset-report-audit-copy-remove assetReportAuditCopyRemove" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   audit_copy_token: string # The `audit_copy_token` granting access to the Audit Copy you would like to revoke.
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
@@ -290,11 +307,11 @@ export def "asset-report-audit-copy-remove assetReportAuditCopyRemove" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/asset_report/audit_copy/remove")
-  let body = {audit_copy_token: $audit_copy_token, client_id: $client_id, secret: $secret} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"audit_copy_token": $audit_copy_token, "client_id": $client_id, "secret": $secret} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Create an Asset Report
@@ -302,8 +319,8 @@ export def "asset-report-audit-copy-remove assetReportAuditCopyRemove" [
 # POST /asset_report/create
 # Docs: /api/products/assets/#asset_reportcreate
 # operationId: assetReportCreate
-# --options shape: {add_ons?: list, client_report_id?: string, include_fast_report?: bool, products?: list, user?: record, webhook?: string}
-export def "asset-report-create assetReportCreate" [
+# --options shape: {add_ons?: list<string>, client_report_id?: string, include_fast_report?: bool, products?: list<string>, user?: record, webhook?: string}
+export def "asset-report-create create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -311,11 +328,12 @@ export def "asset-report-create assetReportCreate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  access_tokens: list # An array of access tokens corresponding to the Items that will be included in the report. The `assets` product must have been initialized for the Items during link; the Assets product cannot be added after initialization.
+  access_tokens: list<string> # An array of access tokens corresponding to the Items that will be included in the report. The `assets` product must have been initialized for the Items during link; the Assets product cannot be added after initialization.
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
-  days_requested: int # The maximum integer number of days of history to include in the Asset Report. If using Fannie Mae Day 1 Certainty, `days_requested` must be at least 61 for new originations or at least 31 for refinancings.  An Asset Report requested with "Additional History" (that is, with more than 61 days of transaction history) will incur an Additional History fee.
-  --options: record # An optional object to filter `/asset_report/create` results. If provided, must be non-`null`. The optional `user` object is required for the report to be eligible for Fannie Mae's Day 1 Certainty program. — shape: {add_ons?: list, client_report_id?: string, include_fast_report?: bool, products?: list, user?: record, webhook?: string}
+  days_requested: int # The maximum integer number of days of history to include in the Asset Report. If using Fannie Mae Day 1 Certainty, `days_requested` must be at least 61 for new originations or at least 31 for refinancings. An Asset Report requested with "Additional History" (that is, with more than 61 days of transaction history) will incur an Additional History fee.
+  --options: record # An optional object to filter `/asset_report/create` results. If provided, must be non-`null`. The optional `user` object is required for the report to be eligible for Fannie Mae's Day 1 Certainty program. — shape: {add_ons?: list<string>, client_report_id?: string, include_fast_report?: bool, products?: list<string>, user?: record, webhook?: string}
   --report-type: string@report-type-completer # When set to `VERIFICATION_OF_EMPLOYMENT` and the Asset Report is added to an Audit Copy Token, the Asset Report will be retrieved by Freddie Mac in the Verification Of Employment (VOE) version instead of the default Verification Of Assets (VOA) version.
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
 ]: any -> record<asset_report_id: string, asset_report_token: string, request_id: string> {
@@ -323,11 +341,11 @@ export def "asset-report-create assetReportCreate" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/asset_report/create")
-  let body = {access_tokens: $access_tokens, client_id: $client_id, days_requested: $days_requested, options: $options, report_type: $report_type, secret: $secret} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"access_tokens": $access_tokens, "client_id": $client_id, "days_requested": $days_requested, "options": $options, "report_type": $report_type, "secret": $secret} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Filter Asset Report
@@ -335,7 +353,7 @@ export def "asset-report-create assetReportCreate" [
 # POST /asset_report/filter
 # Docs: /api/products/assets/#asset_reportfilter
 # operationId: assetReportFilter
-export def "asset-report-filter assetReportFilter" [
+export def "asset-report-filter create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -343,8 +361,9 @@ export def "asset-report-filter assetReportFilter" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  account_ids_to_exclude: list # The accounts to exclude from the Asset Report, identified by `account_id`.
+  account_ids_to_exclude: list<string> # The accounts to exclude from the Asset Report, identified by `account_id`.
   asset_report_token: string # A token that can be provided to endpoints such as `/asset_report/get` or `/asset_report/pdf/get` to fetch or update an Asset Report.
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
@@ -353,11 +372,11 @@ export def "asset-report-filter assetReportFilter" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/asset_report/filter")
-  let body = {account_ids_to_exclude: $account_ids_to_exclude, asset_report_token: $asset_report_token, client_id: $client_id, secret: $secret} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"account_ids_to_exclude": $account_ids_to_exclude, "asset_report_token": $asset_report_token, "client_id": $client_id, "secret": $secret} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Retrieve an Asset Report
@@ -366,7 +385,7 @@ export def "asset-report-filter assetReportFilter" [
 # Docs: /api/products/assets/#asset_reportget
 # operationId: assetReportGet
 # --options shape: {days_to_include?: int}
-export def "asset-report-get assetReportGet" [
+export def "asset-report-get get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -374,6 +393,7 @@ export def "asset-report-get assetReportGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   asset_report_token: string # A token that can be provided to endpoints such as `/asset_report/get` or `/asset_report/pdf/get` to fetch or update an Asset Report.
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
@@ -386,11 +406,11 @@ export def "asset-report-get assetReportGet" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/asset_report/get")
-  let body = {asset_report_token: $asset_report_token, client_id: $client_id, fast_report: $fast_report, include_insights: $include_insights, options: $options, secret: $secret} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"asset_report_token": $asset_report_token, "client_id": $client_id, "fast_report": $fast_report, "include_insights": $include_insights, "options": $options, "secret": $secret} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Retrieve a PDF Asset Report
@@ -399,7 +419,7 @@ export def "asset-report-get assetReportGet" [
 # Docs: /api/products/assets/#asset_reportpdfget
 # operationId: assetReportPdfGet
 # --options shape: {days_to_include?: int}
-export def "asset-report-pdf-get assetReportPdfGet" [
+export def "asset-report-pdf-get get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -407,6 +427,7 @@ export def "asset-report-pdf-get assetReportPdfGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   asset_report_token: string # A token that can be provided to endpoints such as `/asset_report/get` or `/asset_report/pdf/get` to fetch or update an Asset Report.
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
@@ -417,11 +438,11 @@ export def "asset-report-pdf-get assetReportPdfGet" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/asset_report/pdf/get")
-  let body = {asset_report_token: $asset_report_token, client_id: $client_id, options: $options, secret: $secret} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"asset_report_token": $asset_report_token, "client_id": $client_id, "options": $options, "secret": $secret} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/pdf"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Refresh an Asset Report
@@ -430,7 +451,7 @@ export def "asset-report-pdf-get assetReportPdfGet" [
 # Docs: /api/products/assets/#asset_reportrefresh
 # operationId: assetReportRefresh
 # --options shape: {client_report_id?: string, user?: record, webhook?: string}
-export def "asset-report-refresh assetReportRefresh" [
+export def "asset-report-refresh refresh" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -438,6 +459,7 @@ export def "asset-report-refresh assetReportRefresh" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   asset_report_token: string # The `asset_report_token` returned by the original call to `/asset_report/create`
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
@@ -449,11 +471,11 @@ export def "asset-report-refresh assetReportRefresh" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/asset_report/refresh")
-  let body = {asset_report_token: $asset_report_token, client_id: $client_id, days_requested: $days_requested, options: $options, secret: $secret} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"asset_report_token": $asset_report_token, "client_id": $client_id, "days_requested": $days_requested, "options": $options, "secret": $secret} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Delete an Asset Report
@@ -461,7 +483,7 @@ export def "asset-report-refresh assetReportRefresh" [
 # POST /asset_report/remove
 # Docs: /api/products/assets/#asset_reportremove
 # operationId: assetReportRemove
-export def "asset-report-remove assetReportRemove" [
+export def "asset-report-remove delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -469,6 +491,7 @@ export def "asset-report-remove assetReportRemove" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   asset_report_token: string # A token that can be provided to endpoints such as `/asset_report/get` or `/asset_report/pdf/get` to fetch or update an Asset Report.
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
@@ -478,11 +501,11 @@ export def "asset-report-remove assetReportRemove" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/asset_report/remove")
-  let body = {asset_report_token: $asset_report_token, client_id: $client_id, secret: $secret} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"asset_report_token": $asset_report_token, "client_id": $client_id, "secret": $secret} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Retrieve auth data
@@ -490,8 +513,8 @@ export def "asset-report-remove assetReportRemove" [
 # POST /auth/get
 # Docs: /api/products/auth/#authget
 # operationId: authGet
-# --options shape: {account_ids?: list}
-export def "auth-get authGet" [
+# --options shape: {account_ids?: list<string>}
+export def "auth-get get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -499,21 +522,22 @@ export def "auth-get authGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   access_token: string # The access token associated with the Item data is being requested for.
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
-  --options: record # An optional object to filter `/auth/get` results. — shape: {account_ids?: list}
+  --options: record # An optional object to filter `/auth/get` results. — shape: {account_ids?: list<string>}
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
 ]: any -> record<accounts: table<account_id: string, balances: record, mask: string, name: string, official_name: string, persistent_account_id: string, subtype: string, type: string, verification_status: string>, item: record<available_products: list<string>, billed_products: list<string>, consent_expiration_time: string, consented_products: list<string>, error: record<causes: list, display_message: string, documentation_url: string, error_code: string, error_message: string, error_type: string, request_id: string, status: float, suggested_action: string>, institution_id: string, item_id: string, products: list<string>, update_type: string, webhook: string>, numbers: record<ach: list<record>, bacs: list<record>, eft: list<record>, international: list<record>>, request_id: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/auth/get")
-  let body = {access_token: $access_token, client_id: $client_id, options: $options, secret: $secret} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"access_token": $access_token, "client_id": $client_id, "options": $options, "secret": $secret} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Get balance of your Bank Transfer account
@@ -521,7 +545,7 @@ export def "auth-get authGet" [
 # POST /bank_transfer/balance/get
 # Docs: /bank-transfers/reference#bank_transferbalanceget
 # operationId: bankTransferBalanceGet
-export def "bank-transfer-balance-get bankTransferBalanceGet" [
+export def "bank-transfer-balance-get get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -529,6 +553,7 @@ export def "bank-transfer-balance-get bankTransferBalanceGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
   --origination-account-id: string # If multiple origination accounts are available, `origination_account_id` must be used to specify the account for which balance will be returned. (nullable)
@@ -538,11 +563,11 @@ export def "bank-transfer-balance-get bankTransferBalanceGet" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/bank_transfer/balance/get")
-  let body = {client_id: $client_id, origination_account_id: $origination_account_id, secret: $secret} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"client_id": $client_id, "origination_account_id": $origination_account_id, "secret": $secret} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Cancel a bank transfer
@@ -550,7 +575,7 @@ export def "bank-transfer-balance-get bankTransferBalanceGet" [
 # POST /bank_transfer/cancel
 # Docs: /bank-transfers/reference#bank_transfercancel
 # operationId: bankTransferCancel
-export def "bank-transfer-cancel bankTransferCancel" [
+export def "bank-transfer-cancel cancel" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -558,6 +583,7 @@ export def "bank-transfer-cancel bankTransferCancel" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   bank_transfer_id: string # Plaid’s unique identifier for a bank transfer.
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
@@ -567,11 +593,11 @@ export def "bank-transfer-cancel bankTransferCancel" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/bank_transfer/cancel")
-  let body = {bank_transfer_id: $bank_transfer_id, client_id: $client_id, secret: $secret} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"bank_transfer_id": $bank_transfer_id, "client_id": $client_id, "secret": $secret} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Create a bank transfer
@@ -580,7 +606,7 @@ export def "bank-transfer-cancel bankTransferCancel" [
 # Docs: /bank-transfers/reference#bank_transfercreate
 # operationId: bankTransferCreate
 # --user shape: {email_address?: string, legal_name: string}
-export def "bank-transfer-create bankTransferCreate" [
+export def "bank-transfer-create create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -588,32 +614,33 @@ export def "bank-transfer-create bankTransferCreate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   access_token: string # The Plaid `access_token` for the account that will be debited or credited.
   account_id: string # The Plaid `account_id` for the account that will be debited or credited.
-  --ach-class: string@ach-class-completer # Specifies the use case of the transfer. Required for transfers on an ACH network.  `"ccd"` - Corporate Credit or Debit - fund transfer between two corporate bank accounts  `"ppd"` - Prearranged Payment or Deposit - the transfer is part of a pre-existing relationship with a consumer, eg. bill payment  `"tel"` - Telephone-Initiated Entry  `"web"` - Internet-Initiated Entry - debits from a consumer’s account where their authorization is obtained over the Internet
+  --ach-class: string@ach-class-completer # Specifies the use case of the transfer. Required for transfers on an ACH network. `"ccd"` - Corporate Credit or Debit - fund transfer between two corporate bank accounts `"ppd"` - Prearranged Payment or Deposit - the transfer is part of a pre-existing relationship with a consumer, eg. bill payment `"tel"` - Telephone-Initiated Entry `"web"` - Internet-Initiated Entry - debits from a consumer’s account where their authorization is obtained over the Internet
   amount: string # The amount of the bank transfer (decimal string with two digits of precision e.g. "10.00").
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
   --custom-tag: string # An arbitrary string provided by the client for storage with the bank transfer. May be up to 100 characters. (nullable)
   description: string # The transfer description. Maximum of 10 characters.
-  idempotency_key: string # A random key provided by the client, per unique bank transfer. Maximum of 50 characters.  The API supports idempotency for safely retrying requests without accidentally performing the same operation twice. For example, if a request to create a bank transfer fails due to a network connection error, you can retry the request with the same idempotency key to guarantee that only a single bank transfer is created.
+  idempotency_key: string # A random key provided by the client, per unique bank transfer. Maximum of 50 characters. The API supports idempotency for safely retrying requests without accidentally performing the same operation twice. For example, if a request to create a bank transfer fails due to a network connection error, you can retry the request with the same idempotency key to guarantee that only a single bank transfer is created.
   iso_currency_code: string # The currency of the transfer amount – should be set to "USD".
-  --metadata: record # The Metadata object is a mapping of client-provided string fields to any string value. The following limitations apply: The JSON values must be Strings (no nested JSON objects allowed) Only ASCII characters may be used Maximum of 50 key/value pairs Maximum key length of 40 characters Maximum value length of 500 characters  (nullable)
+  --metadata: record # The Metadata object is a mapping of client-provided string fields to any string value. The following limitations apply: The JSON values must be Strings (no nested JSON objects allowed) Only ASCII characters may be used Maximum of 50 key/value pairs Maximum key length of 40 characters Maximum value length of 500 characters (nullable)
   network: string@network-completer # The network or rails used for the transfer. Valid options are `ach`, `same-day-ach`, or `wire`.
   --origination-account-id: string # Plaid’s unique identifier for the origination account for this transfer. If you have more than one origination account, this value must be specified. Otherwise, this field should be left blank. (nullable)
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
-  type: string@type-completer # The type of bank transfer. This will be either `debit` or `credit`.  A `debit` indicates a transfer of money into the origination account; a `credit` indicates a transfer of money out of the origination account.
+  type: string@type-completer # The type of bank transfer. This will be either `debit` or `credit`. A `debit` indicates a transfer of money into the origination account; a `credit` indicates a transfer of money out of the origination account.
   user: record # The legal name and other information for the account holder. — shape: {email_address?: string, legal_name: string}
 ]: any -> record<bank_transfer: record<account_id: string, ach_class: string, amount: string, cancellable: bool, created: string, custom_tag: string, description: string, direction: string, failure_reason: record<ach_return_code: string, description: string>, id: string, iso_currency_code: string, metadata: record, network: string, origination_account_id: string, status: string, type: string, user: record<email_address: string, legal_name: string, routing_number: string>>, request_id: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/bank_transfer/create")
-  let body = {access_token: $access_token, account_id: $account_id, ach_class: $ach_class, amount: $amount, client_id: $client_id, custom_tag: $custom_tag, description: $description, idempotency_key: $idempotency_key, iso_currency_code: $iso_currency_code, metadata: $metadata, network: $network, origination_account_id: $origination_account_id, secret: $secret, type: $type, user: $user} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"access_token": $access_token, "account_id": $account_id, "ach_class": $ach_class, "amount": $amount, "client_id": $client_id, "custom_tag": $custom_tag, "description": $description, "idempotency_key": $idempotency_key, "iso_currency_code": $iso_currency_code, "metadata": $metadata, "network": $network, "origination_account_id": $origination_account_id, "secret": $secret, "type": $type, "user": $user} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # List bank transfer events
@@ -621,7 +648,7 @@ export def "bank-transfer-create bankTransferCreate" [
 # POST /bank_transfer/event/list
 # Docs: /api/products/auth#bank_transfereventlist
 # operationId: bankTransferEventList
-export def "bank-transfer-event-list bankTransferEventList" [
+export def "bank-transfer-event-list list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -629,15 +656,16 @@ export def "bank-transfer-event-list bankTransferEventList" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --account-id: string # The account ID to get events for all transactions to/from an account. (nullable)
   --bank-transfer-id: string # Plaid’s unique identifier for a bank transfer. (nullable)
-  --bank-transfer-type: string@bank-transfer-type-completer # The type of bank transfer. This will be either `debit` or `credit`.  A `debit` indicates a transfer of money into your origination account; a `credit` indicates a transfer of money out of your origination account. (nullable)
+  --bank-transfer-type: string@bank-transfer-type-completer # The type of bank transfer. This will be either `debit` or `credit`. A `debit` indicates a transfer of money into your origination account; a `credit` indicates a transfer of money out of your origination account. (nullable)
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
   --count: int # The maximum number of bank transfer events to return. If the number of events matching the above parameters is greater than `count`, the most recent events will be returned. (nullable, default: 25)
   --direction: string@direction-completer # Indicates the direction of the transfer: `outbound`: for API-initiated transfers `inbound`: for payments received by the FBO account. (nullable)
   --end-date: string # The end datetime of bank transfers to list. This should be in RFC 3339 format (i.e. `2019-12-06T22:35:49Z`) (nullable, format: date-time)
-  --event-types: list # Filter events by event type.
+  --event-types: list<string> # Filter events by event type.
   --offset: int # The offset into the list of bank transfer events. When `count`=25 and `offset`=0, the first 25 events will be returned. When `count`=25 and `offset`=25, the next 25 bank transfer events will be returned. (nullable, default: 0)
   --origination-account-id: string # The origination account ID to get events for transfers from a specific origination account. (nullable)
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
@@ -647,11 +675,11 @@ export def "bank-transfer-event-list bankTransferEventList" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/bank_transfer/event/list")
-  let body = {account_id: $account_id, bank_transfer_id: $bank_transfer_id, bank_transfer_type: $bank_transfer_type, client_id: $client_id, count: $count, direction: $direction, end_date: $end_date, event_types: $event_types, offset: $offset, origination_account_id: $origination_account_id, secret: $secret, start_date: $start_date} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"account_id": $account_id, "bank_transfer_id": $bank_transfer_id, "bank_transfer_type": $bank_transfer_type, "client_id": $client_id, "count": $count, "direction": $direction, "end_date": $end_date, "event_types": $event_types, "offset": $offset, "origination_account_id": $origination_account_id, "secret": $secret, "start_date": $start_date} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Sync bank transfer events
@@ -659,7 +687,7 @@ export def "bank-transfer-event-list bankTransferEventList" [
 # POST /bank_transfer/event/sync
 # Docs: /api/products/auth/#bank_transfereventsync
 # operationId: bankTransferEventSync
-export def "bank-transfer-event-sync bankTransferEventSync" [
+export def "bank-transfer-event-sync sync" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -667,6 +695,7 @@ export def "bank-transfer-event-sync bankTransferEventSync" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   after_id: int # The latest (largest) `event_id` fetched via the sync endpoint, or 0 initially.
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
@@ -677,11 +706,11 @@ export def "bank-transfer-event-sync bankTransferEventSync" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/bank_transfer/event/sync")
-  let body = {after_id: $after_id, client_id: $client_id, count: $count, secret: $secret} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"after_id": $after_id, "client_id": $client_id, "count": $count, "secret": $secret} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Retrieve a bank transfer
@@ -689,7 +718,7 @@ export def "bank-transfer-event-sync bankTransferEventSync" [
 # POST /bank_transfer/get
 # Docs: /bank-transfers/reference#bank_transferget
 # operationId: bankTransferGet
-export def "bank-transfer-get bankTransferGet" [
+export def "bank-transfer-get get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -697,6 +726,7 @@ export def "bank-transfer-get bankTransferGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   bank_transfer_id: string # Plaid’s unique identifier for a bank transfer.
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
@@ -706,11 +736,11 @@ export def "bank-transfer-get bankTransferGet" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/bank_transfer/get")
-  let body = {bank_transfer_id: $bank_transfer_id, client_id: $client_id, secret: $secret} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"bank_transfer_id": $bank_transfer_id, "client_id": $client_id, "secret": $secret} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # List bank transfers
@@ -718,7 +748,7 @@ export def "bank-transfer-get bankTransferGet" [
 # POST /bank_transfer/list
 # Docs: /bank-transfers/reference#bank_transferlist
 # operationId: bankTransferList
-export def "bank-transfer-list bankTransferList" [
+export def "bank-transfer-list list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -726,6 +756,7 @@ export def "bank-transfer-list bankTransferList" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
   --count: int # The maximum number of bank transfers to return. (default: 25)
@@ -740,11 +771,11 @@ export def "bank-transfer-list bankTransferList" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/bank_transfer/list")
-  let body = {client_id: $client_id, count: $count, direction: $direction, end_date: $end_date, offset: $offset, origination_account_id: $origination_account_id, secret: $secret, start_date: $start_date} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"client_id": $client_id, "count": $count, "direction": $direction, "end_date": $end_date, "offset": $offset, "origination_account_id": $origination_account_id, "secret": $secret, "start_date": $start_date} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Migrate account into Bank Transfers
@@ -752,7 +783,7 @@ export def "bank-transfer-list bankTransferList" [
 # POST /bank_transfer/migrate_account
 # Docs: /bank-transfers/reference#bank_transfermigrate_account
 # operationId: bankTransferMigrateAccount
-export def "bank-transfer-migrate-account bankTransferMigrateAccount" [
+export def "bank-transfer-migrate-account create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -760,6 +791,7 @@ export def "bank-transfer-migrate-account bankTransferMigrateAccount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   account_number: string # The user's account number.
   account_type: string # The type of the bank account (`checking` or `savings`).
@@ -772,11 +804,11 @@ export def "bank-transfer-migrate-account bankTransferMigrateAccount" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/bank_transfer/migrate_account")
-  let body = {account_number: $account_number, account_type: $account_type, client_id: $client_id, routing_number: $routing_number, secret: $secret, wire_routing_number: $wire_routing_number} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"account_number": $account_number, "account_type": $account_type, "client_id": $client_id, "routing_number": $routing_number, "secret": $secret, "wire_routing_number": $wire_routing_number} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Retrieve a sweep
@@ -784,7 +816,7 @@ export def "bank-transfer-migrate-account bankTransferMigrateAccount" [
 # POST /bank_transfer/sweep/get
 # Docs: /api/products/transfer/#bank_transfersweepget
 # operationId: bankTransferSweepGet
-export def "bank-transfer-sweep-get bankTransferSweepGet" [
+export def "bank-transfer-sweep-get get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -792,6 +824,7 @@ export def "bank-transfer-sweep-get bankTransferSweepGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
@@ -801,11 +834,11 @@ export def "bank-transfer-sweep-get bankTransferSweepGet" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/bank_transfer/sweep/get")
-  let body = {client_id: $client_id, secret: $secret, sweep_id: $sweep_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"client_id": $client_id, "secret": $secret, "sweep_id": $sweep_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # List sweeps
@@ -813,7 +846,7 @@ export def "bank-transfer-sweep-get bankTransferSweepGet" [
 # POST /bank_transfer/sweep/list
 # Docs: /api/products/transfer/#bank_transfersweeplist
 # operationId: bankTransferSweepList
-export def "bank-transfer-sweep-list bankTransferSweepList" [
+export def "bank-transfer-sweep-list list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -821,6 +854,7 @@ export def "bank-transfer-sweep-list bankTransferSweepList" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
   --count: int # The maximum number of sweeps to return. (nullable, default: 25)
@@ -833,11 +867,11 @@ export def "bank-transfer-sweep-list bankTransferSweepList" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/bank_transfer/sweep/list")
-  let body = {client_id: $client_id, count: $count, end_time: $end_time, origination_account_id: $origination_account_id, secret: $secret, start_time: $start_time} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"client_id": $client_id, "count": $count, "end_time": $end_time, "origination_account_id": $origination_account_id, "secret": $secret, "start_time": $start_time} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Retrieve information from the bank accounts used for employment verification
@@ -845,7 +879,7 @@ export def "bank-transfer-sweep-list bankTransferSweepList" [
 # POST /beta/credit/v1/bank_employment/get
 # Docs: /api/products/income/#creditbank_employmentget
 # operationId: creditBankEmploymentGet
-export def "beta-credit-bank-employment-get creditBankEmploymentGet" [
+export def "beta-credit-bank-employment-get get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -853,6 +887,7 @@ export def "beta-credit-bank-employment-get creditBankEmploymentGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
@@ -862,11 +897,11 @@ export def "beta-credit-bank-employment-get creditBankEmploymentGet" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/beta/credit/v1/bank_employment/get")
-  let body = {client_id: $client_id, secret: $secret, user_token: $user_token} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"client_id": $client_id, "secret": $secret, "user_token": $user_token} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Create transaction category rule
@@ -874,7 +909,7 @@ export def "beta-credit-bank-employment-get creditBankEmploymentGet" [
 # POST /beta/transactions/rules/v1/create
 # operationId: transactionsRulesCreate
 # --rule_details shape: {field: "TRANSACTION_ID"|"NAME", query: string, type: "EXACT_MATCH"|"SUBSTRING_MATCH"}
-export def "beta-transactions-rules-create transactionsRulesCreate" [
+export def "beta-transactions-rules-create create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -882,10 +917,11 @@ export def "beta-transactions-rules-create transactionsRulesCreate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   access_token: string # The access token associated with the Item data is being requested for.
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
-  personal_finance_category: string # Personal finance detailed category.  See the [`taxonomy csv file`](https://plaid.com/documents/transactions-personal-finance-category-taxonomy.csv) for a full list of personal finance categories.
+  personal_finance_category: string # Personal finance detailed category. See the [`taxonomy csv file`](https://plaid.com/documents/transactions-personal-finance-category-taxonomy.csv) for a full list of personal finance categories.
   rule_details: record # A representation of transactions rule details. — shape: {field: "TRANSACTION_ID"|"NAME", query: string, type: "EXACT_MATCH"|"SUBSTRING_MATCH"}
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
 ]: any -> record<request_id: string, rule: record<created_at: string, id: string, item_id: string, personal_finance_category: string, rule_details: record<field: string, query: string, type: string>>> {
@@ -893,18 +929,18 @@ export def "beta-transactions-rules-create transactionsRulesCreate" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/beta/transactions/rules/v1/create")
-  let body = {access_token: $access_token, client_id: $client_id, personal_finance_category: $personal_finance_category, rule_details: $rule_details, secret: $secret} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"access_token": $access_token, "client_id": $client_id, "personal_finance_category": $personal_finance_category, "rule_details": $rule_details, "secret": $secret} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Return a list of rules created for the Item associated with the access token.
 #
 # POST /beta/transactions/rules/v1/list
 # operationId: transactionsRulesList
-export def "beta-transactions-rules-list transactionsRulesList" [
+export def "beta-transactions-rules-list list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -912,6 +948,7 @@ export def "beta-transactions-rules-list transactionsRulesList" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   access_token: string # The access token associated with the Item data is being requested for.
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
@@ -921,18 +958,18 @@ export def "beta-transactions-rules-list transactionsRulesList" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/beta/transactions/rules/v1/list")
-  let body = {access_token: $access_token, client_id: $client_id, secret: $secret} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"access_token": $access_token, "client_id": $client_id, "secret": $secret} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Remove transaction rule
 #
 # POST /beta/transactions/rules/v1/remove
 # operationId: transactionsRulesRemove
-export def "beta-transactions-rules-remove transactionsRulesRemove" [
+export def "beta-transactions-rules-remove delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -940,6 +977,7 @@ export def "beta-transactions-rules-remove transactionsRulesRemove" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   access_token: string # The access token associated with the Item data is being requested for.
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
@@ -950,11 +988,11 @@ export def "beta-transactions-rules-remove transactionsRulesRemove" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/beta/transactions/rules/v1/remove")
-  let body = {access_token: $access_token, client_id: $client_id, rule_id: $rule_id, secret: $secret} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"access_token": $access_token, "client_id": $client_id, "rule_id": $rule_id, "secret": $secret} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # enhance locally-held transaction data
@@ -962,7 +1000,7 @@ export def "beta-transactions-rules-remove transactionsRulesRemove" [
 # POST /beta/transactions/v1/enhance
 # operationId: transactionsEnhance
 # --transactions item shape: {amount: float, description: string, id: string, iso_currency_code: string}
-export def "beta-transactions-enhance transactionsEnhance" [
+export def "beta-transactions-enhance create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -970,6 +1008,7 @@ export def "beta-transactions-enhance transactionsEnhance" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   account_type: string # The type of account for the requested transactions (`depository` or `credit`).
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
@@ -980,11 +1019,11 @@ export def "beta-transactions-enhance transactionsEnhance" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/beta/transactions/v1/enhance")
-  let body = {account_type: $account_type, client_id: $client_id, secret: $secret, transactions: $transactions} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"account_type": $account_type, "client_id": $client_id, "secret": $secret, "transactions": $transactions} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Get Categories
@@ -992,7 +1031,7 @@ export def "beta-transactions-enhance transactionsEnhance" [
 # POST /categories/get
 # Docs: /api/products/transactions/#categoriesget
 # operationId: categoriesGet
-export def "categories-get categoriesGet" [
+export def "categories-get get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1000,6 +1039,7 @@ export def "categories-get categoriesGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> record<categories: table<category_id: string, group: string, hierarchy: list>, request_id: string> {
@@ -1007,10 +1047,11 @@ export def "categories-get categoriesGet" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/categories/get")
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Retrieve an Asset Report with Freddie Mac format. Only Freddie Mac can use this endpoint.
@@ -1018,7 +1059,7 @@ export def "categories-get categoriesGet" [
 # POST /credit/asset_report/freddie_mac/get
 # Docs: /none/
 # operationId: creditAssetReportFreddieMacGet
-export def "credit-asset-report-freddie-mac-get creditAssetReportFreddieMacGet" [
+export def "credit-asset-report-freddie-mac-get get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1026,6 +1067,7 @@ export def "credit-asset-report-freddie-mac-get creditAssetReportFreddieMacGet" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   audit_copy_token: string # A token that can be shared with a third party auditor to allow them to obtain access to the Asset Report. This token should be stored securely.
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
@@ -1035,11 +1077,11 @@ export def "credit-asset-report-freddie-mac-get creditAssetReportFreddieMacGet" 
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/credit/asset_report/freddie_mac/get")
-  let body = {audit_copy_token: $audit_copy_token, client_id: $client_id, secret: $secret} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"audit_copy_token": $audit_copy_token, "client_id": $client_id, "secret": $secret} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Create Asset or Income Report Audit Copy Token
@@ -1047,7 +1089,7 @@ export def "credit-asset-report-freddie-mac-get creditAssetReportFreddieMacGet" 
 # POST /credit/audit_copy_token/create
 # Docs: /api/products/income/#creditaudit_copy_tokencreate
 # operationId: creditAuditCopyTokenCreate
-export def "credit-audit-copy-token-create creditAuditCopyTokenCreate" [
+export def "credit-audit-copy-token-create copy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1055,20 +1097,21 @@ export def "credit-audit-copy-token-create creditAuditCopyTokenCreate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
-  report_tokens: list # List of report tokens; can include both Asset Report tokens and Income Report tokens.
+  report_tokens: list<string> # List of report tokens; can include both Asset Report tokens and Income Report tokens.
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
 ]: any -> record<audit_copy_token: string, request_id: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/credit/audit_copy_token/create")
-  let body = {client_id: $client_id, report_tokens: $report_tokens, secret: $secret} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"client_id": $client_id, "report_tokens": $report_tokens, "secret": $secret} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Remove an Audit Copy token
@@ -1076,7 +1119,7 @@ export def "credit-audit-copy-token-create creditAuditCopyTokenCreate" [
 # POST /credit/audit_copy_token/remove
 # Docs: /api/products/income/#creditaudit_copy_tokenremove
 # operationId: creditReportAuditCopyRemove
-export def "credit-audit-copy-token-remove creditReportAuditCopyRemove" [
+export def "credit-audit-copy-token-remove copy-report" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1084,6 +1127,7 @@ export def "credit-audit-copy-token-remove creditReportAuditCopyRemove" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   audit_copy_token: string # The `audit_copy_token` granting access to the Audit Copy you would like to revoke.
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
@@ -1093,11 +1137,11 @@ export def "credit-audit-copy-token-remove creditReportAuditCopyRemove" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/credit/audit_copy_token/remove")
-  let body = {audit_copy_token: $audit_copy_token, client_id: $client_id, secret: $secret} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"audit_copy_token": $audit_copy_token, "client_id": $client_id, "secret": $secret} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Update an Audit Copy Token
@@ -1105,7 +1149,7 @@ export def "credit-audit-copy-token-remove creditReportAuditCopyRemove" [
 # POST /credit/audit_copy_token/update
 # Docs: /none/
 # operationId: creditAuditCopyTokenUpdate
-export def "credit-audit-copy-token-update creditAuditCopyTokenUpdate" [
+export def "credit-audit-copy-token-update copy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1113,21 +1157,22 @@ export def "credit-audit-copy-token-update creditAuditCopyTokenUpdate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   audit_copy_token: string # The `audit_copy_token` you would like to update.
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
-  report_tokens: list # Array of tokens which the specified Audit Copy Token will be updated with. The types of token supported are asset report token and employment report token. There can be at most 1 of each type can be in the array.
+  report_tokens: list<string> # Array of tokens which the specified Audit Copy Token will be updated with. The types of token supported are asset report token and employment report token. There can be at most 1 of each type can be in the array.
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
 ]: any -> record<request_id: string, updated: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/credit/audit_copy_token/update")
-  let body = {audit_copy_token: $audit_copy_token, client_id: $client_id, report_tokens: $report_tokens, secret: $secret} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"audit_copy_token": $audit_copy_token, "client_id": $client_id, "report_tokens": $report_tokens, "secret": $secret} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Retrieve information from the bank accounts used for income verification
@@ -1136,7 +1181,7 @@ export def "credit-audit-copy-token-update creditAuditCopyTokenUpdate" [
 # Docs: /api/products/income/#creditbank_incomeget
 # operationId: creditBankIncomeGet
 # --options shape: {count?: int}
-export def "credit-bank-income-get creditBankIncomeGet" [
+export def "credit-bank-income-get get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1144,6 +1189,7 @@ export def "credit-bank-income-get creditBankIncomeGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
   --options: record # An optional object for `/credit/bank_income/get` request options. — shape: {count?: int}
@@ -1154,11 +1200,11 @@ export def "credit-bank-income-get creditBankIncomeGet" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/credit/bank_income/get")
-  let body = {client_id: $client_id, options: $options, secret: $secret, user_token: $user_token} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"client_id": $client_id, "options": $options, "secret": $secret, "user_token": $user_token} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Retrieve information from the bank accounts used for income verification in PDF format
@@ -1166,7 +1212,7 @@ export def "credit-bank-income-get creditBankIncomeGet" [
 # POST /credit/bank_income/pdf/get
 # Docs: /api/products/income/#creditbank_incomepdfget
 # operationId: creditBankIncomePdfGet
-export def "credit-bank-income-pdf-get creditBankIncomePdfGet" [
+export def "credit-bank-income-pdf-get get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1174,6 +1220,7 @@ export def "credit-bank-income-pdf-get creditBankIncomePdfGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
@@ -1183,11 +1230,11 @@ export def "credit-bank-income-pdf-get creditBankIncomePdfGet" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/credit/bank_income/pdf/get")
-  let body = {client_id: $client_id, secret: $secret, user_token: $user_token} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"client_id": $client_id, "secret": $secret, "user_token": $user_token} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/pdf"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Refresh a user's bank income information
@@ -1196,7 +1243,7 @@ export def "credit-bank-income-pdf-get creditBankIncomePdfGet" [
 # Docs: /api/products/income/#creditbank_incomerefresh
 # operationId: creditBankIncomeRefresh
 # --options shape: {days_requested?: int, webhook?: string}
-export def "credit-bank-income-refresh creditBankIncomeRefresh" [
+export def "credit-bank-income-refresh refresh" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1204,6 +1251,7 @@ export def "credit-bank-income-refresh creditBankIncomeRefresh" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
   --options: record # An optional object for `/credit/bank_income/refresh` request options. — shape: {days_requested?: int, webhook?: string}
@@ -1214,11 +1262,11 @@ export def "credit-bank-income-refresh creditBankIncomeRefresh" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/credit/bank_income/refresh")
-  let body = {client_id: $client_id, options: $options, secret: $secret, user_token: $user_token} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"client_id": $client_id, "options": $options, "secret": $secret, "user_token": $user_token} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Retrieve a summary of an individual's employment information
@@ -1226,7 +1274,7 @@ export def "credit-bank-income-refresh creditBankIncomeRefresh" [
 # POST /credit/employment/get
 # Docs: /api/products/income/#creditemploymentget
 # operationId: creditEmploymentGet
-export def "credit-employment-get creditEmploymentGet" [
+export def "credit-employment-get get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1234,6 +1282,7 @@ export def "credit-employment-get creditEmploymentGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
@@ -1243,11 +1292,11 @@ export def "credit-employment-get creditEmploymentGet" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/credit/employment/get")
-  let body = {client_id: $client_id, secret: $secret, user_token: $user_token} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"client_id": $client_id, "secret": $secret, "user_token": $user_token} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Retrieve an Asset Report with Freddie Mac format (aka VOA - Verification Of Assets), and a Verification Of Employment (VOE) report if this one is available. Only Freddie Mac can use this endpoint.
@@ -1255,7 +1304,7 @@ export def "credit-employment-get creditEmploymentGet" [
 # POST /credit/freddie_mac/reports/get
 # Docs: /none/
 # operationId: creditFreddieMacReportsGet
-export def "credit-freddie-mac-reports-get creditFreddieMacReportsGet" [
+export def "credit-freddie-mac-reports-get get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1263,6 +1312,7 @@ export def "credit-freddie-mac-reports-get creditFreddieMacReportsGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   audit_copy_token: string # A token that can be shared with a third party auditor to allow them to obtain access to the Asset Report. This token should be stored securely.
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
@@ -1272,11 +1322,11 @@ export def "credit-freddie-mac-reports-get creditFreddieMacReportsGet" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/credit/freddie_mac/reports/get")
-  let body = {audit_copy_token: $audit_copy_token, client_id: $client_id, secret: $secret} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"audit_copy_token": $audit_copy_token, "client_id": $client_id, "secret": $secret} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Retrieve a user's payroll information
@@ -1284,7 +1334,7 @@ export def "credit-freddie-mac-reports-get creditFreddieMacReportsGet" [
 # POST /credit/payroll_income/get
 # Docs: /api/products/income/#creditpayroll_incomeget
 # operationId: creditPayrollIncomeGet
-export def "credit-payroll-income-get creditPayrollIncomeGet" [
+export def "credit-payroll-income-get get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1292,6 +1342,7 @@ export def "credit-payroll-income-get creditPayrollIncomeGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
@@ -1301,11 +1352,11 @@ export def "credit-payroll-income-get creditPayrollIncomeGet" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/credit/payroll_income/get")
-  let body = {client_id: $client_id, secret: $secret, user_token: $user_token} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"client_id": $client_id, "secret": $secret, "user_token": $user_token} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Check income verification eligibility and optimize conversion
@@ -1316,7 +1367,7 @@ export def "credit-payroll-income-get creditPayrollIncomeGet" [
 # --employer shape: {address?: record, name?: string, tax_id?: string, url?: string}
 # --payroll_institution shape: {name?: string}
 # --us_military_info shape: {branch?: string, is_active_duty?: bool}
-export def "credit-payroll-income-precheck creditPayrollIncomePrecheck" [
+export def "credit-payroll-income-precheck create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1324,8 +1375,9 @@ export def "credit-payroll-income-precheck creditPayrollIncomePrecheck" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --access-tokens: list # An array of access tokens corresponding to Items belonging to the user whose eligibility is being checked. Note that if the Items specified here are not already initialized with `transactions`, providing them in this field will cause these Items to be initialized with (and billed for) the Transactions product.
+  --access-tokens: list<string> # An array of access tokens corresponding to Items belonging to the user whose eligibility is being checked. Note that if the Items specified here are not already initialized with `transactions`, providing them in this field will cause these Items to be initialized with (and billed for) the Transactions product.
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
   --employer: record # Information about the end user's employer (nullable) — shape: {address?: record, name?: string, tax_id?: string, url?: string}
   --payroll-institution: record # Information about the end user's payroll institution (nullable) — shape: {name?: string}
@@ -1337,11 +1389,11 @@ export def "credit-payroll-income-precheck creditPayrollIncomePrecheck" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/credit/payroll_income/precheck")
-  let body = {access_tokens: $access_tokens, client_id: $client_id, employer: $employer, payroll_institution: $payroll_institution, secret: $secret, us_military_info: $us_military_info, user_token: $user_token} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"access_tokens": $access_tokens, "client_id": $client_id, "employer": $employer, "payroll_institution": $payroll_institution, "secret": $secret, "us_military_info": $us_military_info, "user_token": $user_token} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Refresh a digital payroll income verification
@@ -1349,7 +1401,7 @@ export def "credit-payroll-income-precheck creditPayrollIncomePrecheck" [
 # POST /credit/payroll_income/refresh
 # Docs: /api/products/income/#creditpayroll_incomerefresh
 # operationId: creditPayrollIncomeRefresh
-export def "credit-payroll-income-refresh creditPayrollIncomeRefresh" [
+export def "credit-payroll-income-refresh refresh" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1357,6 +1409,7 @@ export def "credit-payroll-income-refresh creditPayrollIncomeRefresh" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
@@ -1366,11 +1419,11 @@ export def "credit-payroll-income-refresh creditPayrollIncomeRefresh" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/credit/payroll_income/refresh")
-  let body = {client_id: $client_id, secret: $secret, user_token: $user_token} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"client_id": $client_id, "secret": $secret, "user_token": $user_token} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Create a relay token to share an Asset Report with a partner client (beta)
@@ -1378,7 +1431,7 @@ export def "credit-payroll-income-refresh creditPayrollIncomeRefresh" [
 # POST /credit/relay/create
 # Docs: /api/products/assets/#creditrelaycreate
 # operationId: creditRelayCreate
-export def "credit-relay-create creditRelayCreate" [
+export def "credit-relay-create create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1386,9 +1439,10 @@ export def "credit-relay-create creditRelayCreate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
-  report_tokens: list # List of report token strings, with at most one token of each report type. Currently only Asset Report token is supported.
+  report_tokens: list<string> # List of report token strings, with at most one token of each report type. Currently only Asset Report token is supported.
   secondary_client_id: string # The `secondary_client_id` is the client id of the third party with whom you would like to share the relay token.
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
   --webhook: string # URL to which Plaid will send webhooks when the Secondary Client successfully retrieves an Asset Report by calling `/credit/relay/get`. (nullable)
@@ -1397,11 +1451,11 @@ export def "credit-relay-create creditRelayCreate" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/credit/relay/create")
-  let body = {client_id: $client_id, report_tokens: $report_tokens, secondary_client_id: $secondary_client_id, secret: $secret, webhook: $webhook} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"client_id": $client_id, "report_tokens": $report_tokens, "secondary_client_id": $secondary_client_id, "secret": $secret, "webhook": $webhook} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Retrieve the reports associated with a relay token that was shared with you (beta)
@@ -1409,7 +1463,7 @@ export def "credit-relay-create creditRelayCreate" [
 # POST /credit/relay/get
 # Docs: /api/products/assets/#creditrelayget
 # operationId: creditRelayGet
-export def "credit-relay-get creditRelayGet" [
+export def "credit-relay-get get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1417,6 +1471,7 @@ export def "credit-relay-get creditRelayGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
   relay_token: string # The `relay_token` granting access to the report you would like to get.
@@ -1427,11 +1482,11 @@ export def "credit-relay-get creditRelayGet" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/credit/relay/get")
-  let body = {client_id: $client_id, relay_token: $relay_token, report_type: $report_type, secret: $secret} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"client_id": $client_id, "relay_token": $relay_token, "report_type": $report_type, "secret": $secret} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Refresh a report of a relay token (beta)
@@ -1439,7 +1494,7 @@ export def "credit-relay-get creditRelayGet" [
 # POST /credit/relay/refresh
 # Docs: /api/products/assets/#creditrelayrefresh
 # operationId: creditRelayRefresh
-export def "credit-relay-refresh creditRelayRefresh" [
+export def "credit-relay-refresh refresh" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1447,6 +1502,7 @@ export def "credit-relay-refresh creditRelayRefresh" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
   relay_token: string # The `relay_token` granting access to the report you would like to refresh.
@@ -1458,11 +1514,11 @@ export def "credit-relay-refresh creditRelayRefresh" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/credit/relay/refresh")
-  let body = {client_id: $client_id, relay_token: $relay_token, report_type: $report_type, secret: $secret, webhook: $webhook} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"client_id": $client_id, "relay_token": $relay_token, "report_type": $report_type, "secret": $secret, "webhook": $webhook} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Remove relay token (beta)
@@ -1470,7 +1526,7 @@ export def "credit-relay-refresh creditRelayRefresh" [
 # POST /credit/relay/remove
 # Docs: /api/products/assets/#creditrelayremove
 # operationId: creditRelayRemove
-export def "credit-relay-remove creditRelayRemove" [
+export def "credit-relay-remove delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1478,6 +1534,7 @@ export def "credit-relay-remove creditRelayRemove" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
   relay_token: string # The `relay_token` you would like to revoke.
@@ -1487,11 +1544,11 @@ export def "credit-relay-remove creditRelayRemove" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/credit/relay/remove")
-  let body = {client_id: $client_id, relay_token: $relay_token, secret: $secret} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"client_id": $client_id, "relay_token": $relay_token, "secret": $secret} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Retrieve Link sessions for your user
@@ -1499,7 +1556,7 @@ export def "credit-relay-remove creditRelayRemove" [
 # POST /credit/sessions/get
 # Docs: /api/products/income/#creditsessionsget
 # operationId: creditSessionsGet
-export def "credit-sessions-get creditSessionsGet" [
+export def "credit-sessions-get get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1507,6 +1564,7 @@ export def "credit-sessions-get creditSessionsGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
@@ -1516,11 +1574,11 @@ export def "credit-sessions-get creditSessionsGet" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/credit/sessions/get")
-  let body = {client_id: $client_id, secret: $secret, user_token: $user_token} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"client_id": $client_id, "secret": $secret, "user_token": $user_token} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Retrieve a dashboard user
@@ -1528,7 +1586,7 @@ export def "credit-sessions-get creditSessionsGet" [
 # POST /dashboard_user/get
 # Docs: /api/products/monitor/#dashboard_userget
 # operationId: dashboardUserGet
-export def "dashboard-user-get dashboardUserGet" [
+export def "dashboard-user-get get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1536,6 +1594,7 @@ export def "dashboard-user-get dashboardUserGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
   dashboard_user_id: string # ID of the associated user. (e.g. 54350110fedcbaf01234ffee)
@@ -1545,11 +1604,11 @@ export def "dashboard-user-get dashboardUserGet" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/dashboard_user/get")
-  let body = {client_id: $client_id, dashboard_user_id: $dashboard_user_id, secret: $secret} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"client_id": $client_id, "dashboard_user_id": $dashboard_user_id, "secret": $secret} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # List dashboard users
@@ -1557,7 +1616,7 @@ export def "dashboard-user-get dashboardUserGet" [
 # POST /dashboard_user/list
 # Docs: /api/products/monitor/#dashboard_userlist
 # operationId: dashboardUserList
-export def "dashboard-user-list dashboardUserList" [
+export def "dashboard-user-list list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1565,6 +1624,7 @@ export def "dashboard-user-list dashboardUserList" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
   --cursor: string # An identifier that determines which page of results you receive. (nullable, e.g. eyJkaXJlY3Rpb24iOiJuZXh0Iiwib2Zmc2V0IjoiMTU5NDM)
@@ -1574,11 +1634,11 @@ export def "dashboard-user-list dashboardUserList" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/dashboard_user/list")
-  let body = {client_id: $client_id, cursor: $cursor, secret: $secret} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"client_id": $client_id, "cursor": $cursor, "secret": $secret} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Create a deposit switch without using Plaid Exchange
@@ -1586,10 +1646,10 @@ export def "dashboard-user-list dashboardUserList" [
 # POST /deposit_switch/alt/create
 # Docs: /deposit-switch/reference#deposit_switchaltcreate
 # operationId: depositSwitchAltCreate
-# --options shape: {transaction_item_access_tokens?: list, webhook?: string}
+# --options shape: {transaction_item_access_tokens?: list<string>, webhook?: string}
 # --target_account shape: {account_name: string, account_number: string, account_subtype: "checking"|"savings", routing_number: string}
 # --target_user shape: {address?: record, email: string, family_name: string, given_name: string, phone: string, tax_payer_id?: string}
-export def "deposit-switch-alt-create depositSwitchAltCreate" [
+export def "deposit-switch-alt-create create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1597,10 +1657,11 @@ export def "deposit-switch-alt-create depositSwitchAltCreate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
   --country-code: string@country-code-completer # ISO-3166-1 alpha-2 country code standard. (nullable)
-  --options: record # Options to configure the `/deposit_switch/create` request. If provided, cannot be `null`. — shape: {transaction_item_access_tokens?: list, webhook?: string}
+  --options: record # Options to configure the `/deposit_switch/create` request. If provided, cannot be `null`. — shape: {transaction_item_access_tokens?: list<string>, webhook?: string}
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
   target_account: record # The deposit switch destination account — shape: {account_name: string, account_number: string, account_subtype: "checking"|"savings", routing_number: string}
   target_user: record # The deposit switch target user — shape: {address?: record, email: string, family_name: string, given_name: string, phone: string, tax_payer_id?: string}
@@ -1609,11 +1670,11 @@ export def "deposit-switch-alt-create depositSwitchAltCreate" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/deposit_switch/alt/create")
-  let body = {client_id: $client_id, country_code: $country_code, options: $options, secret: $secret, target_account: $target_account, target_user: $target_user} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"client_id": $client_id, "country_code": $country_code, "options": $options, "secret": $secret, "target_account": $target_account, "target_user": $target_user} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Create a deposit switch
@@ -1621,8 +1682,8 @@ export def "deposit-switch-alt-create depositSwitchAltCreate" [
 # POST /deposit_switch/create
 # Docs: /deposit-switch/reference#deposit_switchcreate
 # operationId: depositSwitchCreate
-# --options shape: {transaction_item_access_tokens?: list, webhook?: string}
-export def "deposit-switch-create depositSwitchCreate" [
+# --options shape: {transaction_item_access_tokens?: list<string>, webhook?: string}
+export def "deposit-switch-create create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1630,23 +1691,24 @@ export def "deposit-switch-create depositSwitchCreate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
   --country-code: string@country-code-completer # ISO-3166-1 alpha-2 country code standard. (nullable)
-  --options: record # Options to configure the `/deposit_switch/create` request. If provided, cannot be `null`. — shape: {transaction_item_access_tokens?: list, webhook?: string}
+  --options: record # Options to configure the `/deposit_switch/create` request. If provided, cannot be `null`. — shape: {transaction_item_access_tokens?: list<string>, webhook?: string}
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
-  target_access_token: string # Access token for the target Item, typically provided in the Import Item response. 
+  target_access_token: string # Access token for the target Item, typically provided in the Import Item response.
   target_account_id: string # Plaid Account ID that specifies the target bank account. This account will become the recipient for a user's direct deposit.
 ]: any -> record<deposit_switch_id: string, request_id: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/deposit_switch/create")
-  let body = {client_id: $client_id, country_code: $country_code, options: $options, secret: $secret, target_access_token: $target_access_token, target_account_id: $target_account_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"client_id": $client_id, "country_code": $country_code, "options": $options, "secret": $secret, "target_access_token": $target_access_token, "target_account_id": $target_account_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Retrieve a deposit switch
@@ -1654,7 +1716,7 @@ export def "deposit-switch-create depositSwitchCreate" [
 # POST /deposit_switch/get
 # Docs: /deposit-switch/reference#deposit_switchget
 # operationId: depositSwitchGet
-export def "deposit-switch-get depositSwitchGet" [
+export def "deposit-switch-get get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1662,6 +1724,7 @@ export def "deposit-switch-get depositSwitchGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
   deposit_switch_id: string # The ID of the deposit switch
@@ -1671,11 +1734,11 @@ export def "deposit-switch-get depositSwitchGet" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/deposit_switch/get")
-  let body = {client_id: $client_id, deposit_switch_id: $deposit_switch_id, secret: $secret} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"client_id": $client_id, "deposit_switch_id": $deposit_switch_id, "secret": $secret} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Create a deposit switch token
@@ -1683,7 +1746,7 @@ export def "deposit-switch-get depositSwitchGet" [
 # POST /deposit_switch/token/create
 # Docs: /deposit-switch/reference#deposit_switchtokencreate
 # operationId: depositSwitchTokenCreate
-export def "deposit-switch-token-create depositSwitchTokenCreate" [
+export def "deposit-switch-token-create create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1691,6 +1754,7 @@ export def "deposit-switch-token-create depositSwitchTokenCreate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
   deposit_switch_id: string # The ID of the deposit switch
@@ -1700,11 +1764,11 @@ export def "deposit-switch-token-create depositSwitchTokenCreate" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/deposit_switch/token/create")
-  let body = {client_id: $client_id, deposit_switch_id: $deposit_switch_id, secret: $secret} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"client_id": $client_id, "deposit_switch_id": $deposit_switch_id, "secret": $secret} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Search employer database
@@ -1712,7 +1776,7 @@ export def "deposit-switch-token-create depositSwitchTokenCreate" [
 # POST /employers/search
 # Docs: /api/employers/#employerssearch
 # operationId: employersSearch
-export def "employers-search employersSearch" [
+export def "employers-search list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1720,9 +1784,10 @@ export def "employers-search employersSearch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
-  products: list # The Plaid products the returned employers should support. Currently, this field must be set to `"deposit_switch"`.
+  products: list<string> # The Plaid products the returned employers should support. Currently, this field must be set to `"deposit_switch"`.
   query: string # The employer name to be searched for.
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
 ]: any -> record<employers: table<address: record, confidence_score: float, employer_id: string, name: string>, request_id: string> {
@@ -1730,11 +1795,11 @@ export def "employers-search employersSearch" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/employers/search")
-  let body = {client_id: $client_id, products: $products, query: $query, secret: $secret} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"client_id": $client_id, "products": $products, "query": $query, "secret": $secret} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # (Deprecated) Retrieve a summary of an individual's employment information
@@ -1744,7 +1809,7 @@ export def "employers-search employersSearch" [
 # Docs: /api/products/income/#employmentverificationget
 # operationId: employmentVerificationGet
 @deprecated
-export def "employment-verification-get employmentVerificationGet" [
+export def "employment-verification-get get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1752,6 +1817,7 @@ export def "employment-verification-get employmentVerificationGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   access_token: string # The access token associated with the Item data is being requested for.
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
@@ -1761,11 +1827,11 @@ export def "employment-verification-get employmentVerificationGet" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/employment/verification/get")
-  let body = {access_token: $access_token, client_id: $client_id, secret: $secret} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"access_token": $access_token, "client_id": $client_id, "secret": $secret} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Webhook receiver for fdx notifications
@@ -1776,8 +1842,8 @@ export def "employment-verification-get employmentVerificationGet" [
 # --notificationPayload shape: {customFields?: record, id?: string, idType?: "ACCOUNT"|"CUSTOMER"|"PARTY"|"MAINTENANCE"|"CONSENT"}
 # --publisher shape: {homeUri?: string, logoUri?: string, name: string, registeredEntityId?: string, registeredEntityName?: string, registry?: "FDX"|"GLEIF"|"ICANN"|"PRIVATE", type: "DATA_ACCESS_PLATFORM"|"DATA_PROVIDER"|"DATA_RECIPIENT"|"INDIVIDUAL"|"MERCHANT"|"VENDOR"}
 # --subscriber shape: {homeUri?: string, logoUri?: string, name: string, registeredEntityId?: string, registeredEntityName?: string, registry?: "FDX"|"GLEIF"|"ICANN"|"PRIVATE", type: "DATA_ACCESS_PLATFORM"|"DATA_PROVIDER"|"DATA_RECIPIENT"|"INDIVIDUAL"|"MERCHANT"|"VENDOR"}
-# --url shape: {action?: "GET"|"POST"|"PATCH"|"DELETE"|"PUT", href: string, rel?: string, types?: list}
-export def "fdx-notifications fdxNotifications" [
+# --url shape: {action?: "GET"|"POST"|"PATCH"|"DELETE"|"PUT", href: string, rel?: string, types?: list<string>}
+export def "fdx-notifications create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1785,27 +1851,28 @@ export def "fdx-notifications fdxNotifications" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   category: string@category-completer # Category of Notification
-  notificationId: string # Id of notification
-  notificationPayload: record # Custom key-value pairs payload for a notification — shape: {customFields?: record, id?: string, idType?: "ACCOUNT"|"CUSTOMER"|"PARTY"|"MAINTENANCE"|"CONSENT"}
+  notification_id: string # Id of notification
+  notification_payload: record # Custom key-value pairs payload for a notification — shape: {customFields?: record, id?: string, idType?: "ACCOUNT"|"CUSTOMER"|"PARTY"|"MAINTENANCE"|"CONSENT"}
   --priority: string@priority-completer # Priority of notification
   publisher: record # FDX Participant - an entity or person that is a part of a FDX API transaction — shape: {homeUri?: string, logoUri?: string, name: string, registeredEntityId?: string, registeredEntityName?: string, registry?: "FDX"|"GLEIF"|"ICANN"|"PRIVATE", type: "DATA_ACCESS_PLATFORM"|"DATA_PROVIDER"|"DATA_RECIPIENT"|"INDIVIDUAL"|"MERCHANT"|"VENDOR"}
-  sentOn: string # ISO 8601 date-time in format 'YYYY-MM-DDThh:mm:ss.nnn[Z|[+|-]hh:mm]' according to [IETF RFC3339](https://xml2rfc.tools.ietf.org/public/rfc/html/rfc3339.html#anchor14) (format: date-time, e.g. 2021-07-15T14:46:41.375Z)
+  sent_on: string # ISO 8601 date-time in format 'YYYY-MM-DDThh:mm:ss.nnn[Z|[+|-]hh:mm]' according to [IETF RFC3339](https://xml2rfc.tools.ietf.org/public/rfc/html/rfc3339.html#anchor14) (format: date-time, e.g. 2021-07-15T14:46:41.375Z)
   --severity: string@severity-completer # Severity level of notification
   --subscriber: record # FDX Participant - an entity or person that is a part of a FDX API transaction — shape: {homeUri?: string, logoUri?: string, name: string, registeredEntityId?: string, registeredEntityName?: string, registry?: "FDX"|"GLEIF"|"ICANN"|"PRIVATE", type: "DATA_ACCESS_PLATFORM"|"DATA_PROVIDER"|"DATA_RECIPIENT"|"INDIVIDUAL"|"MERCHANT"|"VENDOR"}
   type: string@type-completer-1 # Type of Notification
-  --body-url: record # REST application constraint (Hypermedia As The Engine Of Application State) — shape: {action?: "GET"|"POST"|"PATCH"|"DELETE"|"PUT", href: string, rel?: string, types?: list}
+  --url: record # REST application constraint (Hypermedia As The Engine Of Application State) — shape: {action?: "GET"|"POST"|"PATCH"|"DELETE"|"PUT", href: string, rel?: string, types?: list<string>}
 ]: any -> record<causes: list<any>, display_message: string, documentation_url: string, error_code: string, error_message: string, error_type: string, request_id: string, status: float, suggested_action: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/fdx/notifications")
-  let body = {category: $category, notificationId: $notificationId, notificationPayload: $notificationPayload, priority: $priority, publisher: $publisher, sentOn: $sentOn, severity: $severity, subscriber: $subscriber, type: $type, url: $body_url} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"category": $category, "notificationId": $notification_id, "notificationPayload": $notification_payload, "priority": $priority, "publisher": $publisher, "sentOn": $sent_on, "severity": $severity, "subscriber": $subscriber, "type": $type, "url": $url} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Retrieve identity data
@@ -1813,8 +1880,8 @@ export def "fdx-notifications fdxNotifications" [
 # POST /identity/get
 # Docs: /api/products/identity/#identityget
 # operationId: identityGet
-# --options shape: {account_ids?: list}
-export def "identity-get identityGet" [
+# --options shape: {account_ids?: list<string>}
+export def "identity-get get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1822,21 +1889,22 @@ export def "identity-get identityGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   access_token: string # The access token associated with the Item data is being requested for.
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
-  --options: record # An optional object to filter `/identity/get` results. — shape: {account_ids?: list}
+  --options: record # An optional object to filter `/identity/get` results. — shape: {account_ids?: list<string>}
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
 ]: any -> record<accounts: table<account_id: string, balances: record, mask: string, name: string, official_name: string, persistent_account_id: string, subtype: string, type: string, verification_status: string, owners: list>, item: record<available_products: list<string>, billed_products: list<string>, consent_expiration_time: string, consented_products: list<string>, error: record<causes: list, display_message: string, documentation_url: string, error_code: string, error_message: string, error_type: string, request_id: string, status: float, suggested_action: string>, institution_id: string, item_id: string, products: list<string>, update_type: string, webhook: string>, request_id: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/identity/get")
-  let body = {access_token: $access_token, client_id: $client_id, options: $options, secret: $secret} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"access_token": $access_token, "client_id": $client_id, "options": $options, "secret": $secret} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Retrieve identity match score
@@ -1844,9 +1912,9 @@ export def "identity-get identityGet" [
 # POST /identity/match
 # Docs: /api/products/identity/#identitymatch
 # operationId: identityMatch
-# --options shape: {account_ids?: list}
+# --options shape: {account_ids?: list<string>}
 # --user shape: {address?: any, email_address?: string, legal_name?: string, phone_number?: string}
-export def "identity-match identityMatch" [
+export def "identity-match create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1854,10 +1922,11 @@ export def "identity-match identityMatch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   access_token: string # The access token associated with the Item data is being requested for.
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
-  --options: record # An optional object to filter /identity/match results — shape: {account_ids?: list}
+  --options: record # An optional object to filter /identity/match results — shape: {account_ids?: list<string>}
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
   --user: record # The user's legal name, phone number, email address and address used to perform fuzzy match. — shape: {address?: any, email_address?: string, legal_name?: string, phone_number?: string}
 ]: any -> record<accounts: table<account_id: string, balances: record, mask: string, name: string, official_name: string, persistent_account_id: string, subtype: string, type: string, verification_status: string, address: record, email_address: record, legal_name: record, phone_number: record>, item: record<available_products: list<string>, billed_products: list<string>, consent_expiration_time: string, consented_products: list<string>, error: record<causes: list, display_message: string, documentation_url: string, error_code: string, error_message: string, error_type: string, request_id: string, status: float, suggested_action: string>, institution_id: string, item_id: string, products: list<string>, update_type: string, webhook: string>, request_id: string> {
@@ -1865,11 +1934,11 @@ export def "identity-match identityMatch" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/identity/match")
-  let body = {access_token: $access_token, client_id: $client_id, options: $options, secret: $secret, user: $user} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"access_token": $access_token, "client_id": $client_id, "options": $options, "secret": $secret, "user": $user} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Create a new identity verification
@@ -1878,7 +1947,7 @@ export def "identity-match identityMatch" [
 # Docs: /api/products/identity-verification/#identity_verificationcreate
 # operationId: identityVerificationCreate
 # --user shape: {address?: record, client_user_id: string, date_of_birth?: string, email_address?: string, id_number?: record, name?: record, phone_number?: string}
-export def "identity-verification-create identityVerificationCreate" [
+export def "identity-verification-create create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1886,24 +1955,25 @@ export def "identity-verification-create identityVerificationCreate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
-  --gave-consent: oneof<nothing, bool> # A flag specifying whether the end user has already agreed to a privacy policy specifying that their data will be shared with Plaid for verification purposes.  If `gave_consent` is set to `true`, the `accept_tos` step will be marked as `skipped` and the end user's session will start at the next step requirement. (default: false, e.g. true)
+  --gave-consent: oneof<nothing, bool> # A flag specifying whether the end user has already agreed to a privacy policy specifying that their data will be shared with Plaid for verification purposes. If `gave_consent` is set to `true`, the `accept_tos` step will be marked as `skipped` and the end user's session will start at the next step requirement. (default: false, e.g. true)
   --is-idempotent: oneof<nothing, bool> # An optional flag specifying how you would like Plaid to handle attempts to create an Identity Verification when an Identity Verification already exists for the provided `client_user_id` and `template_id`. If idempotency is enabled, Plaid will return the existing Identity Verification. If idempotency is disabled, Plaid will reject the request with a `400 Bad Request` status code if an Identity Verification already exists for the supplied `client_user_id` and `template_id`. (nullable, e.g. true)
   --is-shareable: oneof<nothing, bool> # A flag specifying whether you would like Plaid to expose a shareable URL for the verification being created. (e.g. true)
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
   template_id: string # ID of the associated Identity Verification template. (e.g. idvtmp_4FrXJvfQU3zGUR)
-  user: record # User information collected outside of Link, most likely via your own onboarding process.  Each of the following identity fields are optional:  `email_address`  `phone_number`  `date_of_birth`  `name`  `address`  `id_number`  Specifically, these fields are optional in that they can either be fully provided (satisfying every required field in their subschema) or omitted from the request entirely by not providing the key or value. Providing these fields via the API will result in Link skipping the data collection process for the associated user. All verification steps enabled in the associated Identity Verification Template will still be run. Verification steps will either be run immediately, or once the user completes the `accept_tos` step, depending on the value provided to the `gave_consent` field. — shape: {address?: record, client_user_id: string, date_of_birth?: string, email_address?: string, id_number?: record, name?: record, phone_number?: string}
+  user: record # User information collected outside of Link, most likely via your own onboarding process. Each of the following identity fields are optional: `email_address` `phone_number` `date_of_birth` `name` `address` `id_number` Specifically, these fields are optional in that they can either be fully provided (satisfying every required field in their subschema) or omitted from the request entirely by not providing the key or value. Providing these fields via the API will result in Link skipping the data collection process for the associated user. All verification steps enabled in the associated Identity Verification Template will still be run. Verification steps will either be run immediately, or once the user completes the `accept_tos` step, depending on the value provided to the `gave_consent` field. — shape: {address?: record, client_user_id: string, date_of_birth?: string, email_address?: string, id_number?: record, name?: record, phone_number?: string}
 ]: any -> record<client_user_id: string, completed_at: string, created_at: string, documentary_verification: record<documents: list<record>, status: string>, id: string, kyc_check: record<address: record<po_box: string, summary: string, type: string>, date_of_birth: record<summary: string>, id_number: record<summary: string>, name: record<summary: string>, phone_number: record<summary: string>, status: string>, previous_attempt_id: string, redacted_at: string, request_id: string, shareable_url: string, status: string, steps: record<accept_tos: string, documentary_verification: string, kyc_check: string, risk_check: string, selfie_check: string, verify_sms: string, watchlist_screening: string>, template: record<id: string, version: float>, user: record<address: record<city: string, country: string, postal_code: string, region: string, street: string, street2: string>, date_of_birth: string, email_address: string, id_number: record<type: string, value: string>, ip_address: string, name: record<family_name: string, given_name: string>, phone_number: string>, watchlist_screening_id: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/identity_verification/create")
-  let body = {client_id: $client_id, gave_consent: $gave_consent, is_idempotent: $is_idempotent, is_shareable: $is_shareable, secret: $secret, template_id: $template_id, user: $user} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"client_id": $client_id, "gave_consent": $gave_consent, "is_idempotent": $is_idempotent, "is_shareable": $is_shareable, "secret": $secret, "template_id": $template_id, "user": $user} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Retrieve Identity Verification
@@ -1911,7 +1981,7 @@ export def "identity-verification-create identityVerificationCreate" [
 # POST /identity_verification/get
 # Docs: /api/products/identity-verification/#identity_verificationget
 # operationId: identityVerificationGet
-export def "identity-verification-get identityVerificationGet" [
+export def "identity-verification-get get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1919,6 +1989,7 @@ export def "identity-verification-get identityVerificationGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
   identity_verification_id: string # ID of the associated Identity Verification attempt. (e.g. idv_52xR9LKo77r1Np)
@@ -1928,11 +1999,11 @@ export def "identity-verification-get identityVerificationGet" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/identity_verification/get")
-  let body = {client_id: $client_id, identity_verification_id: $identity_verification_id, secret: $secret} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"client_id": $client_id, "identity_verification_id": $identity_verification_id, "secret": $secret} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # List Identity Verifications
@@ -1940,7 +2011,7 @@ export def "identity-verification-get identityVerificationGet" [
 # POST /identity_verification/list
 # Docs: /api/products/identity-verification/#identity_verificationlist
 # operationId: identityVerificationList
-export def "identity-verification-list identityVerificationList" [
+export def "identity-verification-list list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1948,6 +2019,7 @@ export def "identity-verification-list identityVerificationList" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
   client_user_id: string # An identifier to help you connect this object to your internal systems. For example, your database ID corresponding to this object. (e.g. your-db-id-3b24110)
@@ -1959,11 +2031,11 @@ export def "identity-verification-list identityVerificationList" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/identity_verification/list")
-  let body = {client_id: $client_id, client_user_id: $client_user_id, cursor: $cursor, secret: $secret, template_id: $template_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"client_id": $client_id, "client_user_id": $client_user_id, "cursor": $cursor, "secret": $secret, "template_id": $template_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Retry an Identity Verification
@@ -1972,7 +2044,7 @@ export def "identity-verification-list identityVerificationList" [
 # Docs: /api/products/identity-verification/#identity_verificationretry
 # operationId: identityVerificationRetry
 # --steps shape: {documentary_verification: bool, kyc_check: bool, selfie_check: bool, verify_sms: bool}
-export def "identity-verification-retry identityVerificationRetry" [
+export def "identity-verification-retry create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1980,23 +2052,24 @@ export def "identity-verification-retry identityVerificationRetry" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
   client_user_id: string # An identifier to help you connect this object to your internal systems. For example, your database ID corresponding to this object. (e.g. your-db-id-3b24110)
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
-  --steps: record # Instructions for the `custom` retry strategy specifying which steps should be required or skipped.   Note:   This field must be provided when the retry strategy is `custom` and must be omitted otherwise.  Custom retries override settings in your Plaid Template. For example, if your Plaid Template has `verify_sms` disabled, a custom retry with `verify_sms` enabled will still require the step.  The `selfie_check` step is currently not supported on the sandbox server. Sandbox requests will silently disable the `selfie_check` step when provided. (nullable) — shape: {documentary_verification: bool, kyc_check: bool, selfie_check: bool, verify_sms: bool}
-  strategy: string@strategy-completer # An instruction specifying what steps the new Identity Verification attempt should require the user to complete:   `reset` - Restart the user at the beginning of the session, regardless of whether they successfully completed part of their previous session.  `incomplete` - Start the new session at the step that the user failed in the previous session, skipping steps that have already been successfully completed.  `infer` - If the most recent Identity Verification attempt associated with the given `client_user_id` has a status of `failed` or `expired`, retry using the `incomplete` strategy. Otherwise, use the `reset` strategy.  `custom` - Start the new session with a custom configuration, specified by the value of the `steps` field  Note:  The `incomplete` strategy cannot be applied if the session's failing step is `screening` or `risk_check`.  The `infer` strategy cannot be applied if the session's status is still `active`
+  --steps: record # Instructions for the `custom` retry strategy specifying which steps should be required or skipped. Note: This field must be provided when the retry strategy is `custom` and must be omitted otherwise. Custom retries override settings in your Plaid Template. For example, if your Plaid Template has `verify_sms` disabled, a custom retry with `verify_sms` enabled will still require the step. The `selfie_check` step is currently not supported on the sandbox server. Sandbox requests will silently disable the `selfie_check` step when provided. (nullable) — shape: {documentary_verification: bool, kyc_check: bool, selfie_check: bool, verify_sms: bool}
+  strategy: string@strategy-completer # An instruction specifying what steps the new Identity Verification attempt should require the user to complete: `reset` - Restart the user at the beginning of the session, regardless of whether they successfully completed part of their previous session. `incomplete` - Start the new session at the step that the user failed in the previous session, skipping steps that have already been successfully completed. `infer` - If the most recent Identity Verification attempt associated with the given `client_user_id` has a status of `failed` or `expired`, retry using the `incomplete` strategy. Otherwise, use the `reset` strategy. `custom` - Start the new session with a custom configuration, specified by the value of the `steps` field Note: The `incomplete` strategy cannot be applied if the session's failing step is `screening` or `risk_check`. The `infer` strategy cannot be applied if the session's status is still `active`
   template_id: string # ID of the associated Identity Verification template. (e.g. idvtmp_4FrXJvfQU3zGUR)
 ]: any -> record<client_user_id: string, completed_at: string, created_at: string, documentary_verification: record<documents: list<record>, status: string>, id: string, kyc_check: record<address: record<po_box: string, summary: string, type: string>, date_of_birth: record<summary: string>, id_number: record<summary: string>, name: record<summary: string>, phone_number: record<summary: string>, status: string>, previous_attempt_id: string, redacted_at: string, request_id: string, shareable_url: string, status: string, steps: record<accept_tos: string, documentary_verification: string, kyc_check: string, risk_check: string, selfie_check: string, verify_sms: string, watchlist_screening: string>, template: record<id: string, version: float>, user: record<address: record<city: string, country: string, postal_code: string, region: string, street: string, street2: string>, date_of_birth: string, email_address: string, id_number: record<type: string, value: string>, ip_address: string, name: record<family_name: string, given_name: string>, phone_number: string>, watchlist_screening_id: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/identity_verification/retry")
-  let body = {client_id: $client_id, client_user_id: $client_user_id, secret: $secret, steps: $steps, strategy: $strategy, template_id: $template_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"client_id": $client_id, "client_user_id": $client_user_id, "secret": $secret, "steps": $steps, "strategy": $strategy, "template_id": $template_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # (Deprecated) Create an income verification instance
@@ -2005,9 +2078,9 @@ export def "identity-verification-retry identityVerificationRetry" [
 # DEPRECATED
 # Docs: /api/products/income/#incomeverificationcreate
 # operationId: incomeVerificationCreate
-# --options shape: {access_tokens?: list}
+# --options shape: {access_tokens?: list<string>}
 @deprecated
-export def "income-verification-create incomeVerificationCreate" [
+export def "income-verification-create create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2015,9 +2088,10 @@ export def "income-verification-create incomeVerificationCreate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
-  --options: record # Optional arguments for `/income/verification/create` — shape: {access_tokens?: list}
+  --options: record # Optional arguments for `/income/verification/create` — shape: {access_tokens?: list<string>}
   --precheck-id: string # The ID of a precheck created with `/income/verification/precheck`. Will be used to improve conversion of the income verification flow.
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
   webhook: string # The URL endpoint to which Plaid should send webhooks related to the progress of the income verification process.
@@ -2026,11 +2100,11 @@ export def "income-verification-create incomeVerificationCreate" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/income/verification/create")
-  let body = {client_id: $client_id, options: $options, precheck_id: $precheck_id, secret: $secret, webhook: $webhook} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"client_id": $client_id, "options": $options, "precheck_id": $precheck_id, "secret": $secret, "webhook": $webhook} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # (Deprecated) Download the original documents used for income verification
@@ -2041,7 +2115,7 @@ export def "income-verification-create incomeVerificationCreate" [
 # operationId: incomeVerificationDocumentsDownload
 @deprecated
 @deprecated --flag income-verification-id
-export def "income-verification-documents-download incomeVerificationDocumentsDownload" [
+export def "income-verification-documents-download download" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2049,6 +2123,7 @@ export def "income-verification-documents-download incomeVerificationDocumentsDo
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --access-token: string # The access token associated with the Item data is being requested for. (nullable)
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
@@ -2060,11 +2135,11 @@ export def "income-verification-documents-download incomeVerificationDocumentsDo
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/income/verification/documents/download")
-  let body = {access_token: $access_token, client_id: $client_id, document_id: $document_id, income_verification_id: $income_verification_id, secret: $secret} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"access_token": $access_token, "client_id": $client_id, "document_id": $document_id, "income_verification_id": $income_verification_id, "secret": $secret} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/zip"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # (Deprecated) Retrieve information from the paystubs used for income verification
@@ -2075,7 +2150,7 @@ export def "income-verification-documents-download incomeVerificationDocumentsDo
 # operationId: incomeVerificationPaystubsGet
 @deprecated
 @deprecated --flag income-verification-id
-export def "income-verification-paystubs-get incomeVerificationPaystubsGet" [
+export def "income-verification-paystubs-get get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2083,6 +2158,7 @@ export def "income-verification-paystubs-get incomeVerificationPaystubsGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --access-token: string # The access token associated with the Item data is being requested for. (nullable)
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
@@ -2093,11 +2169,11 @@ export def "income-verification-paystubs-get incomeVerificationPaystubsGet" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/income/verification/paystubs/get")
-  let body = {access_token: $access_token, client_id: $client_id, income_verification_id: $income_verification_id, secret: $secret} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"access_token": $access_token, "client_id": $client_id, "income_verification_id": $income_verification_id, "secret": $secret} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # (Deprecated) Check digital income verification eligibility and optimize conversion
@@ -2112,7 +2188,7 @@ export def "income-verification-paystubs-get incomeVerificationPaystubsGet" [
 # --user shape: {email_address?: string, first_name?: string, home_address?: record, last_name?: string}
 @deprecated
 @deprecated --flag transactions-access-token
-export def "income-verification-precheck incomeVerificationPrecheck" [
+export def "income-verification-precheck create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2120,13 +2196,14 @@ export def "income-verification-precheck incomeVerificationPrecheck" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
   --employer: record # Information about the end user's employer (nullable) — shape: {address?: record, name?: string, tax_id?: string, url?: string}
   --payroll-institution: record # Information about the end user's payroll institution (nullable) — shape: {name?: string}
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
   --transactions-access-token: any # DEPRECATED
-  --transactions-access-tokens: list # An array of access tokens corresponding to Items belonging to the user whose eligibility is being checked. Note that if the Items specified here are not already initialized with `transactions`, providing them in this field will cause these Items to be initialized with (and billed for) the Transactions product.
+  --transactions-access-tokens: list<string> # An array of access tokens corresponding to Items belonging to the user whose eligibility is being checked. Note that if the Items specified here are not already initialized with `transactions`, providing them in this field will cause these Items to be initialized with (and billed for) the Transactions product.
   --us-military-info: record # Data about military info in the income verification precheck. (nullable) — shape: {branch?: string, is_active_duty?: bool}
   --user: record # Information about the user whose eligibility is being evaluated. (nullable) — shape: {email_address?: string, first_name?: string, home_address?: record, last_name?: string}
 ]: any -> record<confidence: string, precheck_id: string, request_id: string> {
@@ -2134,11 +2211,11 @@ export def "income-verification-precheck incomeVerificationPrecheck" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/income/verification/precheck")
-  let body = {client_id: $client_id, employer: $employer, payroll_institution: $payroll_institution, secret: $secret, transactions_access_token: $transactions_access_token, transactions_access_tokens: $transactions_access_tokens, us_military_info: $us_military_info, user: $user} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"client_id": $client_id, "employer": $employer, "payroll_institution": $payroll_institution, "secret": $secret, "transactions_access_token": $transactions_access_token, "transactions_access_tokens": $transactions_access_tokens, "us_military_info": $us_military_info, "user": $user} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # (Deprecated) Retrieve information from the tax documents used for income verification
@@ -2149,7 +2226,7 @@ export def "income-verification-precheck incomeVerificationPrecheck" [
 # operationId: incomeVerificationTaxformsGet
 @deprecated
 @deprecated --flag income-verification-id
-export def "income-verification-taxforms-get incomeVerificationTaxformsGet" [
+export def "income-verification-taxforms-get get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2157,6 +2234,7 @@ export def "income-verification-taxforms-get incomeVerificationTaxformsGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --access-token: string # The access token associated with the Item data is being requested for. (nullable)
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
@@ -2167,11 +2245,11 @@ export def "income-verification-taxforms-get incomeVerificationTaxformsGet" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/income/verification/taxforms/get")
-  let body = {access_token: $access_token, client_id: $client_id, income_verification_id: $income_verification_id, secret: $secret} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"access_token": $access_token, "client_id": $client_id, "income_verification_id": $income_verification_id, "secret": $secret} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Get details of all supported institutions
@@ -2179,8 +2257,8 @@ export def "income-verification-taxforms-get incomeVerificationTaxformsGet" [
 # POST /institutions/get
 # Docs: /api/institutions/#institutionsget
 # operationId: institutionsGet
-# --options shape: {include_auth_metadata?: bool, include_optional_metadata?: bool, include_payment_initiation_metadata?: bool, oauth?: bool, products?: list, routing_numbers?: list}
-export def "institutions-get institutionsGet" [
+# --options shape: {include_auth_metadata?: bool, include_optional_metadata?: bool, include_payment_initiation_metadata?: bool, oauth?: bool, products?: list<string>, routing_numbers?: list<string>}
+export def "institutions-get get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2188,23 +2266,24 @@ export def "institutions-get institutionsGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
   count: int # The total number of Institutions to return.
-  country_codes: list # Specify an array of Plaid-supported country codes this institution supports, using the ISO-3166-1 alpha-2 country code standard.  In API versions 2019-05-29 and earlier, the `country_codes` parameter is an optional parameter within the `options` object and will default to `[US]` if it is not supplied.
+  country_codes: list<string> # Specify an array of Plaid-supported country codes this institution supports, using the ISO-3166-1 alpha-2 country code standard. In API versions 2019-05-29 and earlier, the `country_codes` parameter is an optional parameter within the `options` object and will default to `[US]` if it is not supplied.
   offset: int # The number of Institutions to skip.
-  --options: record # An optional object to filter `/institutions/get` results. — shape: {include_auth_metadata?: bool, include_optional_metadata?: bool, include_payment_initiation_metadata?: bool, oauth?: bool, products?: list, routing_numbers?: list}
+  --options: record # An optional object to filter `/institutions/get` results. — shape: {include_auth_metadata?: bool, include_optional_metadata?: bool, include_payment_initiation_metadata?: bool, oauth?: bool, products?: list<string>, routing_numbers?: list<string>}
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
 ]: any -> record<institutions: table<auth_metadata: record, country_codes: list, institution_id: string, logo: string, name: string, oauth: bool, payment_initiation_metadata: record, primary_color: string, products: list, routing_numbers: list, status: record, url: string>, request_id: string, total: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/institutions/get")
-  let body = {client_id: $client_id, count: $count, country_codes: $country_codes, offset: $offset, options: $options, secret: $secret} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"client_id": $client_id, "count": $count, "country_codes": $country_codes, "offset": $offset, "options": $options, "secret": $secret} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Get details of an institution
@@ -2213,7 +2292,7 @@ export def "institutions-get institutionsGet" [
 # Docs: /api/institutions/#institutionsget_by_id
 # operationId: institutionsGetById
 # --options shape: {include_auth_metadata?: bool, include_optional_metadata?: bool, include_payment_initiation_metadata?: bool, include_status?: bool}
-export def "institutions-get-by-id institutionsGetById" [
+export def "institutions-get-by-id get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2221,9 +2300,10 @@ export def "institutions-get-by-id institutionsGetById" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
-  country_codes: list # Specify an array of Plaid-supported country codes this institution supports, using the ISO-3166-1 alpha-2 country code standard. In API versions 2019-05-29 and earlier, the `country_codes` parameter is an optional parameter within the `options` object and will default to `[US]` if it is not supplied.
+  country_codes: list<string> # Specify an array of Plaid-supported country codes this institution supports, using the ISO-3166-1 alpha-2 country code standard. In API versions 2019-05-29 and earlier, the `country_codes` parameter is an optional parameter within the `options` object and will default to `[US]` if it is not supplied.
   institution_id: string # The ID of the institution to get details about
   --options: record # Specifies optional parameters for `/institutions/get_by_id`. If provided, must not be `null`. — shape: {include_auth_metadata?: bool, include_optional_metadata?: bool, include_payment_initiation_metadata?: bool, include_status?: bool}
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
@@ -2232,11 +2312,11 @@ export def "institutions-get-by-id institutionsGetById" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/institutions/get_by_id")
-  let body = {client_id: $client_id, country_codes: $country_codes, institution_id: $institution_id, options: $options, secret: $secret} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"client_id": $client_id, "country_codes": $country_codes, "institution_id": $institution_id, "options": $options, "secret": $secret} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Search institutions
@@ -2245,7 +2325,7 @@ export def "institutions-get-by-id institutionsGetById" [
 # Docs: /api/institutions/#institutionssearch
 # operationId: institutionsSearch
 # --options shape: {include_auth_metadata?: bool, include_optional_metadata?: bool, include_payment_initiation_metadata?: bool, oauth?: bool, payment_initiation?: record}
-export def "institutions-search institutionsSearch" [
+export def "institutions-search list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2253,11 +2333,12 @@ export def "institutions-search institutionsSearch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
-  country_codes: list # Specify an array of Plaid-supported country codes this institution supports, using the ISO-3166-1 alpha-2 country code standard. In API versions 2019-05-29 and earlier, the `country_codes` parameter is an optional parameter within the `options` object and will default to `[US]` if it is not supplied.
+  country_codes: list<string> # Specify an array of Plaid-supported country codes this institution supports, using the ISO-3166-1 alpha-2 country code standard. In API versions 2019-05-29 and earlier, the `country_codes` parameter is an optional parameter within the `options` object and will default to `[US]` if it is not supplied.
   --options: record # An optional object to filter `/institutions/search` results. — shape: {include_auth_metadata?: bool, include_optional_metadata?: bool, include_payment_initiation_metadata?: bool, oauth?: bool, payment_initiation?: record}
-  --products: list # Filter the Institutions based on whether they support all products listed in `products`. Provide `null` to get institutions regardless of supported products. Note that when `auth` is specified as a product, if you are enabled for Instant Match or Automated Micro-deposits, institutions that support those products will be returned even if `auth` is not present in their product array. (nullable)
+  --products: list<string> # Filter the Institutions based on whether they support all products listed in `products`. Provide `null` to get institutions regardless of supported products. Note that when `auth` is specified as a product, if you are enabled for Instant Match or Automated Micro-deposits, institutions that support those products will be returned even if `auth` is not present in their product array. (nullable)
   query: string # The search query. Institutions with names matching the query are returned
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
 ]: any -> record<institutions: table<auth_metadata: record, country_codes: list, institution_id: string, logo: string, name: string, oauth: bool, payment_initiation_metadata: record, primary_color: string, products: list, routing_numbers: list, status: record, url: string>, request_id: string> {
@@ -2265,11 +2346,11 @@ export def "institutions-search institutionsSearch" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/institutions/search")
-  let body = {client_id: $client_id, country_codes: $country_codes, options: $options, products: $products, query: $query, secret: $secret} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"client_id": $client_id, "country_codes": $country_codes, "options": $options, "products": $products, "query": $query, "secret": $secret} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Get Investment holdings
@@ -2277,8 +2358,8 @@ export def "institutions-search institutionsSearch" [
 # POST /investments/holdings/get
 # Docs: /api/products/investments/#investmentsholdingsget
 # operationId: investmentsHoldingsGet
-# --options shape: {account_ids?: list}
-export def "investments-holdings-get investmentsHoldingsGet" [
+# --options shape: {account_ids?: list<string>}
+export def "investments-holdings-get get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2286,21 +2367,22 @@ export def "investments-holdings-get investmentsHoldingsGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   access_token: string # The access token associated with the Item data is being requested for.
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
-  --options: record # An optional object to filter `/investments/holdings/get` results. If provided, must not be `null`. — shape: {account_ids?: list}
+  --options: record # An optional object to filter `/investments/holdings/get` results. If provided, must not be `null`. — shape: {account_ids?: list<string>}
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
 ]: any -> record<accounts: table<account_id: string, balances: record, mask: string, name: string, official_name: string, persistent_account_id: string, subtype: string, type: string, verification_status: string>, holdings: table<account_id: string, cost_basis: float, institution_price: float, institution_price_as_of: string, institution_price_datetime: string, institution_value: float, iso_currency_code: string, quantity: float, security_id: string, unofficial_currency_code: string>, item: record<available_products: list<string>, billed_products: list<string>, consent_expiration_time: string, consented_products: list<string>, error: record<causes: list, display_message: string, documentation_url: string, error_code: string, error_message: string, error_type: string, request_id: string, status: float, suggested_action: string>, institution_id: string, item_id: string, products: list<string>, update_type: string, webhook: string>, request_id: string, securities: table<close_price: float, close_price_as_of: string, cusip: string, institution_id: string, institution_security_id: string, is_cash_equivalent: bool, isin: string, iso_currency_code: string, name: string, proxy_security_id: string, security_id: string, sedol: string, ticker_symbol: string, type: string, unofficial_currency_code: string, update_datetime: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/investments/holdings/get")
-  let body = {access_token: $access_token, client_id: $client_id, options: $options, secret: $secret} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"access_token": $access_token, "client_id": $client_id, "options": $options, "secret": $secret} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Get investment transactions
@@ -2308,8 +2390,8 @@ export def "investments-holdings-get investmentsHoldingsGet" [
 # POST /investments/transactions/get
 # Docs: /api/products/investments/#investmentstransactionsget
 # operationId: investmentsTransactionsGet
-# --options shape: {account_ids?: list, count?: int, offset?: int}
-export def "investments-transactions-get investmentsTransactionsGet" [
+# --options shape: {account_ids?: list<string>, count?: int, offset?: int}
+export def "investments-transactions-get get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2317,11 +2399,12 @@ export def "investments-transactions-get investmentsTransactionsGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   access_token: string # The access token associated with the Item data is being requested for.
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
   end_date: string # The most recent date for which to fetch transaction history. Dates should be formatted as YYYY-MM-DD. (format: date)
-  --options: record # An optional object to filter `/investments/transactions/get` results. If provided, must be non-`null`. — shape: {account_ids?: list, count?: int, offset?: int}
+  --options: record # An optional object to filter `/investments/transactions/get` results. If provided, must be non-`null`. — shape: {account_ids?: list<string>, count?: int, offset?: int}
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
   start_date: string # The earliest date for which to fetch transaction history. Dates should be formatted as YYYY-MM-DD. (format: date)
 ]: any -> record<accounts: table<account_id: string, balances: record, mask: string, name: string, official_name: string, persistent_account_id: string, subtype: string, type: string, verification_status: string>, investment_transactions: table<account_id: string, amount: float, cancel_transaction_id: string, date: string, fees: float, investment_transaction_id: string, iso_currency_code: string, name: string, price: float, quantity: float, security_id: string, subtype: string, type: string, unofficial_currency_code: string>, item: record<available_products: list<string>, billed_products: list<string>, consent_expiration_time: string, consented_products: list<string>, error: record<causes: list, display_message: string, documentation_url: string, error_code: string, error_message: string, error_type: string, request_id: string, status: float, suggested_action: string>, institution_id: string, item_id: string, products: list<string>, update_type: string, webhook: string>, request_id: string, securities: table<close_price: float, close_price_as_of: string, cusip: string, institution_id: string, institution_security_id: string, is_cash_equivalent: bool, isin: string, iso_currency_code: string, name: string, proxy_security_id: string, security_id: string, sedol: string, ticker_symbol: string, type: string, unofficial_currency_code: string, update_datetime: string>, total_investment_transactions: int> {
@@ -2329,11 +2412,11 @@ export def "investments-transactions-get investmentsTransactionsGet" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/investments/transactions/get")
-  let body = {access_token: $access_token, client_id: $client_id, end_date: $end_date, options: $options, secret: $secret, start_date: $start_date} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"access_token": $access_token, "client_id": $client_id, "end_date": $end_date, "options": $options, "secret": $secret, "start_date": $start_date} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Invalidate access_token
@@ -2341,7 +2424,7 @@ export def "investments-transactions-get investmentsTransactionsGet" [
 # POST /item/access_token/invalidate
 # Docs: /api/tokens/#itemaccess_tokeninvalidate
 # operationId: itemAccessTokenInvalidate
-export def "item-access-token-invalidate itemAccessTokenInvalidate" [
+export def "item-access-token-invalidate create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2349,6 +2432,7 @@ export def "item-access-token-invalidate itemAccessTokenInvalidate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   access_token: string # The access token associated with the Item data is being requested for.
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
@@ -2358,18 +2442,18 @@ export def "item-access-token-invalidate itemAccessTokenInvalidate" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/item/access_token/invalidate")
-  let body = {access_token: $access_token, client_id: $client_id, secret: $secret} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"access_token": $access_token, "client_id": $client_id, "secret": $secret} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # List a historical log of user consent events
 #
 # POST /item/activity/list
 # operationId: itemActivityList
-export def "item-activity-list itemActivityList" [
+export def "item-activity-list list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2377,6 +2461,7 @@ export def "item-activity-list itemActivityList" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --access-token: string # The access token associated with the Item data is being requested for.
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
@@ -2388,18 +2473,18 @@ export def "item-activity-list itemActivityList" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/item/activity/list")
-  let body = {access_token: $access_token, client_id: $client_id, count: $count, cursor: $cursor, secret: $secret} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"access_token": $access_token, "client_id": $client_id, "count": $count, "cursor": $cursor, "secret": $secret} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # List a user’s connected applications
 #
 # POST /item/application/list
 # operationId: itemApplicationList
-export def "item-application-list itemApplicationList" [
+export def "item-application-list list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2407,6 +2492,7 @@ export def "item-application-list itemApplicationList" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --access-token: string # The access token associated with the Item data is being requested for. (nullable)
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
@@ -2416,11 +2502,11 @@ export def "item-application-list itemApplicationList" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/item/application/list")
-  let body = {access_token: $access_token, client_id: $client_id, secret: $secret} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"access_token": $access_token, "client_id": $client_id, "secret": $secret} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Update the scopes of access for a particular application
@@ -2428,7 +2514,7 @@ export def "item-application-list itemApplicationList" [
 # POST /item/application/scopes/update
 # operationId: itemApplicationScopesUpdate
 # --scopes shape: {accounts?: list, new_accounts?: bool, product_access?: record}
-export def "item-application-scopes-update itemApplicationScopesUpdate" [
+export def "item-application-scopes-update update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2436,6 +2522,7 @@ export def "item-application-scopes-update itemApplicationScopesUpdate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   access_token: string # The access token associated with the Item data is being requested for.
   application_id: string # This field will map to the application ID that is returned from /item/applications/list, or provided to the institution in an oauth redirect.
@@ -2449,11 +2536,11 @@ export def "item-application-scopes-update itemApplicationScopesUpdate" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/item/application/scopes/update")
-  let body = {access_token: $access_token, application_id: $application_id, client_id: $client_id, context: $context, scopes: $scopes, secret: $secret, state: $state} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"access_token": $access_token, "application_id": $application_id, "client_id": $client_id, "context": $context, "scopes": $scopes, "secret": $secret, "state": $state} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Retrieve an Item
@@ -2461,7 +2548,7 @@ export def "item-application-scopes-update itemApplicationScopesUpdate" [
 # POST /item/get
 # Docs: /api/items/#itemget
 # operationId: itemGet
-export def "item-get itemGet" [
+export def "item-get get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2469,6 +2556,7 @@ export def "item-get itemGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   access_token: string # The access token associated with the Item data is being requested for.
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
@@ -2478,11 +2566,11 @@ export def "item-get itemGet" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/item/get")
-  let body = {access_token: $access_token, client_id: $client_id, secret: $secret} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"access_token": $access_token, "client_id": $client_id, "secret": $secret} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Import Item
@@ -2491,7 +2579,7 @@ export def "item-get itemGet" [
 # operationId: itemImport
 # --options shape: {webhook?: string}
 # --user_auth shape: {auth_token: string, user_id: string}
-export def "item-import itemImport" [
+export def "item-import import" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2499,10 +2587,11 @@ export def "item-import itemImport" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
   --options: record # An optional object to configure `/item/import` request. — shape: {webhook?: string}
-  products: list # Array of product strings
+  products: list<string> # Array of product strings
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
   user_auth: record # Object of user ID and auth token pair, permitting Plaid to aggregate a user’s accounts — shape: {auth_token: string, user_id: string}
 ]: any -> record<access_token: string, request_id: string> {
@@ -2510,11 +2599,11 @@ export def "item-import itemImport" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/item/import")
-  let body = {client_id: $client_id, options: $options, products: $products, secret: $secret, user_auth: $user_auth} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"client_id": $client_id, "options": $options, "products": $products, "secret": $secret, "user_auth": $user_auth} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Create public token
@@ -2522,7 +2611,7 @@ export def "item-import itemImport" [
 # POST /item/public_token/create
 # Docs: /api/tokens/#itempublic_tokencreate
 # operationId: itemCreatePublicToken
-export def "item-public-token-create itemCreatePublicToken" [
+export def "item-public-token-create create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2530,6 +2619,7 @@ export def "item-public-token-create itemCreatePublicToken" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   access_token: string # The access token associated with the Item data is being requested for.
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
@@ -2539,11 +2629,11 @@ export def "item-public-token-create itemCreatePublicToken" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/item/public_token/create")
-  let body = {access_token: $access_token, client_id: $client_id, secret: $secret} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"access_token": $access_token, "client_id": $client_id, "secret": $secret} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Exchange public token for an access token
@@ -2551,7 +2641,7 @@ export def "item-public-token-create itemCreatePublicToken" [
 # POST /item/public_token/exchange
 # Docs: /api/tokens/#itempublic_tokenexchange
 # operationId: itemPublicTokenExchange
-export def "item-public-token-exchange itemPublicTokenExchange" [
+export def "item-public-token-exchange create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2559,6 +2649,7 @@ export def "item-public-token-exchange itemPublicTokenExchange" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
   public_token: string # Your `public_token`, obtained from the Link `onSuccess` callback or `/sandbox/item/public_token/create`.
@@ -2568,11 +2659,11 @@ export def "item-public-token-exchange itemPublicTokenExchange" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/item/public_token/exchange")
-  let body = {client_id: $client_id, public_token: $public_token, secret: $secret} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"client_id": $client_id, "public_token": $public_token, "secret": $secret} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Remove an Item
@@ -2580,7 +2671,7 @@ export def "item-public-token-exchange itemPublicTokenExchange" [
 # POST /item/remove
 # Docs: /api/items/#itemremove
 # operationId: itemRemove
-export def "item-remove itemRemove" [
+export def "item-remove delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2588,6 +2679,7 @@ export def "item-remove itemRemove" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   access_token: string # The access token associated with the Item data is being requested for.
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
@@ -2597,11 +2689,11 @@ export def "item-remove itemRemove" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/item/remove")
-  let body = {access_token: $access_token, client_id: $client_id, secret: $secret} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"access_token": $access_token, "client_id": $client_id, "secret": $secret} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Update Webhook URL
@@ -2609,7 +2701,7 @@ export def "item-remove itemRemove" [
 # POST /item/webhook/update
 # Docs: /api/items/#itemwebhookupdate
 # operationId: itemWebhookUpdate
-export def "item-webhook-update itemWebhookUpdate" [
+export def "item-webhook-update update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2617,6 +2709,7 @@ export def "item-webhook-update itemWebhookUpdate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   access_token: string # The access token associated with the Item data is being requested for.
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
@@ -2627,11 +2720,11 @@ export def "item-webhook-update itemWebhookUpdate" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/item/webhook/update")
-  let body = {access_token: $access_token, client_id: $client_id, secret: $secret, webhook: $webhook} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"access_token": $access_token, "client_id": $client_id, "secret": $secret, "webhook": $webhook} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Retrieve Liabilities data
@@ -2639,8 +2732,8 @@ export def "item-webhook-update itemWebhookUpdate" [
 # POST /liabilities/get
 # Docs: /api/products/liabilities/#liabilitiesget
 # operationId: liabilitiesGet
-# --options shape: {account_ids?: list}
-export def "liabilities-get liabilitiesGet" [
+# --options shape: {account_ids?: list<string>}
+export def "liabilities-get get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2648,21 +2741,22 @@ export def "liabilities-get liabilitiesGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   access_token: string # The access token associated with the Item data is being requested for.
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
-  --options: record # An optional object to filter `/liabilities/get` results. If provided, `options` cannot be null. — shape: {account_ids?: list}
+  --options: record # An optional object to filter `/liabilities/get` results. If provided, `options` cannot be null. — shape: {account_ids?: list<string>}
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
 ]: any -> record<accounts: table<account_id: string, balances: record, mask: string, name: string, official_name: string, persistent_account_id: string, subtype: string, type: string, verification_status: string>, item: record<available_products: list<string>, billed_products: list<string>, consent_expiration_time: string, consented_products: list<string>, error: record<causes: list, display_message: string, documentation_url: string, error_code: string, error_message: string, error_type: string, request_id: string, status: float, suggested_action: string>, institution_id: string, item_id: string, products: list<string>, update_type: string, webhook: string>, liabilities: record<credit: list<record>, mortgage: list<record>, student: list<record>>, request_id: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/liabilities/get")
-  let body = {access_token: $access_token, client_id: $client_id, options: $options, secret: $secret} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"access_token": $access_token, "client_id": $client_id, "options": $options, "secret": $secret} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Exchange the Link Correlation Id for a Link Token
@@ -2670,7 +2764,7 @@ export def "liabilities-get liabilitiesGet" [
 # POST /link/oauth/correlation_id/exchange
 # Docs: /api/oauth/#linkcorrelationid
 # operationId: linkOauthCorrelationIdExchange
-export def "link-oauth-correlation-id-exchange linkOauthCorrelationIdExchange" [
+export def "link-oauth-correlation-id-exchange create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2678,6 +2772,7 @@ export def "link-oauth-correlation-id-exchange linkOauthCorrelationIdExchange" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
   link_correlation_id: string # A `link_correlation_id` from a received OAuth redirect URI callback
@@ -2687,11 +2782,11 @@ export def "link-oauth-correlation-id-exchange linkOauthCorrelationIdExchange" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/link/oauth/correlation_id/exchange")
-  let body = {client_id: $client_id, link_correlation_id: $link_correlation_id, secret: $secret} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"client_id": $client_id, "link_correlation_id": $link_correlation_id, "secret": $secret} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Create Link Token
@@ -2702,17 +2797,17 @@ export def "link-oauth-correlation-id-exchange linkOauthCorrelationIdExchange" [
 # --account_filters shape: {credit?: record, depository?: record, investment?: record, loan?: record}
 # --auth shape: {auth_type_select_enabled?: bool, automated_microdeposits_enabled?: bool, flow_type?: "FLEXIBLE_AUTH", instant_match_enabled?: bool, same_day_microdeposits_enabled?: bool}
 # --deposit_switch shape: {deposit_switch_id: string}
-# --employment shape: {bank_employment?: record, employment_source_types?: list}
+# --employment shape: {bank_employment?: record, employment_source_types?: list<string>}
 # --eu_config shape: {headless?: bool}
 # --identity_verification shape: {consent?: any, gave_consent?: bool, template_id: string}
-# --income_verification shape: {access_tokens?: list, asset_report_id?: string, bank_income?: record, income_source_types?: list, income_verification_id?: string, payroll_income?: record, precheck_id?: string, stated_income_sources?: list}
+# --income_verification shape: {access_tokens?: list<string>, asset_report_id?: string, bank_income?: record, income_source_types?: list<string>, income_verification_id?: string, payroll_income?: record, precheck_id?: string, stated_income_sources?: list}
 # --institution_data shape: {routing_number?: string}
 # --investments shape: {allow_unverified_crypto_wallets?: bool}
 # --payment_initiation shape: {consent_id?: string, payment_id?: string}
 # --transfer shape: {intent_id?: string, payment_profile_token?: string}
 # --update shape: {account_selection_enabled?: bool}
 # --user shape: {address?: record, client_user_id: string, date_of_birth?: string, email_address?: string, email_address_verified_time?: string, id_number?: record, legal_name?: string, name?: any, phone_number?: string, phone_number_verified_time?: string, ssn?: string}
-export def "link-token-create linkTokenCreate" [
+export def "link-token-create create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2720,28 +2815,29 @@ export def "link-token-create linkTokenCreate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --access-token: string # The `access_token` associated with the Item to update or reference, used when updating, modifying, or accessing an existing `access_token`. Used when launching Link in update mode, when completing the Same-day (manual) Micro-deposit flow, or (optionally) when initializing Link for a returning user as part of the Transfer UI flow.
-  --account-filters: record # By default, Link will provide limited account filtering: it will only display Institutions that are compatible with all products supplied in the `products` parameter of `/link/token/create`, and, if `auth` is specified in the `products` array, will also filter out accounts other than `checking` and `savings` accounts on the Account Select pane. You can further limit the accounts shown in Link by using `account_filters` to specify the account subtypes to be shown in Link. Only the specified subtypes will be shown. This filtering applies to both the Account Select view (if enabled) and the Institution Select view. Institutions that do not support the selected subtypes will be omitted from Link. To indicate that all subtypes should be shown, use the value `"all"`. If the `account_filters` filter is used, any account type for which a filter is not specified will be entirely omitted from Link. For a full list of valid types and subtypes, see the [Account schema](https://plaid.com/docs/api/accounts#account-type-schema).  For institutions using OAuth, the filter will not affect the list of accounts shown by the bank in the OAuth window. — shape: {credit?: record, depository?: record, investment?: record, loan?: record}
-  --additional-consented-products: list # (Beta) This field has no effect unless you are participating in the Product Scope Transparency beta program. List of additional Plaid product(s) you wish to collect consent for. These products will not be billed until you start using them by calling the relevant endpoints.  `balance` is *not* a valid value, the Balance product does not require explicit initialization and will automatically have consent collected.  Institutions that do not support these products will still be shown in Link
-  --android-package-name: string # The name of your app's Android package. Required if using the `link_token` to initialize Link on Android. When creating a `link_token` for initializing Link on other platforms, this field must be left blank. Any package name specified here must also be added to the Allowed Android package names setting on the [developer dashboard](https://dashboard.plaid.com/team/api). 
+  --account-filters: record # By default, Link will provide limited account filtering: it will only display Institutions that are compatible with all products supplied in the `products` parameter of `/link/token/create`, and, if `auth` is specified in the `products` array, will also filter out accounts other than `checking` and `savings` accounts on the Account Select pane. You can further limit the accounts shown in Link by using `account_filters` to specify the account subtypes to be shown in Link. Only the specified subtypes will be shown. This filtering applies to both the Account Select view (if enabled) and the Institution Select view. Institutions that do not support the selected subtypes will be omitted from Link. To indicate that all subtypes should be shown, use the value `"all"`. If the `account_filters` filter is used, any account type for which a filter is not specified will be entirely omitted from Link. For a full list of valid types and subtypes, see the [Account schema](https://plaid.com/docs/api/accounts#account-type-schema). For institutions using OAuth, the filter will not affect the list of accounts shown by the bank in the OAuth window. — shape: {credit?: record, depository?: record, investment?: record, loan?: record}
+  --additional-consented-products: list<string> # (Beta) This field has no effect unless you are participating in the Product Scope Transparency beta program. List of additional Plaid product(s) you wish to collect consent for. These products will not be billed until you start using them by calling the relevant endpoints. `balance` is *not* a valid value, the Balance product does not require explicit initialization and will automatically have consent collected. Institutions that do not support these products will still be shown in Link
+  --android-package-name: string # The name of your app's Android package. Required if using the `link_token` to initialize Link on Android. When creating a `link_token` for initializing Link on other platforms, this field must be left blank. Any package name specified here must also be added to the Allowed Android package names setting on the [developer dashboard](https://dashboard.plaid.com/team/api).
   --body-auth: record # Specifies options for initializing Link for use with the Auth product. This field can be used to enable or disable extended Auth flows for the resulting Link session. Omitting any field will result in a default that can be configured by your account manager. — shape: {auth_type_select_enabled?: bool, automated_microdeposits_enabled?: bool, flow_type?: "FLEXIBLE_AUTH", instant_match_enabled?: bool, same_day_microdeposits_enabled?: bool}
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
   client_name: string # The name of your application, as it should be displayed in Link. Maximum length of 30 characters. If a value longer than 30 characters is provided, Link will display "This Application" instead.
-  country_codes: list # Specify an array of Plaid-supported country codes using the ISO-3166-1 alpha-2 country code standard. Institutions from all listed countries will be shown. For a complete mapping of supported products by country, see https://plaid.com/global/.  If Link is launched with multiple country codes, only products that you are enabled for in all countries will be used by Link. Note that while all countries are enabled by default in Sandbox and Development, in Production only US and Canada are enabled by default. To gain access to European institutions in the Production environment, [file a product access Support ticket](https://dashboard.plaid.com/support/new/product-and-development/product-troubleshooting/request-product-access) via the Plaid dashboard. If you initialize with a European country code, your users will see the European consent panel during the Link flow.  If using a Link customization, make sure the country codes in the customization match those specified in `country_codes`. If both `country_codes` and a Link customization are used, the value in `country_codes` may override the value in the customization.  If using the Auth features Instant Match, Same-day Micro-deposits, or Automated Micro-deposits, `country_codes` must be set to `['US']`.
+  country_codes: list<string> # Specify an array of Plaid-supported country codes using the ISO-3166-1 alpha-2 country code standard. Institutions from all listed countries will be shown. For a complete mapping of supported products by country, see https://plaid.com/global/. If Link is launched with multiple country codes, only products that you are enabled for in all countries will be used by Link. Note that while all countries are enabled by default in Sandbox and Development, in Production only US and Canada are enabled by default. To gain access to European institutions in the Production environment, [file a product access Support ticket](https://dashboard.plaid.com/support/new/product-and-development/product-troubleshooting/request-product-access) via the Plaid dashboard. If you initialize with a European country code, your users will see the European consent panel during the Link flow. If using a Link customization, make sure the country codes in the customization match those specified in `country_codes`. If both `country_codes` and a Link customization are used, the value in `country_codes` may override the value in the customization. If using the Auth features Instant Match, Same-day Micro-deposits, or Automated Micro-deposits, `country_codes` must be set to `['US']`.
   --deposit-switch: record # Specifies options for initializing Link for use with the Deposit Switch (beta) product. This field is required if `deposit_switch` is included in the `products` array. — shape: {deposit_switch_id: string}
-  --employment: record # Specifies options for initializing Link for use with the Employment product. This field is required if `employment` is included in the `products` array. — shape: {bank_employment?: record, employment_source_types?: list}
+  --employment: record # Specifies options for initializing Link for use with the Employment product. This field is required if `employment` is included in the `products` array. — shape: {bank_employment?: record, employment_source_types?: list<string>}
   --eu-config: record # Configuration parameters for EU flows — shape: {headless?: bool}
   --identity-verification: record # Specifies option for initializing Link for use with the Identity Verification product. — shape: {consent?: any, gave_consent?: bool, template_id: string}
-  --income-verification: record # Specifies options for initializing Link for use with the Income product. This field is required if `income_verification` is included in the `products` array. — shape: {access_tokens?: list, asset_report_id?: string, bank_income?: record, income_source_types?: list, income_verification_id?: string, payroll_income?: record, precheck_id?: string, stated_income_sources?: list}
+  --income-verification: record # Specifies options for initializing Link for use with the Income product. This field is required if `income_verification` is included in the `products` array. — shape: {access_tokens?: list<string>, asset_report_id?: string, bank_income?: record, income_source_types?: list<string>, income_verification_id?: string, payroll_income?: record, precheck_id?: string, stated_income_sources?: list}
   --institution-data: record # A map containing data used to highlight institutions in Link. — shape: {routing_number?: string}
   --institution-id: string # Used for certain Europe-only configurations, as well as certain legacy use cases in other regions.
   --investments: record # Configuration parameters for the Investments product — shape: {allow_unverified_crypto_wallets?: bool}
-  language: string # The language that Link should be displayed in.  Supported languages are: - Danish (`'da'`) - Dutch (`'nl'`) - English (`'en'`) - Estonian (`'et'`) - French (`'fr'`) - German (`'de'`) - Italian (`'it'`) - Latvian (`'lv'`) - Lithuanian (`'lt'`) - Norwegian (`'no'`) - Polish (`'po'`) - Romanian (`'ro'`) - Spanish (`'es'`) - Swedish (`'se'`)  When using a Link customization, the language configured here must match the setting in the customization, or the customization will not be applied.
+  language: string # The language that Link should be displayed in. Supported languages are: - Danish (`'da'`) - Dutch (`'nl'`) - English (`'en'`) - Estonian (`'et'`) - French (`'fr'`) - German (`'de'`) - Italian (`'it'`) - Latvian (`'lv'`) - Lithuanian (`'lt'`) - Norwegian (`'no'`) - Polish (`'po'`) - Romanian (`'ro'`) - Spanish (`'es'`) - Swedish (`'se'`) When using a Link customization, the language configured here must match the setting in the customization, or the customization will not be applied.
   --link-customization-name: string # The name of the Link customization from the Plaid Dashboard to be applied to Link. If not specified, the `default` customization will be used. When using a Link customization, the language in the customization must match the language selected via the `language` parameter, and the countries in the customization should match the country codes selected via `country_codes`.
   --payment-initiation: record # Specifies options for initializing Link for use with the Payment Initiation (Europe) product. This field is required if `payment_initiation` is included in the `products` array. Either `payment_id` or `consent_id` must be provided. — shape: {consent_id?: string, payment_id?: string}
-  --products: list # List of Plaid product(s) you wish to use. If launching Link in update mode, should be omitted; required otherwise.  `balance` is *not* a valid value, the Balance product does not require explicit initialization and will automatically be initialized when any other product is initialized.  The products specified here will determine which institutions will be available to your users in Link. Only institutions that support *all* requested products can be selected; a if a user attempts to select an institution that does not support a listed product, a "Connectivity not supported" error message will appear in Link. To maximize the number of institutions available, initialize Link with the minimal product set required for your use case. Additional products can be added after Link initialization by calling the relevant endpoints. For details and exceptions, see [Choosing when to initialize products](https://plaid.com/docs/link/initializing-products/).  Note that, unless you have opted to disable Instant Match support, institutions that support Instant Match will also be shown in Link if `auth` is specified as a product, even though these institutions do not contain `auth` in their product array.  In Production, you will be billed for each product that you specify when initializing Link. Note that a product cannot be removed from an Item once the Item has been initialized with that product. To stop billing on an Item for subscription-based products, such as Liabilities, Investments, and Transactions, remove the Item via `/item/remove`.
-  --redirect-uri: string # A URI indicating the destination where a user should be forwarded after completing the Link flow; used to support OAuth authentication flows when launching Link in the browser or via a webview. The `redirect_uri` should not contain any query parameters. When used in Production or Development, must be an https URI. To specify any subdomain, use `*` as a wildcard character, e.g. `https://*.example.com/oauth.html`. If `android_package_name` is specified, this field should be left blank.  Note that any redirect URI must also be added to the Allowed redirect URIs list in the [developer dashboard](https://dashboard.plaid.com/team/api).
+  --products: list<string> # List of Plaid product(s) you wish to use. If launching Link in update mode, should be omitted; required otherwise. `balance` is *not* a valid value, the Balance product does not require explicit initialization and will automatically be initialized when any other product is initialized. The products specified here will determine which institutions will be available to your users in Link. Only institutions that support *all* requested products can be selected; a if a user attempts to select an institution that does not support a listed product, a "Connectivity not supported" error message will appear in Link. To maximize the number of institutions available, initialize Link with the minimal product set required for your use case. Additional products can be added after Link initialization by calling the relevant endpoints. For details and exceptions, see [Choosing when to initialize products](https://plaid.com/docs/link/initializing-products/). Note that, unless you have opted to disable Instant Match support, institutions that support Instant Match will also be shown in Link if `auth` is specified as a product, even though these institutions do not contain `auth` in their product array. In Production, you will be billed for each product that you specify when initializing Link. Note that a product cannot be removed from an Item once the Item has been initialized with that product. To stop billing on an Item for subscription-based products, such as Liabilities, Investments, and Transactions, remove the Item via `/item/remove`.
+  --redirect-uri: string # A URI indicating the destination where a user should be forwarded after completing the Link flow; used to support OAuth authentication flows when launching Link in the browser or via a webview. The `redirect_uri` should not contain any query parameters. When used in Production or Development, must be an https URI. To specify any subdomain, use `*` as a wildcard character, e.g. `https://*.example.com/oauth.html`. If `android_package_name` is specified, this field should be left blank. Note that any redirect URI must also be added to the Allowed redirect URIs list in the [developer dashboard](https://dashboard.plaid.com/team/api).
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
   --transfer: record # Specifies options for initializing Link for use with the Transfer product. — shape: {intent_id?: string, payment_profile_token?: string}
   --update: record # Specifies options for initializing Link for [update mode](https://plaid.com/docs/link/update-mode). — shape: {account_selection_enabled?: bool}
@@ -2753,11 +2849,11 @@ export def "link-token-create linkTokenCreate" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/link/token/create")
-  let body = {access_token: $access_token, account_filters: $account_filters, additional_consented_products: $additional_consented_products, android_package_name: $android_package_name, auth: $body_auth, client_id: $client_id, client_name: $client_name, country_codes: $country_codes, deposit_switch: $deposit_switch, employment: $employment, eu_config: $eu_config, identity_verification: $identity_verification, income_verification: $income_verification, institution_data: $institution_data, institution_id: $institution_id, investments: $investments, language: $language, link_customization_name: $link_customization_name, payment_initiation: $payment_initiation, products: $products, redirect_uri: $redirect_uri, secret: $secret, transfer: $transfer, update: $update, user: $user, user_token: $user_token, webhook: $webhook} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"access_token": $access_token, "account_filters": $account_filters, "additional_consented_products": $additional_consented_products, "android_package_name": $android_package_name, "auth": $body_auth, "client_id": $client_id, "client_name": $client_name, "country_codes": $country_codes, "deposit_switch": $deposit_switch, "employment": $employment, "eu_config": $eu_config, "identity_verification": $identity_verification, "income_verification": $income_verification, "institution_data": $institution_data, "institution_id": $institution_id, "investments": $investments, "language": $language, "link_customization_name": $link_customization_name, "payment_initiation": $payment_initiation, "products": $products, "redirect_uri": $redirect_uri, "secret": $secret, "transfer": $transfer, "update": $update, "user": $user, "user_token": $user_token, "webhook": $webhook} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Get Link Token
@@ -2765,7 +2861,7 @@ export def "link-token-create linkTokenCreate" [
 # POST /link/token/get
 # Docs: /api/tokens/#linktokenget
 # operationId: linkTokenGet
-export def "link-token-get linkTokenGet" [
+export def "link-token-get get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2773,6 +2869,7 @@ export def "link-token-get linkTokenGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
   link_token: string # A `link_token` from a previous invocation of `/link/token/create`
@@ -2782,11 +2879,11 @@ export def "link-token-get linkTokenGet" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/link/token/get")
-  let body = {client_id: $client_id, link_token: $link_token, secret: $secret} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"client_id": $client_id, "link_token": $link_token, "secret": $secret} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Create Link Delivery session
@@ -2795,7 +2892,7 @@ export def "link-token-get linkTokenGet" [
 # Docs: /docs/assets/waitlist/link-delivery/
 # operationId: linkDeliveryCreate
 # --communication_methods item shape: {address?: string, method?: "SMS"|"EMAIL"}
-export def "link-delivery-create linkDeliveryCreate" [
+export def "link-delivery-create create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2803,6 +2900,7 @@ export def "link-delivery-create linkDeliveryCreate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
   communication_methods: list # The list of communication methods to send the Link Delivery URL to. — item shape: {address?: string, method?: "SMS"|"EMAIL"}
@@ -2813,11 +2911,11 @@ export def "link-delivery-create linkDeliveryCreate" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/link_delivery/create")
-  let body = {client_id: $client_id, communication_methods: $communication_methods, link_token: $link_token, secret: $secret} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"client_id": $client_id, "communication_methods": $communication_methods, "link_token": $link_token, "secret": $secret} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Get Link Delivery session
@@ -2825,7 +2923,7 @@ export def "link-delivery-create linkDeliveryCreate" [
 # POST /link_delivery/get
 # Docs: /docs/assets/waitlist/link-delivery/
 # operationId: linkDeliveryGet
-export def "link-delivery-get linkDeliveryGet" [
+export def "link-delivery-get get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2833,6 +2931,7 @@ export def "link-delivery-get linkDeliveryGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
   link_delivery_session_id: string # The ID for the Link Delivery session from a previous invocation of `/link_delivery/create`.
@@ -2842,11 +2941,11 @@ export def "link-delivery-get linkDeliveryGet" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/link_delivery/get")
-  let body = {client_id: $client_id, link_delivery_session_id: $link_delivery_session_id, secret: $secret} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"client_id": $client_id, "link_delivery_session_id": $link_delivery_session_id, "secret": $secret} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Creates a new end customer for a Plaid reseller.
@@ -2859,7 +2958,7 @@ export def "link-delivery-get linkDeliveryGet" [
 # --billing_contact shape: {email?: string, family_name?: string, given_name?: string}
 # --customer_support_info shape: {contact_url?: string, email?: string, link_update_url?: string, phone_number?: string}
 # --technical_contact shape: {email?: string, family_name?: string, given_name?: string}
-export def "partner-customer-create partnerCustomerCreate" [
+export def "partner-customer-create create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2867,6 +2966,7 @@ export def "partner-customer-create partnerCustomerCreate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   address: record # The end customer's address. — shape: {city?: string, country_code?: string, postal_code?: string, region?: string, street?: string}
   application_name: string # The name of the end customer's application. This will be shown to end users when they go through the Plaid Link flow.
@@ -2880,8 +2980,8 @@ export def "partner-customer-create partnerCustomerCreate" [
   --is-diligence-attested: oneof<nothing, bool> # Denotes whether or not the partner has completed attestation of diligence for the end customer to be created.
   legal_entity_name: string # The end customer's legal name. This will be shared with financial institutions as part of the OAuth registration process. It will not be shown to end users.
   --logo: string # Base64-encoded representation of the end customer's logo. Must be a PNG of size 1024x1024 under 4MB. The logo will be shared with financial institutions and shown to the end user during Link flows. A logo is required if `create_link_customization` is `true`. If `create_link_customization` is `false` and the logo is omitted, a stock logo will be used.
-  products: list # The products to be enabled for the end customer.
-  --redirect-uris: list # A list of URIs indicating the destination(s) where a user can be forwarded after completing the Link flow; used to support OAuth authentication flows when launching Link in the browser or via a webview. URIs should not contain any query parameters. When used in Production or Development, URIs must use https. To specify any subdomain, use `*` as a wildcard character, e.g. `https://*.example.com/oauth.html`. To modify redirect URIs for an end customer after creating them, go to the end customer's [API page](https://dashboard.plaid.com/team/api) in the Dashboard.
+  products: list<string> # The products to be enabled for the end customer.
+  --redirect-uris: list<string> # A list of URIs indicating the destination(s) where a user can be forwarded after completing the Link flow; used to support OAuth authentication flows when launching Link in the browser or via a webview. URIs should not contain any query parameters. When used in Production or Development, URIs must use https. To specify any subdomain, use `*` as a wildcard character, e.g. `https://*.example.com/oauth.html`. To modify redirect URIs for an end customer after creating them, go to the end customer's [API page](https://dashboard.plaid.com/team/api) in the Dashboard.
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
   --technical-contact: record # The technical contact for the end customer. Defaults to partner's technical contact if omitted. — shape: {email?: string, family_name?: string, given_name?: string}
   website: string # The end customer's website.
@@ -2890,11 +2990,11 @@ export def "partner-customer-create partnerCustomerCreate" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/partner/customer/create")
-  let body = {address: $address, application_name: $application_name, assets_under_management: $assets_under_management, billing_contact: $billing_contact, client_id: $client_id, company_name: $company_name, create_link_customization: $create_link_customization, customer_support_info: $customer_support_info, is_bank_addendum_completed: $is_bank_addendum_completed, is_diligence_attested: $is_diligence_attested, legal_entity_name: $legal_entity_name, logo: $logo, products: $products, redirect_uris: $redirect_uris, secret: $secret, technical_contact: $technical_contact, website: $website} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"address": $address, "application_name": $application_name, "assets_under_management": $assets_under_management, "billing_contact": $billing_contact, "client_id": $client_id, "company_name": $company_name, "create_link_customization": $create_link_customization, "customer_support_info": $customer_support_info, "is_bank_addendum_completed": $is_bank_addendum_completed, "is_diligence_attested": $is_diligence_attested, "legal_entity_name": $legal_entity_name, "logo": $logo, "products": $products, "redirect_uris": $redirect_uris, "secret": $secret, "technical_contact": $technical_contact, "website": $website} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Enables a Plaid reseller's end customer in the Production environment.
@@ -2902,7 +3002,7 @@ export def "partner-customer-create partnerCustomerCreate" [
 # POST /partner/customer/enable
 # Docs: /api/partner/#partnercustomerenable
 # operationId: partnerCustomerEnable
-export def "partner-customer-enable partnerCustomerEnable" [
+export def "partner-customer-enable enable" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2910,6 +3010,7 @@ export def "partner-customer-enable partnerCustomerEnable" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
   end_customer_client_id: string
@@ -2919,11 +3020,11 @@ export def "partner-customer-enable partnerCustomerEnable" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/partner/customer/enable")
-  let body = {client_id: $client_id, end_customer_client_id: $end_customer_client_id, secret: $secret} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"client_id": $client_id, "end_customer_client_id": $end_customer_client_id, "secret": $secret} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Returns a Plaid reseller's end customer.
@@ -2931,7 +3032,7 @@ export def "partner-customer-enable partnerCustomerEnable" [
 # POST /partner/customer/get
 # Docs: /api/partner/#partnercustomerget
 # operationId: partnerCustomerGet
-export def "partner-customer-get partnerCustomerGet" [
+export def "partner-customer-get get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2939,6 +3040,7 @@ export def "partner-customer-get partnerCustomerGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
   end_customer_client_id: string
@@ -2948,11 +3050,11 @@ export def "partner-customer-get partnerCustomerGet" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/partner/customer/get")
-  let body = {client_id: $client_id, end_customer_client_id: $end_customer_client_id, secret: $secret} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"client_id": $client_id, "end_customer_client_id": $end_customer_client_id, "secret": $secret} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Returns OAuth-institution registration information for a given end customer.
@@ -2960,7 +3062,7 @@ export def "partner-customer-get partnerCustomerGet" [
 # POST /partner/customer/oauth_institutions/get
 # Docs: /api/partner/#partnercustomeroauth_institutionsget
 # operationId: partnerCustomerOauthInstitutionsGet
-export def "partner-customer-oauth-institutions-get partnerCustomerOauthInstitutionsGet" [
+export def "partner-customer-oauth-institutions-get get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2968,6 +3070,7 @@ export def "partner-customer-oauth-institutions-get partnerCustomerOauthInstitut
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
   end_customer_client_id: string
@@ -2977,11 +3080,11 @@ export def "partner-customer-oauth-institutions-get partnerCustomerOauthInstitut
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/partner/customer/oauth_institutions/get")
-  let body = {client_id: $client_id, end_customer_client_id: $end_customer_client_id, secret: $secret} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"client_id": $client_id, "end_customer_client_id": $end_customer_client_id, "secret": $secret} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Removes a Plaid reseller's end customer.
@@ -2989,7 +3092,7 @@ export def "partner-customer-oauth-institutions-get partnerCustomerOauthInstitut
 # POST /partner/customer/remove
 # Docs: /api/partner/#partnercustomerremove
 # operationId: partnerCustomerRemove
-export def "partner-customer-remove partnerCustomerRemove" [
+export def "partner-customer-remove delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2997,6 +3100,7 @@ export def "partner-customer-remove partnerCustomerRemove" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
   end_customer_client_id: string
@@ -3006,11 +3110,11 @@ export def "partner-customer-remove partnerCustomerRemove" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/partner/customer/remove")
-  let body = {client_id: $client_id, end_customer_client_id: $end_customer_client_id, secret: $secret} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"client_id": $client_id, "end_customer_client_id": $end_customer_client_id, "secret": $secret} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Create payment consent
@@ -3020,7 +3124,7 @@ export def "partner-customer-remove partnerCustomerRemove" [
 # operationId: paymentInitiationConsentCreate
 # --constraints shape: {max_payment_amount: any, periodic_amounts: list, valid_date_time?: record}
 # --options shape: {bacs?: any, iban?: string, request_refund_details?: bool}
-export def "payment-initiation-consent-create paymentInitiationConsentCreate" [
+export def "payment-initiation-consent-create create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3028,24 +3132,25 @@ export def "payment-initiation-consent-create paymentInitiationConsentCreate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
   constraints: record # Limitations that will be applied to payments initiated using the payment consent. — shape: {max_payment_amount: any, periodic_amounts: list, valid_date_time?: record}
   --options: record # Additional payment consent options (nullable) — shape: {bacs?: any, iban?: string, request_refund_details?: bool}
   recipient_id: string # The ID of the recipient the payment consent is for. The created consent can be used to transfer funds to this recipient only.
   reference: string # A reference for the payment consent. This must be an alphanumeric string with at most 18 characters and must not contain any special characters.
-  scopes: list # An array of payment consent scopes.
+  scopes: list<string> # An array of payment consent scopes.
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
 ]: any -> record<consent_id: string, request_id: string, status: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/payment_initiation/consent/create")
-  let body = {client_id: $client_id, constraints: $constraints, options: $options, recipient_id: $recipient_id, reference: $reference, scopes: $scopes, secret: $secret} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"client_id": $client_id, "constraints": $constraints, "options": $options, "recipient_id": $recipient_id, "reference": $reference, "scopes": $scopes, "secret": $secret} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Get payment consent
@@ -3053,7 +3158,7 @@ export def "payment-initiation-consent-create paymentInitiationConsentCreate" [
 # POST /payment_initiation/consent/get
 # Docs: /api/products/payment-initiation/#payment_initiationconsentget
 # operationId: paymentInitiationConsentGet
-export def "payment-initiation-consent-get paymentInitiationConsentGet" [
+export def "payment-initiation-consent-get get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3061,6 +3166,7 @@ export def "payment-initiation-consent-get paymentInitiationConsentGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
   consent_id: string # The `consent_id` returned from `/payment_initiation/consent/create`.
@@ -3070,11 +3176,11 @@ export def "payment-initiation-consent-get paymentInitiationConsentGet" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/payment_initiation/consent/get")
-  let body = {client_id: $client_id, consent_id: $consent_id, secret: $secret} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"client_id": $client_id, "consent_id": $consent_id, "secret": $secret} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Execute a single payment using consent
@@ -3083,7 +3189,7 @@ export def "payment-initiation-consent-get paymentInitiationConsentGet" [
 # Docs: /api/products/payment-initiation/#payment_initiationconsentpaymentexecute
 # operationId: paymentInitiationConsentPaymentExecute
 # --amount shape: {currency: "GBP"|"EUR"|"PLN"|"SEK"|"DKK"|"NOK", value: float}
-export def "payment-initiation-consent-payment-execute paymentInitiationConsentPaymentExecute" [
+export def "payment-initiation-consent-payment-execute create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3091,22 +3197,23 @@ export def "payment-initiation-consent-payment-execute paymentInitiationConsentP
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   amount: record # The amount and currency of a payment — shape: {currency: "GBP"|"EUR"|"PLN"|"SEK"|"DKK"|"NOK", value: float}
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
   consent_id: string # The consent ID.
-  idempotency_key: string # A random key provided by the client, per unique consent payment. Maximum of 128 characters.  The API supports idempotency for safely retrying requests without accidentally performing the same operation twice. If a request to execute a consent payment fails due to a network connection error, you can retry the request with the same idempotency key to guarantee that only a single payment is created. If the request was successfully processed, it will prevent any payment that uses the same idempotency key, and was received within 24 hours of the first request, from being processed.
+  idempotency_key: string # A random key provided by the client, per unique consent payment. Maximum of 128 characters. The API supports idempotency for safely retrying requests without accidentally performing the same operation twice. If a request to execute a consent payment fails due to a network connection error, you can retry the request with the same idempotency key to guarantee that only a single payment is created. If the request was successfully processed, it will prevent any payment that uses the same idempotency key, and was received within 24 hours of the first request, from being processed.
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
 ]: any -> record<payment_id: string, request_id: string, status: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/payment_initiation/consent/payment/execute")
-  let body = {amount: $amount, client_id: $client_id, consent_id: $consent_id, idempotency_key: $idempotency_key, secret: $secret} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"amount": $amount, "client_id": $client_id, "consent_id": $consent_id, "idempotency_key": $idempotency_key, "secret": $secret} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Revoke payment consent
@@ -3114,7 +3221,7 @@ export def "payment-initiation-consent-payment-execute paymentInitiationConsentP
 # POST /payment_initiation/consent/revoke
 # Docs: /api/products/payment-initiation/#payment_initiationconsentrevoke
 # operationId: paymentInitiationConsentRevoke
-export def "payment-initiation-consent-revoke paymentInitiationConsentRevoke" [
+export def "payment-initiation-consent-revoke delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3122,6 +3229,7 @@ export def "payment-initiation-consent-revoke paymentInitiationConsentRevoke" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
   consent_id: string # The consent ID.
@@ -3131,11 +3239,11 @@ export def "payment-initiation-consent-revoke paymentInitiationConsentRevoke" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/payment_initiation/consent/revoke")
-  let body = {client_id: $client_id, consent_id: $consent_id, secret: $secret} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"client_id": $client_id, "consent_id": $consent_id, "secret": $secret} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Create a payment
@@ -3145,7 +3253,7 @@ export def "payment-initiation-consent-revoke paymentInitiationConsentRevoke" [
 # operationId: paymentInitiationPaymentCreate
 # --amount shape: {currency: "GBP"|"EUR"|"PLN"|"SEK"|"DKK"|"NOK", value: float}
 # --options shape: {bacs?: any, iban?: string, request_refund_details?: bool, scheme?: ""|"LOCAL_DEFAULT"|"LOCAL_INSTANT"|"SEPA_CREDIT_TRANSFER"|"SEPA_CREDIT_TRANSFER_INSTANT"}
-export def "payment-initiation-payment-create paymentInitiationPaymentCreate" [
+export def "payment-initiation-payment-create create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3153,6 +3261,7 @@ export def "payment-initiation-payment-create paymentInitiationPaymentCreate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   amount: record # The amount and currency of a payment — shape: {currency: "GBP"|"EUR"|"PLN"|"SEK"|"DKK"|"NOK", value: float}
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
@@ -3166,11 +3275,11 @@ export def "payment-initiation-payment-create paymentInitiationPaymentCreate" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/payment_initiation/payment/create")
-  let body = {amount: $amount, client_id: $client_id, options: $options, recipient_id: $recipient_id, reference: $reference, schedule: $schedule, secret: $secret} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"amount": $amount, "client_id": $client_id, "options": $options, "recipient_id": $recipient_id, "reference": $reference, "schedule": $schedule, "secret": $secret} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Get payment details
@@ -3178,7 +3287,7 @@ export def "payment-initiation-payment-create paymentInitiationPaymentCreate" [
 # POST /payment_initiation/payment/get
 # Docs: /api/products/payment-initiation/#payment_initiationpaymentget
 # operationId: paymentInitiationPaymentGet
-export def "payment-initiation-payment-get paymentInitiationPaymentGet" [
+export def "payment-initiation-payment-get get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3186,6 +3295,7 @@ export def "payment-initiation-payment-get paymentInitiationPaymentGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
   payment_id: string # The `payment_id` returned from `/payment_initiation/payment/create`.
@@ -3195,11 +3305,11 @@ export def "payment-initiation-payment-get paymentInitiationPaymentGet" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/payment_initiation/payment/get")
-  let body = {client_id: $client_id, payment_id: $payment_id, secret: $secret} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"client_id": $client_id, "payment_id": $payment_id, "secret": $secret} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # List payments
@@ -3207,7 +3317,7 @@ export def "payment-initiation-payment-get paymentInitiationPaymentGet" [
 # POST /payment_initiation/payment/list
 # Docs: /api/products/payment-initiation/#payment_initiationpaymentlist
 # operationId: paymentInitiationPaymentList
-export def "payment-initiation-payment-list paymentInitiationPaymentList" [
+export def "payment-initiation-payment-list list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3215,6 +3325,7 @@ export def "payment-initiation-payment-list paymentInitiationPaymentList" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
   --consent-id: string # The consent ID. If specified, only payments, executed using this consent, will be returned. (nullable)
@@ -3226,11 +3337,11 @@ export def "payment-initiation-payment-list paymentInitiationPaymentList" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/payment_initiation/payment/list")
-  let body = {client_id: $client_id, consent_id: $consent_id, count: $count, cursor: $cursor, secret: $secret} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"client_id": $client_id, "consent_id": $consent_id, "count": $count, "cursor": $cursor, "secret": $secret} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Reverse an existing payment
@@ -3238,7 +3349,7 @@ export def "payment-initiation-payment-list paymentInitiationPaymentList" [
 # POST /payment_initiation/payment/reverse
 # Docs: /api/products/payment-initiation/#payment_initiationpaymentreverse
 # operationId: paymentInitiationPaymentReverse
-export def "payment-initiation-payment-reverse paymentInitiationPaymentReverse" [
+export def "payment-initiation-payment-reverse create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3246,10 +3357,11 @@ export def "payment-initiation-payment-reverse paymentInitiationPaymentReverse" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --amount: any # The amount and currency of a payment
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
-  idempotency_key: string # A random key provided by the client, per unique wallet transaction. Maximum of 128 characters.  The API supports idempotency for safely retrying requests without accidentally performing the same operation twice. If a request to execute a wallet transaction fails due to a network connection error, then after a minimum delay of one minute, you can retry the request with the same idempotency key to guarantee that only a single wallet transaction is created. If the request was successfully processed, it will prevent any transaction that uses the same idempotency key, and was received within 24 hours of the first request, from being processed.
+  idempotency_key: string # A random key provided by the client, per unique wallet transaction. Maximum of 128 characters. The API supports idempotency for safely retrying requests without accidentally performing the same operation twice. If a request to execute a wallet transaction fails due to a network connection error, then after a minimum delay of one minute, you can retry the request with the same idempotency key to guarantee that only a single wallet transaction is created. If the request was successfully processed, it will prevent any transaction that uses the same idempotency key, and was received within 24 hours of the first request, from being processed.
   payment_id: string # The ID of the payment to reverse
   reference: string # A reference for the refund. This must be an alphanumeric string with 6 to 18 characters and must not contain any special characters or spaces.
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
@@ -3258,11 +3370,11 @@ export def "payment-initiation-payment-reverse paymentInitiationPaymentReverse" 
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/payment_initiation/payment/reverse")
-  let body = {amount: $amount, client_id: $client_id, idempotency_key: $idempotency_key, payment_id: $payment_id, reference: $reference, secret: $secret} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"amount": $amount, "client_id": $client_id, "idempotency_key": $idempotency_key, "payment_id": $payment_id, "reference": $reference, "secret": $secret} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Create payment token
@@ -3272,7 +3384,7 @@ export def "payment-initiation-payment-reverse paymentInitiationPaymentReverse" 
 # Docs: /link/maintain-legacy-integration/#creating-a-payment-token
 # operationId: createPaymentToken
 @deprecated
-export def "payment-initiation-payment-token-create createPaymentToken" [
+export def "payment-initiation-payment-token-create create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3280,6 +3392,7 @@ export def "payment-initiation-payment-token-create createPaymentToken" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
   payment_id: string # The `payment_id` returned from `/payment_initiation/payment/create`.
@@ -3289,11 +3402,11 @@ export def "payment-initiation-payment-token-create createPaymentToken" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/payment_initiation/payment/token/create")
-  let body = {client_id: $client_id, payment_id: $payment_id, secret: $secret} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"client_id": $client_id, "payment_id": $payment_id, "secret": $secret} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Create payment recipient
@@ -3301,8 +3414,8 @@ export def "payment-initiation-payment-token-create createPaymentToken" [
 # POST /payment_initiation/recipient/create
 # Docs: /api/products/payment-initiation/#payment_initiationrecipientcreate
 # operationId: paymentInitiationRecipientCreate
-# --address shape: {city: string, country: string, postal_code: string, street: list}
-export def "payment-initiation-recipient-create paymentInitiationRecipientCreate" [
+# --address shape: {city: string, country: string, postal_code: string, street: list<string>}
+export def "payment-initiation-recipient-create create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3310,8 +3423,9 @@ export def "payment-initiation-recipient-create paymentInitiationRecipientCreate
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --address: record # The optional address of the payment recipient. (nullable) — shape: {city: string, country: string, postal_code: string, street: list}
+  --address: record # The optional address of the payment recipient. (nullable) — shape: {city: string, country: string, postal_code: string, street: list<string>}
   --bacs: any # An object containing a BACS account number and sort code. If an IBAN is not provided or if this recipient needs to accept domestic GBP-denominated payments, BACS data is required. (nullable)
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
   --iban: string # The International Bank Account Number (IBAN) for the recipient. If BACS data is not provided, an IBAN is required. (nullable)
@@ -3322,11 +3436,11 @@ export def "payment-initiation-recipient-create paymentInitiationRecipientCreate
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/payment_initiation/recipient/create")
-  let body = {address: $address, bacs: $bacs, client_id: $client_id, iban: $iban, name: $name, secret: $secret} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"address": $address, "bacs": $bacs, "client_id": $client_id, "iban": $iban, "name": $name, "secret": $secret} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Get payment recipient
@@ -3334,7 +3448,7 @@ export def "payment-initiation-recipient-create paymentInitiationRecipientCreate
 # POST /payment_initiation/recipient/get
 # Docs: /api/products/payment-initiation/#payment_initiationrecipientget
 # operationId: paymentInitiationRecipientGet
-export def "payment-initiation-recipient-get paymentInitiationRecipientGet" [
+export def "payment-initiation-recipient-get get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3342,6 +3456,7 @@ export def "payment-initiation-recipient-get paymentInitiationRecipientGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
   recipient_id: string # The ID of the recipient
@@ -3351,11 +3466,11 @@ export def "payment-initiation-recipient-get paymentInitiationRecipientGet" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/payment_initiation/recipient/get")
-  let body = {client_id: $client_id, recipient_id: $recipient_id, secret: $secret} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"client_id": $client_id, "recipient_id": $recipient_id, "secret": $secret} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # List payment recipients
@@ -3363,7 +3478,7 @@ export def "payment-initiation-recipient-get paymentInitiationRecipientGet" [
 # POST /payment_initiation/recipient/list
 # Docs: /api/products/payment-initiation/#payment_initiationrecipientlist
 # operationId: paymentInitiationRecipientList
-export def "payment-initiation-recipient-list paymentInitiationRecipientList" [
+export def "payment-initiation-recipient-list list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3371,6 +3486,7 @@ export def "payment-initiation-recipient-list paymentInitiationRecipientList" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
@@ -3379,11 +3495,11 @@ export def "payment-initiation-recipient-list paymentInitiationRecipientList" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/payment_initiation/recipient/list")
-  let body = {client_id: $client_id, secret: $secret} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"client_id": $client_id, "secret": $secret} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Create payment profile
@@ -3391,7 +3507,7 @@ export def "payment-initiation-recipient-list paymentInitiationRecipientList" [
 # POST /payment_profile/create
 # Docs: /api/products/transfer/#payment_profilecreate
 # operationId: paymentProfileCreate
-export def "payment-profile-create paymentProfileCreate" [
+export def "payment-profile-create create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3399,6 +3515,7 @@ export def "payment-profile-create paymentProfileCreate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
@@ -3407,11 +3524,11 @@ export def "payment-profile-create paymentProfileCreate" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/payment_profile/create")
-  let body = {client_id: $client_id, secret: $secret} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"client_id": $client_id, "secret": $secret} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Get payment profile
@@ -3419,7 +3536,7 @@ export def "payment-profile-create paymentProfileCreate" [
 # POST /payment_profile/get
 # Docs: /api/products/transfer/#payment_profileget
 # operationId: paymentProfileGet
-export def "payment-profile-get paymentProfileGet" [
+export def "payment-profile-get get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3427,6 +3544,7 @@ export def "payment-profile-get paymentProfileGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
   payment_profile_token: string # A payment profile token associated with the Payment Profile data that is being requested.
@@ -3436,11 +3554,11 @@ export def "payment-profile-get paymentProfileGet" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/payment_profile/get")
-  let body = {client_id: $client_id, payment_profile_token: $payment_profile_token, secret: $secret} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"client_id": $client_id, "payment_profile_token": $payment_profile_token, "secret": $secret} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Remove payment profile
@@ -3448,7 +3566,7 @@ export def "payment-profile-get paymentProfileGet" [
 # POST /payment_profile/remove
 # Docs: /api/products/transfer/#payment_profileremove
 # operationId: paymentProfileRemove
-export def "payment-profile-remove paymentProfileRemove" [
+export def "payment-profile-remove delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3456,6 +3574,7 @@ export def "payment-profile-remove paymentProfileRemove" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
   payment_profile_token: string # A payment profile token associated with the Payment Profile data that is being requested.
@@ -3465,11 +3584,11 @@ export def "payment-profile-remove paymentProfileRemove" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/payment_profile/remove")
-  let body = {client_id: $client_id, payment_profile_token: $payment_profile_token, secret: $secret} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"client_id": $client_id, "payment_profile_token": $payment_profile_token, "secret": $secret} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Create Apex bank account token
@@ -3477,7 +3596,7 @@ export def "payment-profile-remove paymentProfileRemove" [
 # POST /processor/apex/processor_token/create
 # Docs: /none/
 # operationId: processorApexProcessorTokenCreate
-export def "processor-apex-processor-token-create processorApexProcessorTokenCreate" [
+export def "processor-apex-processor-token-create create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3485,6 +3604,7 @@ export def "processor-apex-processor-token-create processorApexProcessorTokenCre
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   access_token: string # The access token associated with the Item data is being requested for.
   account_id: string # The `account_id` value obtained from the `onSuccess` callback in Link
@@ -3495,11 +3615,11 @@ export def "processor-apex-processor-token-create processorApexProcessorTokenCre
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/processor/apex/processor_token/create")
-  let body = {access_token: $access_token, account_id: $account_id, client_id: $client_id, secret: $secret} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"access_token": $access_token, "account_id": $account_id, "client_id": $client_id, "secret": $secret} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Retrieve Auth data
@@ -3507,7 +3627,7 @@ export def "processor-apex-processor-token-create processorApexProcessorTokenCre
 # POST /processor/auth/get
 # Docs: /api/processors/#processorauthget
 # operationId: processorAuthGet
-export def "processor-auth-get processorAuthGet" [
+export def "processor-auth-get get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3515,20 +3635,21 @@ export def "processor-auth-get processorAuthGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
-  processor_token: string # The processor token obtained from the Plaid integration partner. Processor tokens are in the format: `processor-<environment>-<identifier>`
+  processor_token: string # The processor token obtained from the Plaid integration partner. Processor tokens are in the format: `processor--`
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
 ]: any -> record<account: record<account_id: string, balances: record<available: float, current: float, iso_currency_code: string, last_updated_datetime: string, limit: float, unofficial_currency_code: string>, mask: string, name: string, official_name: string, persistent_account_id: string, subtype: string, type: string, verification_status: string>, numbers: record<ach: record<account: string, account_id: string, can_transfer_in: bool, can_transfer_out: bool, routing: string, wire_routing: string>, bacs: record<account: string, account_id: string, sort_code: string>, eft: record<account: string, account_id: string, branch: string, institution: string>, international: record<account_id: string, bic: string, iban: string>>, request_id: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/processor/auth/get")
-  let body = {client_id: $client_id, processor_token: $processor_token, secret: $secret} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"client_id": $client_id, "processor_token": $processor_token, "secret": $secret} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Retrieve Balance data
@@ -3537,7 +3658,7 @@ export def "processor-auth-get processorAuthGet" [
 # Docs: /api/processors/#processorbalanceget
 # operationId: processorBalanceGet
 # --options shape: {min_last_updated_datetime?: string}
-export def "processor-balance-get processorBalanceGet" [
+export def "processor-balance-get get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3545,21 +3666,22 @@ export def "processor-balance-get processorBalanceGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
   --options: record # An optional object to filter `/processor/balance/get` results. — shape: {min_last_updated_datetime?: string}
-  processor_token: string # The processor token obtained from the Plaid integration partner. Processor tokens are in the format: `processor-<environment>-<identifier>`
+  processor_token: string # The processor token obtained from the Plaid integration partner. Processor tokens are in the format: `processor--`
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
 ]: any -> record<account: record<account_id: string, balances: record<available: float, current: float, iso_currency_code: string, last_updated_datetime: string, limit: float, unofficial_currency_code: string>, mask: string, name: string, official_name: string, persistent_account_id: string, subtype: string, type: string, verification_status: string>, request_id: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/processor/balance/get")
-  let body = {client_id: $client_id, options: $options, processor_token: $processor_token, secret: $secret} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"client_id": $client_id, "options": $options, "processor_token": $processor_token, "secret": $secret} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Create a bank transfer as a processor
@@ -3568,7 +3690,7 @@ export def "processor-balance-get processorBalanceGet" [
 # Docs: /api/processors/#bank_transfercreate
 # operationId: processorBankTransferCreate
 # --user shape: {email_address?: string, legal_name: string}
-export def "processor-bank-transfer-create processorBankTransferCreate" [
+export def "processor-bank-transfer-create create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3576,31 +3698,32 @@ export def "processor-bank-transfer-create processorBankTransferCreate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ach-class: string@ach-class-completer # Specifies the use case of the transfer. Required for transfers on an ACH network.  `"ccd"` - Corporate Credit or Debit - fund transfer between two corporate bank accounts  `"ppd"` - Prearranged Payment or Deposit - the transfer is part of a pre-existing relationship with a consumer, eg. bill payment  `"tel"` - Telephone-Initiated Entry  `"web"` - Internet-Initiated Entry - debits from a consumer’s account where their authorization is obtained over the Internet
+  --ach-class: string@ach-class-completer # Specifies the use case of the transfer. Required for transfers on an ACH network. `"ccd"` - Corporate Credit or Debit - fund transfer between two corporate bank accounts `"ppd"` - Prearranged Payment or Deposit - the transfer is part of a pre-existing relationship with a consumer, eg. bill payment `"tel"` - Telephone-Initiated Entry `"web"` - Internet-Initiated Entry - debits from a consumer’s account where their authorization is obtained over the Internet
   amount: string # The amount of the bank transfer (decimal string with two digits of precision e.g. "10.00").
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
   --custom-tag: string # An arbitrary string provided by the client for storage with the bank transfer. May be up to 100 characters. (nullable)
   description: string # The transfer description. Maximum of 10 characters.
-  idempotency_key: string # A random key provided by the client, per unique bank transfer. Maximum of 50 characters.  The API supports idempotency for safely retrying requests without accidentally performing the same operation twice. For example, if a request to create a bank transfer fails due to a network connection error, you can retry the request with the same idempotency key to guarantee that only a single bank transfer is created.
+  idempotency_key: string # A random key provided by the client, per unique bank transfer. Maximum of 50 characters. The API supports idempotency for safely retrying requests without accidentally performing the same operation twice. For example, if a request to create a bank transfer fails due to a network connection error, you can retry the request with the same idempotency key to guarantee that only a single bank transfer is created.
   iso_currency_code: string # The currency of the transfer amount – should be set to "USD".
-  --metadata: record # The Metadata object is a mapping of client-provided string fields to any string value. The following limitations apply: The JSON values must be Strings (no nested JSON objects allowed) Only ASCII characters may be used Maximum of 50 key/value pairs Maximum key length of 40 characters Maximum value length of 500 characters  (nullable)
+  --metadata: record # The Metadata object is a mapping of client-provided string fields to any string value. The following limitations apply: The JSON values must be Strings (no nested JSON objects allowed) Only ASCII characters may be used Maximum of 50 key/value pairs Maximum key length of 40 characters Maximum value length of 500 characters (nullable)
   network: string@network-completer # The network or rails used for the transfer. Valid options are `ach`, `same-day-ach`, or `wire`.
   --origination-account-id: string # Plaid’s unique identifier for the origination account for this transfer. If you have more than one origination account, this value must be specified. (nullable)
-  processor_token: string # The processor token obtained from the Plaid integration partner. Processor tokens are in the format: `processor-<environment>-<identifier>`
+  processor_token: string # The processor token obtained from the Plaid integration partner. Processor tokens are in the format: `processor--`
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
-  type: string@type-completer # The type of bank transfer. This will be either `debit` or `credit`.  A `debit` indicates a transfer of money into the origination account; a `credit` indicates a transfer of money out of the origination account.
+  type: string@type-completer # The type of bank transfer. This will be either `debit` or `credit`. A `debit` indicates a transfer of money into the origination account; a `credit` indicates a transfer of money out of the origination account.
   user: record # The legal name and other information for the account holder. — shape: {email_address?: string, legal_name: string}
 ]: any -> record<bank_transfer: record<account_id: string, ach_class: string, amount: string, cancellable: bool, created: string, custom_tag: string, description: string, direction: string, failure_reason: record<ach_return_code: string, description: string>, id: string, iso_currency_code: string, metadata: record, network: string, origination_account_id: string, status: string, type: string, user: record<email_address: string, legal_name: string, routing_number: string>>, request_id: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/processor/bank_transfer/create")
-  let body = {ach_class: $ach_class, amount: $amount, client_id: $client_id, custom_tag: $custom_tag, description: $description, idempotency_key: $idempotency_key, iso_currency_code: $iso_currency_code, metadata: $metadata, network: $network, origination_account_id: $origination_account_id, processor_token: $processor_token, secret: $secret, type: $type, user: $user} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"ach_class": $ach_class, "amount": $amount, "client_id": $client_id, "custom_tag": $custom_tag, "description": $description, "idempotency_key": $idempotency_key, "iso_currency_code": $iso_currency_code, "metadata": $metadata, "network": $network, "origination_account_id": $origination_account_id, "processor_token": $processor_token, "secret": $secret, "type": $type, "user": $user} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Retrieve Identity data
@@ -3608,7 +3731,7 @@ export def "processor-bank-transfer-create processorBankTransferCreate" [
 # POST /processor/identity/get
 # Docs: /api/processors/#processoridentityget
 # operationId: processorIdentityGet
-export def "processor-identity-get processorIdentityGet" [
+export def "processor-identity-get get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3616,20 +3739,21 @@ export def "processor-identity-get processorIdentityGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
-  processor_token: string # The processor token obtained from the Plaid integration partner. Processor tokens are in the format: `processor-<environment>-<identifier>`
+  processor_token: string # The processor token obtained from the Plaid integration partner. Processor tokens are in the format: `processor--`
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
 ]: any -> record<account: record<account_id: string, balances: record<available: float, current: float, iso_currency_code: string, last_updated_datetime: string, limit: float, unofficial_currency_code: string>, mask: string, name: string, official_name: string, persistent_account_id: string, subtype: string, type: string, verification_status: string, owners: list<record>>, request_id: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/processor/identity/get")
-  let body = {client_id: $client_id, processor_token: $processor_token, secret: $secret} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"client_id": $client_id, "processor_token": $processor_token, "secret": $secret} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Report whether you initiated an ACH transaction
@@ -3637,7 +3761,7 @@ export def "processor-identity-get processorIdentityGet" [
 # POST /processor/signal/decision/report
 # Docs: /api/processors/#processorsignaldecisionreport
 # operationId: processorSignalDecisionReport
-export def "processor-signal-decision-report processorSignalDecisionReport" [
+export def "processor-signal-decision-report create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3645,26 +3769,27 @@ export def "processor-signal-decision-report processorSignalDecisionReport" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --amount-instantly-available: float # The amount (in USD) made available to your customers instantly following the debit transaction. It could be a partial amount of the requested transaction (example: 102.05). (nullable, format: double)
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
   client_transaction_id: string # Must be the same as the `client_transaction_id` supplied when calling `/signal/evaluate`
-  --days-funds-on-hold: int # The actual number of days (hold time) since the ACH debit transaction that you wait before making funds available to your customers. The holding time could affect the ACH return rate.  For example, use 0 if you make funds available to your customers instantly or the same day following the debit transaction, or 1 if you make funds available the next day following the debit initialization. (nullable)
-  --decision-outcome: string@decision-outcome-completer # The payment decision from the risk assessment.  `APPROVE`: approve the transaction without requiring further actions from your customers. For example, use this field if you are placing a standard hold for all the approved transactions before making funds available to your customers. You should also use this field if you decide to accelerate the fund availability for your customers.  `REVIEW`: the transaction requires manual review  `REJECT`: reject the transaction  `TAKE_OTHER_RISK_MEASURES`: for example, placing a longer hold on funds than those approved transactions or introducing customer frictions such as step-up verification/authentication  `NOT_EVALUATED`: if only logging the Signal results without using them  Possible values:  `APPROVE`, `REVIEW`, `REJECT`, `TAKE_OTHER_RISK_MEASURES`, `NOT_EVALUATED`  (nullable)
-  --initiated: oneof<nothing, bool> # `true` if the ACH transaction was initiated, `false` otherwise.  This field must be returned as a boolean. If formatted incorrectly, this will result in an [`INVALID_FIELD`](/docs/errors/invalid-request/#invalid_field) error.
-  --payment-method: string@payment-method-completer # The payment method to complete the transaction after the risk assessment. It may be different from the default payment method.  `SAME_DAY_ACH`: Same Day ACH by NACHA. The debit transaction is processed and settled on the same day  `NEXT_DAY_ACH`: Next Day ACH settlement for debit transactions, offered by some payment processors  `STANDARD_ACH`: standard ACH by NACHA  `REAL_TIME_PAYMENTS`: real-time payments such as RTP and FedNow  `DEBIT_CARD`: if the default payment is over debit card networks  `MULTIPLE_PAYMENT_METHODS`: if there is no default debit rail or there are multiple payment methods  Possible values: `SAME_DAY_ACH`, `NEXT_DAY_ACH`, `STANDARD_ACH`, `REAL_TIME_PAYMENTS`, `DEBIT_CARD`, `MULTIPLE_PAYMENT_METHODS`  (nullable)
-  processor_token: string # The processor token obtained from the Plaid integration partner. Processor tokens are in the format: `processor-<environment>-<identifier>`
+  --days-funds-on-hold: int # The actual number of days (hold time) since the ACH debit transaction that you wait before making funds available to your customers. The holding time could affect the ACH return rate. For example, use 0 if you make funds available to your customers instantly or the same day following the debit transaction, or 1 if you make funds available the next day following the debit initialization. (nullable)
+  --decision-outcome: string@decision-outcome-completer # The payment decision from the risk assessment. `APPROVE`: approve the transaction without requiring further actions from your customers. For example, use this field if you are placing a standard hold for all the approved transactions before making funds available to your customers. You should also use this field if you decide to accelerate the fund availability for your customers. `REVIEW`: the transaction requires manual review `REJECT`: reject the transaction `TAKE_OTHER_RISK_MEASURES`: for example, placing a longer hold on funds than those approved transactions or introducing customer frictions such as step-up verification/authentication `NOT_EVALUATED`: if only logging the Signal results without using them Possible values: `APPROVE`, `REVIEW`, `REJECT`, `TAKE_OTHER_RISK_MEASURES`, `NOT_EVALUATED` (nullable)
+  --initiated: oneof<nothing, bool> # `true` if the ACH transaction was initiated, `false` otherwise. This field must be returned as a boolean. If formatted incorrectly, this will result in an [`INVALID_FIELD`](/docs/errors/invalid-request/#invalid_field) error.
+  --payment-method: string@payment-method-completer # The payment method to complete the transaction after the risk assessment. It may be different from the default payment method. `SAME_DAY_ACH`: Same Day ACH by NACHA. The debit transaction is processed and settled on the same day `NEXT_DAY_ACH`: Next Day ACH settlement for debit transactions, offered by some payment processors `STANDARD_ACH`: standard ACH by NACHA `REAL_TIME_PAYMENTS`: real-time payments such as RTP and FedNow `DEBIT_CARD`: if the default payment is over debit card networks `MULTIPLE_PAYMENT_METHODS`: if there is no default debit rail or there are multiple payment methods Possible values: `SAME_DAY_ACH`, `NEXT_DAY_ACH`, `STANDARD_ACH`, `REAL_TIME_PAYMENTS`, `DEBIT_CARD`, `MULTIPLE_PAYMENT_METHODS` (nullable)
+  processor_token: string # The processor token obtained from the Plaid integration partner. Processor tokens are in the format: `processor--`
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
 ]: any -> record<request_id: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/processor/signal/decision/report")
-  let body = {amount_instantly_available: $amount_instantly_available, client_id: $client_id, client_transaction_id: $client_transaction_id, days_funds_on_hold: $days_funds_on_hold, decision_outcome: $decision_outcome, initiated: $initiated, payment_method: $payment_method, processor_token: $processor_token, secret: $secret} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"amount_instantly_available": $amount_instantly_available, "client_id": $client_id, "client_transaction_id": $client_transaction_id, "days_funds_on_hold": $days_funds_on_hold, "decision_outcome": $decision_outcome, "initiated": $initiated, "payment_method": $payment_method, "processor_token": $processor_token, "secret": $secret} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Evaluate a planned ACH transaction
@@ -3674,7 +3799,7 @@ export def "processor-signal-decision-report processorSignalDecisionReport" [
 # operationId: processorSignalEvaluate
 # --device shape: {ip_address?: string, user_agent?: string}
 # --user shape: {address?: record, email_address?: string, name?: record, phone_number?: string}
-export def "processor-signal-evaluate processorSignalEvaluate" [
+export def "processor-signal-evaluate create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3682,15 +3807,16 @@ export def "processor-signal-evaluate processorSignalEvaluate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   amount: float # The transaction amount, in USD (e.g. `102.05`) (format: double)
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
   client_transaction_id: string # The unique ID that you would like to use to refer to this transaction. For your convenience mapping your internal data, you could use your internal ID/identifier for this transaction. The max length for this field is 36 characters.
   --client-user-id: string # A unique ID that identifies the end user in your system. This ID is used to correlate requests by a user with multiple Items. The max length for this field is 36 characters. Personally identifiable information, such as an email address or phone number, should not be used in the `client_user_id`.
-  --default-payment-method: string # The default ACH or non-ACH payment method to complete the transaction. `SAME_DAY_ACH`: Same Day ACH by NACHA. The debit transaction is processed and settled on the same day `NEXT_DAY_ACH`: Next Day ACH settlement for debit transactions, offered by some payment processors `STANDARD_ACH`: standard ACH by NACHA `REAL_TIME_PAYMENTS`: real-time payments such as RTP and FedNow `DEBIT_CARD`: if the default payment is over debit card networks `MULTIPLE_PAYMENT_METHODS`: if there is no default debit rail or there are multiple payment methods Possible values:  `SAME_DAY_ACH`, `NEXT_DAY_ACH`, `STANDARD_ACH`, `REAL_TIME_PAYMENTS`, `DEBIT_CARD`, `MULTIPLE_PAYMENT_METHODS` (nullable)
+  --default-payment-method: string # The default ACH or non-ACH payment method to complete the transaction. `SAME_DAY_ACH`: Same Day ACH by NACHA. The debit transaction is processed and settled on the same day `NEXT_DAY_ACH`: Next Day ACH settlement for debit transactions, offered by some payment processors `STANDARD_ACH`: standard ACH by NACHA `REAL_TIME_PAYMENTS`: real-time payments such as RTP and FedNow `DEBIT_CARD`: if the default payment is over debit card networks `MULTIPLE_PAYMENT_METHODS`: if there is no default debit rail or there are multiple payment methods Possible values: `SAME_DAY_ACH`, `NEXT_DAY_ACH`, `STANDARD_ACH`, `REAL_TIME_PAYMENTS`, `DEBIT_CARD`, `MULTIPLE_PAYMENT_METHODS` (nullable)
   --device: record # Details about the end user's device — shape: {ip_address?: string, user_agent?: string}
-  --is-recurring: oneof<nothing, bool> # **true** if the ACH transaction is a recurring transaction; **false** otherwise  (nullable)
-  processor_token: string # The processor token obtained from the Plaid integration partner. Processor tokens are in the format: `processor-<environment>-<identifier>`
+  --is-recurring: oneof<nothing, bool> # **true** if the ACH transaction is a recurring transaction; **false** otherwise (nullable)
+  processor_token: string # The processor token obtained from the Plaid integration partner. Processor tokens are in the format: `processor--`
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
   --user: record # Details about the end user initiating the transaction (i.e., the account holder). — shape: {address?: record, email_address?: string, name?: record, phone_number?: string}
   --user-present: oneof<nothing, bool> # `true` if the end user is present while initiating the ACH transfer and the endpoint is being called; `false` otherwise (for example, when the ACH transfer is scheduled and the end user is not present, or you call this endpoint after the ACH transfer but before submitting the Nacha file for ACH processing). (nullable)
@@ -3699,11 +3825,11 @@ export def "processor-signal-evaluate processorSignalEvaluate" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/processor/signal/evaluate")
-  let body = {amount: $amount, client_id: $client_id, client_transaction_id: $client_transaction_id, client_user_id: $client_user_id, default_payment_method: $default_payment_method, device: $device, is_recurring: $is_recurring, processor_token: $processor_token, secret: $secret, user: $user, user_present: $user_present} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"amount": $amount, "client_id": $client_id, "client_transaction_id": $client_transaction_id, "client_user_id": $client_user_id, "default_payment_method": $default_payment_method, "device": $device, "is_recurring": $is_recurring, "processor_token": $processor_token, "secret": $secret, "user": $user, "user_present": $user_present} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Report a return for an ACH transaction
@@ -3711,7 +3837,7 @@ export def "processor-signal-evaluate processorSignalEvaluate" [
 # POST /processor/signal/return/report
 # Docs: /api/processors/#processorsignalreturnreport
 # operationId: processorSignalReturnReport
-export def "processor-signal-return-report processorSignalReturnReport" [
+export def "processor-signal-return-report create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3719,11 +3845,12 @@ export def "processor-signal-return-report processorSignalReturnReport" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
   client_transaction_id: string # Must be the same as the `client_transaction_id` supplied when calling `/processor/signal/evaluate`
-  processor_token: string # The processor token obtained from the Plaid integration partner. Processor tokens are in the format: `processor-<environment>-<identifier>`
-  return_code: string # Must be a valid ACH return code (e.g. "R01")  If formatted incorrectly, this will result in an [`INVALID_FIELD`](/docs/errors/invalid-request/#invalid_field) error.
+  processor_token: string # The processor token obtained from the Plaid integration partner. Processor tokens are in the format: `processor--`
+  return_code: string # Must be a valid ACH return code (e.g. "R01") If formatted incorrectly, this will result in an [`INVALID_FIELD`](/docs/errors/invalid-request/#invalid_field) error.
   --returned-at: string # Date and time when you receive the returns from your payment processors, in ISO 8601 format (`YYYY-MM-DDTHH:mm:ssZ`). (nullable, format: date-time)
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
 ]: any -> record<request_id: string> {
@@ -3731,11 +3858,11 @@ export def "processor-signal-return-report processorSignalReturnReport" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/processor/signal/return/report")
-  let body = {client_id: $client_id, client_transaction_id: $client_transaction_id, processor_token: $processor_token, return_code: $return_code, returned_at: $returned_at, secret: $secret} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"client_id": $client_id, "client_transaction_id": $client_transaction_id, "processor_token": $processor_token, "return_code": $return_code, "returned_at": $returned_at, "secret": $secret} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Create Stripe bank account token
@@ -3743,7 +3870,7 @@ export def "processor-signal-return-report processorSignalReturnReport" [
 # POST /processor/stripe/bank_account_token/create
 # Docs: /api/processors/#processorstripebank_account_tokencreate
 # operationId: processorStripeBankAccountTokenCreate
-export def "processor-stripe-bank-account-token-create processorStripeBankAccountTokenCreate" [
+export def "processor-stripe-bank-account-token-create create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3751,6 +3878,7 @@ export def "processor-stripe-bank-account-token-create processorStripeBankAccoun
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   access_token: string # The access token associated with the Item data is being requested for.
   account_id: string # The `account_id` value obtained from the `onSuccess` callback in Link
@@ -3761,11 +3889,11 @@ export def "processor-stripe-bank-account-token-create processorStripeBankAccoun
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/processor/stripe/bank_account_token/create")
-  let body = {access_token: $access_token, account_id: $account_id, client_id: $client_id, secret: $secret} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"access_token": $access_token, "account_id": $account_id, "client_id": $client_id, "secret": $secret} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Create processor token
@@ -3773,7 +3901,7 @@ export def "processor-stripe-bank-account-token-create processorStripeBankAccoun
 # POST /processor/token/create
 # Docs: /api/processors/#processortokencreate
 # operationId: processorTokenCreate
-export def "processor-token-create processorTokenCreate" [
+export def "processor-token-create create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3781,6 +3909,7 @@ export def "processor-token-create processorTokenCreate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   access_token: string # The access token associated with the Item data is being requested for.
   account_id: string # The `account_id` value obtained from the `onSuccess` callback in Link
@@ -3792,11 +3921,11 @@ export def "processor-token-create processorTokenCreate" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/processor/token/create")
-  let body = {access_token: $access_token, account_id: $account_id, client_id: $client_id, processor: $processor, secret: $secret} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"access_token": $access_token, "account_id": $account_id, "client_id": $client_id, "processor": $processor, "secret": $secret} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Manually fire a Bank Transfer webhook
@@ -3804,7 +3933,7 @@ export def "processor-token-create processorTokenCreate" [
 # POST /sandbox/bank_transfer/fire_webhook
 # Docs: /bank-transfers/reference/#sandboxbank_transferfire_webhook
 # operationId: sandboxBankTransferFireWebhook
-export def "sandbox-bank-transfer-fire-webhook sandboxBankTransferFireWebhook" [
+export def "sandbox-bank-transfer-fire-webhook create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3812,6 +3941,7 @@ export def "sandbox-bank-transfer-fire-webhook sandboxBankTransferFireWebhook" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
@@ -3821,11 +3951,11 @@ export def "sandbox-bank-transfer-fire-webhook sandboxBankTransferFireWebhook" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sandbox/bank_transfer/fire_webhook")
-  let body = {client_id: $client_id, secret: $secret, webhook: $webhook} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"client_id": $client_id, "secret": $secret, "webhook": $webhook} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Simulate a bank transfer event in Sandbox
@@ -3834,7 +3964,7 @@ export def "sandbox-bank-transfer-fire-webhook sandboxBankTransferFireWebhook" [
 # Docs: /bank-transfers/reference/#sandboxbank_transfersimulate
 # operationId: sandboxBankTransferSimulate
 # --failure_reason shape: {ach_return_code?: string, description?: string}
-export def "sandbox-bank-transfer-simulate sandboxBankTransferSimulate" [
+export def "sandbox-bank-transfer-simulate create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3842,10 +3972,11 @@ export def "sandbox-bank-transfer-simulate sandboxBankTransferSimulate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   bank_transfer_id: string # Plaid’s unique identifier for a bank transfer.
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
-  event_type: string # The asynchronous event to be simulated. May be: `posted`, `failed`, or `reversed`.  An error will be returned if the event type is incompatible with the current transfer status. Compatible status --> event type transitions include:  `pending` --> `failed`  `pending` --> `posted`  `posted` --> `reversed`
+  event_type: string # The asynchronous event to be simulated. May be: `posted`, `failed`, or `reversed`. An error will be returned if the event type is incompatible with the current transfer status. Compatible status --> event type transitions include: `pending` --> `failed` `pending` --> `posted` `posted` --> `reversed`
   --failure-reason: record # The failure reason if the type of this transfer is `"failed"` or `"reversed"`. Null value otherwise. (nullable) — shape: {ach_return_code?: string, description?: string}
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
 ]: any -> record<request_id: string> {
@@ -3853,11 +3984,11 @@ export def "sandbox-bank-transfer-simulate sandboxBankTransferSimulate" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sandbox/bank_transfer/simulate")
-  let body = {bank_transfer_id: $bank_transfer_id, client_id: $client_id, event_type: $event_type, failure_reason: $failure_reason, secret: $secret} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"bank_transfer_id": $bank_transfer_id, "client_id": $client_id, "event_type": $event_type, "failure_reason": $failure_reason, "secret": $secret} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Manually fire an Income webhook
@@ -3865,7 +3996,7 @@ export def "sandbox-bank-transfer-simulate sandboxBankTransferSimulate" [
 # POST /sandbox/income/fire_webhook
 # Docs: /api/sandbox/#sandboxincomefire_webhook
 # operationId: sandboxIncomeFireWebhook
-export def "sandbox-income-fire-webhook sandboxIncomeFireWebhook" [
+export def "sandbox-income-fire-webhook create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3873,23 +4004,24 @@ export def "sandbox-income-fire-webhook sandboxIncomeFireWebhook" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
   item_id: string # The Item ID associated with the verification.
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
   --user-id: string # The Plaid `user_id` of the User associated with this webhook, warning, or error.
-  verification_status: string@verification-status-completer # `VERIFICATION_STATUS_PROCESSING_COMPLETE`: The income verification status processing has completed. If the user uploaded multiple documents, this webhook will fire when all documents have finished processing. Call the `/income/verification/paystubs/get` endpoint and check the document metadata to see which documents were successfully parsed.  `VERIFICATION_STATUS_PROCESSING_FAILED`: A failure occurred when attempting to process the verification documentation.  `VERIFICATION_STATUS_PENDING_APPROVAL`: (deprecated) The income verification has been sent to the user for review.
+  verification_status: string@verification-status-completer # `VERIFICATION_STATUS_PROCESSING_COMPLETE`: The income verification status processing has completed. If the user uploaded multiple documents, this webhook will fire when all documents have finished processing. Call the `/income/verification/paystubs/get` endpoint and check the document metadata to see which documents were successfully parsed. `VERIFICATION_STATUS_PROCESSING_FAILED`: A failure occurred when attempting to process the verification documentation. `VERIFICATION_STATUS_PENDING_APPROVAL`: (deprecated) The income verification has been sent to the user for review.
   webhook: string # The URL to which the webhook should be sent.
 ]: any -> record<request_id: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sandbox/income/fire_webhook")
-  let body = {client_id: $client_id, item_id: $item_id, secret: $secret, user_id: $user_id, verification_status: $verification_status, webhook: $webhook} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"client_id": $client_id, "item_id": $item_id, "secret": $secret, "user_id": $user_id, "verification_status": $verification_status, "webhook": $webhook} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Fire a test webhook
@@ -3897,7 +4029,7 @@ export def "sandbox-income-fire-webhook sandboxIncomeFireWebhook" [
 # POST /sandbox/item/fire_webhook
 # Docs: /api/sandbox/#sandboxitemfire_webhook
 # operationId: sandboxItemFireWebhook
-export def "sandbox-item-fire-webhook sandboxItemFireWebhook" [
+export def "sandbox-item-fire-webhook create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3905,6 +4037,7 @@ export def "sandbox-item-fire-webhook sandboxItemFireWebhook" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   access_token: string # The access token associated with the Item data is being requested for.
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
@@ -3916,11 +4049,11 @@ export def "sandbox-item-fire-webhook sandboxItemFireWebhook" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sandbox/item/fire_webhook")
-  let body = {access_token: $access_token, client_id: $client_id, secret: $secret, webhook_code: $webhook_code, webhook_type: $webhook_type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"access_token": $access_token, "client_id": $client_id, "secret": $secret, "webhook_code": $webhook_code, "webhook_type": $webhook_type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Force a Sandbox Item into an error state
@@ -3928,7 +4061,7 @@ export def "sandbox-item-fire-webhook sandboxItemFireWebhook" [
 # POST /sandbox/item/reset_login
 # Docs: /api/sandbox/#sandboxitemreset_login
 # operationId: sandboxItemResetLogin
-export def "sandbox-item-reset-login sandboxItemResetLogin" [
+export def "sandbox-item-reset-login reset" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3936,6 +4069,7 @@ export def "sandbox-item-reset-login sandboxItemResetLogin" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   access_token: string # The access token associated with the Item data is being requested for.
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
@@ -3945,11 +4079,11 @@ export def "sandbox-item-reset-login sandboxItemResetLogin" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sandbox/item/reset_login")
-  let body = {access_token: $access_token, client_id: $client_id, secret: $secret} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"access_token": $access_token, "client_id": $client_id, "secret": $secret} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Set verification status for Sandbox account
@@ -3957,7 +4091,7 @@ export def "sandbox-item-reset-login sandboxItemResetLogin" [
 # POST /sandbox/item/set_verification_status
 # Docs: /api/sandbox/#sandboxitemset_verification_status
 # operationId: sandboxItemSetVerificationStatus
-export def "sandbox-item-set-verification-status sandboxItemSetVerificationStatus" [
+export def "sandbox-item-set-verification-status update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3965,6 +4099,7 @@ export def "sandbox-item-set-verification-status sandboxItemSetVerificationStatu
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   access_token: string # The access token associated with the Item data is being requested for.
   account_id: string # The `account_id` of the account whose verification status is to be modified
@@ -3976,18 +4111,18 @@ export def "sandbox-item-set-verification-status sandboxItemSetVerificationStatu
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sandbox/item/set_verification_status")
-  let body = {access_token: $access_token, account_id: $account_id, client_id: $client_id, secret: $secret, verification_status: $verification_status} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"access_token": $access_token, "account_id": $account_id, "client_id": $client_id, "secret": $secret, "verification_status": $verification_status} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Save the selected accounts when connecting to the Platypus Oauth institution
 #
 # POST /sandbox/oauth/select_accounts
 # operationId: sandboxOauthSelectAccounts
-export def "sandbox-oauth-select-accounts sandboxOauthSelectAccounts" [
+export def "sandbox-oauth-select-accounts create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3995,19 +4130,20 @@ export def "sandbox-oauth-select-accounts sandboxOauthSelectAccounts" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  accounts: list
+  accounts: list<string>
   oauth_state_id: string
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sandbox/oauth/select_accounts")
-  let body = {accounts: $accounts, oauth_state_id: $oauth_state_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"accounts": $accounts, "oauth_state_id": $oauth_state_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Reset the login of a Payment Profile
@@ -4015,7 +4151,7 @@ export def "sandbox-oauth-select-accounts sandboxOauthSelectAccounts" [
 # POST /sandbox/payment_profile/reset_login
 # Docs: /api/sandbox/#sandboxpayment_profilereset_login
 # operationId: sandboxPaymentProfileResetLogin
-export def "sandbox-payment-profile-reset-login sandboxPaymentProfileResetLogin" [
+export def "sandbox-payment-profile-reset-login reset" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4023,6 +4159,7 @@ export def "sandbox-payment-profile-reset-login sandboxPaymentProfileResetLogin"
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
   payment_profile_token: string # A payment profile token associated with the Payment Profile data that is being requested.
@@ -4032,11 +4169,11 @@ export def "sandbox-payment-profile-reset-login sandboxPaymentProfileResetLogin"
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sandbox/payment_profile/reset_login")
-  let body = {client_id: $client_id, payment_profile_token: $payment_profile_token, secret: $secret} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"client_id": $client_id, "payment_profile_token": $payment_profile_token, "secret": $secret} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Create a test Item and processor token
@@ -4045,7 +4182,7 @@ export def "sandbox-payment-profile-reset-login sandboxPaymentProfileResetLogin"
 # Docs: /api/sandbox/#sandboxprocessor_tokencreate
 # operationId: sandboxProcessorTokenCreate
 # --options shape: {override_password?: string, override_username?: string}
-export def "sandbox-processor-token-create sandboxProcessorTokenCreate" [
+export def "sandbox-processor-token-create create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4053,6 +4190,7 @@ export def "sandbox-processor-token-create sandboxProcessorTokenCreate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
   institution_id: string # The ID of the institution the Item will be associated with
@@ -4063,11 +4201,11 @@ export def "sandbox-processor-token-create sandboxProcessorTokenCreate" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sandbox/processor_token/create")
-  let body = {client_id: $client_id, institution_id: $institution_id, options: $options, secret: $secret} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"client_id": $client_id, "institution_id": $institution_id, "options": $options, "secret": $secret} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Create a test Item
@@ -4076,7 +4214,7 @@ export def "sandbox-processor-token-create sandboxProcessorTokenCreate" [
 # Docs: /api/sandbox/#sandboxpublic_tokencreate
 # operationId: sandboxPublicTokenCreate
 # --options shape: {income_verification?: record, override_password?: string, override_username?: string, transactions?: record, webhook?: string}
-export def "sandbox-public-token-create sandboxPublicTokenCreate" [
+export def "sandbox-public-token-create create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4084,9 +4222,10 @@ export def "sandbox-public-token-create sandboxPublicTokenCreate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
-  initial_products: list # The products to initially pull for the Item. May be any products that the specified `institution_id`  supports. This array may not be empty.
+  initial_products: list<string> # The products to initially pull for the Item. May be any products that the specified `institution_id` supports. This array may not be empty.
   institution_id: string # The ID of the institution the Item will be associated with
   --options: record # An optional set of options to be used when configuring the Item. If specified, must not be `null`. — shape: {income_verification?: record, override_password?: string, override_username?: string, transactions?: record, webhook?: string}
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
@@ -4096,11 +4235,11 @@ export def "sandbox-public-token-create sandboxPublicTokenCreate" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sandbox/public_token/create")
-  let body = {client_id: $client_id, initial_products: $initial_products, institution_id: $institution_id, options: $options, secret: $secret, user_token: $user_token} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"client_id": $client_id, "initial_products": $initial_products, "institution_id": $institution_id, "options": $options, "secret": $secret, "user_token": $user_token} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Manually fire a Transfer webhook
@@ -4108,7 +4247,7 @@ export def "sandbox-public-token-create sandboxPublicTokenCreate" [
 # POST /sandbox/transfer/fire_webhook
 # Docs: /api/sandbox/#sandboxtransferfire_webhook
 # operationId: sandboxTransferFireWebhook
-export def "sandbox-transfer-fire-webhook sandboxTransferFireWebhook" [
+export def "sandbox-transfer-fire-webhook create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4116,6 +4255,7 @@ export def "sandbox-transfer-fire-webhook sandboxTransferFireWebhook" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
@@ -4125,11 +4265,11 @@ export def "sandbox-transfer-fire-webhook sandboxTransferFireWebhook" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sandbox/transfer/fire_webhook")
-  let body = {client_id: $client_id, secret: $secret, webhook: $webhook} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"client_id": $client_id, "secret": $secret, "webhook": $webhook} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Trigger the creation of a repayment
@@ -4137,7 +4277,7 @@ export def "sandbox-transfer-fire-webhook sandboxTransferFireWebhook" [
 # POST /sandbox/transfer/repayment/simulate
 # Docs: /api/sandbox/#sandboxtransferrepaymentsimulate
 # operationId: sandboxTransferRepaymentSimulate
-export def "sandbox-transfer-repayment-simulate sandboxTransferRepaymentSimulate" [
+export def "sandbox-transfer-repayment-simulate create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4145,6 +4285,7 @@ export def "sandbox-transfer-repayment-simulate sandboxTransferRepaymentSimulate
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
@@ -4153,11 +4294,11 @@ export def "sandbox-transfer-repayment-simulate sandboxTransferRepaymentSimulate
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sandbox/transfer/repayment/simulate")
-  let body = {client_id: $client_id, secret: $secret} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"client_id": $client_id, "secret": $secret} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Simulate a transfer event in Sandbox
@@ -4166,7 +4307,7 @@ export def "sandbox-transfer-repayment-simulate sandboxTransferRepaymentSimulate
 # Docs: /api/sandbox/#sandboxtransfersimulate
 # operationId: sandboxTransferSimulate
 # --failure_reason shape: {ach_return_code?: string, description?: string}
-export def "sandbox-transfer-simulate sandboxTransferSimulate" [
+export def "sandbox-transfer-simulate create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4174,9 +4315,10 @@ export def "sandbox-transfer-simulate sandboxTransferSimulate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
-  event_type: string # The asynchronous event to be simulated. May be: `posted`, `settled`, `failed`, or `returned`.  An error will be returned if the event type is incompatible with the current transfer status. Compatible status --> event type transitions include:  `pending` --> `failed`  `pending` --> `posted`  `posted` --> `returned`  `posted` --> `settled`
+  event_type: string # The asynchronous event to be simulated. May be: `posted`, `settled`, `failed`, or `returned`. An error will be returned if the event type is incompatible with the current transfer status. Compatible status --> event type transitions include: `pending` --> `failed` `pending` --> `posted` `posted` --> `returned` `posted` --> `settled`
   --failure-reason: record # The failure reason if the event type for a transfer is `"failed"` or `"returned"`. Null value otherwise. (nullable) — shape: {ach_return_code?: string, description?: string}
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
   transfer_id: string # Plaid’s unique identifier for a transfer.
@@ -4185,11 +4327,11 @@ export def "sandbox-transfer-simulate sandboxTransferSimulate" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sandbox/transfer/simulate")
-  let body = {client_id: $client_id, event_type: $event_type, failure_reason: $failure_reason, secret: $secret, transfer_id: $transfer_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"client_id": $client_id, "event_type": $event_type, "failure_reason": $failure_reason, "secret": $secret, "transfer_id": $transfer_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Simulate creating a sweep
@@ -4197,7 +4339,7 @@ export def "sandbox-transfer-simulate sandboxTransferSimulate" [
 # POST /sandbox/transfer/sweep/simulate
 # Docs: /api/sandbox/#sandboxtransfersweepsimulate
 # operationId: sandboxTransferSweepSimulate
-export def "sandbox-transfer-sweep-simulate sandboxTransferSweepSimulate" [
+export def "sandbox-transfer-sweep-simulate create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4205,6 +4347,7 @@ export def "sandbox-transfer-sweep-simulate sandboxTransferSweepSimulate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
@@ -4213,11 +4356,11 @@ export def "sandbox-transfer-sweep-simulate sandboxTransferSweepSimulate" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sandbox/transfer/sweep/simulate")
-  let body = {client_id: $client_id, secret: $secret} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"client_id": $client_id, "secret": $secret} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Advance a test clock
@@ -4225,7 +4368,7 @@ export def "sandbox-transfer-sweep-simulate sandboxTransferSweepSimulate" [
 # POST /sandbox/transfer/test_clock/advance
 # Docs: /api/sandbox/#sandboxtransfertest_clockadvance
 # operationId: sandboxTransferTestClockAdvance
-export def "sandbox-transfer-test-clock-advance sandboxTransferTestClockAdvance" [
+export def "sandbox-transfer-test-clock-advance test" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4233,6 +4376,7 @@ export def "sandbox-transfer-test-clock-advance sandboxTransferTestClockAdvance"
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
   new_virtual_time: string # The virtual timestamp on the test clock. This will be of the form `2006-01-02T15:04:05Z`. (format: date-time)
@@ -4243,11 +4387,11 @@ export def "sandbox-transfer-test-clock-advance sandboxTransferTestClockAdvance"
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sandbox/transfer/test_clock/advance")
-  let body = {client_id: $client_id, new_virtual_time: $new_virtual_time, secret: $secret, test_clock_id: $test_clock_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"client_id": $client_id, "new_virtual_time": $new_virtual_time, "secret": $secret, "test_clock_id": $test_clock_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Create a test clock
@@ -4255,7 +4399,7 @@ export def "sandbox-transfer-test-clock-advance sandboxTransferTestClockAdvance"
 # POST /sandbox/transfer/test_clock/create
 # Docs: /api/sandbox/#sandboxtransfertest_clockcreate
 # operationId: sandboxTransferTestClockCreate
-export def "sandbox-transfer-test-clock-create sandboxTransferTestClockCreate" [
+export def "sandbox-transfer-test-clock-create test" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4263,6 +4407,7 @@ export def "sandbox-transfer-test-clock-create sandboxTransferTestClockCreate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
@@ -4272,11 +4417,11 @@ export def "sandbox-transfer-test-clock-create sandboxTransferTestClockCreate" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sandbox/transfer/test_clock/create")
-  let body = {client_id: $client_id, secret: $secret, virtual_time: $virtual_time} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"client_id": $client_id, "secret": $secret, "virtual_time": $virtual_time} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Get a test clock
@@ -4284,7 +4429,7 @@ export def "sandbox-transfer-test-clock-create sandboxTransferTestClockCreate" [
 # POST /sandbox/transfer/test_clock/get
 # Docs: /api/sandbox/#sandboxtransfertest_clockget
 # operationId: sandboxTransferTestClockGet
-export def "sandbox-transfer-test-clock-get sandboxTransferTestClockGet" [
+export def "sandbox-transfer-test-clock-get test" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4292,6 +4437,7 @@ export def "sandbox-transfer-test-clock-get sandboxTransferTestClockGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
@@ -4301,11 +4447,11 @@ export def "sandbox-transfer-test-clock-get sandboxTransferTestClockGet" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sandbox/transfer/test_clock/get")
-  let body = {client_id: $client_id, secret: $secret, test_clock_id: $test_clock_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"client_id": $client_id, "secret": $secret, "test_clock_id": $test_clock_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # List test clocks
@@ -4313,7 +4459,7 @@ export def "sandbox-transfer-test-clock-get sandboxTransferTestClockGet" [
 # POST /sandbox/transfer/test_clock/list
 # Docs: /api/sandbox/#sandboxtransfertest_clocklist
 # operationId: sandboxTransferTestClockList
-export def "sandbox-transfer-test-clock-list sandboxTransferTestClockList" [
+export def "sandbox-transfer-test-clock-list test" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4321,6 +4467,7 @@ export def "sandbox-transfer-test-clock-list sandboxTransferTestClockList" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
   --count: int # The maximum number of test clocks to return. (nullable, default: 25)
@@ -4333,11 +4480,11 @@ export def "sandbox-transfer-test-clock-list sandboxTransferTestClockList" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sandbox/transfer/test_clock/list")
-  let body = {client_id: $client_id, count: $count, end_virtual_time: $end_virtual_time, offset: $offset, secret: $secret, start_virtual_time: $start_virtual_time} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"client_id": $client_id, "count": $count, "end_virtual_time": $end_virtual_time, "offset": $offset, "secret": $secret, "start_virtual_time": $start_virtual_time} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Report whether you initiated an ACH transaction
@@ -4345,7 +4492,7 @@ export def "sandbox-transfer-test-clock-list sandboxTransferTestClockList" [
 # POST /signal/decision/report
 # Docs: /api/products/signal#signaldecisionreport
 # operationId: signalDecisionReport
-export def "signal-decision-report signalDecisionReport" [
+export def "signal-decision-report create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4353,25 +4500,26 @@ export def "signal-decision-report signalDecisionReport" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --amount-instantly-available: float # The amount (in USD) made available to your customers instantly following the debit transaction. It could be a partial amount of the requested transaction (example: 102.05). (nullable, format: double)
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
   client_transaction_id: string # Must be the same as the `client_transaction_id` supplied when calling `/signal/evaluate`
-  --days-funds-on-hold: int # The actual number of days (hold time) since the ACH debit transaction that you wait before making funds available to your customers. The holding time could affect the ACH return rate.  For example, use 0 if you make funds available to your customers instantly or the same day following the debit transaction, or 1 if you make funds available the next day following the debit initialization. (nullable)
-  --decision-outcome: string@decision-outcome-completer # The payment decision from the risk assessment.  `APPROVE`: approve the transaction without requiring further actions from your customers. For example, use this field if you are placing a standard hold for all the approved transactions before making funds available to your customers. You should also use this field if you decide to accelerate the fund availability for your customers.  `REVIEW`: the transaction requires manual review  `REJECT`: reject the transaction  `TAKE_OTHER_RISK_MEASURES`: for example, placing a longer hold on funds than those approved transactions or introducing customer frictions such as step-up verification/authentication  `NOT_EVALUATED`: if only logging the Signal results without using them  Possible values:  `APPROVE`, `REVIEW`, `REJECT`, `TAKE_OTHER_RISK_MEASURES`, `NOT_EVALUATED`  (nullable)
-  --initiated: oneof<nothing, bool> # `true` if the ACH transaction was initiated, `false` otherwise.  This field must be returned as a boolean. If formatted incorrectly, this will result in an [`INVALID_FIELD`](/docs/errors/invalid-request/#invalid_field) error.
-  --payment-method: string@payment-method-completer # The payment method to complete the transaction after the risk assessment. It may be different from the default payment method.  `SAME_DAY_ACH`: Same Day ACH by NACHA. The debit transaction is processed and settled on the same day  `NEXT_DAY_ACH`: Next Day ACH settlement for debit transactions, offered by some payment processors  `STANDARD_ACH`: standard ACH by NACHA  `REAL_TIME_PAYMENTS`: real-time payments such as RTP and FedNow  `DEBIT_CARD`: if the default payment is over debit card networks  `MULTIPLE_PAYMENT_METHODS`: if there is no default debit rail or there are multiple payment methods  Possible values: `SAME_DAY_ACH`, `NEXT_DAY_ACH`, `STANDARD_ACH`, `REAL_TIME_PAYMENTS`, `DEBIT_CARD`, `MULTIPLE_PAYMENT_METHODS`  (nullable)
+  --days-funds-on-hold: int # The actual number of days (hold time) since the ACH debit transaction that you wait before making funds available to your customers. The holding time could affect the ACH return rate. For example, use 0 if you make funds available to your customers instantly or the same day following the debit transaction, or 1 if you make funds available the next day following the debit initialization. (nullable)
+  --decision-outcome: string@decision-outcome-completer # The payment decision from the risk assessment. `APPROVE`: approve the transaction without requiring further actions from your customers. For example, use this field if you are placing a standard hold for all the approved transactions before making funds available to your customers. You should also use this field if you decide to accelerate the fund availability for your customers. `REVIEW`: the transaction requires manual review `REJECT`: reject the transaction `TAKE_OTHER_RISK_MEASURES`: for example, placing a longer hold on funds than those approved transactions or introducing customer frictions such as step-up verification/authentication `NOT_EVALUATED`: if only logging the Signal results without using them Possible values: `APPROVE`, `REVIEW`, `REJECT`, `TAKE_OTHER_RISK_MEASURES`, `NOT_EVALUATED` (nullable)
+  --initiated: oneof<nothing, bool> # `true` if the ACH transaction was initiated, `false` otherwise. This field must be returned as a boolean. If formatted incorrectly, this will result in an [`INVALID_FIELD`](/docs/errors/invalid-request/#invalid_field) error.
+  --payment-method: string@payment-method-completer # The payment method to complete the transaction after the risk assessment. It may be different from the default payment method. `SAME_DAY_ACH`: Same Day ACH by NACHA. The debit transaction is processed and settled on the same day `NEXT_DAY_ACH`: Next Day ACH settlement for debit transactions, offered by some payment processors `STANDARD_ACH`: standard ACH by NACHA `REAL_TIME_PAYMENTS`: real-time payments such as RTP and FedNow `DEBIT_CARD`: if the default payment is over debit card networks `MULTIPLE_PAYMENT_METHODS`: if there is no default debit rail or there are multiple payment methods Possible values: `SAME_DAY_ACH`, `NEXT_DAY_ACH`, `STANDARD_ACH`, `REAL_TIME_PAYMENTS`, `DEBIT_CARD`, `MULTIPLE_PAYMENT_METHODS` (nullable)
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
 ]: any -> record<request_id: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/signal/decision/report")
-  let body = {amount_instantly_available: $amount_instantly_available, client_id: $client_id, client_transaction_id: $client_transaction_id, days_funds_on_hold: $days_funds_on_hold, decision_outcome: $decision_outcome, initiated: $initiated, payment_method: $payment_method, secret: $secret} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"amount_instantly_available": $amount_instantly_available, "client_id": $client_id, "client_transaction_id": $client_transaction_id, "days_funds_on_hold": $days_funds_on_hold, "decision_outcome": $decision_outcome, "initiated": $initiated, "payment_method": $payment_method, "secret": $secret} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Evaluate a planned ACH transaction
@@ -4381,7 +4529,7 @@ export def "signal-decision-report signalDecisionReport" [
 # operationId: signalEvaluate
 # --device shape: {ip_address?: string, user_agent?: string}
 # --user shape: {address?: record, email_address?: string, name?: record, phone_number?: string}
-export def "signal-evaluate signalEvaluate" [
+export def "signal-evaluate create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4389,16 +4537,17 @@ export def "signal-evaluate signalEvaluate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   access_token: string # The access token associated with the Item data is being requested for.
-  account_id: string # The Plaid `account_id` of the account that is the funding source for the proposed transaction. The `account_id` is returned in the `/accounts/get` endpoint as well as the [`onSuccess`](/docs/link/ios/#link-ios-onsuccess-linkSuccess-metadata-accounts-id) callback metadata.  This will return an [`INVALID_ACCOUNT_ID`](/docs/errors/invalid-input/#invalid_account_id) error if the account has been removed at the bank or if the `account_id` is no longer valid.
+  account_id: string # The Plaid `account_id` of the account that is the funding source for the proposed transaction. The `account_id` is returned in the `/accounts/get` endpoint as well as the [`onSuccess`](/docs/link/ios/#link-ios-onsuccess-linkSuccess-metadata-accounts-id) callback metadata. This will return an [`INVALID_ACCOUNT_ID`](/docs/errors/invalid-input/#invalid_account_id) error if the account has been removed at the bank or if the `account_id` is no longer valid.
   amount: float # The transaction amount, in USD (e.g. `102.05`) (format: double)
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
   client_transaction_id: string # The unique ID that you would like to use to refer to this transaction. For your convenience mapping your internal data, you could use your internal ID/identifier for this transaction. The max length for this field is 36 characters.
   --client-user-id: string # A unique ID that identifies the end user in your system. This ID is used to correlate requests by a user with multiple Items. The max length for this field is 36 characters. Personally identifiable information, such as an email address or phone number, should not be used in the `client_user_id`.
-  --default-payment-method: string # The default ACH or non-ACH payment method to complete the transaction. `SAME_DAY_ACH`: Same Day ACH by NACHA. The debit transaction is processed and settled on the same day `NEXT_DAY_ACH`: Next Day ACH settlement for debit transactions, offered by some payment processors `STANDARD_ACH`: standard ACH by NACHA `REAL_TIME_PAYMENTS`: real-time payments such as RTP and FedNow `DEBIT_CARD`: if the default payment is over debit card networks `MULTIPLE_PAYMENT_METHODS`: if there is no default debit rail or there are multiple payment methods Possible values:  `SAME_DAY_ACH`, `NEXT_DAY_ACH`, `STANDARD_ACH`, `REAL_TIME_PAYMENTS`, `DEBIT_CARD`, `MULTIPLE_PAYMENT_METHODS` (nullable)
+  --default-payment-method: string # The default ACH or non-ACH payment method to complete the transaction. `SAME_DAY_ACH`: Same Day ACH by NACHA. The debit transaction is processed and settled on the same day `NEXT_DAY_ACH`: Next Day ACH settlement for debit transactions, offered by some payment processors `STANDARD_ACH`: standard ACH by NACHA `REAL_TIME_PAYMENTS`: real-time payments such as RTP and FedNow `DEBIT_CARD`: if the default payment is over debit card networks `MULTIPLE_PAYMENT_METHODS`: if there is no default debit rail or there are multiple payment methods Possible values: `SAME_DAY_ACH`, `NEXT_DAY_ACH`, `STANDARD_ACH`, `REAL_TIME_PAYMENTS`, `DEBIT_CARD`, `MULTIPLE_PAYMENT_METHODS` (nullable)
   --device: record # Details about the end user's device — shape: {ip_address?: string, user_agent?: string}
-  --is-recurring: oneof<nothing, bool> # `true` if the ACH transaction is a recurring transaction; `false` otherwise  (nullable)
+  --is-recurring: oneof<nothing, bool> # `true` if the ACH transaction is a recurring transaction; `false` otherwise (nullable)
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
   --user: record # Details about the end user initiating the transaction (i.e., the account holder). — shape: {address?: record, email_address?: string, name?: record, phone_number?: string}
   --user-present: oneof<nothing, bool> # `true` if the end user is present while initiating the ACH transfer and the endpoint is being called; `false` otherwise (for example, when the ACH transfer is scheduled and the end user is not present, or you call this endpoint after the ACH transfer but before submitting the Nacha file for ACH processing). (nullable)
@@ -4407,11 +4556,11 @@ export def "signal-evaluate signalEvaluate" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/signal/evaluate")
-  let body = {access_token: $access_token, account_id: $account_id, amount: $amount, client_id: $client_id, client_transaction_id: $client_transaction_id, client_user_id: $client_user_id, default_payment_method: $default_payment_method, device: $device, is_recurring: $is_recurring, secret: $secret, user: $user, user_present: $user_present} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"access_token": $access_token, "account_id": $account_id, "amount": $amount, "client_id": $client_id, "client_transaction_id": $client_transaction_id, "client_user_id": $client_user_id, "default_payment_method": $default_payment_method, "device": $device, "is_recurring": $is_recurring, "secret": $secret, "user": $user, "user_present": $user_present} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Opt-in an Item to Signal
@@ -4419,7 +4568,7 @@ export def "signal-evaluate signalEvaluate" [
 # POST /signal/prepare
 # Docs: /api/products/signal#signalprepare
 # operationId: signalPrepare
-export def "signal-prepare signalPrepare" [
+export def "signal-prepare create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4427,6 +4576,7 @@ export def "signal-prepare signalPrepare" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   access_token: string # The access token associated with the Item data is being requested for.
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
@@ -4436,11 +4586,11 @@ export def "signal-prepare signalPrepare" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/signal/prepare")
-  let body = {access_token: $access_token, client_id: $client_id, secret: $secret} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"access_token": $access_token, "client_id": $client_id, "secret": $secret} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Report a return for an ACH transaction
@@ -4448,7 +4598,7 @@ export def "signal-prepare signalPrepare" [
 # POST /signal/return/report
 # Docs: /api/products/signal#signalreturnreport
 # operationId: signalReturnReport
-export def "signal-return-report signalReturnReport" [
+export def "signal-return-report create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4456,10 +4606,11 @@ export def "signal-return-report signalReturnReport" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
   client_transaction_id: string # Must be the same as the `client_transaction_id` supplied when calling `/signal/evaluate`
-  return_code: string # Must be a valid ACH return code (e.g. "R01")  If formatted incorrectly, this will result in an [`INVALID_FIELD`](/docs/errors/invalid-request/#invalid_field) error.
+  return_code: string # Must be a valid ACH return code (e.g. "R01") If formatted incorrectly, this will result in an [`INVALID_FIELD`](/docs/errors/invalid-request/#invalid_field) error.
   --returned-at: string # Date and time when you receive the returns from your payment processors, in ISO 8601 format (`YYYY-MM-DDTHH:mm:ssZ`). (nullable, format: date-time)
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
 ]: any -> record<request_id: string> {
@@ -4467,11 +4618,11 @@ export def "signal-return-report signalReturnReport" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/signal/return/report")
-  let body = {client_id: $client_id, client_transaction_id: $client_transaction_id, return_code: $return_code, returned_at: $returned_at, secret: $secret} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"client_id": $client_id, "client_transaction_id": $client_transaction_id, "return_code": $return_code, "returned_at": $returned_at, "secret": $secret} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Enrich locally-held transaction data
@@ -4481,7 +4632,7 @@ export def "signal-return-report signalReturnReport" [
 # operationId: transactionsEnrich
 # --options shape: {include_legacy_category?: bool}
 # --transactions item shape: {amount: float, date_posted?: string, description: string, direction: "INFLOW"|"OUTFLOW", id: string, iso_currency_code: string, location?: record, mcc?: string}
-export def "transactions-enrich transactionsEnrich" [
+export def "transactions-enrich create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4489,6 +4640,7 @@ export def "transactions-enrich transactionsEnrich" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   account_type: string # The account type for the requested transactions (either `depository` or `credit`).
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
@@ -4500,11 +4652,11 @@ export def "transactions-enrich transactionsEnrich" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/transactions/enrich")
-  let body = {account_type: $account_type, client_id: $client_id, options: $options, secret: $secret, transactions: $transactions} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"account_type": $account_type, "client_id": $client_id, "options": $options, "secret": $secret, "transactions": $transactions} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Get transaction data
@@ -4512,8 +4664,8 @@ export def "transactions-enrich transactionsEnrich" [
 # POST /transactions/get
 # Docs: /api/products/transactions/#transactionsget
 # operationId: transactionsGet
-# --options shape: {account_ids?: list, count?: int, include_logo_and_counterparty_beta?: bool, include_original_description?: bool, include_personal_finance_category?: bool, include_personal_finance_category_beta?: bool, offset?: int}
-export def "transactions-get transactionsGet" [
+# --options shape: {account_ids?: list<string>, count?: int, include_logo_and_counterparty_beta?: bool, include_original_description?: bool, include_personal_finance_category?: bool, include_personal_finance_category_beta?: bool, offset?: int}
+export def "transactions-get get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4521,11 +4673,12 @@ export def "transactions-get transactionsGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   access_token: string # The access token associated with the Item data is being requested for.
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
   end_date: string # The latest date for which data should be returned. Dates should be formatted as YYYY-MM-DD. (format: date)
-  --options: record # An optional object to be used with the request. If specified, `options` must not be `null`. — shape: {account_ids?: list, count?: int, include_logo_and_counterparty_beta?: bool, include_original_description?: bool, include_personal_finance_category?: bool, include_personal_finance_category_beta?: bool, offset?: int}
+  --options: record # An optional object to be used with the request. If specified, `options` must not be `null`. — shape: {account_ids?: list<string>, count?: int, include_logo_and_counterparty_beta?: bool, include_original_description?: bool, include_personal_finance_category?: bool, include_personal_finance_category_beta?: bool, offset?: int}
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
   start_date: string # The earliest date for which data should be returned. Dates should be formatted as YYYY-MM-DD. (format: date)
 ]: any -> record<accounts: table<account_id: string, balances: record, mask: string, name: string, official_name: string, persistent_account_id: string, subtype: string, type: string, verification_status: string>, item: record<available_products: list<string>, billed_products: list<string>, consent_expiration_time: string, consented_products: list<string>, error: record<causes: list, display_message: string, documentation_url: string, error_code: string, error_message: string, error_type: string, request_id: string, status: float, suggested_action: string>, institution_id: string, item_id: string, products: list<string>, update_type: string, webhook: string>, request_id: string, total_transactions: int, transactions: table<account_id: string, account_owner: string, amount: float, category: list, category_id: string, check_number: string, date: string, iso_currency_code: string, location: record, logo_url: string, merchant_name: string, name: string, original_description: string, payment_meta: record, pending: bool, pending_transaction_id: string, transaction_id: string, transaction_type: string, unofficial_currency_code: string, website: string, authorized_date: string, authorized_datetime: string, counterparties: list, datetime: string, payment_channel: string, personal_finance_category: record, personal_finance_category_icon_url: string, transaction_code: string>> {
@@ -4533,11 +4686,11 @@ export def "transactions-get transactionsGet" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/transactions/get")
-  let body = {access_token: $access_token, client_id: $client_id, end_date: $end_date, options: $options, secret: $secret, start_date: $start_date} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"access_token": $access_token, "client_id": $client_id, "end_date": $end_date, "options": $options, "secret": $secret, "start_date": $start_date} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Fetch recurring transaction streams
@@ -4546,7 +4699,7 @@ export def "transactions-get transactionsGet" [
 # Docs: /api/products/transactions/#transactionsrecurringget
 # operationId: transactionsRecurringGet
 # --options shape: {include_personal_finance_category?: bool}
-export def "transactions-recurring-get transactionsRecurringGet" [
+export def "transactions-recurring-get get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4554,9 +4707,10 @@ export def "transactions-recurring-get transactionsRecurringGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   access_token: string # The access token associated with the Item data is being requested for.
-  account_ids: list # A list of `account_ids` to retrieve for the Item  Note: An error will be returned if a provided `account_id` is not associated with the Item.
+  account_ids: list<string> # A list of `account_ids` to retrieve for the Item Note: An error will be returned if a provided `account_id` is not associated with the Item.
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
   --options: record # An optional object to be used with the request. If specified, `options` must not be `null`. — shape: {include_personal_finance_category?: bool}
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
@@ -4565,11 +4719,11 @@ export def "transactions-recurring-get transactionsRecurringGet" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/transactions/recurring/get")
-  let body = {access_token: $access_token, account_ids: $account_ids, client_id: $client_id, options: $options, secret: $secret} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"access_token": $access_token, "account_ids": $account_ids, "client_id": $client_id, "options": $options, "secret": $secret} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Refresh transaction data
@@ -4577,7 +4731,7 @@ export def "transactions-recurring-get transactionsRecurringGet" [
 # POST /transactions/refresh
 # Docs: /api/products/transactions/#transactionsrefresh
 # operationId: transactionsRefresh
-export def "transactions-refresh transactionsRefresh" [
+export def "transactions-refresh refresh" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4585,6 +4739,7 @@ export def "transactions-refresh transactionsRefresh" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   access_token: string # The access token associated with the Item data is being requested for.
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
@@ -4594,11 +4749,11 @@ export def "transactions-refresh transactionsRefresh" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/transactions/refresh")
-  let body = {access_token: $access_token, client_id: $client_id, secret: $secret} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"access_token": $access_token, "client_id": $client_id, "secret": $secret} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Get incremental transaction updates on an Item
@@ -4607,7 +4762,7 @@ export def "transactions-refresh transactionsRefresh" [
 # Docs: /api/products/transactions/#transactionssync
 # operationId: transactionsSync
 # --options shape: {include_logo_and_counterparty_beta?: bool, include_original_description?: bool, include_personal_finance_category?: bool}
-export def "transactions-sync transactionsSync" [
+export def "transactions-sync sync" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4615,6 +4770,7 @@ export def "transactions-sync transactionsSync" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   access_token: string # The access token associated with the Item data is being requested for.
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
@@ -4627,11 +4783,11 @@ export def "transactions-sync transactionsSync" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/transactions/sync")
-  let body = {access_token: $access_token, client_id: $client_id, count: $count, cursor: $cursor, options: $options, secret: $secret} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"access_token": $access_token, "client_id": $client_id, "count": $count, "cursor": $cursor, "options": $options, "secret": $secret} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Create a transfer authorization
@@ -4642,7 +4798,7 @@ export def "transactions-sync transactionsSync" [
 # --device shape: {ip_address?: string, user_agent?: string}
 # --user shape: {address?: record, email_address?: string, legal_name: string, phone_number?: string}
 @deprecated --flag origination-account-id
-export def "transfer-authorization-create transferAuthorizationCreate" [
+export def "transfer-authorization-create create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4650,23 +4806,24 @@ export def "transfer-authorization-create transferAuthorizationCreate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --access-token: string # The Plaid `access_token` for the account that will be debited or credited. Required if not using `payment_profile_token`.
   --account-id: string # The Plaid `account_id` corresponding to the end-user account that will be debited or credited. Returned only if `account_id` was set on intent creation.
-  --ach-class: string@ach-class-completer # Specifies the use case of the transfer. Required for transfers on an ACH network.  `"ccd"` - Corporate Credit or Debit - fund transfer between two corporate bank accounts  `"ppd"` - Prearranged Payment or Deposit - the transfer is part of a pre-existing relationship with a consumer, eg. bill payment  `"tel"` - Telephone-Initiated Entry  `"web"` - Internet-Initiated Entry - debits from a consumer’s account where their authorization is obtained over the Internet
+  --ach-class: string@ach-class-completer # Specifies the use case of the transfer. Required for transfers on an ACH network. `"ccd"` - Corporate Credit or Debit - fund transfer between two corporate bank accounts `"ppd"` - Prearranged Payment or Deposit - the transfer is part of a pre-existing relationship with a consumer, eg. bill payment `"tel"` - Telephone-Initiated Entry `"web"` - Internet-Initiated Entry - debits from a consumer’s account where their authorization is obtained over the Internet
   amount: string # The amount of the transfer (decimal string with two digits of precision e.g. "10.00").
   --beacon-session-id: string # The unique identifier returned by Plaid's [beacon](https://plaid.com/docs/transfer/guarantee/#using-a-beacon) when it is run on your webpage. Required for Guarantee customers who are not using [Transfer UI](https://plaid.com/docs/transfer/using-transfer-ui/) and have a web checkout experience. (nullable)
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
   --device: record # Information about the device being used to initiate the authorization. — shape: {ip_address?: string, user_agent?: string}
   --funding-account-id: string # The id of the funding account to use, available in the Plaid Dashboard. This determines which of your business checking accounts will be credited or debited. Defaults to the account configured during onboarding. (nullable)
-  --idempotency-key: string # A random key provided by the client, per unique authorization. Maximum of 50 characters.  The API supports idempotency for safely retrying requests without accidentally performing the same operation twice. For example, if a request to create an authorization fails due to a network connection error, you can retry the request with the same idempotency key to guarantee that only a single authorization is created.  Failure to provide this key may result in duplicate charges.  Required for guaranteed ACH customers. (nullable)
+  --idempotency-key: string # A random key provided by the client, per unique authorization. Maximum of 50 characters. The API supports idempotency for safely retrying requests without accidentally performing the same operation twice. For example, if a request to create an authorization fails due to a network connection error, you can retry the request with the same idempotency key to guarantee that only a single authorization is created. Failure to provide this key may result in duplicate charges. Required for guaranteed ACH customers. (nullable)
   --iso-currency-code: string # The currency of the transfer amount. The default value is "USD".
-  network: string@network-completer-1 # The network or rails used for the transfer.  For transfers submitted as either `ach` or `same-day-ach` the cutoff for same-day is 9:30 AM Pacific Time and the cutoff for next-day transfers is 5:30 PM Pacific Time. It is recommended to submit a transfer at least 15 minutes before the cutoff time in order to ensure that it will be processed before the cutoff. Any transfer that is indicated as `same-day-ach` and that misses the same-day cutoff, but is submitted in time for the next-day cutoff, will be sent over next-day rails and will not incur same-day charges. Note that both legs of the transfer will be downgraded if applicable.
+  network: string@network-completer-1 # The network or rails used for the transfer. For transfers submitted as either `ach` or `same-day-ach` the cutoff for same-day is 9:30 AM Pacific Time and the cutoff for next-day transfers is 5:30 PM Pacific Time. It is recommended to submit a transfer at least 15 minutes before the cutoff time in order to ensure that it will be processed before the cutoff. Any transfer that is indicated as `same-day-ach` and that misses the same-day cutoff, but is submitted in time for the next-day cutoff, will be sent over next-day rails and will not incur same-day charges. Note that both legs of the transfer will be downgraded if applicable.
   --origination-account-id: string # Plaid's unique identifier for the origination account for this authorization. If not specified, the default account will be used. (DEPRECATED)
   --originator-client-id: string # The Plaid client ID that is the originator of this transfer. Only needed if creating transfers on behalf of another client as a third-party sender (TPS). (nullable)
   --payment-profile-token: string # The payment profile token associated with the Payment Profile that will be debited or credited. Required if not using `access_token`.
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
-  type: string@type-completer # The type of transfer. This will be either `debit` or `credit`.  A `debit` indicates a transfer of money into the origination account; a `credit` indicates a transfer of money out of the origination account.
+  type: string@type-completer # The type of transfer. This will be either `debit` or `credit`. A `debit` indicates a transfer of money into the origination account; a `credit` indicates a transfer of money out of the origination account.
   user: record # The legal name and other information for the account holder. — shape: {address?: record, email_address?: string, legal_name: string, phone_number?: string}
   --user-present: oneof<nothing, bool> # Required for Guarantee. If the end user is initiating the specific transfer themselves via an interactive UI, this should be `true`; for automatic recurring payments where the end user is not actually initiating each individual transfer, it should be `false`. (nullable)
   --with-guarantee: oneof<nothing, bool> # If set to `false`, Plaid will not offer a `guarantee_decision` for this request(Guarantee customers only). (nullable, default: true)
@@ -4675,11 +4832,11 @@ export def "transfer-authorization-create transferAuthorizationCreate" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/transfer/authorization/create")
-  let body = {access_token: $access_token, account_id: $account_id, ach_class: $ach_class, amount: $amount, beacon_session_id: $beacon_session_id, client_id: $client_id, device: $device, funding_account_id: $funding_account_id, idempotency_key: $idempotency_key, iso_currency_code: $iso_currency_code, network: $network, origination_account_id: $origination_account_id, originator_client_id: $originator_client_id, payment_profile_token: $payment_profile_token, secret: $secret, type: $type, user: $user, user_present: $user_present, with_guarantee: $with_guarantee} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"access_token": $access_token, "account_id": $account_id, "ach_class": $ach_class, "amount": $amount, "beacon_session_id": $beacon_session_id, "client_id": $client_id, "device": $device, "funding_account_id": $funding_account_id, "idempotency_key": $idempotency_key, "iso_currency_code": $iso_currency_code, "network": $network, "origination_account_id": $origination_account_id, "originator_client_id": $originator_client_id, "payment_profile_token": $payment_profile_token, "secret": $secret, "type": $type, "user": $user, "user_present": $user_present, "with_guarantee": $with_guarantee} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Cancel a transfer
@@ -4687,7 +4844,7 @@ export def "transfer-authorization-create transferAuthorizationCreate" [
 # POST /transfer/cancel
 # Docs: /api/products/transfer/#transfercancel
 # operationId: transferCancel
-export def "transfer-cancel transferCancel" [
+export def "transfer-cancel cancel" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4695,6 +4852,7 @@ export def "transfer-cancel transferCancel" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
@@ -4704,11 +4862,11 @@ export def "transfer-cancel transferCancel" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/transfer/cancel")
-  let body = {client_id: $client_id, secret: $secret, transfer_id: $transfer_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"client_id": $client_id, "secret": $secret, "transfer_id": $transfer_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Get RTP eligibility information of a transfer
@@ -4716,7 +4874,7 @@ export def "transfer-cancel transferCancel" [
 # POST /transfer/capabilities/get
 # Docs: /api/products/transfer/#transfercapabilitiesget
 # operationId: transferCapabilitiesGet
-export def "transfer-capabilities-get transferCapabilitiesGet" [
+export def "transfer-capabilities-get get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4724,6 +4882,7 @@ export def "transfer-capabilities-get transferCapabilitiesGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --access-token: string # The Plaid `access_token` for the account that will be debited or credited. Required if not using `payment_profile_token`.
   --account-id: string # The Plaid `account_id` corresponding to the end-user account that will be debited or credited. Returned only if `account_id` was set on intent creation.
@@ -4735,11 +4894,11 @@ export def "transfer-capabilities-get transferCapabilitiesGet" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/transfer/capabilities/get")
-  let body = {access_token: $access_token, account_id: $account_id, client_id: $client_id, payment_profile_token: $payment_profile_token, secret: $secret} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"access_token": $access_token, "account_id": $account_id, "client_id": $client_id, "payment_profile_token": $payment_profile_token, "secret": $secret} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Create a transfer
@@ -4755,7 +4914,7 @@ export def "transfer-capabilities-get transferCapabilitiesGet" [
 @deprecated --flag origination-account-id
 @deprecated --flag type
 @deprecated --flag user
-export def "transfer-create transferCreate" [
+export def "transfer-create create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4763,6 +4922,7 @@ export def "transfer-create transferCreate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --access-token: string # The Plaid `access_token` for the account that will be debited or credited. Required if not using `payment_profile_token`.
   --account-id: string # The Plaid `account_id` corresponding to the end-user account that will be debited or credited. Returned only if `account_id` was set on intent creation.
@@ -4771,9 +4931,9 @@ export def "transfer-create transferCreate" [
   authorization_id: string # Plaid’s unique identifier for a transfer authorization. This parameter also serves the purpose of acting as an idempotency identifier.
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
   description: string # The transfer description. Maximum of 10 characters.
-  --idempotency-key: string # Deprecated. `authorization_id` is now used as idempotency instead.  A random key provided by the client, per unique transfer. Maximum of 50 characters.  The API supports idempotency for safely retrying requests without accidentally performing the same operation twice. For example, if a request to create a transfer fails due to a network connection error, you can retry the request with the same idempotency key to guarantee that only a single transfer is created. (DEPRECATED)
+  --idempotency-key: string # Deprecated. `authorization_id` is now used as idempotency instead. A random key provided by the client, per unique transfer. Maximum of 50 characters. The API supports idempotency for safely retrying requests without accidentally performing the same operation twice. For example, if a request to create a transfer fails due to a network connection error, you can retry the request with the same idempotency key to guarantee that only a single transfer is created. (DEPRECATED)
   --iso-currency-code: string # The currency of the transfer amount. The default value is "USD". (DEPRECATED)
-  --metadata: record # The Metadata object is a mapping of client-provided string fields to any string value. The following limitations apply: The JSON values must be Strings (no nested JSON objects allowed) Only ASCII characters may be used Maximum of 50 key/value pairs Maximum key length of 40 characters Maximum value length of 500 characters  (nullable)
+  --metadata: record # The Metadata object is a mapping of client-provided string fields to any string value. The following limitations apply: The JSON values must be Strings (no nested JSON objects allowed) Only ASCII characters may be used Maximum of 50 key/value pairs Maximum key length of 40 characters Maximum value length of 500 characters (nullable)
   --network: any # DEPRECATED
   --origination-account-id: string # Plaid’s unique identifier for the origination account for this transfer. If you have more than one origination account, this value must be specified. Otherwise, this field should be left blank. (DEPRECATED, nullable)
   --payment-profile-token: string # The payment profile token associated with the Payment Profile that will be debited or credited. Required if not using `access_token`.
@@ -4785,11 +4945,11 @@ export def "transfer-create transferCreate" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/transfer/create")
-  let body = {access_token: $access_token, account_id: $account_id, ach_class: $ach_class, amount: $amount, authorization_id: $authorization_id, client_id: $client_id, description: $description, idempotency_key: $idempotency_key, iso_currency_code: $iso_currency_code, metadata: $metadata, network: $network, origination_account_id: $origination_account_id, payment_profile_token: $payment_profile_token, secret: $secret, type: $type, user: $user} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"access_token": $access_token, "account_id": $account_id, "ach_class": $ach_class, "amount": $amount, "authorization_id": $authorization_id, "client_id": $client_id, "description": $description, "idempotency_key": $idempotency_key, "iso_currency_code": $iso_currency_code, "metadata": $metadata, "network": $network, "origination_account_id": $origination_account_id, "payment_profile_token": $payment_profile_token, "secret": $secret, "type": $type, "user": $user} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # List transfer events
@@ -4798,7 +4958,7 @@ export def "transfer-create transferCreate" [
 # Docs: /api/products/transfer/#transfereventlist
 # operationId: transferEventList
 @deprecated --flag origination-account-id
-export def "transfer-event-list transferEventList" [
+export def "transfer-event-list list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4806,12 +4966,13 @@ export def "transfer-event-list transferEventList" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --account-id: string # The account ID to get events for all transactions to/from an account. (nullable)
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
   --count: int # The maximum number of transfer events to return. If the number of events matching the above parameters is greater than `count`, the most recent events will be returned. (nullable, default: 25)
   --end-date: string # The end datetime of transfers to list. This should be in RFC 3339 format (i.e. `2019-12-06T22:35:49Z`) (nullable, format: date-time)
-  --event-types: list # Filter events by event type.
+  --event-types: list<string> # Filter events by event type.
   --funding-account-id: string # Filter transfer events to only those with the specified `funding_account_id`. (nullable)
   --offset: int # The offset into the list of transfer events. When `count`=25 and `offset`=0, the first 25 events will be returned. When `count`=25 and `offset`=25, the next 25 events will be returned. (nullable, default: 0)
   --origination-account-id: string # The origination account ID to get events for transfers from a specific origination account. (DEPRECATED, nullable)
@@ -4820,17 +4981,17 @@ export def "transfer-event-list transferEventList" [
   --start-date: string # The start datetime of transfers to list. This should be in RFC 3339 format (i.e. `2019-12-06T22:35:49Z`) (nullable, format: date-time)
   --sweep-id: string # Plaid’s unique identifier for a sweep.
   --transfer-id: string # Plaid’s unique identifier for a transfer. (nullable)
-  --transfer-type: string@transfer-type-completer # The type of transfer. This will be either `debit` or `credit`.  A `debit` indicates a transfer of money into your origination account; a `credit` indicates a transfer of money out of your origination account. (nullable)
+  --transfer-type: string@transfer-type-completer # The type of transfer. This will be either `debit` or `credit`. A `debit` indicates a transfer of money into your origination account; a `credit` indicates a transfer of money out of your origination account. (nullable)
 ]: any -> record<request_id: string, transfer_events: table<account_id: string, event_id: int, event_type: string, failure_reason: record, funding_account_id: string, origination_account_id: string, originator_client_id: string, refund_id: string, sweep_amount: string, sweep_id: string, timestamp: string, transfer_amount: string, transfer_id: string, transfer_type: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/transfer/event/list")
-  let body = {account_id: $account_id, client_id: $client_id, count: $count, end_date: $end_date, event_types: $event_types, funding_account_id: $funding_account_id, offset: $offset, origination_account_id: $origination_account_id, originator_client_id: $originator_client_id, secret: $secret, start_date: $start_date, sweep_id: $sweep_id, transfer_id: $transfer_id, transfer_type: $transfer_type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"account_id": $account_id, "client_id": $client_id, "count": $count, "end_date": $end_date, "event_types": $event_types, "funding_account_id": $funding_account_id, "offset": $offset, "origination_account_id": $origination_account_id, "originator_client_id": $originator_client_id, "secret": $secret, "start_date": $start_date, "sweep_id": $sweep_id, "transfer_id": $transfer_id, "transfer_type": $transfer_type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Sync transfer events
@@ -4838,7 +4999,7 @@ export def "transfer-event-list transferEventList" [
 # POST /transfer/event/sync
 # Docs: /api/products/transfer/#transfereventsync
 # operationId: transferEventSync
-export def "transfer-event-sync transferEventSync" [
+export def "transfer-event-sync sync" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4846,6 +5007,7 @@ export def "transfer-event-sync transferEventSync" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   after_id: int # The latest (largest) `event_id` fetched via the sync endpoint, or 0 initially.
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
@@ -4856,11 +5018,11 @@ export def "transfer-event-sync transferEventSync" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/transfer/event/sync")
-  let body = {after_id: $after_id, client_id: $client_id, count: $count, secret: $secret} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"after_id": $after_id, "client_id": $client_id, "count": $count, "secret": $secret} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Retrieve a transfer
@@ -4868,7 +5030,7 @@ export def "transfer-event-sync transferEventSync" [
 # POST /transfer/get
 # Docs: /api/products/transfer/#transferget
 # operationId: transferGet
-export def "transfer-get transferGet" [
+export def "transfer-get get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4876,6 +5038,7 @@ export def "transfer-get transferGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
@@ -4885,11 +5048,11 @@ export def "transfer-get transferGet" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/transfer/get")
-  let body = {client_id: $client_id, secret: $secret, transfer_id: $transfer_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"client_id": $client_id, "secret": $secret, "transfer_id": $transfer_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Create a transfer intent object to invoke the Transfer UI
@@ -4899,7 +5062,7 @@ export def "transfer-get transferGet" [
 # operationId: transferIntentCreate
 # --user shape: {address?: record, email_address?: string, legal_name: string, phone_number?: string}
 @deprecated --flag origination-account-id
-export def "transfer-intent-create transferIntentCreate" [
+export def "transfer-intent-create create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4907,17 +5070,18 @@ export def "transfer-intent-create transferIntentCreate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --account-id: string # The Plaid `account_id` corresponding to the end-user account that will be debited or credited. (nullable)
-  --ach-class: string@ach-class-completer # Specifies the use case of the transfer. Required for transfers on an ACH network.  `"ccd"` - Corporate Credit or Debit - fund transfer between two corporate bank accounts  `"ppd"` - Prearranged Payment or Deposit - the transfer is part of a pre-existing relationship with a consumer, eg. bill payment  `"tel"` - Telephone-Initiated Entry  `"web"` - Internet-Initiated Entry - debits from a consumer’s account where their authorization is obtained over the Internet
+  --ach-class: string@ach-class-completer # Specifies the use case of the transfer. Required for transfers on an ACH network. `"ccd"` - Corporate Credit or Debit - fund transfer between two corporate bank accounts `"ppd"` - Prearranged Payment or Deposit - the transfer is part of a pre-existing relationship with a consumer, eg. bill payment `"tel"` - Telephone-Initiated Entry `"web"` - Internet-Initiated Entry - debits from a consumer’s account where their authorization is obtained over the Internet
   amount: string # The amount of the transfer (decimal string with two digits of precision e.g. "10.00").
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
   description: string # A description for the underlying transfer. Maximum of 8 characters.
   --funding-account-id: string # The id of the funding account to use, available in the Plaid Dashboard. This determines which of your business checking accounts will be credited or debited. Defaults to the account configured during onboarding. (nullable)
   --iso-currency-code: string # The currency of the transfer amount, e.g. "USD"
-  --metadata: record # The Metadata object is a mapping of client-provided string fields to any string value. The following limitations apply: The JSON values must be Strings (no nested JSON objects allowed) Only ASCII characters may be used Maximum of 50 key/value pairs Maximum key length of 40 characters Maximum value length of 500 characters  (nullable)
-  mode: string@mode-completer # The direction of the flow of transfer funds.  `PAYMENT`: Transfers funds from an end user's account to your business account.  `DISBURSEMENT`: Transfers funds from your business account to an end user's account.
-  --network: string@network-completer-2 # The network or rails used for the transfer. Defaults to `same-day-ach`.  For transfers submitted as either `ach` or `same-day-ach` the cutoff for same-day is 9:30 AM Pacific Time and the cutoff for next-day transfers is 5:30 PM Pacific Time. It is recommended to submit a transfer at least 15 minutes before the cutoff time in order to ensure that it will be processed before the cutoff. Any transfer that is indicated as `same-day-ach` and that misses the same-day cutoff, but is submitted in time for the next-day cutoff, will be sent over next-day rails and will not incur same-day charges. Note that both legs of the transfer will be downgraded if applicable. (default: same-day-ach)
+  --metadata: record # The Metadata object is a mapping of client-provided string fields to any string value. The following limitations apply: The JSON values must be Strings (no nested JSON objects allowed) Only ASCII characters may be used Maximum of 50 key/value pairs Maximum key length of 40 characters Maximum value length of 500 characters (nullable)
+  mode: string@mode-completer # The direction of the flow of transfer funds. `PAYMENT`: Transfers funds from an end user's account to your business account. `DISBURSEMENT`: Transfers funds from your business account to an end user's account.
+  --network: string@network-completer-2 # The network or rails used for the transfer. Defaults to `same-day-ach`. For transfers submitted as either `ach` or `same-day-ach` the cutoff for same-day is 9:30 AM Pacific Time and the cutoff for next-day transfers is 5:30 PM Pacific Time. It is recommended to submit a transfer at least 15 minutes before the cutoff time in order to ensure that it will be processed before the cutoff. Any transfer that is indicated as `same-day-ach` and that misses the same-day cutoff, but is submitted in time for the next-day cutoff, will be sent over next-day rails and will not incur same-day charges. Note that both legs of the transfer will be downgraded if applicable. (default: same-day-ach)
   --origination-account-id: string # Plaid’s unique identifier for the origination account for the intent. If not provided, the default account will be used. (DEPRECATED, nullable)
   --require-guarantee: oneof<nothing, bool> # When `true`, the transfer requires a `GUARANTEED` decision by Plaid to proceed (Guarantee customers only). (nullable, default: false)
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
@@ -4927,11 +5091,11 @@ export def "transfer-intent-create transferIntentCreate" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/transfer/intent/create")
-  let body = {account_id: $account_id, ach_class: $ach_class, amount: $amount, client_id: $client_id, description: $description, funding_account_id: $funding_account_id, iso_currency_code: $iso_currency_code, metadata: $metadata, mode: $mode, network: $network, origination_account_id: $origination_account_id, require_guarantee: $require_guarantee, secret: $secret, user: $user} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"account_id": $account_id, "ach_class": $ach_class, "amount": $amount, "client_id": $client_id, "description": $description, "funding_account_id": $funding_account_id, "iso_currency_code": $iso_currency_code, "metadata": $metadata, "mode": $mode, "network": $network, "origination_account_id": $origination_account_id, "require_guarantee": $require_guarantee, "secret": $secret, "user": $user} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Retrieve more information about a transfer intent
@@ -4939,7 +5103,7 @@ export def "transfer-intent-create transferIntentCreate" [
 # POST /transfer/intent/get
 # Docs: /api/products/transfer/#transferintentget
 # operationId: transferIntentGet
-export def "transfer-intent-get transferIntentGet" [
+export def "transfer-intent-get get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4947,6 +5111,7 @@ export def "transfer-intent-get transferIntentGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
@@ -4956,11 +5121,11 @@ export def "transfer-intent-get transferIntentGet" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/transfer/intent/get")
-  let body = {client_id: $client_id, secret: $secret, transfer_intent_id: $transfer_intent_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"client_id": $client_id, "secret": $secret, "transfer_intent_id": $transfer_intent_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # List transfers
@@ -4969,7 +5134,7 @@ export def "transfer-intent-get transferIntentGet" [
 # Docs: /api/products/transfer/#transferlist
 # operationId: transferList
 @deprecated --flag origination-account-id
-export def "transfer-list transferList" [
+export def "transfer-list list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4977,6 +5142,7 @@ export def "transfer-list transferList" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
   --count: int # The maximum number of transfers to return. (default: 25)
@@ -4992,11 +5158,11 @@ export def "transfer-list transferList" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/transfer/list")
-  let body = {client_id: $client_id, count: $count, end_date: $end_date, funding_account_id: $funding_account_id, offset: $offset, origination_account_id: $origination_account_id, originator_client_id: $originator_client_id, secret: $secret, start_date: $start_date} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"client_id": $client_id, "count": $count, "end_date": $end_date, "funding_account_id": $funding_account_id, "offset": $offset, "origination_account_id": $origination_account_id, "originator_client_id": $originator_client_id, "secret": $secret, "start_date": $start_date} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Migrate account into Transfers
@@ -5004,7 +5170,7 @@ export def "transfer-list transferList" [
 # POST /transfer/migrate_account
 # Docs: /api/products/transfer/#transfermigrate_account
 # operationId: transferMigrateAccount
-export def "transfer-migrate-account transferMigrateAccount" [
+export def "transfer-migrate-account create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5012,6 +5178,7 @@ export def "transfer-migrate-account transferMigrateAccount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   account_number: string # The user's account number.
   account_type: string # The type of the bank account (`checking` or `savings`).
@@ -5024,11 +5191,11 @@ export def "transfer-migrate-account transferMigrateAccount" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/transfer/migrate_account")
-  let body = {account_number: $account_number, account_type: $account_type, client_id: $client_id, routing_number: $routing_number, secret: $secret, wire_routing_number: $wire_routing_number} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"account_number": $account_number, "account_type": $account_type, "client_id": $client_id, "routing_number": $routing_number, "secret": $secret, "wire_routing_number": $wire_routing_number} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Create a new originator
@@ -5036,7 +5203,7 @@ export def "transfer-migrate-account transferMigrateAccount" [
 # POST /transfer/originator/create
 # Docs: /api/products/transfer/#transferoriginatorcreate
 # operationId: transferOriginatorCreate
-export def "transfer-originator-create transferOriginatorCreate" [
+export def "transfer-originator-create create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5044,6 +5211,7 @@ export def "transfer-originator-create transferOriginatorCreate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
   company_name: string # The company name of the end customer being created. This will be displayed in public-facing surfaces, e.g. Plaid Dashboard.
@@ -5053,11 +5221,11 @@ export def "transfer-originator-create transferOriginatorCreate" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/transfer/originator/create")
-  let body = {client_id: $client_id, company_name: $company_name, secret: $secret} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"client_id": $client_id, "company_name": $company_name, "secret": $secret} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Get status of an originator's onboarding
@@ -5065,7 +5233,7 @@ export def "transfer-originator-create transferOriginatorCreate" [
 # POST /transfer/originator/get
 # Docs: /api/products/transfer/#transferoriginatorget
 # operationId: transferOriginatorGet
-export def "transfer-originator-get transferOriginatorGet" [
+export def "transfer-originator-get get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5073,6 +5241,7 @@ export def "transfer-originator-get transferOriginatorGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
   originator_client_id: string # Client ID of the end customer (i.e. the originator).
@@ -5082,11 +5251,11 @@ export def "transfer-originator-get transferOriginatorGet" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/transfer/originator/get")
-  let body = {client_id: $client_id, originator_client_id: $originator_client_id, secret: $secret} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"client_id": $client_id, "originator_client_id": $originator_client_id, "secret": $secret} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Get status of all originators' onboarding
@@ -5094,7 +5263,7 @@ export def "transfer-originator-get transferOriginatorGet" [
 # POST /transfer/originator/list
 # Docs: /api/products/transfer/#transferoriginatorlist
 # operationId: transferOriginatorList
-export def "transfer-originator-list transferOriginatorList" [
+export def "transfer-originator-list list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5102,6 +5271,7 @@ export def "transfer-originator-list transferOriginatorList" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
   --count: int # The maximum number of originators to return. (nullable, default: 25)
@@ -5112,11 +5282,11 @@ export def "transfer-originator-list transferOriginatorList" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/transfer/originator/list")
-  let body = {client_id: $client_id, count: $count, offset: $offset, secret: $secret} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"client_id": $client_id, "count": $count, "offset": $offset, "secret": $secret} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Generate a Plaid-hosted onboarding UI URL.
@@ -5124,7 +5294,7 @@ export def "transfer-originator-list transferOriginatorList" [
 # POST /transfer/questionnaire/create
 # Docs: /api/products/transfer/#transferquestionnairecreate
 # operationId: transferQuestionnaireCreate
-export def "transfer-questionnaire-create transferQuestionnaireCreate" [
+export def "transfer-questionnaire-create create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5132,6 +5302,7 @@ export def "transfer-questionnaire-create transferQuestionnaireCreate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
   originator_client_id: string # Client ID of the end customer.
@@ -5142,11 +5313,11 @@ export def "transfer-questionnaire-create transferQuestionnaireCreate" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/transfer/questionnaire/create")
-  let body = {client_id: $client_id, originator_client_id: $originator_client_id, redirect_uri: $redirect_uri, secret: $secret} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"client_id": $client_id, "originator_client_id": $originator_client_id, "redirect_uri": $redirect_uri, "secret": $secret} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Cancel a recurring transfer.
@@ -5154,7 +5325,7 @@ export def "transfer-questionnaire-create transferQuestionnaireCreate" [
 # POST /transfer/recurring/cancel
 # Docs: /api/products/transfer/#transferrecurringcancel
 # operationId: transferRecurringCancel
-export def "transfer-recurring-cancel transferRecurringCancel" [
+export def "transfer-recurring-cancel cancel" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5162,6 +5333,7 @@ export def "transfer-recurring-cancel transferRecurringCancel" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
   recurring_transfer_id: string # Plaid’s unique identifier for a recurring transfer.
@@ -5171,11 +5343,11 @@ export def "transfer-recurring-cancel transferRecurringCancel" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/transfer/recurring/cancel")
-  let body = {client_id: $client_id, recurring_transfer_id: $recurring_transfer_id, secret: $secret} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"client_id": $client_id, "recurring_transfer_id": $recurring_transfer_id, "secret": $secret} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Create a recurring transfer
@@ -5187,7 +5359,7 @@ export def "transfer-recurring-cancel transferRecurringCancel" [
 # --schedule shape: {end_date?: string, interval_count: int, interval_execution_day: int, interval_unit: "week"|"month", start_date: string}
 # --user shape: {address?: record, email_address?: string, legal_name: string, phone_number?: string}
 @deprecated --flag iso-currency-code
-export def "transfer-recurring-create transferRecurringCreate" [
+export def "transfer-recurring-create create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5195,22 +5367,23 @@ export def "transfer-recurring-create transferRecurringCreate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   access_token: string # The Plaid `access_token` for the account that will be debited or credited. Required if not using `payment_profile_token`.
   account_id: string # The Plaid `account_id` corresponding to the end-user account that will be debited or credited. Returned only if `account_id` was set on intent creation.
-  --ach-class: string@ach-class-completer # Specifies the use case of the transfer. Required for transfers on an ACH network.  `"ccd"` - Corporate Credit or Debit - fund transfer between two corporate bank accounts  `"ppd"` - Prearranged Payment or Deposit - the transfer is part of a pre-existing relationship with a consumer, eg. bill payment  `"tel"` - Telephone-Initiated Entry  `"web"` - Internet-Initiated Entry - debits from a consumer’s account where their authorization is obtained over the Internet
+  --ach-class: string@ach-class-completer # Specifies the use case of the transfer. Required for transfers on an ACH network. `"ccd"` - Corporate Credit or Debit - fund transfer between two corporate bank accounts `"ppd"` - Prearranged Payment or Deposit - the transfer is part of a pre-existing relationship with a consumer, eg. bill payment `"tel"` - Telephone-Initiated Entry `"web"` - Internet-Initiated Entry - debits from a consumer’s account where their authorization is obtained over the Internet
   amount: string # The amount of the transfer (decimal string with two digits of precision e.g. "10.00").
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
   description: string # The description of the recurring transfer.
   device: record # Information about the device being used to initiate the authorization. — shape: {ip_address: string, user_agent: string}
   --funding-account-id: string # The id of the funding account to use, available in the Plaid Dashboard. This determines which of your business checking accounts will be credited or debited. Defaults to the account configured during onboarding. (nullable)
-  idempotency_key: string # A random key provided by the client, per unique recurring transfer. Maximum of 50 characters.  The API supports idempotency for safely retrying requests without accidentally performing the same operation twice. For example, if a request to create a recurring fails due to a network connection error, you can retry the request with the same idempotency key to guarantee that only a single recurring transfer is created.
+  idempotency_key: string # A random key provided by the client, per unique recurring transfer. Maximum of 50 characters. The API supports idempotency for safely retrying requests without accidentally performing the same operation twice. For example, if a request to create a recurring fails due to a network connection error, you can retry the request with the same idempotency key to guarantee that only a single recurring transfer is created.
   --iso-currency-code: string # The currency of the transfer amount. The default value is "USD". (DEPRECATED)
-  network: string@network-completer-1 # The network or rails used for the transfer.  For transfers submitted as either `ach` or `same-day-ach` the cutoff for same-day is 9:30 AM Pacific Time and the cutoff for next-day transfers is 5:30 PM Pacific Time. It is recommended to submit a transfer at least 15 minutes before the cutoff time in order to ensure that it will be processed before the cutoff. Any transfer that is indicated as `same-day-ach` and that misses the same-day cutoff, but is submitted in time for the next-day cutoff, will be sent over next-day rails and will not incur same-day charges. Note that both legs of the transfer will be downgraded if applicable.
+  network: string@network-completer-1 # The network or rails used for the transfer. For transfers submitted as either `ach` or `same-day-ach` the cutoff for same-day is 9:30 AM Pacific Time and the cutoff for next-day transfers is 5:30 PM Pacific Time. It is recommended to submit a transfer at least 15 minutes before the cutoff time in order to ensure that it will be processed before the cutoff. Any transfer that is indicated as `same-day-ach` and that misses the same-day cutoff, but is submitted in time for the next-day cutoff, will be sent over next-day rails and will not incur same-day charges. Note that both legs of the transfer will be downgraded if applicable.
   schedule: record # The schedule that the recurring transfer will be executed on. — shape: {end_date?: string, interval_count: int, interval_execution_day: int, interval_unit: "week"|"month", start_date: string}
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
   --test-clock-id: string # Plaid’s unique identifier for a test clock. (nullable)
-  type: string@type-completer # The type of transfer. This will be either `debit` or `credit`.  A `debit` indicates a transfer of money into the origination account; a `credit` indicates a transfer of money out of the origination account.
+  type: string@type-completer # The type of transfer. This will be either `debit` or `credit`. A `debit` indicates a transfer of money into the origination account; a `credit` indicates a transfer of money out of the origination account.
   user: record # The legal name and other information for the account holder. — shape: {address?: record, email_address?: string, legal_name: string, phone_number?: string}
   --user-present: oneof<nothing, bool> # If the end user is initiating the specific transfer themselves via an interactive UI, this should be `true`; for automatic recurring payments where the end user is not actually initiating each individual transfer, it should be `false`. (nullable)
 ]: any -> record<decision: string, decision_rationale: record<code: string, description: string>, recurring_transfer: record, request_id: string> {
@@ -5218,11 +5391,11 @@ export def "transfer-recurring-create transferRecurringCreate" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/transfer/recurring/create")
-  let body = {access_token: $access_token, account_id: $account_id, ach_class: $ach_class, amount: $amount, client_id: $client_id, description: $description, device: $device, funding_account_id: $funding_account_id, idempotency_key: $idempotency_key, iso_currency_code: $iso_currency_code, network: $network, schedule: $schedule, secret: $secret, test_clock_id: $test_clock_id, type: $type, user: $user, user_present: $user_present} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"access_token": $access_token, "account_id": $account_id, "ach_class": $ach_class, "amount": $amount, "client_id": $client_id, "description": $description, "device": $device, "funding_account_id": $funding_account_id, "idempotency_key": $idempotency_key, "iso_currency_code": $iso_currency_code, "network": $network, "schedule": $schedule, "secret": $secret, "test_clock_id": $test_clock_id, "type": $type, "user": $user, "user_present": $user_present} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Retrieve a recurring transfer
@@ -5230,7 +5403,7 @@ export def "transfer-recurring-create transferRecurringCreate" [
 # POST /transfer/recurring/get
 # Docs: /api/products/transfer/#transferrecurringget
 # operationId: transferRecurringGet
-export def "transfer-recurring-get transferRecurringGet" [
+export def "transfer-recurring-get get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5238,6 +5411,7 @@ export def "transfer-recurring-get transferRecurringGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
   recurring_transfer_id: string # Plaid’s unique identifier for a recurring transfer.
@@ -5247,11 +5421,11 @@ export def "transfer-recurring-get transferRecurringGet" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/transfer/recurring/get")
-  let body = {client_id: $client_id, recurring_transfer_id: $recurring_transfer_id, secret: $secret} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"client_id": $client_id, "recurring_transfer_id": $recurring_transfer_id, "secret": $secret} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # List recurring transfers
@@ -5259,7 +5433,7 @@ export def "transfer-recurring-get transferRecurringGet" [
 # POST /transfer/recurring/list
 # Docs: /api/products/transfer/#transferrecurringlist
 # operationId: transferRecurringList
-export def "transfer-recurring-list transferRecurringList" [
+export def "transfer-recurring-list list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5267,6 +5441,7 @@ export def "transfer-recurring-list transferRecurringList" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
   --count: int # The maximum number of recurring transfers to return. (default: 25)
@@ -5280,11 +5455,11 @@ export def "transfer-recurring-list transferRecurringList" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/transfer/recurring/list")
-  let body = {client_id: $client_id, count: $count, end_time: $end_time, funding_account_id: $funding_account_id, offset: $offset, secret: $secret, start_time: $start_time} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"client_id": $client_id, "count": $count, "end_time": $end_time, "funding_account_id": $funding_account_id, "offset": $offset, "secret": $secret, "start_time": $start_time} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Cancel a refund
@@ -5292,7 +5467,7 @@ export def "transfer-recurring-list transferRecurringList" [
 # POST /transfer/refund/cancel
 # Docs: /api/products/transfer/#transferrefundcancel
 # operationId: transferRefundCancel
-export def "transfer-refund-cancel transferRefundCancel" [
+export def "transfer-refund-cancel cancel" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5300,6 +5475,7 @@ export def "transfer-refund-cancel transferRefundCancel" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
   refund_id: string # Plaid’s unique identifier for a refund.
@@ -5309,11 +5485,11 @@ export def "transfer-refund-cancel transferRefundCancel" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/transfer/refund/cancel")
-  let body = {client_id: $client_id, refund_id: $refund_id, secret: $secret} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"client_id": $client_id, "refund_id": $refund_id, "secret": $secret} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Create a refund
@@ -5321,7 +5497,7 @@ export def "transfer-refund-cancel transferRefundCancel" [
 # POST /transfer/refund/create
 # Docs: /api/products/transfer/#transferrefundcreate
 # operationId: transferRefundCreate
-export def "transfer-refund-create transferRefundCreate" [
+export def "transfer-refund-create create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5329,10 +5505,11 @@ export def "transfer-refund-create transferRefundCreate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   amount: string # The amount of the refund (decimal string with two digits of precision e.g. "10.00").
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
-  idempotency_key: string # A random key provided by the client, per unique refund. Maximum of 50 characters.  The API supports idempotency for safely retrying requests without accidentally performing the same operation twice. For example, if a request to create a refund fails due to a network connection error, you can retry the request with the same idempotency key to guarantee that only a single refund is created.
+  idempotency_key: string # A random key provided by the client, per unique refund. Maximum of 50 characters. The API supports idempotency for safely retrying requests without accidentally performing the same operation twice. For example, if a request to create a refund fails due to a network connection error, you can retry the request with the same idempotency key to guarantee that only a single refund is created.
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
   transfer_id: string # The ID of the transfer to refund.
 ]: any -> record<refund: record<amount: string, created: string, id: string, status: string, transfer_id: string>, request_id: string> {
@@ -5340,11 +5517,11 @@ export def "transfer-refund-create transferRefundCreate" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/transfer/refund/create")
-  let body = {amount: $amount, client_id: $client_id, idempotency_key: $idempotency_key, secret: $secret, transfer_id: $transfer_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"amount": $amount, "client_id": $client_id, "idempotency_key": $idempotency_key, "secret": $secret, "transfer_id": $transfer_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Retrieve a refund
@@ -5352,7 +5529,7 @@ export def "transfer-refund-create transferRefundCreate" [
 # POST /transfer/refund/get
 # Docs: /api/products/transfer/#transferrefundget
 # operationId: transferRefundGet
-export def "transfer-refund-get transferRefundGet" [
+export def "transfer-refund-get get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5360,6 +5537,7 @@ export def "transfer-refund-get transferRefundGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
   refund_id: string # Plaid’s unique identifier for a refund.
@@ -5369,11 +5547,11 @@ export def "transfer-refund-get transferRefundGet" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/transfer/refund/get")
-  let body = {client_id: $client_id, refund_id: $refund_id, secret: $secret} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"client_id": $client_id, "refund_id": $refund_id, "secret": $secret} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Lists historical repayments
@@ -5381,7 +5559,7 @@ export def "transfer-refund-get transferRefundGet" [
 # POST /transfer/repayment/list
 # Docs: /api/products/transfer/#transferrepaymentlist
 # operationId: transferRepaymentList
-export def "transfer-repayment-list transferRepaymentList" [
+export def "transfer-repayment-list list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5389,6 +5567,7 @@ export def "transfer-repayment-list transferRepaymentList" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
   --count: int # The maximum number of repayments to return. (nullable, default: 25)
@@ -5401,11 +5580,11 @@ export def "transfer-repayment-list transferRepaymentList" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/transfer/repayment/list")
-  let body = {client_id: $client_id, count: $count, end_date: $end_date, offset: $offset, secret: $secret, start_date: $start_date} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"client_id": $client_id, "count": $count, "end_date": $end_date, "offset": $offset, "secret": $secret, "start_date": $start_date} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # List the returns included in a repayment
@@ -5413,7 +5592,7 @@ export def "transfer-repayment-list transferRepaymentList" [
 # POST /transfer/repayment/return/list
 # Docs: /api/products/transfer/#transferrepaymentreturnlist
 # operationId: transferRepaymentReturnList
-export def "transfer-repayment-return-list transferRepaymentReturnList" [
+export def "transfer-repayment-return-list list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5421,6 +5600,7 @@ export def "transfer-repayment-return-list transferRepaymentReturnList" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
   --count: int # The maximum number of repayments to return. (nullable, default: 25)
@@ -5432,11 +5612,11 @@ export def "transfer-repayment-return-list transferRepaymentReturnList" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/transfer/repayment/return/list")
-  let body = {client_id: $client_id, count: $count, offset: $offset, repayment_id: $repayment_id, secret: $secret} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"client_id": $client_id, "count": $count, "offset": $offset, "repayment_id": $repayment_id, "secret": $secret} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Retrieve a sweep
@@ -5444,7 +5624,7 @@ export def "transfer-repayment-return-list transferRepaymentReturnList" [
 # POST /transfer/sweep/get
 # Docs: /api/products/transfer/#transfersweepget
 # operationId: transferSweepGet
-export def "transfer-sweep-get transferSweepGet" [
+export def "transfer-sweep-get get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5452,6 +5632,7 @@ export def "transfer-sweep-get transferSweepGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
@@ -5461,11 +5642,11 @@ export def "transfer-sweep-get transferSweepGet" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/transfer/sweep/get")
-  let body = {client_id: $client_id, secret: $secret, sweep_id: $sweep_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"client_id": $client_id, "secret": $secret, "sweep_id": $sweep_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # List sweeps
@@ -5473,7 +5654,7 @@ export def "transfer-sweep-get transferSweepGet" [
 # POST /transfer/sweep/list
 # Docs: /api/products/transfer/#transfersweeplist
 # operationId: transferSweepList
-export def "transfer-sweep-list transferSweepList" [
+export def "transfer-sweep-list list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5481,6 +5662,7 @@ export def "transfer-sweep-list transferSweepList" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
   --count: int # The maximum number of sweeps to return. (nullable, default: 25)
@@ -5495,11 +5677,11 @@ export def "transfer-sweep-list transferSweepList" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/transfer/sweep/list")
-  let body = {client_id: $client_id, count: $count, end_date: $end_date, funding_account_id: $funding_account_id, offset: $offset, originator_client_id: $originator_client_id, secret: $secret, start_date: $start_date} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"client_id": $client_id, "count": $count, "end_date": $end_date, "funding_account_id": $funding_account_id, "offset": $offset, "originator_client_id": $originator_client_id, "secret": $secret, "start_date": $start_date} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Create user
@@ -5507,7 +5689,7 @@ export def "transfer-sweep-list transferSweepList" [
 # POST /user/create
 # Docs: /api/products/income/#usercreate
 # operationId: userCreate
-export def "user-create userCreate" [
+export def "user-create create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5515,6 +5697,7 @@ export def "user-create userCreate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
   client_user_id: string # A unique ID representing the end user. Maximum of 128 characters. Typically this will be a user ID number from your application. Personally identifiable information, such as an email address or phone number, should not be used in the `client_user_id`.
@@ -5524,11 +5707,11 @@ export def "user-create userCreate" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/user/create")
-  let body = {client_id: $client_id, client_user_id: $client_user_id, secret: $secret} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"client_id": $client_id, "client_user_id": $client_user_id, "secret": $secret} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Create an e-wallet
@@ -5536,7 +5719,7 @@ export def "user-create userCreate" [
 # POST /wallet/create
 # Docs: /api/products/virtual-accounts/#walletcreate
 # operationId: walletCreate
-export def "wallet-create walletCreate" [
+export def "wallet-create create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5544,6 +5727,7 @@ export def "wallet-create walletCreate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
   iso_currency_code: string@iso-currency-code-completer # An ISO-4217 currency code, used with e-wallets and transactions.
@@ -5553,11 +5737,11 @@ export def "wallet-create walletCreate" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/wallet/create")
-  let body = {client_id: $client_id, iso_currency_code: $iso_currency_code, secret: $secret} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"client_id": $client_id, "iso_currency_code": $iso_currency_code, "secret": $secret} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Fetch an e-wallet
@@ -5565,7 +5749,7 @@ export def "wallet-create walletCreate" [
 # POST /wallet/get
 # Docs: /api/products/virtual-accounts/#walletget
 # operationId: walletGet
-export def "wallet-get walletGet" [
+export def "wallet-get get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5573,6 +5757,7 @@ export def "wallet-get walletGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
@@ -5582,11 +5767,11 @@ export def "wallet-get walletGet" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/wallet/get")
-  let body = {client_id: $client_id, secret: $secret, wallet_id: $wallet_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"client_id": $client_id, "secret": $secret, "wallet_id": $wallet_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Fetch a list of e-wallets
@@ -5594,7 +5779,7 @@ export def "wallet-get walletGet" [
 # POST /wallet/list
 # Docs: /api/products/virtual-accounts/#walletlist
 # operationId: walletList
-export def "wallet-list walletList" [
+export def "wallet-list list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5602,6 +5787,7 @@ export def "wallet-list walletList" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
   --count: int # The number of e-wallets to fetch (default: 10)
@@ -5613,11 +5799,11 @@ export def "wallet-list walletList" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/wallet/list")
-  let body = {client_id: $client_id, count: $count, cursor: $cursor, iso_currency_code: $iso_currency_code, secret: $secret} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"client_id": $client_id, "count": $count, "cursor": $cursor, "iso_currency_code": $iso_currency_code, "secret": $secret} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Execute a transaction using an e-wallet
@@ -5627,7 +5813,7 @@ export def "wallet-list walletList" [
 # operationId: walletTransactionExecute
 # --amount shape: {iso_currency_code: "GBP"|"EUR", value: float}
 # --counterparty shape: {name: string, numbers: record}
-export def "wallet-transaction-execute walletTransactionExecute" [
+export def "wallet-transaction-execute create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5635,11 +5821,12 @@ export def "wallet-transaction-execute walletTransactionExecute" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   amount: record # The amount and currency of a transaction — shape: {iso_currency_code: "GBP"|"EUR", value: float}
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
   counterparty: record # An object representing the e-wallet transaction's counterparty — shape: {name: string, numbers: record}
-  idempotency_key: string # A random key provided by the client, per unique wallet transaction. Maximum of 128 characters.  The API supports idempotency for safely retrying requests without accidentally performing the same operation twice. If a request to execute a wallet transaction fails due to a network connection error, then after a minimum delay of one minute, you can retry the request with the same idempotency key to guarantee that only a single wallet transaction is created. If the request was successfully processed, it will prevent any transaction that uses the same idempotency key, and was received within 24 hours of the first request, from being processed.
+  idempotency_key: string # A random key provided by the client, per unique wallet transaction. Maximum of 128 characters. The API supports idempotency for safely retrying requests without accidentally performing the same operation twice. If a request to execute a wallet transaction fails due to a network connection error, then after a minimum delay of one minute, you can retry the request with the same idempotency key to guarantee that only a single wallet transaction is created. If the request was successfully processed, it will prevent any transaction that uses the same idempotency key, and was received within 24 hours of the first request, from being processed.
   reference: string # A reference for the transaction. This must be an alphanumeric string with 6 to 18 characters and must not contain any special characters or spaces. Ensure that the `reference` field is unique for each transaction.
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
   wallet_id: string # The ID of the e-wallet to debit from
@@ -5648,11 +5835,11 @@ export def "wallet-transaction-execute walletTransactionExecute" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/wallet/transaction/execute")
-  let body = {amount: $amount, client_id: $client_id, counterparty: $counterparty, idempotency_key: $idempotency_key, reference: $reference, secret: $secret, wallet_id: $wallet_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"amount": $amount, "client_id": $client_id, "counterparty": $counterparty, "idempotency_key": $idempotency_key, "reference": $reference, "secret": $secret, "wallet_id": $wallet_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Fetch an e-wallet transaction
@@ -5660,7 +5847,7 @@ export def "wallet-transaction-execute walletTransactionExecute" [
 # POST /wallet/transaction/get
 # Docs: /api/products/virtual-accounts/#wallettransactionget
 # operationId: walletTransactionGet
-export def "wallet-transaction-get walletTransactionGet" [
+export def "wallet-transaction-get get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5668,6 +5855,7 @@ export def "wallet-transaction-get walletTransactionGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
@@ -5677,11 +5865,11 @@ export def "wallet-transaction-get walletTransactionGet" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/wallet/transaction/get")
-  let body = {client_id: $client_id, secret: $secret, transaction_id: $transaction_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"client_id": $client_id, "secret": $secret, "transaction_id": $transaction_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # List e-wallet transactions
@@ -5690,7 +5878,7 @@ export def "wallet-transaction-get walletTransactionGet" [
 # Docs: /api/products/virtual-accounts/#wallettransactionlist
 # operationId: walletTransactionList
 # --options shape: {end_time?: string, start_time?: string}
-export def "wallet-transaction-list walletTransactionList" [
+export def "wallet-transaction-list list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5698,6 +5886,7 @@ export def "wallet-transaction-list walletTransactionList" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
   --count: int # The number of transactions to fetch (default: 10)
@@ -5710,11 +5899,11 @@ export def "wallet-transaction-list walletTransactionList" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/wallet/transaction/list")
-  let body = {client_id: $client_id, count: $count, cursor: $cursor, options: $options, secret: $secret, wallet_id: $wallet_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"client_id": $client_id, "count": $count, "cursor": $cursor, "options": $options, "secret": $secret, "wallet_id": $wallet_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Create a watchlist screening for an entity
@@ -5723,7 +5912,7 @@ export def "wallet-transaction-list walletTransactionList" [
 # Docs: /api/products/monitor/#watchlist_screeningentitycreate
 # operationId: watchlistScreeningEntityCreate
 # --search_terms shape: {country?: string, document_number?: string, email_address?: string, entity_watchlist_program_id: string, legal_name: string, phone_number?: string, url?: string}
-export def "watchlist-screening-entity-create watchlistScreeningEntityCreate" [
+export def "watchlist-screening-entity-create create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5731,6 +5920,7 @@ export def "watchlist-screening-entity-create watchlistScreeningEntityCreate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
   --client-user-id: string # An identifier to help you connect this object to your internal systems. For example, your database ID corresponding to this object. (e.g. your-db-id-3b24110)
@@ -5741,11 +5931,11 @@ export def "watchlist-screening-entity-create watchlistScreeningEntityCreate" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/watchlist_screening/entity/create")
-  let body = {client_id: $client_id, client_user_id: $client_user_id, search_terms: $search_terms, secret: $secret} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"client_id": $client_id, "client_user_id": $client_user_id, "search_terms": $search_terms, "secret": $secret} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Get an entity screening
@@ -5753,7 +5943,7 @@ export def "watchlist-screening-entity-create watchlistScreeningEntityCreate" [
 # POST /watchlist_screening/entity/get
 # Docs: /api/products/monitor/#watchlist_screeningentityget
 # operationId: watchlistScreeningEntityGet
-export def "watchlist-screening-entity-get watchlistScreeningEntityGet" [
+export def "watchlist-screening-entity-get get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5761,6 +5951,7 @@ export def "watchlist-screening-entity-get watchlistScreeningEntityGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
   entity_watchlist_screening_id: string # ID of the associated entity screening. (e.g. entscr_52xR9LKo77r1Np)
@@ -5770,11 +5961,11 @@ export def "watchlist-screening-entity-get watchlistScreeningEntityGet" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/watchlist_screening/entity/get")
-  let body = {client_id: $client_id, entity_watchlist_screening_id: $entity_watchlist_screening_id, secret: $secret} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"client_id": $client_id, "entity_watchlist_screening_id": $entity_watchlist_screening_id, "secret": $secret} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # List history for entity watchlist screenings
@@ -5782,7 +5973,7 @@ export def "watchlist-screening-entity-get watchlistScreeningEntityGet" [
 # POST /watchlist_screening/entity/history/list
 # Docs: /api/products/monitor/#watchlist_screeningentityhistorylist
 # operationId: watchlistScreeningEntityHistoryList
-export def "watchlist-screening-entity-history-list watchlistScreeningEntityHistoryList" [
+export def "watchlist-screening-entity-history-list list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5790,6 +5981,7 @@ export def "watchlist-screening-entity-history-list watchlistScreeningEntityHist
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
   --cursor: string # An identifier that determines which page of results you receive. (nullable, e.g. eyJkaXJlY3Rpb24iOiJuZXh0Iiwib2Zmc2V0IjoiMTU5NDM)
@@ -5800,11 +5992,11 @@ export def "watchlist-screening-entity-history-list watchlistScreeningEntityHist
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/watchlist_screening/entity/history/list")
-  let body = {client_id: $client_id, cursor: $cursor, entity_watchlist_screening_id: $entity_watchlist_screening_id, secret: $secret} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"client_id": $client_id, "cursor": $cursor, "entity_watchlist_screening_id": $entity_watchlist_screening_id, "secret": $secret} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # List hits for entity watchlist screenings
@@ -5812,7 +6004,7 @@ export def "watchlist-screening-entity-history-list watchlistScreeningEntityHist
 # POST /watchlist_screening/entity/hit/list
 # Docs: /api/products/monitor/#watchlist_screeningentityhitlist
 # operationId: watchlistScreeningEntityHitList
-export def "watchlist-screening-entity-hit-list watchlistScreeningEntityHitList" [
+export def "watchlist-screening-entity-hit-list list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5820,6 +6012,7 @@ export def "watchlist-screening-entity-hit-list watchlistScreeningEntityHitList"
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
   --cursor: string # An identifier that determines which page of results you receive. (nullable, e.g. eyJkaXJlY3Rpb24iOiJuZXh0Iiwib2Zmc2V0IjoiMTU5NDM)
@@ -5830,11 +6023,11 @@ export def "watchlist-screening-entity-hit-list watchlistScreeningEntityHitList"
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/watchlist_screening/entity/hit/list")
-  let body = {client_id: $client_id, cursor: $cursor, entity_watchlist_screening_id: $entity_watchlist_screening_id, secret: $secret} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"client_id": $client_id, "cursor": $cursor, "entity_watchlist_screening_id": $entity_watchlist_screening_id, "secret": $secret} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # List entity watchlist screenings
@@ -5842,7 +6035,7 @@ export def "watchlist-screening-entity-hit-list watchlistScreeningEntityHitList"
 # POST /watchlist_screening/entity/list
 # Docs: /api/products/monitor/#watchlist_screeningentitylist
 # operationId: watchlistScreeningEntityList
-export def "watchlist-screening-entity-list watchlistScreeningEntityList" [
+export def "watchlist-screening-entity-list list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5850,6 +6043,7 @@ export def "watchlist-screening-entity-list watchlistScreeningEntityList" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --assignee: string # ID of the associated user. (e.g. 54350110fedcbaf01234ffee)
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
@@ -5863,11 +6057,11 @@ export def "watchlist-screening-entity-list watchlistScreeningEntityList" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/watchlist_screening/entity/list")
-  let body = {assignee: $assignee, client_id: $client_id, client_user_id: $client_user_id, cursor: $cursor, entity_watchlist_program_id: $entity_watchlist_program_id, secret: $secret, status: $status} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"assignee": $assignee, "client_id": $client_id, "client_user_id": $client_user_id, "cursor": $cursor, "entity_watchlist_program_id": $entity_watchlist_program_id, "secret": $secret, "status": $status} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Get entity watchlist screening program
@@ -5875,7 +6069,7 @@ export def "watchlist-screening-entity-list watchlistScreeningEntityList" [
 # POST /watchlist_screening/entity/program/get
 # Docs: /api/products/monitor/#watchlist_screeningentityprogramget
 # operationId: watchlistScreeningEntityProgramGet
-export def "watchlist-screening-entity-program-get watchlistScreeningEntityProgramGet" [
+export def "watchlist-screening-entity-program-get get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5883,6 +6077,7 @@ export def "watchlist-screening-entity-program-get watchlistScreeningEntityProgr
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
   entity_watchlist_program_id: string # ID of the associated entity program. (e.g. entprg_2eRPsDnL66rZ7H)
@@ -5892,11 +6087,11 @@ export def "watchlist-screening-entity-program-get watchlistScreeningEntityProgr
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/watchlist_screening/entity/program/get")
-  let body = {client_id: $client_id, entity_watchlist_program_id: $entity_watchlist_program_id, secret: $secret} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"client_id": $client_id, "entity_watchlist_program_id": $entity_watchlist_program_id, "secret": $secret} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # List entity watchlist screening programs
@@ -5904,7 +6099,7 @@ export def "watchlist-screening-entity-program-get watchlistScreeningEntityProgr
 # POST /watchlist_screening/entity/program/list
 # Docs: /api/products/monitor/#watchlist_screeningentityprogramlist
 # operationId: watchlistScreeningEntityProgramList
-export def "watchlist-screening-entity-program-list watchlistScreeningEntityProgramList" [
+export def "watchlist-screening-entity-program-list list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5912,6 +6107,7 @@ export def "watchlist-screening-entity-program-list watchlistScreeningEntityProg
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
   --cursor: string # An identifier that determines which page of results you receive. (nullable, e.g. eyJkaXJlY3Rpb24iOiJuZXh0Iiwib2Zmc2V0IjoiMTU5NDM)
@@ -5921,11 +6117,11 @@ export def "watchlist-screening-entity-program-list watchlistScreeningEntityProg
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/watchlist_screening/entity/program/list")
-  let body = {client_id: $client_id, cursor: $cursor, secret: $secret} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"client_id": $client_id, "cursor": $cursor, "secret": $secret} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Create a review for an entity watchlist screening
@@ -5933,7 +6129,7 @@ export def "watchlist-screening-entity-program-list watchlistScreeningEntityProg
 # POST /watchlist_screening/entity/review/create
 # Docs: /api/products/monitor/#watchlist_screeningentityreviewcreate
 # operationId: watchlistScreeningEntityReviewCreate
-export def "watchlist-screening-entity-review-create watchlistScreeningEntityReviewCreate" [
+export def "watchlist-screening-entity-review-create create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5941,11 +6137,12 @@ export def "watchlist-screening-entity-review-create watchlistScreeningEntityRev
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
   --comment: string # A comment submitted by a team member as part of reviewing a watchlist screening. (nullable, e.g. These look like legitimate matches, rejecting the customer.)
-  confirmed_hits: list # Hits to mark as a true positive after thorough manual review. These hits will never recur or be updated once dismissed. In most cases, confirmed hits indicate that the customer should be rejected.
-  dismissed_hits: list # Hits to mark as a false positive after thorough manual review. These hits will never recur or be updated once dismissed.
+  confirmed_hits: list<string> # Hits to mark as a true positive after thorough manual review. These hits will never recur or be updated once dismissed. In most cases, confirmed hits indicate that the customer should be rejected.
+  dismissed_hits: list<string> # Hits to mark as a false positive after thorough manual review. These hits will never recur or be updated once dismissed.
   entity_watchlist_screening_id: string # ID of the associated entity screening. (e.g. entscr_52xR9LKo77r1Np)
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
 ]: any -> record<audit_trail: record<dashboard_user_id: string, source: string, timestamp: string>, comment: string, confirmed_hits: list<string>, dismissed_hits: list<string>, id: string, request_id: string> {
@@ -5953,11 +6150,11 @@ export def "watchlist-screening-entity-review-create watchlistScreeningEntityRev
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/watchlist_screening/entity/review/create")
-  let body = {client_id: $client_id, comment: $comment, confirmed_hits: $confirmed_hits, dismissed_hits: $dismissed_hits, entity_watchlist_screening_id: $entity_watchlist_screening_id, secret: $secret} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"client_id": $client_id, "comment": $comment, "confirmed_hits": $confirmed_hits, "dismissed_hits": $dismissed_hits, "entity_watchlist_screening_id": $entity_watchlist_screening_id, "secret": $secret} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # List reviews for entity watchlist screenings
@@ -5965,7 +6162,7 @@ export def "watchlist-screening-entity-review-create watchlistScreeningEntityRev
 # POST /watchlist_screening/entity/review/list
 # Docs: /api/products/monitor/#watchlist_screeningentityreviewlist
 # operationId: watchlistScreeningEntityReviewList
-export def "watchlist-screening-entity-review-list watchlistScreeningEntityReviewList" [
+export def "watchlist-screening-entity-review-list list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5973,6 +6170,7 @@ export def "watchlist-screening-entity-review-list watchlistScreeningEntityRevie
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
   --cursor: string # An identifier that determines which page of results you receive. (nullable, e.g. eyJkaXJlY3Rpb24iOiJuZXh0Iiwib2Zmc2V0IjoiMTU5NDM)
@@ -5983,11 +6181,11 @@ export def "watchlist-screening-entity-review-list watchlistScreeningEntityRevie
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/watchlist_screening/entity/review/list")
-  let body = {client_id: $client_id, cursor: $cursor, entity_watchlist_screening_id: $entity_watchlist_screening_id, secret: $secret} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"client_id": $client_id, "cursor": $cursor, "entity_watchlist_screening_id": $entity_watchlist_screening_id, "secret": $secret} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Update an entity screening
@@ -5996,7 +6194,7 @@ export def "watchlist-screening-entity-review-list watchlistScreeningEntityRevie
 # Docs: /api/products/monitor/#watchlist_screeningentityupdate
 # operationId: watchlistScreeningEntityUpdate
 # --search_terms shape: {client_id: string, country?: string, document_number?: string, email_address?: string, entity_watchlist_program_id: string, legal_name?: string, phone_number?: string, secret: string, url?: string}
-export def "watchlist-screening-entity-update watchlistScreeningEntityUpdate" [
+export def "watchlist-screening-entity-update update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6004,12 +6202,13 @@ export def "watchlist-screening-entity-update watchlistScreeningEntityUpdate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --assignee: string # ID of the associated user. (e.g. 54350110fedcbaf01234ffee)
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
   --client-user-id: string # An identifier to help you connect this object to your internal systems. For example, your database ID corresponding to this object. (e.g. your-db-id-3b24110)
   entity_watchlist_screening_id: string # ID of the associated entity screening. (e.g. entscr_52xR9LKo77r1Np)
-  --reset-fields: list # A list of fields to reset back to null (nullable)
+  --reset-fields: list<string> # A list of fields to reset back to null (nullable)
   --search-terms: record # Search terms for editing an entity watchlist screening (nullable) — shape: {client_id: string, country?: string, document_number?: string, email_address?: string, entity_watchlist_program_id: string, legal_name?: string, phone_number?: string, secret: string, url?: string}
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
   --status: string@status-completer # A status enum indicating whether a screening is still pending review, has been rejected, or has been cleared. (e.g. cleared)
@@ -6018,11 +6217,11 @@ export def "watchlist-screening-entity-update watchlistScreeningEntityUpdate" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/watchlist_screening/entity/update")
-  let body = {assignee: $assignee, client_id: $client_id, client_user_id: $client_user_id, entity_watchlist_screening_id: $entity_watchlist_screening_id, reset_fields: $reset_fields, search_terms: $search_terms, secret: $secret, status: $status} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"assignee": $assignee, "client_id": $client_id, "client_user_id": $client_user_id, "entity_watchlist_screening_id": $entity_watchlist_screening_id, "reset_fields": $reset_fields, "search_terms": $search_terms, "secret": $secret, "status": $status} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Create a watchlist screening for a person
@@ -6031,7 +6230,7 @@ export def "watchlist-screening-entity-update watchlistScreeningEntityUpdate" [
 # Docs: /api/products/monitor/#watchlist_screeningindividualcreate
 # operationId: watchlistScreeningIndividualCreate
 # --search_terms shape: {country?: string, date_of_birth?: string, document_number?: string, legal_name: string, watchlist_program_id: string}
-export def "watchlist-screening-individual-create watchlistScreeningIndividualCreate" [
+export def "watchlist-screening-individual-create create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6039,6 +6238,7 @@ export def "watchlist-screening-individual-create watchlistScreeningIndividualCr
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
   --client-user-id: string # An identifier to help you connect this object to your internal systems. For example, your database ID corresponding to this object. (e.g. your-db-id-3b24110)
@@ -6049,11 +6249,11 @@ export def "watchlist-screening-individual-create watchlistScreeningIndividualCr
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/watchlist_screening/individual/create")
-  let body = {client_id: $client_id, client_user_id: $client_user_id, search_terms: $search_terms, secret: $secret} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"client_id": $client_id, "client_user_id": $client_user_id, "search_terms": $search_terms, "secret": $secret} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Retrieve an individual watchlist screening
@@ -6061,7 +6261,7 @@ export def "watchlist-screening-individual-create watchlistScreeningIndividualCr
 # POST /watchlist_screening/individual/get
 # Docs: /api/products/monitor/#watchlist_screeningindividualget
 # operationId: watchlistScreeningIndividualGet
-export def "watchlist-screening-individual-get watchlistScreeningIndividualGet" [
+export def "watchlist-screening-individual-get get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6069,6 +6269,7 @@ export def "watchlist-screening-individual-get watchlistScreeningIndividualGet" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
@@ -6078,11 +6279,11 @@ export def "watchlist-screening-individual-get watchlistScreeningIndividualGet" 
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/watchlist_screening/individual/get")
-  let body = {client_id: $client_id, secret: $secret, watchlist_screening_id: $watchlist_screening_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"client_id": $client_id, "secret": $secret, "watchlist_screening_id": $watchlist_screening_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # List history for individual watchlist screenings
@@ -6090,7 +6291,7 @@ export def "watchlist-screening-individual-get watchlistScreeningIndividualGet" 
 # POST /watchlist_screening/individual/history/list
 # Docs: /api/products/monitor/#watchlist_screeningindividualhistorylist
 # operationId: watchlistScreeningIndividualHistoryList
-export def "watchlist-screening-individual-history-list watchlistScreeningIndividualHistoryList" [
+export def "watchlist-screening-individual-history-list list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6098,6 +6299,7 @@ export def "watchlist-screening-individual-history-list watchlistScreeningIndivi
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
   --cursor: string # An identifier that determines which page of results you receive. (nullable, e.g. eyJkaXJlY3Rpb24iOiJuZXh0Iiwib2Zmc2V0IjoiMTU5NDM)
@@ -6108,11 +6310,11 @@ export def "watchlist-screening-individual-history-list watchlistScreeningIndivi
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/watchlist_screening/individual/history/list")
-  let body = {client_id: $client_id, cursor: $cursor, secret: $secret, watchlist_screening_id: $watchlist_screening_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"client_id": $client_id, "cursor": $cursor, "secret": $secret, "watchlist_screening_id": $watchlist_screening_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # List hits for individual watchlist screening
@@ -6120,7 +6322,7 @@ export def "watchlist-screening-individual-history-list watchlistScreeningIndivi
 # POST /watchlist_screening/individual/hit/list
 # Docs: /api/products/monitor/#watchlist_screeningindividualhitlist
 # operationId: watchlistScreeningIndividualHitList
-export def "watchlist-screening-individual-hit-list watchlistScreeningIndividualHitList" [
+export def "watchlist-screening-individual-hit-list list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6128,6 +6330,7 @@ export def "watchlist-screening-individual-hit-list watchlistScreeningIndividual
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
   --cursor: string # An identifier that determines which page of results you receive. (nullable, e.g. eyJkaXJlY3Rpb24iOiJuZXh0Iiwib2Zmc2V0IjoiMTU5NDM)
@@ -6138,11 +6341,11 @@ export def "watchlist-screening-individual-hit-list watchlistScreeningIndividual
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/watchlist_screening/individual/hit/list")
-  let body = {client_id: $client_id, cursor: $cursor, secret: $secret, watchlist_screening_id: $watchlist_screening_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"client_id": $client_id, "cursor": $cursor, "secret": $secret, "watchlist_screening_id": $watchlist_screening_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # List Individual Watchlist Screenings
@@ -6150,7 +6353,7 @@ export def "watchlist-screening-individual-hit-list watchlistScreeningIndividual
 # POST /watchlist_screening/individual/list
 # Docs: /api/products/monitor/#watchlist_screeningindividuallist
 # operationId: watchlistScreeningIndividualList
-export def "watchlist-screening-individual-list watchlistScreeningIndividualList" [
+export def "watchlist-screening-individual-list list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6158,6 +6361,7 @@ export def "watchlist-screening-individual-list watchlistScreeningIndividualList
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --assignee: string # ID of the associated user. (e.g. 54350110fedcbaf01234ffee)
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
@@ -6171,11 +6375,11 @@ export def "watchlist-screening-individual-list watchlistScreeningIndividualList
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/watchlist_screening/individual/list")
-  let body = {assignee: $assignee, client_id: $client_id, client_user_id: $client_user_id, cursor: $cursor, secret: $secret, status: $status, watchlist_program_id: $watchlist_program_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"assignee": $assignee, "client_id": $client_id, "client_user_id": $client_user_id, "cursor": $cursor, "secret": $secret, "status": $status, "watchlist_program_id": $watchlist_program_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Get individual watchlist screening program
@@ -6183,7 +6387,7 @@ export def "watchlist-screening-individual-list watchlistScreeningIndividualList
 # POST /watchlist_screening/individual/program/get
 # Docs: /api/products/monitor/#watchlist_screeningindividualprogramget
 # operationId: watchlistScreeningIndividualProgramGet
-export def "watchlist-screening-individual-program-get watchlistScreeningIndividualProgramGet" [
+export def "watchlist-screening-individual-program-get get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6191,6 +6395,7 @@ export def "watchlist-screening-individual-program-get watchlistScreeningIndivid
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
@@ -6200,11 +6405,11 @@ export def "watchlist-screening-individual-program-get watchlistScreeningIndivid
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/watchlist_screening/individual/program/get")
-  let body = {client_id: $client_id, secret: $secret, watchlist_program_id: $watchlist_program_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"client_id": $client_id, "secret": $secret, "watchlist_program_id": $watchlist_program_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # List individual watchlist screening programs
@@ -6212,7 +6417,7 @@ export def "watchlist-screening-individual-program-get watchlistScreeningIndivid
 # POST /watchlist_screening/individual/program/list
 # Docs: /api/products/monitor/#watchlist_screeningindividualprogramlist
 # operationId: watchlistScreeningIndividualProgramList
-export def "watchlist-screening-individual-program-list watchlistScreeningIndividualProgramList" [
+export def "watchlist-screening-individual-program-list list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6220,6 +6425,7 @@ export def "watchlist-screening-individual-program-list watchlistScreeningIndivi
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
   --cursor: string # An identifier that determines which page of results you receive. (nullable, e.g. eyJkaXJlY3Rpb24iOiJuZXh0Iiwib2Zmc2V0IjoiMTU5NDM)
@@ -6229,11 +6435,11 @@ export def "watchlist-screening-individual-program-list watchlistScreeningIndivi
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/watchlist_screening/individual/program/list")
-  let body = {client_id: $client_id, cursor: $cursor, secret: $secret} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"client_id": $client_id, "cursor": $cursor, "secret": $secret} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Create a review for an individual watchlist screening
@@ -6241,7 +6447,7 @@ export def "watchlist-screening-individual-program-list watchlistScreeningIndivi
 # POST /watchlist_screening/individual/review/create
 # Docs: /api/products/monitor/#watchlist_screeningindividualreviewcreate
 # operationId: watchlistScreeningIndividualReviewCreate
-export def "watchlist-screening-individual-review-create watchlistScreeningIndividualReviewCreate" [
+export def "watchlist-screening-individual-review-create create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6249,11 +6455,12 @@ export def "watchlist-screening-individual-review-create watchlistScreeningIndiv
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
   --comment: string # A comment submitted by a team member as part of reviewing a watchlist screening. (nullable, e.g. These look like legitimate matches, rejecting the customer.)
-  confirmed_hits: list # Hits to mark as a true positive after thorough manual review. These hits will never recur or be updated once dismissed. In most cases, confirmed hits indicate that the customer should be rejected.
-  dismissed_hits: list # Hits to mark as a false positive after thorough manual review. These hits will never recur or be updated once dismissed.
+  confirmed_hits: list<string> # Hits to mark as a true positive after thorough manual review. These hits will never recur or be updated once dismissed. In most cases, confirmed hits indicate that the customer should be rejected.
+  dismissed_hits: list<string> # Hits to mark as a false positive after thorough manual review. These hits will never recur or be updated once dismissed.
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
   watchlist_screening_id: string # ID of the associated screening. (e.g. scr_52xR9LKo77r1Np)
 ]: any -> record<audit_trail: record<dashboard_user_id: string, source: string, timestamp: string>, comment: string, confirmed_hits: list<string>, dismissed_hits: list<string>, id: string, request_id: string> {
@@ -6261,11 +6468,11 @@ export def "watchlist-screening-individual-review-create watchlistScreeningIndiv
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/watchlist_screening/individual/review/create")
-  let body = {client_id: $client_id, comment: $comment, confirmed_hits: $confirmed_hits, dismissed_hits: $dismissed_hits, secret: $secret, watchlist_screening_id: $watchlist_screening_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"client_id": $client_id, "comment": $comment, "confirmed_hits": $confirmed_hits, "dismissed_hits": $dismissed_hits, "secret": $secret, "watchlist_screening_id": $watchlist_screening_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # List reviews for individual watchlist screenings
@@ -6273,7 +6480,7 @@ export def "watchlist-screening-individual-review-create watchlistScreeningIndiv
 # POST /watchlist_screening/individual/review/list
 # Docs: /api/products/monitor/#watchlist_screeningindividualreviewlist
 # operationId: watchlistScreeningIndividualReviewList
-export def "watchlist-screening-individual-review-list watchlistScreeningIndividualReviewList" [
+export def "watchlist-screening-individual-review-list list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6281,6 +6488,7 @@ export def "watchlist-screening-individual-review-list watchlistScreeningIndivid
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
   --cursor: string # An identifier that determines which page of results you receive. (nullable, e.g. eyJkaXJlY3Rpb24iOiJuZXh0Iiwib2Zmc2V0IjoiMTU5NDM)
@@ -6291,11 +6499,11 @@ export def "watchlist-screening-individual-review-list watchlistScreeningIndivid
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/watchlist_screening/individual/review/list")
-  let body = {client_id: $client_id, cursor: $cursor, secret: $secret, watchlist_screening_id: $watchlist_screening_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"client_id": $client_id, "cursor": $cursor, "secret": $secret, "watchlist_screening_id": $watchlist_screening_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Update individual watchlist screening
@@ -6304,7 +6512,7 @@ export def "watchlist-screening-individual-review-list watchlistScreeningIndivid
 # Docs: /api/products/monitor/#watchlist_screeningindividualupdate
 # operationId: watchlistScreeningIndividualUpdate
 # --search_terms shape: {country?: string, date_of_birth?: string, document_number?: string, legal_name?: string, watchlist_program_id?: string}
-export def "watchlist-screening-individual-update watchlistScreeningIndividualUpdate" [
+export def "watchlist-screening-individual-update update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6312,11 +6520,12 @@ export def "watchlist-screening-individual-update watchlistScreeningIndividualUp
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --assignee: string # ID of the associated user. (e.g. 54350110fedcbaf01234ffee)
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
   --client-user-id: string # An identifier to help you connect this object to your internal systems. For example, your database ID corresponding to this object. (e.g. your-db-id-3b24110)
-  --reset-fields: list # A list of fields to reset back to null (nullable)
+  --reset-fields: list<string> # A list of fields to reset back to null (nullable)
   --search-terms: record # Search terms for editing an individual watchlist screening (nullable) — shape: {country?: string, date_of_birth?: string, document_number?: string, legal_name?: string, watchlist_program_id?: string}
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
   --status: string@status-completer # A status enum indicating whether a screening is still pending review, has been rejected, or has been cleared. (e.g. cleared)
@@ -6326,11 +6535,11 @@ export def "watchlist-screening-individual-update watchlistScreeningIndividualUp
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/watchlist_screening/individual/update")
-  let body = {assignee: $assignee, client_id: $client_id, client_user_id: $client_user_id, reset_fields: $reset_fields, search_terms: $search_terms, secret: $secret, status: $status, watchlist_screening_id: $watchlist_screening_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"assignee": $assignee, "client_id": $client_id, "client_user_id": $client_user_id, "reset_fields": $reset_fields, "search_terms": $search_terms, "secret": $secret, "status": $status, "watchlist_screening_id": $watchlist_screening_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Get webhook verification key
@@ -6338,7 +6547,7 @@ export def "watchlist-screening-individual-update watchlistScreeningIndividualUp
 # POST /webhook_verification_key/get
 # Docs: /api/webhooks/webhook-verification/#get-webhook-verification-key
 # operationId: webhookVerificationKeyGet
-export def "webhook-verification-key-get webhookVerificationKeyGet" [
+export def "webhook-verification-key-get get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6346,6 +6555,7 @@ export def "webhook-verification-key-get webhookVerificationKeyGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
   key_id: string # The key ID ( `kid` ) from the JWT header.
@@ -6355,9 +6565,9 @@ export def "webhook-verification-key-get webhookVerificationKeyGet" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/webhook_verification_key/get")
-  let body = {client_id: $client_id, key_id: $key_id, secret: $secret} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"client_id": $client_id, "key_id": $key_id, "secret": $secret} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }

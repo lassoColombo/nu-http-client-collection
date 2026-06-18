@@ -18,21 +18,32 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 }
 
 # Serialize a single query parameter based on collection style
+# Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
+# ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = ($name | url encode)
+  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
-  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
-    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
-    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
+    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
+    _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
+}
+
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Build URL from base, path, and optional query string
@@ -44,7 +55,7 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
@@ -53,13 +64,13 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
     "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "put" => { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "patch" => { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
   if ($method in ["head" "options"]) { return $resp }
-  if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
+  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
 def base-url-completer [] { ["http://example.com/setup"] }
@@ -68,8 +79,8 @@ def auth-scheme-completer [] { ["cast-local-authorization-token"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "notic-ehtmlgz LegalNotice" } } | get name | first)
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "notice-html-gz get-legal" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -93,7 +104,7 @@ export def commands []: nothing -> table {
 #
 # GET /NOTICE.html.gz
 # operationId: LegalNotice
-export def "notic-ehtmlgz LegalNotice" [
+export def "notice-html-gz get-legal" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -101,6 +112,7 @@ export def "notic-ehtmlgz LegalNotice" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cast-local-authorization-token"))
@@ -108,14 +120,14 @@ export def "notic-ehtmlgz LegalNotice" [
   let full_url = (build-url $base "/NOTICE.html.gz")
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Accessibility
 #
 # POST /assistant/a11y_mode
 # operationId: Accessibility
-export def "assistant-a11y-mode Accessibility" [
+export def "assistant-a11y-mode create-accessibility" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -123,6 +135,7 @@ export def "assistant-a11y-mode Accessibility" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --endpoint-enabled: oneof<nothing, bool>
   --hotword-enabled: oneof<nothing, bool>
@@ -131,18 +144,18 @@ export def "assistant-a11y-mode Accessibility" [
   let auth = (build-auth $token ($auth_scheme | default "cast-local-authorization-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/assistant/a11y_mode")
-  let body = {endpoint_enabled: $endpoint_enabled, hotword_enabled: $hotword_enabled} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"endpoint_enabled": $endpoint_enabled, "hotword_enabled": $hotword_enabled} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Get Alarms and Timers
 #
 # GET /assistant/alarms
 # operationId: GetAlarmsandTimers
-export def "assistant-alarms GetAlarmsandTimers" [
+export def "assistant-alarms get-alarmsand-timers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -150,6 +163,7 @@ export def "assistant-alarms GetAlarmsandTimers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<alarm: table<date_pattern: record, fire_time: float, id: string, status: int, time_pattern: record>, timer: table<fire_time: int, id: string, original_duration: int, status: int>> {
   let auth = (build-auth $token ($auth_scheme | default "cast-local-authorization-token"))
@@ -157,14 +171,14 @@ export def "assistant-alarms GetAlarmsandTimers" [
   let full_url = (build-url $base "/assistant/alarms")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Delete Alarms and Timers
 #
 # POST /assistant/alarms/delete
 # operationId: DeleteAlarmsandTimers
-export def "assistant-alarms-delete DeleteAlarmsandTimers" [
+export def "assistant-alarms-delete delete-alarmsand-timers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -172,25 +186,26 @@ export def "assistant-alarms-delete DeleteAlarmsandTimers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  ids: list
+  ids: list<string>
 ]: any -> record<success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "cast-local-authorization-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/assistant/alarms/delete")
-  let body = {ids: $ids} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"ids": $ids} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Alarm Volume
 #
 # POST /assistant/alarms/volume
 # operationId: AlarmVolume
-export def "assistant-alarms-volume AlarmVolume" [
+export def "assistant-alarms-volume create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -198,6 +213,7 @@ export def "assistant-alarms-volume AlarmVolume" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   volume: int # format: int32
 ]: any -> record<volume: float> {
@@ -205,18 +221,18 @@ export def "assistant-alarms-volume AlarmVolume" [
   let auth = (build-auth $token ($auth_scheme | default "cast-local-authorization-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/assistant/alarms/volume")
-  let body = {volume: $volume} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"volume": $volume} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Check Ready Status
 #
 # POST /assistant/check_ready_status
 # operationId: CheckReadyStatus
-export def "assistant-check-ready-status CheckReadyStatus" [
+export def "assistant-check-ready-status check" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -224,6 +240,7 @@ export def "assistant-check-ready-status CheckReadyStatus" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --play-ready-message: oneof<nothing, bool>
   user_id: string
@@ -232,18 +249,18 @@ export def "assistant-check-ready-status CheckReadyStatus" [
   let auth = (build-auth $token ($auth_scheme | default "cast-local-authorization-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/assistant/check_ready_status")
-  let body = {play_ready_message: $play_ready_message, user_id: $user_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"play_ready_message": $play_ready_message, "user_id": $user_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Do Not Disturb
 #
 # POST /assistant/notifications
 # operationId: DoNotDisturb
-export def "assistant-notifications DoNotDisturb" [
+export def "assistant-notifications create-do-not-disturb" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -251,25 +268,26 @@ export def "assistant-notifications DoNotDisturb" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # e.g. application/json
+  --content-type: string # e.g. application/json
 ]: nothing -> record<notifications_enabled: bool> {
   let auth = (build-auth $token ($auth_scheme | default "cast-local-authorization-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/assistant/notifications")
-  let extra_headers = {"Content-Type": $Content_Type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"Content-Type": $content_type} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Night Mode settings
 #
 # POST /assistant/set_night_mode_params
 # operationId: NightModesettings
-# --windows item shape: {days: list, length_hours: int, start_hour: int}
-export def "assistant-set-night-mode-params NightModesettings" [
+# --windows item shape: {days: list<int>, length_hours: int, start_hour: int}
+export def "assistant-set-night-mode-params create-modesettings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -277,30 +295,31 @@ export def "assistant-set-night-mode-params NightModesettings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --demo-to-user: oneof<nothing, bool>
   --do-not-disturb: oneof<nothing, bool>
   --enabled: oneof<nothing, bool>
   led_brightness: float
   volume: float
-  windows: list # item shape: {days: list, length_hours: int, start_hour: int}
+  windows: list # item shape: {days: list<int>, length_hours: int, start_hour: int}
 ]: any -> record<do_not_disturb: bool, enabled: bool, led_brightness: float, volume: float, windows: table<days: list, length_hours: float, start_hour: float>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "cast-local-authorization-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/assistant/set_night_mode_params")
-  let body = {demo_to_user: $demo_to_user, do_not_disturb: $do_not_disturb, enabled: $enabled, led_brightness: $led_brightness, volume: $volume, windows: $windows} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"demo_to_user": $demo_to_user, "do_not_disturb": $do_not_disturb, "enabled": $enabled, "led_brightness": $led_brightness, "volume": $volume, "windows": $windows} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Forget paired device
 #
 # POST /bluetooth/bond
 # operationId: Forgetpaireddevice
-export def "bluetooth-bond Forgetpaireddevice" [
+export def "bluetooth-bond create-forgetpaireddevice" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -308,6 +327,7 @@ export def "bluetooth-bond Forgetpaireddevice" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --bond: oneof<nothing, bool>
   mac_address: string
@@ -316,18 +336,18 @@ export def "bluetooth-bond Forgetpaireddevice" [
   let auth = (build-auth $token ($auth_scheme | default "cast-local-authorization-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/bluetooth/bond")
-  let body = {bond: $bond, mac_address: $mac_address} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"bond": $bond, "mac_address": $mac_address} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Pair with Speaker
 #
 # POST /bluetooth/connect
 # operationId: PairwithSpeaker
-export def "bluetooth-connect PairwithSpeaker" [
+export def "bluetooth-connect create-pairwith-speaker" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -335,6 +355,7 @@ export def "bluetooth-connect PairwithSpeaker" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --connect: oneof<nothing, bool>
   mac_address: string
@@ -344,18 +365,18 @@ export def "bluetooth-connect PairwithSpeaker" [
   let auth = (build-auth $token ($auth_scheme | default "cast-local-authorization-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/bluetooth/connect")
-  let body = {connect: $connect, mac_address: $mac_address, profile: $profile} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"connect": $connect, "mac_address": $mac_address, "profile": $profile} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Change Discoverability
 #
 # POST /bluetooth/discovery
 # operationId: ChangeDiscoverability
-export def "bluetooth-discovery ChangeDiscoverability" [
+export def "bluetooth-discovery create-change-discoverability" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -363,6 +384,7 @@ export def "bluetooth-discovery ChangeDiscoverability" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --enable-discovery: oneof<nothing, bool>
 ]: any -> any {
@@ -370,18 +392,18 @@ export def "bluetooth-discovery ChangeDiscoverability" [
   let auth = (build-auth $token ($auth_scheme | default "cast-local-authorization-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/bluetooth/discovery")
-  let body = {enable_discovery: $enable_discovery} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"enable_discovery": $enable_discovery} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Get Paired Devices
 #
 # GET /bluetooth/get_bonded
 # operationId: GetPairedDevices
-export def "bluetooth-get-bonded GetPairedDevices" [
+export def "bluetooth-get-bonded get-paired-devices" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -389,6 +411,7 @@ export def "bluetooth-get-bonded GetPairedDevices" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<bond_date: float, device_class: int, device_type: int, last_connect_date: float, mac_address: string, name: string, rssi: int, service_uuids: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "cast-local-authorization-token"))
@@ -396,14 +419,14 @@ export def "bluetooth-get-bonded GetPairedDevices" [
   let full_url = (build-url $base "/bluetooth/get_bonded")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Scan for devices
 #
 # POST /bluetooth/scan
 # operationId: Scanfordevices
-export def "bluetooth-scan Scanfordevices" [
+export def "bluetooth-scan create-scanfordevices" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -411,6 +434,7 @@ export def "bluetooth-scan Scanfordevices" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --clear-results: oneof<nothing, bool>
   --enable: oneof<nothing, bool>
@@ -420,18 +444,18 @@ export def "bluetooth-scan Scanfordevices" [
   let auth = (build-auth $token ($auth_scheme | default "cast-local-authorization-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/bluetooth/scan")
-  let body = {clear_results: $clear_results, enable: $enable, timeout: $timeout} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"clear_results": $clear_results, "enable": $enable, "timeout": $timeout} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Get Scan Results
 #
 # GET /bluetooth/scan_results
 # operationId: GetScanResults
-export def "bluetooth-scan-results GetScanResults" [
+export def "bluetooth-scan-results get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -439,6 +463,7 @@ export def "bluetooth-scan-results GetScanResults" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<device_class: int, device_type: int, expected_profiles: int, mac_address: string, name: string, rssi: int> {
   let auth = (build-auth $token ($auth_scheme | default "cast-local-authorization-token"))
@@ -446,14 +471,14 @@ export def "bluetooth-scan-results GetScanResults" [
   let full_url = (build-url $base "/bluetooth/scan_results")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Status
 #
 # GET /bluetooth/status
 # operationId: Status
-export def "bluetooth-status Status" [
+export def "bluetooth-status get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -461,6 +486,7 @@ export def "bluetooth-status Status" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<audio_mode: int, connected_devices: table<device: record, enabled_profiles: int>, connecting_devices: list<string>, discovery_enabled: bool, remote_sink: record<bond_date: float, device_class: int, device_type: int, last_connect_date: int, mac_address: string, name: string, rssi: int, service_uuids: list<string>>, scanning_enabled: bool> {
   let auth = (build-auth $token ($auth_scheme | default "cast-local-authorization-token"))
@@ -468,14 +494,14 @@ export def "bluetooth-status Status" [
   let full_url = (build-url $base "/bluetooth/status")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get Saved Networks
 #
 # GET /configured_networks
 # operationId: GetSavedNetworks
-export def "configured-networks GetSavedNetworks" [
+export def "configured-networks get-saved" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -483,6 +509,7 @@ export def "configured-networks GetSavedNetworks" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<ssid: string, wpa_auth: int, wpa_cipher: int, wpa_id: int> {
   let auth = (build-auth $token ($auth_scheme | default "cast-local-authorization-token"))
@@ -490,14 +517,14 @@ export def "configured-networks GetSavedNetworks" [
   let full_url = (build-url $base "/configured_networks")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Connect to Wi-Fi Network
 #
 # POST /connect_wifi
 # operationId: ConnecttoWi-FiNetwork
-export def "connect-wifi ConnecttoWi-FiNetwork" [
+export def "connect-wifi create-connectto-wi-fi-network" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -505,6 +532,7 @@ export def "connect-wifi ConnecttoWi-FiNetwork" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   bssid: string
   enc_passwd: string
@@ -517,18 +545,18 @@ export def "connect-wifi ConnecttoWi-FiNetwork" [
   let auth = (build-auth $token ($auth_scheme | default "cast-local-authorization-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/connect_wifi")
-  let body = {bssid: $bssid, enc_passwd: $enc_passwd, signal_level: $signal_level, ssid: $ssid, wpa_auth: $wpa_auth, wpa_cipher: $wpa_cipher} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"bssid": $bssid, "enc_passwd": $enc_passwd, "signal_level": $signal_level, "ssid": $ssid, "wpa_auth": $wpa_auth, "wpa_cipher": $wpa_cipher} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Eureka Info
 #
 # GET /eureka_info
 # operationId: EurekaInfo
-export def "eureka-info EurekaInfo" [
+export def "eureka-info get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -536,6 +564,7 @@ export def "eureka-info EurekaInfo" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --params: string # e.g. version,audio,name,build_info,detail,device_info,net,wifi,setup,settings,opt_in,opencast,multizone,proxy,night_mode_params,user_eq,room_equalizer,sign,aogh,ultrasound,mesh
   --options: string # e.g. detail,sign
@@ -547,14 +576,14 @@ export def "eureka-info EurekaInfo" [
   let full_url = (build-url $base "/eureka_info" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Forget Wi-Fi Network
 #
 # POST /forget_wifi
 # operationId: ForgetWi-FiNetwork
-export def "forget-wifi ForgetWi-FiNetwork" [
+export def "forget-wifi create-wi-fi-network" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -562,6 +591,7 @@ export def "forget-wifi ForgetWi-FiNetwork" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   wpa_id: int # format: int32
 ]: any -> any {
@@ -569,18 +599,18 @@ export def "forget-wifi ForgetWi-FiNetwork" [
   let auth = (build-auth $token ($auth_scheme | default "cast-local-authorization-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/forget_wifi")
-  let body = {wpa_id: $wpa_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"wpa_id": $wpa_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # App Device ID
 #
 # POST /get_app_device_id
 # operationId: AppDeviceID
-export def "get-app-device-id AppDeviceID" [
+export def "get-app-device-id create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -588,6 +618,7 @@ export def "get-app-device-id AppDeviceID" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   app_id: string
 ]: any -> record<app_device_id: string, certificate: string, signed_data: string> {
@@ -595,18 +626,18 @@ export def "get-app-device-id AppDeviceID" [
   let auth = (build-auth $token ($auth_scheme | default "cast-local-authorization-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/get_app_device_id")
-  let body = {app_id: $app_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"app_id": $app_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Chromecast Icon
 #
 # GET /icon.png
 # operationId: ChromecastIcon
-export def "iconpng ChromecastIcon" [
+export def "icon-png get-chromecast" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -614,6 +645,7 @@ export def "iconpng ChromecastIcon" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cast-local-authorization-token"))
@@ -621,14 +653,14 @@ export def "iconpng ChromecastIcon" [
   let full_url = (build-url $base "/icon.png")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Offer
 #
 # GET /offer
 # operationId: Offer
-export def "offer Offer" [
+export def "offer get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -636,6 +668,7 @@ export def "offer Offer" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<token: string> {
   let auth = (build-auth $token ($auth_scheme | default "cast-local-authorization-token"))
@@ -643,14 +676,14 @@ export def "offer Offer" [
   let full_url = (build-url $base "/offer")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Reboot and Factory Reset
 #
 # POST /reboot
 # operationId: RebootandFactoryReset
-export def "reboot RebootandFactoryReset" [
+export def "reboot reset-rebootand-factory" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -658,6 +691,7 @@ export def "reboot RebootandFactoryReset" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   params: string
 ]: any -> any {
@@ -665,18 +699,18 @@ export def "reboot RebootandFactoryReset" [
   let auth = (build-auth $token ($auth_scheme | default "cast-local-authorization-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/reboot")
-  let body = {params: $params} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"params": $params} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Get Wi-Fi Scan Results
 #
 # GET /scan_results
 # operationId: GetWi-FiScanResults
-export def "scan-results GetWi-FiScanResults" [
+export def "scan-results get-wi-fi" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -684,6 +718,7 @@ export def "scan-results GetWi-FiScanResults" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<bssid: string, signal_level: int, ssid: string, wpa_auth: int, wpa_cipher: int, wpa_id: int> {
   let auth = (build-auth $token ($auth_scheme | default "cast-local-authorization-token"))
@@ -691,14 +726,14 @@ export def "scan-results GetWi-FiScanResults" [
   let full_url = (build-url $base "/scan_results")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Scan for Networks
 #
 # POST /scan_wifi
 # operationId: ScanforNetworks
-export def "scan-wifi ScanforNetworks" [
+export def "scan-wifi create-scanfor-networks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -706,6 +741,7 @@ export def "scan-wifi ScanforNetworks" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cast-local-authorization-token"))
@@ -713,7 +749,7 @@ export def "scan-wifi ScanforNetworks" [
   let full_url = (build-url $base "/scan_wifi")
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Set Eureka Info
@@ -722,7 +758,7 @@ export def "scan-wifi ScanforNetworks" [
 # operationId: SetEurekaInfo
 # --opt_in shape: {opencast: bool, preview_channel: bool, remote_ducking: bool, stats: bool}
 # --settings shape: {control_notifications: int}
-export def "set-eureka-info SetEurekaInfo" [
+export def "set-eureka-info update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -730,6 +766,7 @@ export def "set-eureka-info SetEurekaInfo" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   name: string
   opt_in: record # e.g. {opencast: true, preview_channel: true, remote_ducking: true, stats: true} — shape: {opencast: bool, preview_channel: bool, remote_ducking: bool, stats: bool}
@@ -739,18 +776,18 @@ export def "set-eureka-info SetEurekaInfo" [
   let auth = (build-auth $token ($auth_scheme | default "cast-local-authorization-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/set_eureka_info")
-  let body = {name: $name, opt_in: $opt_in, settings: $settings} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"name": $name, "opt_in": $opt_in, "settings": $settings} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Locales
 #
 # GET /supported_locales
 # operationId: Locales
-export def "supported-locales Locales" [
+export def "supported-locales get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -758,6 +795,7 @@ export def "supported-locales Locales" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<display_string: string, locale: string> {
   let auth = (build-auth $token ($auth_scheme | default "cast-local-authorization-token"))
@@ -765,14 +803,14 @@ export def "supported-locales Locales" [
   let full_url = (build-url $base "/supported_locales")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Timezones
 #
 # GET /supported_timezones
 # operationId: Timezones
-export def "supported-timezones Timezones" [
+export def "supported-timezones get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -780,6 +818,7 @@ export def "supported-timezones Timezones" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<display_string: string, offset: int, timezone: string> {
   let auth = (build-auth $token ($auth_scheme | default "cast-local-authorization-token"))
@@ -787,14 +826,14 @@ export def "supported-timezones Timezones" [
   let full_url = (build-url $base "/supported_timezones")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Test Internet Download Speed
 #
 # POST /test_internet_download_speed
 # operationId: TestInternetDownloadSpeed
-export def "test-internet-download-speed TestInternetDownloadSpeed" [
+export def "test-internet-download-speed test" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -802,18 +841,19 @@ export def "test-internet-download-speed TestInternetDownloadSpeed" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body-url: string
+  url: string
 ]: any -> record<bytes_received: int, response_code: int, time_for_data_fetch: int, time_for_http_response: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "cast-local-authorization-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/test_internet_download_speed")
-  let body = {url: $body_url} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"url": $url} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Set Equalizer Values
@@ -822,7 +862,7 @@ export def "test-internet-download-speed TestInternetDownloadSpeed" [
 # operationId: SetEqualizerValues
 # --high_shelf shape: {gain_db: int}
 # --low_shelf shape: {gain_db: int}
-export def "user-eq-set-equalizer SetEqualizerValues" [
+export def "user-eq-set-equalizer update-values" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -830,6 +870,7 @@ export def "user-eq-set-equalizer SetEqualizerValues" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   high_shelf: record # e.g. {gain_db: 0} — shape: {gain_db: int}
   low_shelf: record # e.g. {gain_db: 0} — shape: {gain_db: int}
@@ -838,9 +879,9 @@ export def "user-eq-set-equalizer SetEqualizerValues" [
   let auth = (build-auth $token ($auth_scheme | default "cast-local-authorization-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/user_eq/set_equalizer")
-  let body = {high_shelf: $high_shelf, low_shelf: $low_shelf} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"high_shelf": $high_shelf, "low_shelf": $low_shelf} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }

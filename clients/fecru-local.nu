@@ -17,21 +17,32 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 }
 
 # Serialize a single query parameter based on collection style
+# Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
+# ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = ($name | url encode)
+  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
-  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
-    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
-    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
+    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
+    _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
+}
+
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Build URL from base, path, and optional query string
@@ -43,7 +54,7 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
@@ -52,13 +63,13 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
     "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "put" => { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "patch" => { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
   if ($method in ["head" "options"]) { return $resp }
-  if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
+  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
 def base-url-completer [] { ["http://fecru.local/context"] }
@@ -67,7 +78,7 @@ def auth-scheme-completer [] { ["bearer"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "rest-service-fecru-admin-groups list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -99,6 +110,7 @@ export def "rest-service-fecru-admin-groups list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --prefix: string # filter groups by name prefix
 ]: nothing -> any {
@@ -108,13 +120,13 @@ export def "rest-service-fecru-admin-groups list" [
   let full_url = (build-url $base "/rest-service-fecru/admin/groups/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Creates a new user group.
 #
 # POST /rest-service-fecru/admin/groups/
-export def "rest-service-fecru-admin-groups post" [
+export def "rest-service-fecru-admin-groups create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -122,6 +134,7 @@ export def "rest-service-fecru-admin-groups post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -129,7 +142,7 @@ export def "rest-service-fecru-admin-groups post" [
   let full_url = (build-url $base "/rest-service-fecru/admin/groups/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Deletes a group by name
@@ -144,14 +157,15 @@ export def "rest-service-fecru-admin-groups delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service-fecru/admin/groups/($name)")
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/rest-service-fecru/admin/groups/{name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Retrieve a group by name.
@@ -166,20 +180,21 @@ export def "rest-service-fecru-admin-groups get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service-fecru/admin/groups/($name)")
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/rest-service-fecru/admin/groups/{name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Updates an existing group.
 #
 # PUT /rest-service-fecru/admin/groups/{name}
-export def "rest-service-fecru-admin-groups put" [
+export def "rest-service-fecru-admin-groups update" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -188,14 +203,15 @@ export def "rest-service-fecru-admin-groups put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service-fecru/admin/groups/($name)")
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/rest-service-fecru/admin/groups/{name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Removes user from group
@@ -210,21 +226,22 @@ export def "rest-service-fecru-admin-groups-users delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service-fecru/admin/groups/($name)/users")
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/rest-service-fecru/admin/groups/{name}/users"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Lists group's user names
 #
 # GET /rest-service-fecru/admin/groups/{name}/users
 # operationId: listGroupUsers
-export def "rest-service-fecru-admin-groups-users listGroupUsers" [
+export def "rest-service-fecru-admin-groups-users list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -233,20 +250,21 @@ export def "rest-service-fecru-admin-groups-users listGroupUsers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service-fecru/admin/groups/($name)/users")
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/rest-service-fecru/admin/groups/{name}/users"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Adds user to group
 #
 # PUT /rest-service-fecru/admin/groups/{name}/users
-export def "rest-service-fecru-admin-groups-users put" [
+export def "rest-service-fecru-admin-groups-users update" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -255,14 +273,15 @@ export def "rest-service-fecru-admin-groups-users put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service-fecru/admin/groups/($name)/users")
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/rest-service-fecru/admin/groups/{name}/users"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Retrieve a page of permission schemes.
@@ -276,6 +295,7 @@ export def "rest-service-fecru-admin-permission-schemes list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # permission scheme name part filter, case insensitive, optional
 ]: nothing -> any {
@@ -285,13 +305,13 @@ export def "rest-service-fecru-admin-permission-schemes list" [
   let full_url = (build-url $base "/rest-service-fecru/admin/permission-schemes" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Creates a new permission scheme. The new permission scheme is blank or can be created from another existing permission scheme.
 #
 # POST /rest-service-fecru/admin/permission-schemes
-export def "rest-service-fecru-admin-permission-schemes post" [
+export def "rest-service-fecru-admin-permission-schemes create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -299,16 +319,17 @@ export def "rest-service-fecru-admin-permission-schemes post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --copyFrom: string # if set, the new permission scheme will be a copy of permissionSchemeName
+  --copy-from: string # if set, the new permission scheme will be a copy of permissionSchemeName
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "copyFrom" $copyFrom "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "copyFrom" $copy_from "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest-service-fecru/admin/permission-schemes" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Deletes a permission scheme by name
@@ -323,14 +344,15 @@ export def "rest-service-fecru-admin-permission-schemes delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service-fecru/admin/permission-schemes/($name)")
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/rest-service-fecru/admin/permission-schemes/{name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Retrieve a permission scheme by name
@@ -345,20 +367,21 @@ export def "rest-service-fecru-admin-permission-schemes get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service-fecru/admin/permission-schemes/($name)")
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/rest-service-fecru/admin/permission-schemes/{name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Updates an existing permission scheme.
 #
 # PUT /rest-service-fecru/admin/permission-schemes/{name}
-export def "rest-service-fecru-admin-permission-schemes put" [
+export def "rest-service-fecru-admin-permission-schemes update" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -367,14 +390,15 @@ export def "rest-service-fecru-admin-permission-schemes put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service-fecru/admin/permission-schemes/($name)")
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/rest-service-fecru/admin/permission-schemes/{name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Removes anonymous-user permission [action name] from given permission scheme
@@ -390,21 +414,22 @@ export def "rest-service-fecru-admin-permission-schemes-anonymous-users delete" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service-fecru/admin/permission-schemes/($name)/anonymous-users")
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/rest-service-fecru/admin/permission-schemes/{name}/anonymous-users"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Retrieve a page of anonymous users permissions [action name] for given permission scheme.
 #
 # GET /rest-service-fecru/admin/permission-schemes/{name}/anonymous-users
 # operationId: listAnonymousUsersPrincipalAssociation
-export def "rest-service-fecru-admin-permission-schemes-anonymous-users listAnonymousUsersPrincipalAssociation" [
+export def "rest-service-fecru-admin-permission-schemes-anonymous-users list-principal-association" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -413,23 +438,24 @@ export def "rest-service-fecru-admin-permission-schemes-anonymous-users listAnon
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --action: string # action name
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "action" $action "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/rest-service-fecru/admin/permission-schemes/($name)/anonymous-users" $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/rest-service-fecru/admin/permission-schemes/{name}/anonymous-users") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
-# Add anonymous-user permission [action name] to given permission scheme  List of available action names:
+# Add anonymous-user permission [action name] to given permission scheme List of available action names:
 #
 # PUT /rest-service-fecru/admin/permission-schemes/{name}/anonymous-users
 # operationId: addPermissionSchemeAnonymousUsers
-export def "rest-service-fecru-admin-permission-schemes-anonymous-users addPermissionSchemeAnonymousUsers" [
+export def "rest-service-fecru-admin-permission-schemes-anonymous-users create" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -438,14 +464,15 @@ export def "rest-service-fecru-admin-permission-schemes-anonymous-users addPermi
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service-fecru/admin/permission-schemes/($name)/anonymous-users")
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/rest-service-fecru/admin/permission-schemes/{name}/anonymous-users"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Removes group permission [group name, action name] from given permission scheme
@@ -461,21 +488,22 @@ export def "rest-service-fecru-admin-permission-schemes-groups delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service-fecru/admin/permission-schemes/($name)/groups")
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/rest-service-fecru/admin/permission-schemes/{name}/groups"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Retrieve a page of group permissions [group name, action name] for given permission scheme.
 #
 # GET /rest-service-fecru/admin/permission-schemes/{name}/groups
 # operationId: listGroupPrincipalAssociation
-export def "rest-service-fecru-admin-permission-schemes-groups listGroupPrincipalAssociation" [
+export def "rest-service-fecru-admin-permission-schemes-groups list-principal-association" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -484,6 +512,7 @@ export def "rest-service-fecru-admin-permission-schemes-groups listGroupPrincipa
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # group name
   --action: string # action name
@@ -491,17 +520,17 @@ export def "rest-service-fecru-admin-permission-schemes-groups listGroupPrincipa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "action" $action "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/rest-service-fecru/admin/permission-schemes/($name)/groups" $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/rest-service-fecru/admin/permission-schemes/{name}/groups") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
-# Add group permission [group name, action name] to given permission scheme  List of available action names:
+# Add group permission [group name, action name] to given permission scheme List of available action names:
 #
 # PUT /rest-service-fecru/admin/permission-schemes/{name}/groups
 # operationId: addPermissionSchemeGroup
-export def "rest-service-fecru-admin-permission-schemes-groups addPermissionSchemeGroup" [
+export def "rest-service-fecru-admin-permission-schemes-groups create" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -510,14 +539,15 @@ export def "rest-service-fecru-admin-permission-schemes-groups addPermissionSche
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service-fecru/admin/permission-schemes/($name)/groups")
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/rest-service-fecru/admin/permission-schemes/{name}/groups"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Removes logged-in-users permission [action name] from given permission scheme
@@ -533,21 +563,22 @@ export def "rest-service-fecru-admin-permission-schemes-logged-in-users delete" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service-fecru/admin/permission-schemes/($name)/logged-in-users")
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/rest-service-fecru/admin/permission-schemes/{name}/logged-in-users"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Retrieve a page of logged in users permissions [action name] for given permission scheme.
 #
 # GET /rest-service-fecru/admin/permission-schemes/{name}/logged-in-users
 # operationId: listLoggedUsersPrincipalAssociation
-export def "rest-service-fecru-admin-permission-schemes-logged-in-users listLoggedUsersPrincipalAssociation" [
+export def "rest-service-fecru-admin-permission-schemes-logged-in-users list-principal-association" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -556,23 +587,24 @@ export def "rest-service-fecru-admin-permission-schemes-logged-in-users listLogg
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --action: string # action name
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "action" $action "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/rest-service-fecru/admin/permission-schemes/($name)/logged-in-users" $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/rest-service-fecru/admin/permission-schemes/{name}/logged-in-users") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
-# Add logged-in-users permission [action name] to given permission scheme  List of available action names:
+# Add logged-in-users permission [action name] to given permission scheme List of available action names:
 #
 # PUT /rest-service-fecru/admin/permission-schemes/{name}/logged-in-users
 # operationId: addPermissionSchemeLoggedUsers
-export def "rest-service-fecru-admin-permission-schemes-logged-in-users addPermissionSchemeLoggedUsers" [
+export def "rest-service-fecru-admin-permission-schemes-logged-in-users create" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -581,21 +613,22 @@ export def "rest-service-fecru-admin-permission-schemes-logged-in-users addPermi
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service-fecru/admin/permission-schemes/($name)/logged-in-users")
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/rest-service-fecru/admin/permission-schemes/{name}/logged-in-users"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Retrieve a page of projects for given permission scheme.
 #
 # GET /rest-service-fecru/admin/permission-schemes/{name}/projects
 # operationId: listProjects
-export def "rest-service-fecru-admin-permission-schemes-projects listProjects" [
+export def "rest-service-fecru-admin-permission-schemes-projects list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -604,14 +637,15 @@ export def "rest-service-fecru-admin-permission-schemes-projects listProjects" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service-fecru/admin/permission-schemes/($name)/projects")
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/rest-service-fecru/admin/permission-schemes/{name}/projects"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Removes review-role permission [role name, action name] from given permission scheme
@@ -627,21 +661,22 @@ export def "rest-service-fecru-admin-permission-schemes-review-roles delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service-fecru/admin/permission-schemes/($name)/review-roles")
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/rest-service-fecru/admin/permission-schemes/{name}/review-roles"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Retrieve a page of review-roles permissions [role name, action name] for given permission scheme.
 #
 # GET /rest-service-fecru/admin/permission-schemes/{name}/review-roles
 # operationId: listRolesPrincipalAssociation
-export def "rest-service-fecru-admin-permission-schemes-review-roles listRolesPrincipalAssociation" [
+export def "rest-service-fecru-admin-permission-schemes-review-roles list-principal-association" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -650,6 +685,7 @@ export def "rest-service-fecru-admin-permission-schemes-review-roles listRolesPr
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # role name
   --action: string # action name
@@ -657,17 +693,17 @@ export def "rest-service-fecru-admin-permission-schemes-review-roles listRolesPr
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "action" $action "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/rest-service-fecru/admin/permission-schemes/($name)/review-roles" $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/rest-service-fecru/admin/permission-schemes/{name}/review-roles") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
-# Add review-role permission [role name, action name] to given permission scheme  List of available action names:     List of available role names:
+# Add review-role permission [role name, action name] to given permission scheme List of available action names: List of available role names:
 #
 # PUT /rest-service-fecru/admin/permission-schemes/{name}/review-roles
 # operationId: addPermissionSchemeReviewRole
-export def "rest-service-fecru-admin-permission-schemes-review-roles addPermissionSchemeReviewRole" [
+export def "rest-service-fecru-admin-permission-schemes-review-roles create" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -676,14 +712,15 @@ export def "rest-service-fecru-admin-permission-schemes-review-roles addPermissi
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service-fecru/admin/permission-schemes/($name)/review-roles")
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/rest-service-fecru/admin/permission-schemes/{name}/review-roles"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Removes user permission [username, action name] from given permission scheme
@@ -699,21 +736,22 @@ export def "rest-service-fecru-admin-permission-schemes-users delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service-fecru/admin/permission-schemes/($name)/users")
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/rest-service-fecru/admin/permission-schemes/{name}/users"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Retrieve a page of user permissions [username, action name] for given permission scheme.
 #
 # GET /rest-service-fecru/admin/permission-schemes/{name}/users
 # operationId: listUserPrincipalAssociation
-export def "rest-service-fecru-admin-permission-schemes-users listUserPrincipalAssociation" [
+export def "rest-service-fecru-admin-permission-schemes-users list-principal-association" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -722,6 +760,7 @@ export def "rest-service-fecru-admin-permission-schemes-users listUserPrincipalA
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # permission scheme name
   --action: string # action name
@@ -729,17 +768,17 @@ export def "rest-service-fecru-admin-permission-schemes-users listUserPrincipalA
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "action" $action "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/rest-service-fecru/admin/permission-schemes/($name)/users" $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/rest-service-fecru/admin/permission-schemes/{name}/users") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
-# Add user permission [username, action name] to given permission scheme  List of available action names:
+# Add user permission [username, action name] to given permission scheme List of available action names:
 #
 # PUT /rest-service-fecru/admin/permission-schemes/{name}/users
 # operationId: addPermissionSchemeUser
-export def "rest-service-fecru-admin-permission-schemes-users addPermissionSchemeUser" [
+export def "rest-service-fecru-admin-permission-schemes-users create" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -748,14 +787,15 @@ export def "rest-service-fecru-admin-permission-schemes-users addPermissionSchem
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service-fecru/admin/permission-schemes/($name)/users")
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/rest-service-fecru/admin/permission-schemes/{name}/users"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Retrieve a page of projects.
@@ -769,25 +809,26 @@ export def "rest-service-fecru-admin-projects list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # project's name part filter, optional
   --key: string # project's key part filter, optional
-  --defaultRepositoryName: string # project's default repository key part filter, optional
-  --permissionSchemeName: string # project's permission scheme pare name filter, optional
+  --default-repository-name: string # project's default repository key part filter, optional
+  --permission-scheme-name: string # project's permission scheme pare name filter, optional
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "defaultRepositoryName" $defaultRepositoryName "scalar") (serialize-qp "permissionSchemeName" $permissionSchemeName "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "defaultRepositoryName" $default_repository_name "scalar") (serialize-qp "permissionSchemeName" $permission_scheme_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest-service-fecru/admin/projects" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Creates a new project.
 #
 # POST /rest-service-fecru/admin/projects
-export def "rest-service-fecru-admin-projects post" [
+export def "rest-service-fecru-admin-projects create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -795,6 +836,7 @@ export def "rest-service-fecru-admin-projects post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -802,10 +844,10 @@ export def "rest-service-fecru-admin-projects post" [
   let full_url = (build-url $base "/rest-service-fecru/admin/projects")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
-# Deletes a project by key (including all reviews in this project).  Use   to move reviews to another project.
+# Deletes a project by key (including all reviews in this project). Use to move reviews to another project.
 #
 # DELETE /rest-service-fecru/admin/projects/{key}
 export def "rest-service-fecru-admin-projects delete" [
@@ -817,16 +859,17 @@ export def "rest-service-fecru-admin-projects delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --deleteProjectReviews: oneof<nothing, bool> # if true deletes reviews in project (default: false)
+  --delete-project-reviews: oneof<nothing, bool> # if true deletes reviews in project (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "deleteProjectReviews" $deleteProjectReviews "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/rest-service-fecru/admin/projects/($key)" $qp)
+  let qp = [(serialize-qp "deleteProjectReviews" $delete_project_reviews "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({key: (encode-path-segment $key)} | format pattern "/rest-service-fecru/admin/projects/{key}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Retrieve a project by key.
@@ -841,20 +884,21 @@ export def "rest-service-fecru-admin-projects get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service-fecru/admin/projects/($key)")
+  let full_url = (build-url $base ({key: (encode-path-segment $key)} | format pattern "/rest-service-fecru/admin/projects/{key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Updates an existing project.
 #
 # PUT /rest-service-fecru/admin/projects/{key}
-export def "rest-service-fecru-admin-projects put" [
+export def "rest-service-fecru-admin-projects update" [
   key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -863,14 +907,15 @@ export def "rest-service-fecru-admin-projects put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service-fecru/admin/projects/($key)")
+  let full_url = (build-url $base ({key: (encode-path-segment $key)} | format pattern "/rest-service-fecru/admin/projects/{key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Delete group from project's allowed reviewer group list
@@ -886,21 +931,22 @@ export def "rest-service-fecru-admin-projects-allowed-reviewer-groups delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service-fecru/admin/projects/($key)/allowed-reviewer-groups")
+  let full_url = (build-url $base ({key: (encode-path-segment $key)} | format pattern "/rest-service-fecru/admin/projects/{key}/allowed-reviewer-groups"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Retrieves project's allowed reviewer groups
 #
 # GET /rest-service-fecru/admin/projects/{key}/allowed-reviewer-groups
 # operationId: allowedReviewerGroups
-export def "rest-service-fecru-admin-projects-allowed-reviewer-groups allowedReviewerGroups" [
+export def "rest-service-fecru-admin-projects-allowed-reviewer-groups get" [
   key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -909,21 +955,22 @@ export def "rest-service-fecru-admin-projects-allowed-reviewer-groups allowedRev
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service-fecru/admin/projects/($key)/allowed-reviewer-groups")
+  let full_url = (build-url $base ({key: (encode-path-segment $key)} | format pattern "/rest-service-fecru/admin/projects/{key}/allowed-reviewer-groups"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Add group to project's allowed reviewer group list
 #
 # PUT /rest-service-fecru/admin/projects/{key}/allowed-reviewer-groups
 # operationId: addAllowedReviewerGroup
-export def "rest-service-fecru-admin-projects-allowed-reviewer-groups addAllowedReviewerGroup" [
+export def "rest-service-fecru-admin-projects-allowed-reviewer-groups create" [
   key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -932,14 +979,15 @@ export def "rest-service-fecru-admin-projects-allowed-reviewer-groups addAllowed
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service-fecru/admin/projects/($key)/allowed-reviewer-groups")
+  let full_url = (build-url $base ({key: (encode-path-segment $key)} | format pattern "/rest-service-fecru/admin/projects/{key}/allowed-reviewer-groups"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Remove user from project's allowed reviewer users list
@@ -955,21 +1003,22 @@ export def "rest-service-fecru-admin-projects-allowed-reviewer-users delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service-fecru/admin/projects/($key)/allowed-reviewer-users")
+  let full_url = (build-url $base ({key: (encode-path-segment $key)} | format pattern "/rest-service-fecru/admin/projects/{key}/allowed-reviewer-users"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Retrieves project's allowed reviewer users
 #
 # GET /rest-service-fecru/admin/projects/{key}/allowed-reviewer-users
 # operationId: allowedReviewerUsers
-export def "rest-service-fecru-admin-projects-allowed-reviewer-users allowedReviewerUsers" [
+export def "rest-service-fecru-admin-projects-allowed-reviewer-users get" [
   key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -978,21 +1027,22 @@ export def "rest-service-fecru-admin-projects-allowed-reviewer-users allowedRevi
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service-fecru/admin/projects/($key)/allowed-reviewer-users")
+  let full_url = (build-url $base ({key: (encode-path-segment $key)} | format pattern "/rest-service-fecru/admin/projects/{key}/allowed-reviewer-users"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Add user to project's allowed reviewer users list
 #
 # PUT /rest-service-fecru/admin/projects/{key}/allowed-reviewer-users
 # operationId: addAllowedReviewerUser
-export def "rest-service-fecru-admin-projects-allowed-reviewer-users addAllowedReviewerUser" [
+export def "rest-service-fecru-admin-projects-allowed-reviewer-users create" [
   key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1001,14 +1051,15 @@ export def "rest-service-fecru-admin-projects-allowed-reviewer-users addAllowedR
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service-fecru/admin/projects/($key)/allowed-reviewer-users")
+  let full_url = (build-url $base ({key: (encode-path-segment $key)} | format pattern "/rest-service-fecru/admin/projects/{key}/allowed-reviewer-users"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Delete group from project's default reviewer group list
@@ -1024,21 +1075,22 @@ export def "rest-service-fecru-admin-projects-default-reviewer-groups delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service-fecru/admin/projects/($key)/default-reviewer-groups")
+  let full_url = (build-url $base ({key: (encode-path-segment $key)} | format pattern "/rest-service-fecru/admin/projects/{key}/default-reviewer-groups"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Retrieves project's default reviewer groups
 #
 # GET /rest-service-fecru/admin/projects/{key}/default-reviewer-groups
 # operationId: defaultReviewerGroups
-export def "rest-service-fecru-admin-projects-default-reviewer-groups defaultReviewerGroups" [
+export def "rest-service-fecru-admin-projects-default-reviewer-groups get" [
   key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1047,21 +1099,22 @@ export def "rest-service-fecru-admin-projects-default-reviewer-groups defaultRev
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service-fecru/admin/projects/($key)/default-reviewer-groups")
+  let full_url = (build-url $base ({key: (encode-path-segment $key)} | format pattern "/rest-service-fecru/admin/projects/{key}/default-reviewer-groups"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Add group to project's default reviewer group list
 #
 # PUT /rest-service-fecru/admin/projects/{key}/default-reviewer-groups
 # operationId: addDefaultReviewerGroup
-export def "rest-service-fecru-admin-projects-default-reviewer-groups addDefaultReviewerGroup" [
+export def "rest-service-fecru-admin-projects-default-reviewer-groups create" [
   key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1070,14 +1123,15 @@ export def "rest-service-fecru-admin-projects-default-reviewer-groups addDefault
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service-fecru/admin/projects/($key)/default-reviewer-groups")
+  let full_url = (build-url $base ({key: (encode-path-segment $key)} | format pattern "/rest-service-fecru/admin/projects/{key}/default-reviewer-groups"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Remove user from project's default reviewer users list
@@ -1093,21 +1147,22 @@ export def "rest-service-fecru-admin-projects-default-reviewer-users delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service-fecru/admin/projects/($key)/default-reviewer-users")
+  let full_url = (build-url $base ({key: (encode-path-segment $key)} | format pattern "/rest-service-fecru/admin/projects/{key}/default-reviewer-users"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Retrieves project's default reviewer users
 #
 # GET /rest-service-fecru/admin/projects/{key}/default-reviewer-users
 # operationId: listDefaultReviewerUsers
-export def "rest-service-fecru-admin-projects-default-reviewer-users listDefaultReviewerUsers" [
+export def "rest-service-fecru-admin-projects-default-reviewer-users list" [
   key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1116,21 +1171,22 @@ export def "rest-service-fecru-admin-projects-default-reviewer-users listDefault
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service-fecru/admin/projects/($key)/default-reviewer-users")
+  let full_url = (build-url $base ({key: (encode-path-segment $key)} | format pattern "/rest-service-fecru/admin/projects/{key}/default-reviewer-users"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Add user to project's default reviewer users list
 #
 # PUT /rest-service-fecru/admin/projects/{key}/default-reviewer-users
 # operationId: addDefaultReviewerUser
-export def "rest-service-fecru-admin-projects-default-reviewer-users addDefaultReviewerUser" [
+export def "rest-service-fecru-admin-projects-default-reviewer-users create" [
   key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1139,23 +1195,24 @@ export def "rest-service-fecru-admin-projects-default-reviewer-users addDefaultR
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service-fecru/admin/projects/($key)/default-reviewer-users")
+  let full_url = (build-url $base ({key: (encode-path-segment $key)} | format pattern "/rest-service-fecru/admin/projects/{key}/default-reviewer-users"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Move reviews and snippets from source project to destination project
 #
 # PUT /rest-service-fecru/admin/projects/{sourceProjectKey}/move-reviews/{destinationProjectKey}
 # operationId: moveAllReviews
-export def "rest-service-fecru-admin-projects-move-reviews moveAllReviews" [
-  sourceProjectKey: string
-  destinationProjectKey: string
+export def "rest-service-fecru-admin-projects-move-reviews list" [
+  source_project_key: string
+  destination_project_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1163,14 +1220,15 @@ export def "rest-service-fecru-admin-projects-move-reviews moveAllReviews" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service-fecru/admin/projects/($sourceProjectKey)/move-reviews/($destinationProjectKey)")
+  let full_url = (build-url $base ({source_project_key: (encode-path-segment $source_project_key), destination_project_key: (encode-path-segment $destination_project_key)} | format pattern "/rest-service-fecru/admin/projects/{source_project_key}/move-reviews/{destination_project_key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Retrieve a page of repositories. Repository properties with default values may not be returned.
@@ -1184,6 +1242,7 @@ export def "rest-service-fecru-admin-repositories list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --type: string # filter repositories by repository type: svn, git, hg, cvs, p4, ...
   --enabled: oneof<nothing, bool> # filter repositories by enabled flag
@@ -1195,13 +1254,13 @@ export def "rest-service-fecru-admin-repositories list" [
   let full_url = (build-url $base "/rest-service-fecru/admin/repositories" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Creates a repository.
 #
 # POST /rest-service-fecru/admin/repositories
-export def "rest-service-fecru-admin-repositories post" [
+export def "rest-service-fecru-admin-repositories create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1209,6 +1268,7 @@ export def "rest-service-fecru-admin-repositories post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1216,14 +1276,14 @@ export def "rest-service-fecru-admin-repositories post" [
   let full_url = (build-url $base "/rest-service-fecru/admin/repositories")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Adds repository
 #
 # POST /rest-service-fecru/admin/repositories-v1
 # operationId: addRepository
-export def "rest-service-fecru-admin-repositories-v1 addRepository" [
+export def "rest-service-fecru-admin-repositories-v1 create-repository" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1231,6 +1291,7 @@ export def "rest-service-fecru-admin-repositories-v1 addRepository" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1238,7 +1299,7 @@ export def "rest-service-fecru-admin-repositories-v1 addRepository" [
   let full_url = (build-url $base "/rest-service-fecru/admin/repositories-v1")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Returns information about the status of the repository and the current indexing status
@@ -1253,17 +1314,18 @@ export def "rest-service-fecru-admin-repositories-v1 get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service-fecru/admin/repositories-v1/($repository)")
+  let full_url = (build-url $base ({repository: (encode-path-segment $repository)} | format pattern "/rest-service-fecru/admin/repositories-v1/{repository}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
-# Deletes repository.  Warning: you can not undo this operation
+# Deletes repository. Warning: you can not undo this operation
 #
 # DELETE /rest-service-fecru/admin/repositories-v1/{repository}/
 # operationId: deleteRepository
@@ -1276,21 +1338,22 @@ export def "rest-service-fecru-admin-repositories-v1 delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service-fecru/admin/repositories-v1/($repository)/")
+  let full_url = (build-url $base ({repository: (encode-path-segment $repository)} | format pattern "/rest-service-fecru/admin/repositories-v1/{repository}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Disables repository.
 #
 # POST /rest-service-fecru/admin/repositories-v1/{repository}/disable
 # operationId: disableRepository
-export def "rest-service-fecru-admin-repositories-v1-disable disableRepository" [
+export def "rest-service-fecru-admin-repositories-v1-disable disable" [
   repository: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1299,21 +1362,22 @@ export def "rest-service-fecru-admin-repositories-v1-disable disableRepository" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service-fecru/admin/repositories-v1/($repository)/disable")
+  let full_url = (build-url $base ({repository: (encode-path-segment $repository)} | format pattern "/rest-service-fecru/admin/repositories-v1/{repository}/disable"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Enables repository.
 #
 # POST /rest-service-fecru/admin/repositories-v1/{repository}/enable
 # operationId: enableRepository
-export def "rest-service-fecru-admin-repositories-v1-enable enableRepository" [
+export def "rest-service-fecru-admin-repositories-v1-enable enable" [
   repository: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1322,21 +1386,22 @@ export def "rest-service-fecru-admin-repositories-v1-enable enableRepository" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service-fecru/admin/repositories-v1/($repository)/enable")
+  let full_url = (build-url $base ({repository: (encode-path-segment $repository)} | format pattern "/rest-service-fecru/admin/repositories-v1/{repository}/enable"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
-# Rebuilds the changeset discussion index for the specified repository. The index is used to display changeset  discussions in activity streams.
+# Rebuilds the changeset discussion index for the specified repository. The index is used to display changeset discussions in activity streams.
 #
 # POST /rest-service-fecru/admin/repositories-v1/{repository}/reindex-discussions
 # operationId: reindexChangesetComments
-export def "rest-service-fecru-admin-repositories-v1-reindex-discussions reindexChangesetComments" [
+export def "rest-service-fecru-admin-repositories-v1-reindex-discussions create-changeset-comments" [
   repository: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1345,20 +1410,21 @@ export def "rest-service-fecru-admin-repositories-v1-reindex-discussions reindex
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service-fecru/admin/repositories-v1/($repository)/reindex-discussions")
+  let full_url = (build-url $base ({repository: (encode-path-segment $repository)} | format pattern "/rest-service-fecru/admin/repositories-v1/{repository}/reindex-discussions"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
-# Re-indexes the linecount data used to generate the LOC graphs. The linecount data will be recalculated in daily  buckets based on the server timezone.
+# Re-indexes the linecount data used to generate the LOC graphs. The linecount data will be recalculated in daily buckets based on the server timezone.
 #
 # POST /rest-service-fecru/admin/repositories-v1/{repository}/reindex-linecount
-export def "rest-service-fecru-admin-repositories-v1-reindex-linecount post" [
+export def "rest-service-fecru-admin-repositories-v1-reindex-linecount create" [
   repository: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1367,21 +1433,22 @@ export def "rest-service-fecru-admin-repositories-v1-reindex-linecount post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service-fecru/admin/repositories-v1/($repository)/reindex-linecount")
+  let full_url = (build-url $base ({repository: (encode-path-segment $repository)} | format pattern "/rest-service-fecru/admin/repositories-v1/{repository}/reindex-linecount"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Re-indexes all the Crucible revision data (which revisions have been reviewed)
 #
 # POST /rest-service-fecru/admin/repositories-v1/{repository}/reindex-reviews
 # operationId: doReviewRevisionReindex
-export def "rest-service-fecru-admin-repositories-v1-reindex-reviews doReviewRevisionReindex" [
+export def "rest-service-fecru-admin-repositories-v1-reindex-reviews create-do-revision" [
   repository: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1390,23 +1457,24 @@ export def "rest-service-fecru-admin-repositories-v1-reindex-reviews doReviewRev
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --synchronous: oneof<nothing, bool> # if true will wait for the indexing to finish before returning (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "synchronous" $synchronous "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/rest-service-fecru/admin/repositories-v1/($repository)/reindex-reviews" $qp)
+  let full_url = (build-url $base ({repository: (encode-path-segment $repository)} | format pattern "/rest-service-fecru/admin/repositories-v1/{repository}/reindex-reviews") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
-# Rebuilds the search index data for the given repository. This will rebuild the data used to search by path,  commit message and comitter, also used for activity streams and JIRA integration.
+# Rebuilds the search index data for the given repository. This will rebuild the data used to search by path, commit message and comitter, also used for activity streams and JIRA integration.
 #
 # POST /rest-service-fecru/admin/repositories-v1/{repository}/reindex-search
 # operationId: rebuildSearchIndex
-export def "rest-service-fecru-admin-repositories-v1-reindex-search rebuildSearchIndex" [
+export def "rest-service-fecru-admin-repositories-v1-reindex-search list-rebuild-index" [
   repository: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1415,20 +1483,21 @@ export def "rest-service-fecru-admin-repositories-v1-reindex-search rebuildSearc
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service-fecru/admin/repositories-v1/($repository)/reindex-search")
+  let full_url = (build-url $base ({repository: (encode-path-segment $repository)} | format pattern "/rest-service-fecru/admin/repositories-v1/{repository}/reindex-search"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
-# Deletes the existing cache and re-indexes the repository from scratch.  For large or slow repositories this may take some time, during which some functionality will be unavailable.  This action will also restart the repository.
+# Deletes the existing cache and re-indexes the repository from scratch. For large or slow repositories this may take some time, during which some functionality will be unavailable. This action will also restart the repository.
 #
 # POST /rest-service-fecru/admin/repositories-v1/{repository}/reindex-source
-export def "rest-service-fecru-admin-repositories-v1-reindex-source post" [
+export def "rest-service-fecru-admin-repositories-v1-reindex-source create" [
   repository: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1437,22 +1506,23 @@ export def "rest-service-fecru-admin-repositories-v1-reindex-source post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clone: oneof<nothing, bool> # if true and the repository is a dvcs repository (git or mercurial) it will re-clone the repository  before re-indexing (default: false)
+  --clone: oneof<nothing, bool> # if true and the repository is a dvcs repository (git or mercurial) it will re-clone the repository before re-indexing (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "clone" $clone "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/rest-service-fecru/admin/repositories-v1/($repository)/reindex-source" $qp)
+  let full_url = (build-url $base ({repository: (encode-path-segment $repository)} | format pattern "/rest-service-fecru/admin/repositories-v1/{repository}/reindex-source") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Re-scans the repository metadata for SVN and Perforce repositories. Only valid for Perforce and SVN repositories.
 #
 # POST /rest-service-fecru/admin/repositories-v1/{repository}/rescan-metadata
-export def "rest-service-fecru-admin-repositories-v1-rescan-metadata post" [
+export def "rest-service-fecru-admin-repositories-v1-rescan-metadata create" [
   repository: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1461,6 +1531,7 @@ export def "rest-service-fecru-admin-repositories-v1-rescan-metadata post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --qp-from: int # the revision number to start at (format: int64)
   --qp-to: int # the revision number to end at (format: int64)
@@ -1468,17 +1539,17 @@ export def "rest-service-fecru-admin-repositories-v1-rescan-metadata post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/rest-service-fecru/admin/repositories-v1/($repository)/rescan-metadata" $qp)
+  let full_url = (build-url $base ({repository: (encode-path-segment $repository)} | format pattern "/rest-service-fecru/admin/repositories-v1/{repository}/rescan-metadata") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
-# Runs an incremental repository index now.  This is the same operation as triggered by scheduled indexing.  Can be called using the REST Api Token to authorize.
+# Runs an incremental repository index now. This is the same operation as triggered by scheduled indexing. Can be called using the REST Api Token to authorize.
 #
 # POST /rest-service-fecru/admin/repositories-v1/{repository}/scan
 # operationId: scan
-export def "rest-service-fecru-admin-repositories-v1-scan scan" [
+export def "rest-service-fecru-admin-repositories-v1-scan create" [
   repository: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1487,23 +1558,24 @@ export def "rest-service-fecru-admin-repositories-v1-scan scan" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --synchronous: oneof<nothing, bool> # if true will wait for the indexing to finish before returning (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "synchronous" $synchronous "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/rest-service-fecru/admin/repositories-v1/($repository)/scan" $qp)
+  let full_url = (build-url $base ({repository: (encode-path-segment $repository)} | format pattern "/rest-service-fecru/admin/repositories-v1/{repository}/scan") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Scans the whole CVS repository for any changes since the last scan. Only valid for CVS repositories.
 #
 # POST /rest-service-fecru/admin/repositories-v1/{repository}/scan-cvs
 # operationId: scanCvs
-export def "rest-service-fecru-admin-repositories-v1-scan-cvs scanCvs" [
+export def "rest-service-fecru-admin-repositories-v1-scan-cvs create" [
   repository: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1512,21 +1584,22 @@ export def "rest-service-fecru-admin-repositories-v1-scan-cvs scanCvs" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service-fecru/admin/repositories-v1/($repository)/scan-cvs")
+  let full_url = (build-url $base ({repository: (encode-path-segment $repository)} | format pattern "/rest-service-fecru/admin/repositories-v1/{repository}/scan-cvs"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Starts the repository.
 #
 # POST /rest-service-fecru/admin/repositories-v1/{repository}/start
 # operationId: startRepository
-export def "rest-service-fecru-admin-repositories-v1-start startRepository" [
+export def "rest-service-fecru-admin-repositories-v1-start start" [
   repository: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1535,21 +1608,22 @@ export def "rest-service-fecru-admin-repositories-v1-start startRepository" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service-fecru/admin/repositories-v1/($repository)/start")
+  let full_url = (build-url $base ({repository: (encode-path-segment $repository)} | format pattern "/rest-service-fecru/admin/repositories-v1/{repository}/start"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Stops the repository. Does not wait for the repository to stop before returning.
 #
 # POST /rest-service-fecru/admin/repositories-v1/{repository}/stop
 # operationId: stopRepository
-export def "rest-service-fecru-admin-repositories-v1-stop stopRepository" [
+export def "rest-service-fecru-admin-repositories-v1-stop stop" [
   repository: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1558,14 +1632,15 @@ export def "rest-service-fecru-admin-repositories-v1-stop stopRepository" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service-fecru/admin/repositories-v1/($repository)/stop")
+  let full_url = (build-url $base ({repository: (encode-path-segment $repository)} | format pattern "/rest-service-fecru/admin/repositories-v1/{repository}/stop"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Deletes a repository by key
@@ -1580,14 +1655,15 @@ export def "rest-service-fecru-admin-repositories delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service-fecru/admin/repositories/($repository)")
+  let full_url = (build-url $base ({repository: (encode-path-segment $repository)} | format pattern "/rest-service-fecru/admin/repositories/{repository}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Retrieve a repository by key. Repository properties with default values may not be returned.
@@ -1602,20 +1678,21 @@ export def "rest-service-fecru-admin-repositories get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service-fecru/admin/repositories/($repository)")
+  let full_url = (build-url $base ({repository: (encode-path-segment $repository)} | format pattern "/rest-service-fecru/admin/repositories/{repository}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Updates an existing repository.
 #
 # PUT /rest-service-fecru/admin/repositories/{repository}
-export def "rest-service-fecru-admin-repositories put" [
+export def "rest-service-fecru-admin-repositories update" [
   repository: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1624,21 +1701,22 @@ export def "rest-service-fecru-admin-repositories put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service-fecru/admin/repositories/($repository)")
+  let full_url = (build-url $base ({repository: (encode-path-segment $repository)} | format pattern "/rest-service-fecru/admin/repositories/{repository}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
-# Runs an full incremental repository index.  For CVS: scans the whole CVS repository for any changes since the last scan.  For other repository types will trigger an incremental index.
+# Runs an full incremental repository index. For CVS: scans the whole CVS repository for any changes since the last scan. For other repository types will trigger an incremental index.
 #
 # PUT /rest-service-fecru/admin/repositories/{repository}/full-incremental-index
 # operationId: fullIncrementalIndex
-export def "rest-service-fecru-admin-repositories-full-incremental-index fullIncrementalIndex" [
+export def "rest-service-fecru-admin-repositories-full-incremental-index update" [
   repository: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1647,21 +1725,22 @@ export def "rest-service-fecru-admin-repositories-full-incremental-index fullInc
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service-fecru/admin/repositories/($repository)/full-incremental-index")
+  let full_url = (build-url $base ({repository: (encode-path-segment $repository)} | format pattern "/rest-service-fecru/admin/repositories/{repository}/full-incremental-index"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
-# Runs an incremental repository index.  This is the same operation as triggered by scheduled indexing.  Can be called using the REST API Token to authorize.
+# Runs an incremental repository index. This is the same operation as triggered by scheduled indexing. Can be called using the REST API Token to authorize.
 #
 # PUT /rest-service-fecru/admin/repositories/{repository}/incremental-index
 # operationId: incrementalIndex
-export def "rest-service-fecru-admin-repositories-incremental-index incrementalIndex" [
+export def "rest-service-fecru-admin-repositories-incremental-index update" [
   repository: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1670,23 +1749,24 @@ export def "rest-service-fecru-admin-repositories-incremental-index incrementalI
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --wait: oneof<nothing, bool> # if true will wait for the indexing to finish before returning (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "wait" $wait "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/rest-service-fecru/admin/repositories/($repository)/incremental-index" $qp)
+  let full_url = (build-url $base ({repository: (encode-path-segment $repository)} | format pattern "/rest-service-fecru/admin/repositories/{repository}/incremental-index") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Retrieve repository permissions properties.
 #
 # GET /rest-service-fecru/admin/repositories/{repository}/permissions
 # operationId: permissions
-export def "rest-service-fecru-admin-repositories-permissions permissions" [
+export def "rest-service-fecru-admin-repositories-permissions get" [
   repository: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1695,21 +1775,22 @@ export def "rest-service-fecru-admin-repositories-permissions permissions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service-fecru/admin/repositories/($repository)/permissions")
+  let full_url = (build-url $base ({repository: (encode-path-segment $repository)} | format pattern "/rest-service-fecru/admin/repositories/{repository}/permissions"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
-# Updates repository permissions properties.   Valid permission settings: any combination of useDefaults, allowAnonymous, allowLoggedIn.
+# Updates repository permissions properties. Valid permission settings: any combination of useDefaults, allowAnonymous, allowLoggedIn.
 #
 # PUT /rest-service-fecru/admin/repositories/{repository}/permissions
 # operationId: updatePermissions
-export def "rest-service-fecru-admin-repositories-permissions updatePermissions" [
+export def "rest-service-fecru-admin-repositories-permissions update" [
   repository: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1718,21 +1799,22 @@ export def "rest-service-fecru-admin-repositories-permissions updatePermissions"
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service-fecru/admin/repositories/($repository)/permissions")
+  let full_url = (build-url $base ({repository: (encode-path-segment $repository)} | format pattern "/rest-service-fecru/admin/repositories/{repository}/permissions"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Delete group from repository allowed groups
 #
 # DELETE /rest-service-fecru/admin/repositories/{repository}/permissions/groups
 # operationId: removeGroupToPermissions
-export def "rest-service-fecru-admin-repositories-permissions-groups removeGroupToPermissions" [
+export def "rest-service-fecru-admin-repositories-permissions-groups delete" [
   repository: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1741,21 +1823,22 @@ export def "rest-service-fecru-admin-repositories-permissions-groups removeGroup
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service-fecru/admin/repositories/($repository)/permissions/groups")
+  let full_url = (build-url $base ({repository: (encode-path-segment $repository)} | format pattern "/rest-service-fecru/admin/repositories/{repository}/permissions/groups"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
-# Note: use /rest-service-fecru/admin/repository-permissions/ endpoint for full repository permission administration functionality  Lists groups allowed to access repository.
+# Note: use /rest-service-fecru/admin/repository-permissions/ endpoint for full repository permission administration functionality Lists groups allowed to access repository.
 #
 # GET /rest-service-fecru/admin/repositories/{repository}/permissions/groups
 # operationId: permissionsGroups
-export def "rest-service-fecru-admin-repositories-permissions-groups permissionsGroups" [
+export def "rest-service-fecru-admin-repositories-permissions-groups get" [
   repository: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1764,21 +1847,22 @@ export def "rest-service-fecru-admin-repositories-permissions-groups permissions
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service-fecru/admin/repositories/($repository)/permissions/groups")
+  let full_url = (build-url $base ({repository: (encode-path-segment $repository)} | format pattern "/rest-service-fecru/admin/repositories/{repository}/permissions/groups"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
-# Note: use /rest-service-fecru/admin/repository-permissions/ endpoint for full repository permission administration functionality  Adds group to repository allowed groups
+# Note: use /rest-service-fecru/admin/repository-permissions/ endpoint for full repository permission administration functionality Adds group to repository allowed groups
 #
 # PUT /rest-service-fecru/admin/repositories/{repository}/permissions/groups
 # operationId: addGroupToPermissions
-export def "rest-service-fecru-admin-repositories-permissions-groups addGroupToPermissions" [
+export def "rest-service-fecru-admin-repositories-permissions-groups create" [
   repository: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1787,21 +1871,22 @@ export def "rest-service-fecru-admin-repositories-permissions-groups addGroupToP
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service-fecru/admin/repositories/($repository)/permissions/groups")
+  let full_url = (build-url $base ({repository: (encode-path-segment $repository)} | format pattern "/rest-service-fecru/admin/repositories/{repository}/permissions/groups"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
-# Rebuilds the changeset discussion index for the specified repository. The index is used to display changeset  discussions in activity streams.
+# Rebuilds the changeset discussion index for the specified repository. The index is used to display changeset discussions in activity streams.
 #
 # PUT /rest-service-fecru/admin/repositories/{repository}/reindex-changeset-discussion
 # operationId: reindexChangesetDiscussion
-export def "rest-service-fecru-admin-repositories-reindex-changeset-discussion reindexChangesetDiscussion" [
+export def "rest-service-fecru-admin-repositories-reindex-changeset-discussion update" [
   repository: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1810,20 +1895,21 @@ export def "rest-service-fecru-admin-repositories-reindex-changeset-discussion r
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service-fecru/admin/repositories/($repository)/reindex-changeset-discussion")
+  let full_url = (build-url $base ({repository: (encode-path-segment $repository)} | format pattern "/rest-service-fecru/admin/repositories/{repository}/reindex-changeset-discussion"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
-# Re-indexes the linecount data used to generate the LOC graphs. The linecount data will be recalculated in daily  buckets based on the server timezone.
+# Re-indexes the linecount data used to generate the LOC graphs. The linecount data will be recalculated in daily buckets based on the server timezone.
 #
 # PUT /rest-service-fecru/admin/repositories/{repository}/reindex-linecount
-export def "rest-service-fecru-admin-repositories-reindex-linecount put" [
+export def "rest-service-fecru-admin-repositories-reindex-linecount update" [
   repository: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1832,21 +1918,22 @@ export def "rest-service-fecru-admin-repositories-reindex-linecount put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service-fecru/admin/repositories/($repository)/reindex-linecount")
+  let full_url = (build-url $base ({repository: (encode-path-segment $repository)} | format pattern "/rest-service-fecru/admin/repositories/{repository}/reindex-linecount"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Re-indexes all the Crucible revision data (which revisions have been reviewed)
 #
 # PUT /rest-service-fecru/admin/repositories/{repository}/reindex-reviews
 # operationId: reindexReviews
-export def "rest-service-fecru-admin-repositories-reindex-reviews reindexReviews" [
+export def "rest-service-fecru-admin-repositories-reindex-reviews update" [
   repository: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1855,21 +1942,22 @@ export def "rest-service-fecru-admin-repositories-reindex-reviews reindexReviews
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service-fecru/admin/repositories/($repository)/reindex-reviews")
+  let full_url = (build-url $base ({repository: (encode-path-segment $repository)} | format pattern "/rest-service-fecru/admin/repositories/{repository}/reindex-reviews"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
-# Rebuilds the search index data for the given repository. This will rebuild the data used to search by path,  commit message and committer, also used for activity streams and JIRA integration.
+# Rebuilds the search index data for the given repository. This will rebuild the data used to search by path, commit message and committer, also used for activity streams and JIRA integration.
 #
 # PUT /rest-service-fecru/admin/repositories/{repository}/reindex-search
 # operationId: reindexSearch
-export def "rest-service-fecru-admin-repositories-reindex-search reindexSearch" [
+export def "rest-service-fecru-admin-repositories-reindex-search list" [
   repository: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1878,20 +1966,21 @@ export def "rest-service-fecru-admin-repositories-reindex-search reindexSearch" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service-fecru/admin/repositories/($repository)/reindex-search")
+  let full_url = (build-url $base ({repository: (encode-path-segment $repository)} | format pattern "/rest-service-fecru/admin/repositories/{repository}/reindex-search"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
-# Deletes the existing cache and re-indexes the repository from scratch.  For large or slow repositories this may take some time, during which some functionality will be unavailable.  This action will also restart the repository.
+# Deletes the existing cache and re-indexes the repository from scratch. For large or slow repositories this may take some time, during which some functionality will be unavailable. This action will also restart the repository.
 #
 # PUT /rest-service-fecru/admin/repositories/{repository}/reindex-source
-export def "rest-service-fecru-admin-repositories-reindex-source put" [
+export def "rest-service-fecru-admin-repositories-reindex-source update" [
   repository: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1900,22 +1989,23 @@ export def "rest-service-fecru-admin-repositories-reindex-source put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --clone: oneof<nothing, bool> # if true and the repository is a dvcs repository (git or mercurial) it will re-clone the repository before re-indexing (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "clone" $clone "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/rest-service-fecru/admin/repositories/($repository)/reindex-source" $qp)
+  let full_url = (build-url $base ({repository: (encode-path-segment $repository)} | format pattern "/rest-service-fecru/admin/repositories/{repository}/reindex-source") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Re-scans the repository metadata. Only valid for Perforce and SVN repositories.
 #
 # PUT /rest-service-fecru/admin/repositories/{repository}/rescan-metadata
-export def "rest-service-fecru-admin-repositories-rescan-metadata put" [
+export def "rest-service-fecru-admin-repositories-rescan-metadata update" [
   repository: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1924,6 +2014,7 @@ export def "rest-service-fecru-admin-repositories-rescan-metadata put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --qp-from: string # the revision number to start at
   --qp-to: string # the revision number to end at
@@ -1931,10 +2022,10 @@ export def "rest-service-fecru-admin-repositories-rescan-metadata put" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/rest-service-fecru/admin/repositories/($repository)/rescan-metadata" $qp)
+  let full_url = (build-url $base ({repository: (encode-path-segment $repository)} | format pattern "/rest-service-fecru/admin/repositories/{repository}/rescan-metadata") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Starts repository. Does not wait for the repository to start before returning.
@@ -1950,14 +2041,15 @@ export def "rest-service-fecru-admin-repositories-start start" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service-fecru/admin/repositories/($repository)/start")
+  let full_url = (build-url $base ({repository: (encode-path-segment $repository)} | format pattern "/rest-service-fecru/admin/repositories/{repository}/start"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Stops repository. Does not wait for the repository to stop before returning.
@@ -1973,21 +2065,22 @@ export def "rest-service-fecru-admin-repositories-stop stop" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service-fecru/admin/repositories/($repository)/stop")
+  let full_url = (build-url $base ({repository: (encode-path-segment $repository)} | format pattern "/rest-service-fecru/admin/repositories/{repository}/stop"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Retrieves repository updates properties.
 #
 # GET /rest-service-fecru/admin/repositories/{repository}/updates
 # operationId: repositoryUpdates
-export def "rest-service-fecru-admin-repositories-updates repositoryUpdates" [
+export def "rest-service-fecru-admin-repositories-updates get" [
   repository: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1996,20 +2089,21 @@ export def "rest-service-fecru-admin-repositories-updates repositoryUpdates" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service-fecru/admin/repositories/($repository)/updates")
+  let full_url = (build-url $base ({repository: (encode-path-segment $repository)} | format pattern "/rest-service-fecru/admin/repositories/{repository}/updates"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # PUT /rest-service-fecru/admin/repositories/{repository}/updates
 #
 # operationId: updateRepositoryUpdates
-export def "rest-service-fecru-admin-repositories-updates updateRepositoryUpdates" [
+export def "rest-service-fecru-admin-repositories-updates update" [
   repository: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2018,21 +2112,22 @@ export def "rest-service-fecru-admin-repositories-updates updateRepositoryUpdate
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service-fecru/admin/repositories/($repository)/updates")
+  let full_url = (build-url $base ({repository: (encode-path-segment $repository)} | format pattern "/rest-service-fecru/admin/repositories/{repository}/updates"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Retrieve default repository permissions properties.
 #
 # GET /rest-service-fecru/admin/repositories/~defaults/permissions
 # operationId: defaultPermissions
-export def "rest-service-fecru-admin-repositories-defaults-permissions defaultPermissions" [
+export def "rest-service-fecru-admin-repositories-defaults-permissions get-default" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2040,6 +2135,7 @@ export def "rest-service-fecru-admin-repositories-defaults-permissions defaultPe
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2047,14 +2143,14 @@ export def "rest-service-fecru-admin-repositories-defaults-permissions defaultPe
   let full_url = (build-url $base "/rest-service-fecru/admin/repositories/~defaults/permissions")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
-# Updates default repository permissions properties.   Valid permission settings: any combination of allowAnonymous, allowLoggedIn
+# Updates default repository permissions properties. Valid permission settings: any combination of allowAnonymous, allowLoggedIn
 #
 # PUT /rest-service-fecru/admin/repositories/~defaults/permissions
 # operationId: updateDefaultPermissions
-export def "rest-service-fecru-admin-repositories-defaults-permissions updateDefaultPermissions" [
+export def "rest-service-fecru-admin-repositories-defaults-permissions update-default" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2062,6 +2158,7 @@ export def "rest-service-fecru-admin-repositories-defaults-permissions updateDef
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2069,7 +2166,7 @@ export def "rest-service-fecru-admin-repositories-defaults-permissions updateDef
   let full_url = (build-url $base "/rest-service-fecru/admin/repositories/~defaults/permissions")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Retrieve a page of users.
@@ -2083,6 +2180,7 @@ export def "rest-service-fecru-admin-users list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2090,13 +2188,13 @@ export def "rest-service-fecru-admin-users list" [
   let full_url = (build-url $base "/rest-service-fecru/admin/users/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Creates a new user. Tries to add the user to fisheye-users and crucible-users groups if those exist.
 #
 # POST /rest-service-fecru/admin/users/
-export def "rest-service-fecru-admin-users post" [
+export def "rest-service-fecru-admin-users create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2104,6 +2202,7 @@ export def "rest-service-fecru-admin-users post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2111,7 +2210,7 @@ export def "rest-service-fecru-admin-users post" [
   let full_url = (build-url $base "/rest-service-fecru/admin/users/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Deletes a user by name
@@ -2126,14 +2225,15 @@ export def "rest-service-fecru-admin-users delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service-fecru/admin/users/($name)")
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/rest-service-fecru/admin/users/{name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Retrieve a user by name.
@@ -2148,20 +2248,21 @@ export def "rest-service-fecru-admin-users get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service-fecru/admin/users/($name)")
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/rest-service-fecru/admin/users/{name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Updates an existing user.
 #
 # PUT /rest-service-fecru/admin/users/{name}
-export def "rest-service-fecru-admin-users put" [
+export def "rest-service-fecru-admin-users update" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2170,14 +2271,15 @@ export def "rest-service-fecru-admin-users put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service-fecru/admin/users/($name)")
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/rest-service-fecru/admin/users/{name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Removes user from group
@@ -2192,21 +2294,22 @@ export def "rest-service-fecru-admin-users-groups delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service-fecru/admin/users/($name)/groups")
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/rest-service-fecru/admin/users/{name}/groups"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Lists user's group names
 #
 # GET /rest-service-fecru/admin/users/{name}/groups
 # operationId: listUserGroups
-export def "rest-service-fecru-admin-users-groups listUserGroups" [
+export def "rest-service-fecru-admin-users-groups list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2215,20 +2318,21 @@ export def "rest-service-fecru-admin-users-groups listUserGroups" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service-fecru/admin/users/($name)/groups")
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/rest-service-fecru/admin/users/{name}/groups"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Adds user to group
 #
 # PUT /rest-service-fecru/admin/users/{name}/groups
-export def "rest-service-fecru-admin-users-groups put" [
+export def "rest-service-fecru-admin-users-groups update" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2237,21 +2341,22 @@ export def "rest-service-fecru-admin-users-groups put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service-fecru/admin/users/($name)/groups")
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/rest-service-fecru/admin/users/{name}/groups"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get the user authentication token.
 #
 # POST /rest-service-fecru/auth/login
 # operationId: login
-export def "rest-service-fecru-auth-login login" [
+export def "rest-service-fecru-auth-login create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2259,6 +2364,7 @@ export def "rest-service-fecru-auth-login login" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2266,7 +2372,7 @@ export def "rest-service-fecru-auth-login login" [
   let full_url = (build-url $base "/rest-service-fecru/auth/login")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Returns indexing status of given repository.
@@ -2281,21 +2387,22 @@ export def "rest-service-fecru-indexing-status-v1-status get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service-fecru/indexing-status-v1/status/($repository)")
+  let full_url = (build-url $base ({repository: (encode-path-segment $repository)} | format pattern "/rest-service-fecru/indexing-status-v1/status/{repository}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get a list of recently visited items for the currently logged in user.
 #
 # GET /rest-service-fecru/recently-visited-v1
 # operationId: getRecent
-export def "rest-service-fecru-recently-visited-v1 get" [
+export def "rest-service-fecru-recently-visited-v1 get-recent" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2303,6 +2410,7 @@ export def "rest-service-fecru-recently-visited-v1 get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2310,14 +2418,14 @@ export def "rest-service-fecru-recently-visited-v1 get" [
   let full_url = (build-url $base "/rest-service-fecru/recently-visited-v1")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get a list of recently visisted items for the currently logged in user, including the detailed entities.
 #
 # GET /rest-service-fecru/recently-visited-v1/detailed
 # operationId: getRecentDetailed
-export def "rest-service-fecru-recently-visited-v1-detailed get" [
+export def "rest-service-fecru-recently-visited-v1-detailed get-recent" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2325,6 +2433,7 @@ export def "rest-service-fecru-recently-visited-v1-detailed get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2332,14 +2441,14 @@ export def "rest-service-fecru-recently-visited-v1-detailed get" [
   let full_url = (build-url $base "/rest-service-fecru/recently-visited-v1/detailed")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get a list of recently visited projects for the currently logged in user.
 #
 # GET /rest-service-fecru/recently-visited-v1/projects
 # operationId: getRecentProjects
-export def "rest-service-fecru-recently-visited-v1-projects get" [
+export def "rest-service-fecru-recently-visited-v1-projects get-recent" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2347,6 +2456,7 @@ export def "rest-service-fecru-recently-visited-v1-projects get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2354,14 +2464,14 @@ export def "rest-service-fecru-recently-visited-v1-projects get" [
   let full_url = (build-url $base "/rest-service-fecru/recently-visited-v1/projects")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get a list of recently visited projects for the currently logged in Project, including the detailed entities.
 #
 # GET /rest-service-fecru/recently-visited-v1/projects/detailed
 # operationId: getRecentProjectsDetailed
-export def "rest-service-fecru-recently-visited-v1-projects-detailed get" [
+export def "rest-service-fecru-recently-visited-v1-projects-detailed get-recent" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2369,6 +2479,7 @@ export def "rest-service-fecru-recently-visited-v1-projects-detailed get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2376,14 +2487,14 @@ export def "rest-service-fecru-recently-visited-v1-projects-detailed get" [
   let full_url = (build-url $base "/rest-service-fecru/recently-visited-v1/projects/detailed")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get a list of recently visited repositories for the currently logged in user.
 #
 # GET /rest-service-fecru/recently-visited-v1/repositories
 # operationId: getRecentRepositories
-export def "rest-service-fecru-recently-visited-v1-repositories get" [
+export def "rest-service-fecru-recently-visited-v1-repositories get-recent" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2391,6 +2502,7 @@ export def "rest-service-fecru-recently-visited-v1-repositories get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2398,14 +2510,14 @@ export def "rest-service-fecru-recently-visited-v1-repositories get" [
   let full_url = (build-url $base "/rest-service-fecru/recently-visited-v1/repositories")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get a list of recently visisted repositories for the currently logged in user, including the detailed entities.
 #
 # GET /rest-service-fecru/recently-visited-v1/repositories/detailed
 # operationId: getRecentRepositoriesDetailed
-export def "rest-service-fecru-recently-visited-v1-repositories-detailed get" [
+export def "rest-service-fecru-recently-visited-v1-repositories-detailed get-recent" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2413,6 +2525,7 @@ export def "rest-service-fecru-recently-visited-v1-repositories-detailed get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2420,14 +2533,14 @@ export def "rest-service-fecru-recently-visited-v1-repositories-detailed get" [
   let full_url = (build-url $base "/rest-service-fecru/recently-visited-v1/repositories/detailed")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get a list of recently visited reviews for the currently logged in user.
 #
 # GET /rest-service-fecru/recently-visited-v1/reviews
 # operationId: getRecentReviews
-export def "rest-service-fecru-recently-visited-v1-reviews get" [
+export def "rest-service-fecru-recently-visited-v1-reviews get-recent" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2435,6 +2548,7 @@ export def "rest-service-fecru-recently-visited-v1-reviews get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2442,14 +2556,14 @@ export def "rest-service-fecru-recently-visited-v1-reviews get" [
   let full_url = (build-url $base "/rest-service-fecru/recently-visited-v1/reviews")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get a list of recently visited reviews for the currently logged in user, including the detailed entities.
 #
 # GET /rest-service-fecru/recently-visited-v1/reviews/detailed
 # operationId: getRecentReviewsDetailed
-export def "rest-service-fecru-recently-visited-v1-reviews-detailed get" [
+export def "rest-service-fecru-recently-visited-v1-reviews-detailed get-recent" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2457,6 +2571,7 @@ export def "rest-service-fecru-recently-visited-v1-reviews-detailed get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2464,14 +2579,14 @@ export def "rest-service-fecru-recently-visited-v1-reviews-detailed get" [
   let full_url = (build-url $base "/rest-service-fecru/recently-visited-v1/reviews/detailed")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get a list of recently visited snippets for the currently logged in user.
 #
 # GET /rest-service-fecru/recently-visited-v1/snippets
 # operationId: getRecentSnippets
-export def "rest-service-fecru-recently-visited-v1-snippets get" [
+export def "rest-service-fecru-recently-visited-v1-snippets get-recent" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2479,6 +2594,7 @@ export def "rest-service-fecru-recently-visited-v1-snippets get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2486,14 +2602,14 @@ export def "rest-service-fecru-recently-visited-v1-snippets get" [
   let full_url = (build-url $base "/rest-service-fecru/recently-visited-v1/snippets")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get a list of recently visited snippets for the currently logged in user, including the detailed entities.
 #
 # GET /rest-service-fecru/recently-visited-v1/snippets/detailed
 # operationId: getRecentSnippetsDetailed
-export def "rest-service-fecru-recently-visited-v1-snippets-detailed get" [
+export def "rest-service-fecru-recently-visited-v1-snippets-detailed get-recent" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2501,6 +2617,7 @@ export def "rest-service-fecru-recently-visited-v1-snippets-detailed get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2508,14 +2625,14 @@ export def "rest-service-fecru-recently-visited-v1-snippets-detailed get" [
   let full_url = (build-url $base "/rest-service-fecru/recently-visited-v1/snippets/detailed")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get a list of recently visited users for the currently logged in user.
 #
 # GET /rest-service-fecru/recently-visited-v1/users
 # operationId: getRecentUsers
-export def "rest-service-fecru-recently-visited-v1-users get" [
+export def "rest-service-fecru-recently-visited-v1-users get-recent" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2523,6 +2640,7 @@ export def "rest-service-fecru-recently-visited-v1-users get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2530,14 +2648,14 @@ export def "rest-service-fecru-recently-visited-v1-users get" [
   let full_url = (build-url $base "/rest-service-fecru/recently-visited-v1/users")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get a list of recently visited users for the currently logged in user, including the detailed entities.
 #
 # GET /rest-service-fecru/recently-visited-v1/users/detailed
 # operationId: getRecentUsersDetailed
-export def "rest-service-fecru-recently-visited-v1-users-detailed get" [
+export def "rest-service-fecru-recently-visited-v1-users-detailed get-recent" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2545,6 +2663,7 @@ export def "rest-service-fecru-recently-visited-v1-users-detailed get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2552,14 +2671,14 @@ export def "rest-service-fecru-recently-visited-v1-users-detailed get" [
   let full_url = (build-url $base "/rest-service-fecru/recently-visited-v1/users/detailed")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Provides general information about the server's configuration.
 #
 # GET /rest-service-fecru/server-v1
 # operationId: getInfo
-export def "rest-service-fecru-server-v1 get" [
+export def "rest-service-fecru-server-v1 get-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2567,6 +2686,7 @@ export def "rest-service-fecru-server-v1 get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2574,13 +2694,13 @@ export def "rest-service-fecru-server-v1 get" [
   let full_url = (build-url $base "/rest-service-fecru/server-v1")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # POST /rest-service-fecru/share-content-v1/share
 #
 # operationId: doShareContent
-export def "rest-service-fecru-share-content-v1-share doShareContent" [
+export def "rest-service-fecru-share-content-v1-share create-do" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2588,6 +2708,7 @@ export def "rest-service-fecru-share-content-v1-share doShareContent" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2595,14 +2716,14 @@ export def "rest-service-fecru-share-content-v1-share doShareContent" [
   let full_url = (build-url $base "/rest-service-fecru/share-content-v1/share")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
-# Using POST method to set a user preference.  If repo is not set, the preference will be recognised as a global preference.
+# Using POST method to set a user preference. If repo is not set, the preference will be recognised as a global preference.
 #
 # POST /rest-service-fecru/user-prefs-v1
 # operationId: setPref
-export def "rest-service-fecru-user-prefs-v1 setPref" [
+export def "rest-service-fecru-user-prefs-v1 update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2610,6 +2731,7 @@ export def "rest-service-fecru-user-prefs-v1 setPref" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2617,14 +2739,14 @@ export def "rest-service-fecru-user-prefs-v1 setPref" [
   let full_url = (build-url $base "/rest-service-fecru/user-prefs-v1")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Getting user's global preference
 #
 # GET /rest-service-fecru/user-prefs-v1/{property}
 # operationId: getGlobalPref
-export def "rest-service-fecru-user-prefs-v1 list" [
+export def "rest-service-fecru-user-prefs-v1 get-global" [
   property: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2633,23 +2755,24 @@ export def "rest-service-fecru-user-prefs-v1 list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service-fecru/user-prefs-v1/($property)")
+  let full_url = (build-url $base ({property: (encode-path-segment $property)} | format pattern "/rest-service-fecru/user-prefs-v1/{property}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Getting user's preference related to a certain repository
 #
 # GET /rest-service-fecru/user-prefs-v1/{repository}/{property}
 # operationId: getRepoPref
-export def "rest-service-fecru-user-prefs-v1 get" [
-  property: string
+export def "rest-service-fecru-user-prefs-v1 get-repo" [
   repository: string
+  property: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2657,12 +2780,13 @@ export def "rest-service-fecru-user-prefs-v1 get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service-fecru/user-prefs-v1/($repository)/($property)")
+  let full_url = (build-url $base ({repository: (encode-path-segment $repository), property: (encode-path-segment $property)} | format pattern "/rest-service-fecru/user-prefs-v1/{repository}/{property}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }

@@ -13,27 +13,39 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   match $scheme {
     "x-bigoven-api-key" => { {headers: {X-BigOven-API-Key: $token_val}, query: ""} }
     "basic" => { {headers: {Authorization: $"Basic ($token_val)"}, query: ""} }
+    "basic-credentials" => { {headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: ""} }
     "none" => { {headers: {}, query: ""} }
     _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
   }
 }
 
 # Serialize a single query parameter based on collection style
+# Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
+# ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = ($name | url encode)
+  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
-  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
-    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
-    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
+    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
+    _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
+}
+
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Build URL from base, path, and optional query string
@@ -45,7 +57,7 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
@@ -54,25 +66,25 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
     "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "put" => { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "patch" => { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
   if ($method in ["head" "options"]) { return $resp }
-  if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
+  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
 def base-url-completer [] { ["https://api2.bigoven.com"] }
-def auth-scheme-completer [] { ["x-bigoven-api-key" "basic"] }
+def auth-scheme-completer [] { ["x-bigoven-api-key" "basic" "basic-credentials"] }
 
 # Completers for enum parameters
 def accept-completer [] { ["application/json" "application/xml" "text/json" "text/xml"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "collection GetCollection" } } | get name | first)
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "collection get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -96,7 +108,7 @@ export def commands []: nothing -> table {
 #
 # GET /collection/{id}
 # operationId: Collection_GetCollection
-export def "collection GetCollection" [
+export def "collection get" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -105,27 +117,28 @@ export def "collection GetCollection" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --rpp: int # results per page (format: int32)
   --pg: int # page number (starting with 1) (format: int32)
   --test: oneof<nothing, bool>
-  --sessionForLogging: string
+  --session-for-logging: string
 ]: nothing -> record<ResultCount: int, Results: table<Category: string, CreationDate: string, Cuisine: string, HasVideos: bool, IsBookmark: bool, IsPrivate: bool, IsRecipeScan: bool, Microcategory: string, PhotoUrl: string, Poster: record, RecipeID: int, ReviewCount: int, Servings: float, StarRating: float, Subcategory: string, Title: string, TotalTries: int, WebURL: string>, SpellSuggest: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-bigoven-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "rpp" $rpp "scalar") (serialize-qp "pg" $pg "scalar") (serialize-qp "test" $test "scalar") (serialize-qp "sessionForLogging" $sessionForLogging "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/collection/($id)" $qp)
+  let qp = [(serialize-qp "rpp" $rpp "scalar") (serialize-qp "pg" $pg "scalar") (serialize-qp "test" $test "scalar") (serialize-qp "sessionForLogging" $session_for_logging "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/collection/{id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Gets a recipe collection metadata. A recipe collection is a curated set of recipes.
 #
 # GET /collection/{id}/meta
 # operationId: Collection_GetCollectionMeta
-export def "collection-meta GetCollectionMeta" [
+export def "collection-meta get" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -134,22 +147,23 @@ export def "collection-meta GetCollectionMeta" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<Description: string, ID: int, IsFiltered: bool, IsSponsored: bool, MobileUrl: string, PRO: bool, PhotoUrl: string, Results: table<Category: string, CreationDate: string, Cuisine: string, HasVideos: bool, IsBookmark: bool, IsPrivate: bool, IsRecipeScan: bool, Microcategory: string, PhotoUrl: string, Poster: record, RecipeID: int, ReviewCount: int, Servings: float, StarRating: float, Subcategory: string, Title: string, TotalTries: int, WebURL: string>, Title: string, Token: string, WebUrl: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-bigoven-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/collection/($id)/meta")
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/collection/{id}/meta"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get the list of current, seasonal recipe collections. From here, you can use the /collection/{id} endpoint to retrieve the recipes in those collections.
 #
 # GET /collections
 # operationId: Collection_Collections
-export def "collections Collections" [
+export def "collections get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -157,6 +171,7 @@ export def "collections Collections" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --test: string
@@ -167,14 +182,14 @@ export def "collections Collections" [
   let full_url = (build-url $base "/collections" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Delete all the items on a grocery list; faster operation than a sync with deleted items.
 #
 # DELETE /grocerylist
 # operationId: GroceryList_Delete
-export def "grocerylist Delete" [
+export def "grocerylist list-grocery-delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -182,6 +197,7 @@ export def "grocerylist Delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record {
@@ -190,14 +206,14 @@ export def "grocerylist Delete" [
   let full_url = (build-url $base "/grocerylist")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
-# Get the user's grocery list.  User is determined by Basic Authentication.
+# Get the user's grocery list. User is determined by Basic Authentication.
 #
 # GET /grocerylist
 # operationId: GroceryList_Get
-export def "grocerylist Get" [
+export def "grocerylist list-grocery-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -205,6 +221,7 @@ export def "grocerylist Get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<Items: table<BigOvenObject: string, CreationDate: string, Department: string, DisplayQuantity: string, GUID: string, IsChecked: bool, ItemID: int, LastModified: string, LocalStatus: string, Name: string, Notes: string, RecipeID: int, ThirdPartyURL: string>, LastModified: string, Recipes: table<Category: string, CreationDate: string, Cuisine: string, HasVideos: bool, IsBookmark: bool, IsPrivate: bool, IsRecipeScan: bool, Microcategory: string, PhotoUrl: string, Poster: record, RecipeID: int, ReviewCount: int, Servings: float, StarRating: float, Subcategory: string, Title: string, TotalTries: int, WebURL: string>, VersionGuid: string> {
@@ -213,14 +230,14 @@ export def "grocerylist Get" [
   let full_url = (build-url $base "/grocerylist")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Clears the checked lines.
 #
 # POST /grocerylist/clearcheckedlines
 # operationId: GroceryList_GroceryListRemoveMarkedItems
-export def "grocerylist-clearcheckedlines GroceryListRemoveMarkedItems" [
+export def "grocerylist-clearcheckedlines list-grocery-grocery-list-delete-marked-items" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -228,6 +245,7 @@ export def "grocerylist-clearcheckedlines GroceryListRemoveMarkedItems" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<Items: table<BigOvenObject: string, CreationDate: string, Department: string, DisplayQuantity: string, GUID: string, IsChecked: bool, ItemID: int, LastModified: string, LocalStatus: string, Name: string, Notes: string, RecipeID: int, ThirdPartyURL: string>, LastModified: string, Recipes: table<Category: string, CreationDate: string, Cuisine: string, HasVideos: bool, IsBookmark: bool, IsPrivate: bool, IsRecipeScan: bool, Microcategory: string, PhotoUrl: string, Poster: record, RecipeID: int, ReviewCount: int, Servings: float, StarRating: float, Subcategory: string, Title: string, TotalTries: int, WebURL: string>, VersionGuid: string> {
@@ -236,14 +254,14 @@ export def "grocerylist-clearcheckedlines GroceryListRemoveMarkedItems" [
   let full_url = (build-url $base "/grocerylist/clearcheckedlines")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Departmentalize a list of strings -- used for ad-hoc grocery list item addition
 #
 # POST /grocerylist/department
 # operationId: GroceryList_Department
-export def "grocerylist-department Department" [
+export def "grocerylist-department list-grocery" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -251,6 +269,7 @@ export def "grocerylist-department Department" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --items: string # Gets or sets the items.
@@ -259,17 +278,17 @@ export def "grocerylist-department Department" [
   let auth = (build-auth $token ($auth_scheme | default "x-bigoven-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/grocerylist/department")
-  let body = {items: $items} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"items": $items} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Add a single line item to the grocery list
 #
 # POST /grocerylist/item
-export def "grocerylist-item post" [
+export def "grocerylist-item create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -277,6 +296,7 @@ export def "grocerylist-item post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --department: string # Gets or sets the department.
@@ -289,18 +309,18 @@ export def "grocerylist-item post" [
   let auth = (build-auth $token ($auth_scheme | default "x-bigoven-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/grocerylist/item")
-  let body = {department: $department, name: $name, notes: $notes, quantity: $quantity, unit: $unit} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"department": $department, "name": $name, "notes": $notes, "quantity": $quantity, "unit": $unit} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
-# /grocerylist/item/{guid}  DELETE will delete this item assuming you own it.
+# /grocerylist/item/{guid} DELETE will delete this item assuming you own it.
 #
 # DELETE /grocerylist/item/{guid}
 # operationId: GroceryList_DeleteItemByGuid
-export def "grocerylist-item DeleteItemByGuid" [
+export def "grocerylist-item list-grocery-delete" [
   guid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -309,22 +329,23 @@ export def "grocerylist-item DeleteItemByGuid" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "x-bigoven-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/grocerylist/item/($guid)")
+  let full_url = (build-url $base ({guid: (encode-path-segment $guid)} | format pattern "/grocerylist/item/{guid}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Update a grocery item by GUID
 #
 # PUT /grocerylist/item/{guid}
 # operationId: GroceryList_GroceryListItemGuid
-export def "grocerylist-item GroceryListItemGuid" [
+export def "grocerylist-item list-grocery-grocery-list" [
   guid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -333,6 +354,7 @@ export def "grocerylist-item GroceryListItemGuid" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --department: string # Gets or sets the department.
@@ -346,19 +368,19 @@ export def "grocerylist-item GroceryListItemGuid" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-bigoven-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/grocerylist/item/($guid)")
-  let body = {department: $department, guid: $body_guid, ischecked: $ischecked, name: $name, notes: $notes, quantity: $quantity, unit: $unit} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({guid: (encode-path-segment $guid)} | format pattern "/grocerylist/item/{guid}"))
+  let req_body = {"department": $department, "guid": $body_guid, "ischecked": $ischecked, "name": $name, "notes": $notes, "quantity": $quantity, "unit": $unit} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Add a single line item to the grocery list
 #
 # POST /grocerylist/line
 # operationId: GroceryList_Post
-export def "grocerylist-line Post" [
+export def "grocerylist-line list-grocery-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -366,6 +388,7 @@ export def "grocerylist-line Post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --text: string # Gets or sets the text.
@@ -374,18 +397,18 @@ export def "grocerylist-line Post" [
   let auth = (build-auth $token ($auth_scheme | default "x-bigoven-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/grocerylist/line")
-  let body = {text: $text} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"text": $text} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
-# Add a Recipe to the grocery list.  In the request data, pass in recipeId, scale (scale=1.0 says to keep the recipe the same size as originally posted), markAsPending (true/false) to indicate that             the lines in the recipe should be marked in a "pending" (unconfirmed by user) state.
+# Add a Recipe to the grocery list. In the request data, pass in recipeId, scale (scale=1.0 says to keep the recipe the same size as originally posted), markAsPending (true/false) to indicate that the lines in the recipe should be marked in a "pending" (unconfirmed by user) state.
 #
 # POST /grocerylist/recipe
 # operationId: GroceryList_AddRecipe
-export def "grocerylist-recipe AddRecipe" [
+export def "grocerylist-recipe list-grocery-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -393,29 +416,30 @@ export def "grocerylist-recipe AddRecipe" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --markAsPending: oneof<nothing, bool> # Gets or sets the mark as pending.
-  --recipeId: int # Gets or sets the recipe identifier. (format: int32)
+  --mark-as-pending: oneof<nothing, bool> # Gets or sets the mark as pending.
+  --recipe-id: int # Gets or sets the recipe identifier. (format: int32)
   --scale: float # Gets or sets the scale. (format: double)
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-bigoven-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/grocerylist/recipe")
-  let body = {markAsPending: $markAsPending, recipeId: $recipeId, scale: $scale} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"markAsPending": $mark_as_pending, "recipeId": $recipe_id, "scale": $scale} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
-# Synchronize the grocery list.  Call this with a POST to /grocerylist/sync
+# Synchronize the grocery list. Call this with a POST to /grocerylist/sync
 #
 # POST /grocerylist/sync
 # operationId: GroceryList_PostGroceryListSync
 # --list shape: {Items?: list, LastModified?: string, Recipes?: list, VersionGuid?: string}
-export def "grocerylist-sync PostGroceryListSync" [
+export def "grocerylist-sync list-grocery-create-grocery-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -423,6 +447,7 @@ export def "grocerylist-sync PostGroceryListSync" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --list: record # shape: {Items?: list, LastModified?: string, Recipes?: list, VersionGuid?: string}
@@ -432,18 +457,18 @@ export def "grocerylist-sync PostGroceryListSync" [
   let auth = (build-auth $token ($auth_scheme | default "x-bigoven-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/grocerylist/sync")
-  let body = {list: $list, since: $since} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"list": $list, "since": $since} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
-# POST: /image/avatar                           Testing with Postman (validated 11/20/2015):             1) Remove the Content-Type header; add authentication information             2) On the request, click Body and choose "form-data", then add a line item with "key" column set to "file" and on the right,             change the type of the input from Text to File.  Browse and choose a JPG.
+# POST: /image/avatar Testing with Postman (validated 11/20/2015): 1) Remove the Content-Type header; add authentication information 2) On the request, click Body and choose "form-data", then add a line item with "key" column set to "file" and on the right, change the type of the input from Text to File. Browse and choose a JPG.
 #
 # POST /image/avatar
 # operationId: Images_UploadUserAvatar
-export def "image-avatar UploadUserAvatar" [
+export def "image-avatar upload-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -451,6 +476,7 @@ export def "image-avatar UploadUserAvatar" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record {
@@ -459,14 +485,14 @@ export def "image-avatar UploadUserAvatar" [
   let full_url = (build-url $base "/image/avatar")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Indexes this instance.
 #
 # GET /me
 # operationId: Me_Index
-export def "me Index" [
+export def "me get-index" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -474,6 +500,7 @@ export def "me Index" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<Accounting: record<CreditBalance: int, MemberSince: string, PremiumExpiryDate: string, UserLevel: string>, BOAuthToken: string, LastChangeLogID: string, Personal: record<Email: string, Location: record<City: string, Country: string, DMA: int>>, Preferences: record<EatingStyle: string>, Profile: record<AboutMe: string, BackgroundUrl: string, Counts: record<AddedCount: int, FollowersCount: int, FollowingCount: int, PrivateRecipeCount: int, PublicRecipeCount: int, TotalRecipes: int>, FirstName: string, FullName: string, HomeUrl: string, LastName: string, PhotoUrl: string, UserID: int, UserName: string>> {
@@ -482,7 +509,7 @@ export def "me Index" [
   let full_url = (build-url $base "/me")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Puts me.
@@ -493,7 +520,7 @@ export def "me Index" [
 # --Personal shape: {Email?: string, Location?: record}
 # --Preferences shape: {EatingStyle?: string}
 # --Profile shape: {AboutMe?: string, BackgroundUrl?: string, Counts?: record, FirstName?: string, FullName?: string, HomeUrl?: string, LastName?: string, PhotoUrl?: string, UserID?: int, UserName?: string}
-export def "me PutMe" [
+export def "me update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -501,24 +528,25 @@ export def "me PutMe" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --Accounting: record # shape: {CreditBalance?: int, MemberSince?: string, PremiumExpiryDate?: string, UserLevel?: string}
-  --BOAuthToken: string # The user-specific authentication token
-  --LastChangeLogID: string # Last change log
-  --Personal: record # Personal level info -- email, location, etc. — shape: {Email?: string, Location?: record}
-  --Preferences: record # shape: {EatingStyle?: string}
-  --Profile: record # shape: {AboutMe?: string, BackgroundUrl?: string, Counts?: record, FirstName?: string, FullName?: string, HomeUrl?: string, LastName?: string, PhotoUrl?: string, UserID?: int, UserName?: string}
+  --accounting: record # shape: {CreditBalance?: int, MemberSince?: string, PremiumExpiryDate?: string, UserLevel?: string}
+  --bo-auth-token: string # The user-specific authentication token
+  --last-change-log-id: string # Last change log
+  --personal: record # Personal level info -- email, location, etc. — shape: {Email?: string, Location?: record}
+  --preferences: record # shape: {EatingStyle?: string}
+  --profile: record # shape: {AboutMe?: string, BackgroundUrl?: string, Counts?: record, FirstName?: string, FullName?: string, HomeUrl?: string, LastName?: string, PhotoUrl?: string, UserID?: int, UserName?: string}
 ]: any -> record<Accounting: record<CreditBalance: int, MemberSince: string, PremiumExpiryDate: string, UserLevel: string>, BOAuthToken: string, LastChangeLogID: string, Personal: record<Email: string, Location: record<City: string, Country: string, DMA: int>>, Preferences: record<EatingStyle: string>, Profile: record<AboutMe: string, BackgroundUrl: string, Counts: record<AddedCount: int, FollowersCount: int, FollowingCount: int, PrivateRecipeCount: int, PublicRecipeCount: int, TotalRecipes: int>, FirstName: string, FullName: string, HomeUrl: string, LastName: string, PhotoUrl: string, UserID: int, UserName: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-bigoven-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/me")
-  let body = {Accounting: $Accounting, BOAuthToken: $BOAuthToken, LastChangeLogID: $LastChangeLogID, Personal: $Personal, Preferences: $Preferences, Profile: $Profile} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"Accounting": $accounting, "BOAuthToken": $bo_auth_token, "LastChangeLogID": $last_change_log_id, "Personal": $personal, "Preferences": $preferences, "Profile": $profile} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Puts me personal.
@@ -526,7 +554,7 @@ export def "me PutMe" [
 # PUT /me/personal
 # operationId: Me_PutMePersonal
 # --Location shape: {City?: string, Country?: string, DMA?: int}
-export def "me-personal PutMePersonal" [
+export def "me-personal update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -534,27 +562,28 @@ export def "me-personal PutMePersonal" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --Email: string
-  --Location: record # shape: {City?: string, Country?: string, DMA?: int}
+  --email: string
+  --location: record # shape: {City?: string, Country?: string, DMA?: int}
 ]: any -> record<Accounting: record<CreditBalance: int, MemberSince: string, PremiumExpiryDate: string, UserLevel: string>, BOAuthToken: string, LastChangeLogID: string, Personal: record<Email: string, Location: record<City: string, Country: string, DMA: int>>, Preferences: record<EatingStyle: string>, Profile: record<AboutMe: string, BackgroundUrl: string, Counts: record<AddedCount: int, FollowersCount: int, FollowingCount: int, PrivateRecipeCount: int, PublicRecipeCount: int, TotalRecipes: int>, FirstName: string, FullName: string, HomeUrl: string, LastName: string, PhotoUrl: string, UserID: int, UserName: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-bigoven-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/me/personal")
-  let body = {Email: $Email, Location: $Location} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"Email": $email, "Location": $location} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Puts me preferences.
 #
 # PUT /me/preferences
 # operationId: Me_PutMePreferences
-export def "me-preferences PutMePreferences" [
+export def "me-preferences update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -562,26 +591,27 @@ export def "me-preferences PutMePreferences" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --EatingStyle: string
+  --eating-style: string
 ]: any -> record<Accounting: record<CreditBalance: int, MemberSince: string, PremiumExpiryDate: string, UserLevel: string>, BOAuthToken: string, LastChangeLogID: string, Personal: record<Email: string, Location: record<City: string, Country: string, DMA: int>>, Preferences: record<EatingStyle: string>, Profile: record<AboutMe: string, BackgroundUrl: string, Counts: record<AddedCount: int, FollowersCount: int, FollowingCount: int, PrivateRecipeCount: int, PublicRecipeCount: int, TotalRecipes: int>, FirstName: string, FullName: string, HomeUrl: string, LastName: string, PhotoUrl: string, UserID: int, UserName: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-bigoven-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/me/preferences")
-  let body = {EatingStyle: $EatingStyle} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"EatingStyle": $eating_style} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Gets the options.
 #
 # GET /me/preferences/options
 # operationId: Me_GetOptions
-export def "me-preferences-options GetOptions" [
+export def "me-preferences-options get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -589,6 +619,7 @@ export def "me-preferences-options GetOptions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<EatingStyle: record<Options: list<record>>> {
@@ -597,14 +628,14 @@ export def "me-preferences-options GetOptions" [
   let full_url = (build-url $base "/me/preferences/options")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Puts me.
 #
 # PUT /me/profile
 # --Counts shape: {AddedCount?: int, FollowersCount?: int, FollowingCount?: int, PrivateRecipeCount?: int, PublicRecipeCount?: int, TotalRecipes?: int}
-export def "me-profile put" [
+export def "me-profile update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -612,35 +643,36 @@ export def "me-profile put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --AboutMe: string
-  --BackgroundUrl: string
-  --Counts: record # shape: {AddedCount?: int, FollowersCount?: int, FollowingCount?: int, PrivateRecipeCount?: int, PublicRecipeCount?: int, TotalRecipes?: int}
-  --FirstName: string
-  --FullName: string
-  --HomeUrl: string
-  --LastName: string
-  --PhotoUrl: string
-  --UserID: int # format: int64
-  --UserName: string
+  --about-me: string
+  --background-url: string
+  --counts: record # shape: {AddedCount?: int, FollowersCount?: int, FollowingCount?: int, PrivateRecipeCount?: int, PublicRecipeCount?: int, TotalRecipes?: int}
+  --first-name: string
+  --full-name: string
+  --home-url: string
+  --last-name: string
+  --photo-url: string
+  --user-id: int # format: int64
+  --user-name: string
 ]: any -> record<Accounting: record<CreditBalance: int, MemberSince: string, PremiumExpiryDate: string, UserLevel: string>, BOAuthToken: string, LastChangeLogID: string, Personal: record<Email: string, Location: record<City: string, Country: string, DMA: int>>, Preferences: record<EatingStyle: string>, Profile: record<AboutMe: string, BackgroundUrl: string, Counts: record<AddedCount: int, FollowersCount: int, FollowingCount: int, PrivateRecipeCount: int, PublicRecipeCount: int, TotalRecipes: int>, FirstName: string, FullName: string, HomeUrl: string, LastName: string, PhotoUrl: string, UserID: int, UserName: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-bigoven-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/me/profile")
-  let body = {AboutMe: $AboutMe, BackgroundUrl: $BackgroundUrl, Counts: $Counts, FirstName: $FirstName, FullName: $FullName, HomeUrl: $HomeUrl, LastName: $LastName, PhotoUrl: $PhotoUrl, UserID: $UserID, UserName: $UserName} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"AboutMe": $about_me, "BackgroundUrl": $background_url, "Counts": $counts, "FirstName": $first_name, "FullName": $full_name, "HomeUrl": $home_url, "LastName": $last_name, "PhotoUrl": $photo_url, "UserID": $user_id, "UserName": $user_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Skinnies this instance.
 #
 # GET /me/skinny
 # operationId: Me_Skinny
-export def "me-skinny Skinny" [
+export def "me-skinny get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -648,6 +680,7 @@ export def "me-skinny Skinny" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<Accounting: record<CreditBalance: int, MemberSince: string, PremiumExpiryDate: string, UserLevel: string>, BOAuthToken: string, LastChangeLogID: string, Personal: record<Email: string, Location: record<City: string, Country: string, DMA: int>>, Preferences: record<EatingStyle: string>, Profile: record<AboutMe: string, BackgroundUrl: string, Counts: record<AddedCount: int, FollowersCount: int, FollowingCount: int, PrivateRecipeCount: int, PublicRecipeCount: int, TotalRecipes: int>, FirstName: string, FullName: string, HomeUrl: string, LastName: string, PhotoUrl: string, UserID: int, UserName: string>> {
@@ -656,7 +689,7 @@ export def "me-skinny Skinny" [
   let full_url = (build-url $base "/me/skinny")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Add a new recipe
@@ -666,7 +699,7 @@ export def "me-skinny Skinny" [
 # --Ingredients item shape: {DisplayIndex?: int, DisplayQuantity?: string, HTMLName?: string, IngredientID?: int, IngredientInfo?: record, IsHeading?: bool, IsLinked?: bool, MetricDisplayQuantity?: string, MetricQuantity?: float, MetricUnit?: string, Name?: string, PreparationNotes?: string, Quantity?: float, Unit?: string}
 # --NutritionInfo shape: {CaloriesFromFat?: float, Cholesterol?: float, CholesterolPct?: float, DietaryFiber?: float, DietaryFiberPct?: float, MonoFat?: float, PolyFat?: float, Potassium?: float, PotassiumPct?: float, Protein?: float, ProteinPct?: float, SatFat?: float, SatFatPct?: float, SingularYieldUnit?: string, Sodium?: float, SodiumPct?: float, Sugar?: float, TotalCalories?: float, TotalCarbs?: float, TotalCarbsPct?: float, TotalFat?: float, TotalFatPct?: float, TransFat?: float}
 # --Poster shape: {FirstName?: string, ImageUrl48?: string, IsKitchenHelper?: bool, IsPremium?: bool, IsUsingRecurly?: bool, LastName?: string, MemberSince?: string, PhotoUrl?: string, PremiumExpiryDate?: string, UserID?: int, UserName?: string}
-export def "recipe Post" [
+export def "recipe create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -674,63 +707,64 @@ export def "recipe Post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --ActiveMinutes: int # format: int32
-  --AdTags: string
-  --AdminBoost: int # format: int32
-  --AllCategoriesText: string
-  --BookmarkImageURL: string
-  --BookmarkSiteLogo: string
-  --BookmarkURL: string
-  --Category: string
-  --Collection: string
-  --CollectionID: int # format: int32
-  --CreationDate: string # format: date-time
-  --Cuisine: string
-  --Description: string
-  --FavoriteCount: int # format: int32
-  --HeroPhotoUrl: string
-  --ImageSquares: list
-  --ImageURL: string
-  --Ingredients: list # item shape: {DisplayIndex?: int, DisplayQuantity?: string, HTMLName?: string, IngredientID?: int, IngredientInfo?: record, IsHeading?: bool, IsLinked?: bool, MetricDisplayQuantity?: string, MetricQuantity?: float, MetricUnit?: string, Name?: string, PreparationNotes?: string, Quantity?: float, Unit?: string}
-  --IngredientsTextBlock: string
-  --Instructions: string
-  --IsBookmark: oneof<nothing, bool>
-  --IsPrivate: oneof<nothing, bool>
-  --IsRecipeScan: oneof<nothing, bool>
-  --IsSponsored: oneof<nothing, bool>
-  --LastModified: string # format: date-time
-  --MaxImageSquare: int # format: int32
-  --MedalCount: int # format: int32
-  --MenuCount: int # format: int32
-  --Microcategory: string
-  --NotesCount: int # format: int32
-  --NutritionInfo: record # shape: {CaloriesFromFat?: float, Cholesterol?: float, CholesterolPct?: float, DietaryFiber?: float, DietaryFiberPct?: float, MonoFat?: float, PolyFat?: float, Potassium?: float, PotassiumPct?: float, Protein?: float, ProteinPct?: float, SatFat?: float, SatFatPct?: float, SingularYieldUnit?: string, Sodium?: float, SodiumPct?: float, Sugar?: float, TotalCalories?: float, TotalCarbs?: float, TotalCarbsPct?: float, TotalFat?: float, TotalFatPct?: float, TransFat?: float}
-  --Poster: record # shape: {FirstName?: string, ImageUrl48?: string, IsKitchenHelper?: bool, IsPremium?: bool, IsUsingRecurly?: bool, LastName?: string, MemberSince?: string, PhotoUrl?: string, PremiumExpiryDate?: string, UserID?: int, UserName?: string}
-  --PrimaryIngredient: string
-  --RecipeID: int # format: int32
-  --ReviewCount: int # format: int32
-  --StarRating: float # format: double
-  --Subcategory: string
-  --Title: string
-  --TotalMinutes: int # format: int32
-  --VariantOfRecipeID: int # format: int32
-  --VerifiedByClass: string
-  --VerifiedDateTime: string # format: date-time
-  --WebURL: string
-  --YieldNumber: float # format: double
-  --YieldUnit: string
+  --active-minutes: int # format: int32
+  --ad-tags: string
+  --admin-boost: int # format: int32
+  --all-categories-text: string
+  --bookmark-image-url: string
+  --bookmark-site-logo: string
+  --bookmark-url: string
+  --category: string
+  --collection: string
+  --collection-id: int # format: int32
+  --creation-date: string # format: date-time
+  --cuisine: string
+  --description: string
+  --favorite-count: int # format: int32
+  --hero-photo-url: string
+  --image-squares: list<int>
+  --image-url: string
+  --ingredients: list # item shape: {DisplayIndex?: int, DisplayQuantity?: string, HTMLName?: string, IngredientID?: int, IngredientInfo?: record, IsHeading?: bool, IsLinked?: bool, MetricDisplayQuantity?: string, MetricQuantity?: float, MetricUnit?: string, Name?: string, PreparationNotes?: string, Quantity?: float, Unit?: string}
+  --ingredients-text-block: string
+  --instructions: string
+  --is-bookmark: oneof<nothing, bool>
+  --is-private: oneof<nothing, bool>
+  --is-recipe-scan: oneof<nothing, bool>
+  --is-sponsored: oneof<nothing, bool>
+  --last-modified: string # format: date-time
+  --max-image-square: int # format: int32
+  --medal-count: int # format: int32
+  --menu-count: int # format: int32
+  --microcategory: string
+  --notes-count: int # format: int32
+  --nutrition-info: record # shape: {CaloriesFromFat?: float, Cholesterol?: float, CholesterolPct?: float, DietaryFiber?: float, DietaryFiberPct?: float, MonoFat?: float, PolyFat?: float, Potassium?: float, PotassiumPct?: float, Protein?: float, ProteinPct?: float, SatFat?: float, SatFatPct?: float, SingularYieldUnit?: string, Sodium?: float, SodiumPct?: float, Sugar?: float, TotalCalories?: float, TotalCarbs?: float, TotalCarbsPct?: float, TotalFat?: float, TotalFatPct?: float, TransFat?: float}
+  --poster: record # shape: {FirstName?: string, ImageUrl48?: string, IsKitchenHelper?: bool, IsPremium?: bool, IsUsingRecurly?: bool, LastName?: string, MemberSince?: string, PhotoUrl?: string, PremiumExpiryDate?: string, UserID?: int, UserName?: string}
+  --primary-ingredient: string
+  --recipe-id: int # format: int32
+  --review-count: int # format: int32
+  --star-rating: float # format: double
+  --subcategory: string
+  --title: string
+  --total-minutes: int # format: int32
+  --variant-of-recipe-id: int # format: int32
+  --verified-by-class: string
+  --verified-date-time: string # format: date-time
+  --web-url: string
+  --yield-number: float # format: double
+  --yield-unit: string
 ]: any -> record<ActiveMinutes: int, AdTags: string, AdminBoost: int, AllCategoriesText: string, BookmarkImageURL: string, BookmarkSiteLogo: string, BookmarkURL: string, Category: string, Collection: string, CollectionID: int, CreationDate: string, Cuisine: string, Description: string, FavoriteCount: int, HeroPhotoUrl: string, ImageSquares: list<int>, ImageURL: string, Ingredients: table<DisplayIndex: int, DisplayQuantity: string, HTMLName: string, IngredientID: int, IngredientInfo: record, IsHeading: bool, IsLinked: bool, MetricDisplayQuantity: string, MetricQuantity: float, MetricUnit: string, Name: string, PreparationNotes: string, Quantity: float, Unit: string>, IngredientsTextBlock: string, Instructions: string, IsBookmark: bool, IsPrivate: bool, IsRecipeScan: bool, IsSponsored: bool, LastModified: string, MaxImageSquare: int, MedalCount: int, MenuCount: int, Microcategory: string, NotesCount: int, NutritionInfo: record<CaloriesFromFat: float, Cholesterol: float, CholesterolPct: float, DietaryFiber: float, DietaryFiberPct: float, MonoFat: float, PolyFat: float, Potassium: float, PotassiumPct: float, Protein: float, ProteinPct: float, SatFat: float, SatFatPct: float, SingularYieldUnit: string, Sodium: float, SodiumPct: float, Sugar: float, TotalCalories: float, TotalCarbs: float, TotalCarbsPct: float, TotalFat: float, TotalFatPct: float, TransFat: float>, Poster: record<FirstName: string, ImageUrl48: string, IsKitchenHelper: bool, IsPremium: bool, IsUsingRecurly: bool, LastName: string, MemberSince: string, PhotoUrl: string, PhotoUrl48: string, PremiumExpiryDate: string, UserID: int, UserName: string, WebUrl: string>, PrimaryIngredient: string, RecipeID: int, ReviewCount: int, StarRating: float, Subcategory: string, Title: string, TotalMinutes: int, VariantOfRecipeID: int, VerifiedByClass: string, VerifiedDateTime: string, WebURL: string, YieldNumber: float, YieldUnit: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-bigoven-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/recipe")
-  let body = {ActiveMinutes: $ActiveMinutes, AdTags: $AdTags, AdminBoost: $AdminBoost, AllCategoriesText: $AllCategoriesText, BookmarkImageURL: $BookmarkImageURL, BookmarkSiteLogo: $BookmarkSiteLogo, BookmarkURL: $BookmarkURL, Category: $Category, Collection: $Collection, CollectionID: $CollectionID, CreationDate: $CreationDate, Cuisine: $Cuisine, Description: $Description, FavoriteCount: $FavoriteCount, HeroPhotoUrl: $HeroPhotoUrl, ImageSquares: $ImageSquares, ImageURL: $ImageURL, Ingredients: $Ingredients, IngredientsTextBlock: $IngredientsTextBlock, Instructions: $Instructions, IsBookmark: $IsBookmark, IsPrivate: $IsPrivate, IsRecipeScan: $IsRecipeScan, IsSponsored: $IsSponsored, LastModified: $LastModified, MaxImageSquare: $MaxImageSquare, MedalCount: $MedalCount, MenuCount: $MenuCount, Microcategory: $Microcategory, NotesCount: $NotesCount, NutritionInfo: $NutritionInfo, Poster: $Poster, PrimaryIngredient: $PrimaryIngredient, RecipeID: $RecipeID, ReviewCount: $ReviewCount, StarRating: $StarRating, Subcategory: $Subcategory, Title: $Title, TotalMinutes: $TotalMinutes, VariantOfRecipeID: $VariantOfRecipeID, VerifiedByClass: $VerifiedByClass, VerifiedDateTime: $VerifiedDateTime, WebURL: $WebURL, YieldNumber: $YieldNumber, YieldUnit: $YieldUnit} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"ActiveMinutes": $active_minutes, "AdTags": $ad_tags, "AdminBoost": $admin_boost, "AllCategoriesText": $all_categories_text, "BookmarkImageURL": $bookmark_image_url, "BookmarkSiteLogo": $bookmark_site_logo, "BookmarkURL": $bookmark_url, "Category": $category, "Collection": $collection, "CollectionID": $collection_id, "CreationDate": $creation_date, "Cuisine": $cuisine, "Description": $description, "FavoriteCount": $favorite_count, "HeroPhotoUrl": $hero_photo_url, "ImageSquares": $image_squares, "ImageURL": $image_url, "Ingredients": $ingredients, "IngredientsTextBlock": $ingredients_text_block, "Instructions": $instructions, "IsBookmark": $is_bookmark, "IsPrivate": $is_private, "IsRecipeScan": $is_recipe_scan, "IsSponsored": $is_sponsored, "LastModified": $last_modified, "MaxImageSquare": $max_image_square, "MedalCount": $medal_count, "MenuCount": $menu_count, "Microcategory": $microcategory, "NotesCount": $notes_count, "NutritionInfo": $nutrition_info, "Poster": $poster, "PrimaryIngredient": $primary_ingredient, "RecipeID": $recipe_id, "ReviewCount": $review_count, "StarRating": $star_rating, "Subcategory": $subcategory, "Title": $title, "TotalMinutes": $total_minutes, "VariantOfRecipeID": $variant_of_recipe_id, "VerifiedByClass": $verified_by_class, "VerifiedDateTime": $verified_date_time, "WebURL": $web_url, "YieldNumber": $yield_number, "YieldUnit": $yield_unit} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Update a recipe
@@ -740,7 +774,7 @@ export def "recipe Post" [
 # --Ingredients item shape: {DisplayIndex?: int, DisplayQuantity?: string, HTMLName?: string, IngredientID?: int, IngredientInfo?: record, IsHeading?: bool, IsLinked?: bool, MetricDisplayQuantity?: string, MetricQuantity?: float, MetricUnit?: string, Name?: string, PreparationNotes?: string, Quantity?: float, Unit?: string}
 # --NutritionInfo shape: {CaloriesFromFat?: float, Cholesterol?: float, CholesterolPct?: float, DietaryFiber?: float, DietaryFiberPct?: float, MonoFat?: float, PolyFat?: float, Potassium?: float, PotassiumPct?: float, Protein?: float, ProteinPct?: float, SatFat?: float, SatFatPct?: float, SingularYieldUnit?: string, Sodium?: float, SodiumPct?: float, Sugar?: float, TotalCalories?: float, TotalCarbs?: float, TotalCarbsPct?: float, TotalFat?: float, TotalFatPct?: float, TransFat?: float}
 # --Poster shape: {FirstName?: string, ImageUrl48?: string, IsKitchenHelper?: bool, IsPremium?: bool, IsUsingRecurly?: bool, LastName?: string, MemberSince?: string, PhotoUrl?: string, PremiumExpiryDate?: string, UserID?: int, UserName?: string}
-export def "recipe Put" [
+export def "recipe update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -748,70 +782,71 @@ export def "recipe Put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --ActiveMinutes: int # format: int32
-  --AdTags: string
-  --AdminBoost: int # format: int32
-  --AllCategoriesText: string
-  --BookmarkImageURL: string
-  --BookmarkSiteLogo: string
-  --BookmarkURL: string
-  --Category: string
-  --Collection: string
-  --CollectionID: int # format: int32
-  --CreationDate: string # format: date-time
-  --Cuisine: string
-  --Description: string
-  --FavoriteCount: int # format: int32
-  --HeroPhotoUrl: string
-  --ImageSquares: list
-  --ImageURL: string
-  --Ingredients: list # item shape: {DisplayIndex?: int, DisplayQuantity?: string, HTMLName?: string, IngredientID?: int, IngredientInfo?: record, IsHeading?: bool, IsLinked?: bool, MetricDisplayQuantity?: string, MetricQuantity?: float, MetricUnit?: string, Name?: string, PreparationNotes?: string, Quantity?: float, Unit?: string}
-  --IngredientsTextBlock: string
-  --Instructions: string
-  --IsBookmark: oneof<nothing, bool>
-  --IsPrivate: oneof<nothing, bool>
-  --IsRecipeScan: oneof<nothing, bool>
-  --IsSponsored: oneof<nothing, bool>
-  --LastModified: string # format: date-time
-  --MaxImageSquare: int # format: int32
-  --MedalCount: int # format: int32
-  --MenuCount: int # format: int32
-  --Microcategory: string
-  --NotesCount: int # format: int32
-  --NutritionInfo: record # shape: {CaloriesFromFat?: float, Cholesterol?: float, CholesterolPct?: float, DietaryFiber?: float, DietaryFiberPct?: float, MonoFat?: float, PolyFat?: float, Potassium?: float, PotassiumPct?: float, Protein?: float, ProteinPct?: float, SatFat?: float, SatFatPct?: float, SingularYieldUnit?: string, Sodium?: float, SodiumPct?: float, Sugar?: float, TotalCalories?: float, TotalCarbs?: float, TotalCarbsPct?: float, TotalFat?: float, TotalFatPct?: float, TransFat?: float}
-  --Poster: record # shape: {FirstName?: string, ImageUrl48?: string, IsKitchenHelper?: bool, IsPremium?: bool, IsUsingRecurly?: bool, LastName?: string, MemberSince?: string, PhotoUrl?: string, PremiumExpiryDate?: string, UserID?: int, UserName?: string}
-  --PrimaryIngredient: string
-  --RecipeID: int # format: int32
-  --ReviewCount: int # format: int32
-  --StarRating: float # format: double
-  --Subcategory: string
-  --Title: string
-  --TotalMinutes: int # format: int32
-  --VariantOfRecipeID: int # format: int32
-  --VerifiedByClass: string
-  --VerifiedDateTime: string # format: date-time
-  --WebURL: string
-  --YieldNumber: float # format: double
-  --YieldUnit: string
+  --active-minutes: int # format: int32
+  --ad-tags: string
+  --admin-boost: int # format: int32
+  --all-categories-text: string
+  --bookmark-image-url: string
+  --bookmark-site-logo: string
+  --bookmark-url: string
+  --category: string
+  --collection: string
+  --collection-id: int # format: int32
+  --creation-date: string # format: date-time
+  --cuisine: string
+  --description: string
+  --favorite-count: int # format: int32
+  --hero-photo-url: string
+  --image-squares: list<int>
+  --image-url: string
+  --ingredients: list # item shape: {DisplayIndex?: int, DisplayQuantity?: string, HTMLName?: string, IngredientID?: int, IngredientInfo?: record, IsHeading?: bool, IsLinked?: bool, MetricDisplayQuantity?: string, MetricQuantity?: float, MetricUnit?: string, Name?: string, PreparationNotes?: string, Quantity?: float, Unit?: string}
+  --ingredients-text-block: string
+  --instructions: string
+  --is-bookmark: oneof<nothing, bool>
+  --is-private: oneof<nothing, bool>
+  --is-recipe-scan: oneof<nothing, bool>
+  --is-sponsored: oneof<nothing, bool>
+  --last-modified: string # format: date-time
+  --max-image-square: int # format: int32
+  --medal-count: int # format: int32
+  --menu-count: int # format: int32
+  --microcategory: string
+  --notes-count: int # format: int32
+  --nutrition-info: record # shape: {CaloriesFromFat?: float, Cholesterol?: float, CholesterolPct?: float, DietaryFiber?: float, DietaryFiberPct?: float, MonoFat?: float, PolyFat?: float, Potassium?: float, PotassiumPct?: float, Protein?: float, ProteinPct?: float, SatFat?: float, SatFatPct?: float, SingularYieldUnit?: string, Sodium?: float, SodiumPct?: float, Sugar?: float, TotalCalories?: float, TotalCarbs?: float, TotalCarbsPct?: float, TotalFat?: float, TotalFatPct?: float, TransFat?: float}
+  --poster: record # shape: {FirstName?: string, ImageUrl48?: string, IsKitchenHelper?: bool, IsPremium?: bool, IsUsingRecurly?: bool, LastName?: string, MemberSince?: string, PhotoUrl?: string, PremiumExpiryDate?: string, UserID?: int, UserName?: string}
+  --primary-ingredient: string
+  --recipe-id: int # format: int32
+  --review-count: int # format: int32
+  --star-rating: float # format: double
+  --subcategory: string
+  --title: string
+  --total-minutes: int # format: int32
+  --variant-of-recipe-id: int # format: int32
+  --verified-by-class: string
+  --verified-date-time: string # format: date-time
+  --web-url: string
+  --yield-number: float # format: double
+  --yield-unit: string
 ]: any -> record<ActiveMinutes: int, AdTags: string, AdminBoost: int, AllCategoriesText: string, BookmarkImageURL: string, BookmarkSiteLogo: string, BookmarkURL: string, Category: string, Collection: string, CollectionID: int, CreationDate: string, Cuisine: string, Description: string, FavoriteCount: int, HeroPhotoUrl: string, ImageSquares: list<int>, ImageURL: string, Ingredients: table<DisplayIndex: int, DisplayQuantity: string, HTMLName: string, IngredientID: int, IngredientInfo: record, IsHeading: bool, IsLinked: bool, MetricDisplayQuantity: string, MetricQuantity: float, MetricUnit: string, Name: string, PreparationNotes: string, Quantity: float, Unit: string>, IngredientsTextBlock: string, Instructions: string, IsBookmark: bool, IsPrivate: bool, IsRecipeScan: bool, IsSponsored: bool, LastModified: string, MaxImageSquare: int, MedalCount: int, MenuCount: int, Microcategory: string, NotesCount: int, NutritionInfo: record<CaloriesFromFat: float, Cholesterol: float, CholesterolPct: float, DietaryFiber: float, DietaryFiberPct: float, MonoFat: float, PolyFat: float, Potassium: float, PotassiumPct: float, Protein: float, ProteinPct: float, SatFat: float, SatFatPct: float, SingularYieldUnit: string, Sodium: float, SodiumPct: float, Sugar: float, TotalCalories: float, TotalCarbs: float, TotalCarbsPct: float, TotalFat: float, TotalFatPct: float, TransFat: float>, Poster: record<FirstName: string, ImageUrl48: string, IsKitchenHelper: bool, IsPremium: bool, IsUsingRecurly: bool, LastName: string, MemberSince: string, PhotoUrl: string, PhotoUrl48: string, PremiumExpiryDate: string, UserID: int, UserName: string, WebUrl: string>, PrimaryIngredient: string, RecipeID: int, ReviewCount: int, StarRating: float, Subcategory: string, Title: string, TotalMinutes: int, VariantOfRecipeID: int, VerifiedByClass: string, VerifiedDateTime: string, WebURL: string, YieldNumber: float, YieldUnit: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-bigoven-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/recipe")
-  let body = {ActiveMinutes: $ActiveMinutes, AdTags: $AdTags, AdminBoost: $AdminBoost, AllCategoriesText: $AllCategoriesText, BookmarkImageURL: $BookmarkImageURL, BookmarkSiteLogo: $BookmarkSiteLogo, BookmarkURL: $BookmarkURL, Category: $Category, Collection: $Collection, CollectionID: $CollectionID, CreationDate: $CreationDate, Cuisine: $Cuisine, Description: $Description, FavoriteCount: $FavoriteCount, HeroPhotoUrl: $HeroPhotoUrl, ImageSquares: $ImageSquares, ImageURL: $ImageURL, Ingredients: $Ingredients, IngredientsTextBlock: $IngredientsTextBlock, Instructions: $Instructions, IsBookmark: $IsBookmark, IsPrivate: $IsPrivate, IsRecipeScan: $IsRecipeScan, IsSponsored: $IsSponsored, LastModified: $LastModified, MaxImageSquare: $MaxImageSquare, MedalCount: $MedalCount, MenuCount: $MenuCount, Microcategory: $Microcategory, NotesCount: $NotesCount, NutritionInfo: $NutritionInfo, Poster: $Poster, PrimaryIngredient: $PrimaryIngredient, RecipeID: $RecipeID, ReviewCount: $ReviewCount, StarRating: $StarRating, Subcategory: $Subcategory, Title: $Title, TotalMinutes: $TotalMinutes, VariantOfRecipeID: $VariantOfRecipeID, VerifiedByClass: $VerifiedByClass, VerifiedDateTime: $VerifiedDateTime, WebURL: $WebURL, YieldNumber: $YieldNumber, YieldUnit: $YieldUnit} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"ActiveMinutes": $active_minutes, "AdTags": $ad_tags, "AdminBoost": $admin_boost, "AllCategoriesText": $all_categories_text, "BookmarkImageURL": $bookmark_image_url, "BookmarkSiteLogo": $bookmark_site_logo, "BookmarkURL": $bookmark_url, "Category": $category, "Collection": $collection, "CollectionID": $collection_id, "CreationDate": $creation_date, "Cuisine": $cuisine, "Description": $description, "FavoriteCount": $favorite_count, "HeroPhotoUrl": $hero_photo_url, "ImageSquares": $image_squares, "ImageURL": $image_url, "Ingredients": $ingredients, "IngredientsTextBlock": $ingredients_text_block, "Instructions": $instructions, "IsBookmark": $is_bookmark, "IsPrivate": $is_private, "IsRecipeScan": $is_recipe_scan, "IsSponsored": $is_sponsored, "LastModified": $last_modified, "MaxImageSquare": $max_image_square, "MedalCount": $medal_count, "MenuCount": $menu_count, "Microcategory": $microcategory, "NotesCount": $notes_count, "NutritionInfo": $nutrition_info, "Poster": $poster, "PrimaryIngredient": $primary_ingredient, "RecipeID": $recipe_id, "ReviewCount": $review_count, "StarRating": $star_rating, "Subcategory": $subcategory, "Title": $title, "TotalMinutes": $total_minutes, "VariantOfRecipeID": $variant_of_recipe_id, "VerifiedByClass": $verified_by_class, "VerifiedDateTime": $verified_date_time, "WebURL": $web_url, "YieldNumber": $yield_number, "YieldUnit": $yield_unit} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Given a query, return recipe titles starting with query. Query must be at least 3 chars in length.
 #
 # GET /recipe/autocomplete
 # operationId: Recipe_AutoComplete
-export def "recipe-autocomplete AutoComplete" [
+export def "recipe-autocomplete complete-auto" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -819,6 +854,7 @@ export def "recipe-autocomplete AutoComplete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --query: string
@@ -830,14 +866,14 @@ export def "recipe-autocomplete AutoComplete" [
   let full_url = (build-url $base "/recipe/autocomplete" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Automatics the complete all recipes.
 #
 # GET /recipe/autocomplete/all
 # operationId: Recipe_AutoCompleteAllRecipes
-export def "recipe-autocomplete-all AutoCompleteAllRecipes" [
+export def "recipe-autocomplete-all complete-auto" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -845,6 +881,7 @@ export def "recipe-autocomplete-all AutoCompleteAllRecipes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --query: string # The query.
@@ -856,14 +893,14 @@ export def "recipe-autocomplete-all AutoCompleteAllRecipes" [
   let full_url = (build-url $base "/recipe/autocomplete/all" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Automatics the complete my recipes.
 #
 # GET /recipe/autocomplete/mine
 # operationId: Recipe_AutoCompleteMyRecipes
-export def "recipe-autocomplete-mine AutoCompleteMyRecipes" [
+export def "recipe-autocomplete-mine complete-auto-my" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -871,6 +908,7 @@ export def "recipe-autocomplete-mine AutoCompleteMyRecipes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --query: string # The query.
@@ -882,14 +920,14 @@ export def "recipe-autocomplete-mine AutoCompleteMyRecipes" [
   let full_url = (build-url $base "/recipe/autocomplete/mine" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get a list of recipe categories (the ID field can be used for include_cat in search parameters)
 #
 # GET /recipe/categories
 # operationId: Recipe_Categories
-export def "recipe-categories Categories" [
+export def "recipe-categories get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -897,6 +935,7 @@ export def "recipe-categories Categories" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> table<Category: string, DefaultActiveMinutes: int, DefaultTotalMinutes: int, ID: int, ParentID: int, PrimaryImage: string, ShortDescription: string> {
@@ -905,14 +944,14 @@ export def "recipe-categories Categories" [
   let full_url = (build-url $base "/recipe/categories")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Returns last active recipe for the user
 #
 # GET /recipe/get/active/recipe
 # operationId: Recipe_GetActiveRecipe
-export def "recipe-get-active-recipe GetActiveRecipe" [
+export def "recipe-get-active-recipe get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -920,24 +959,25 @@ export def "recipe-get-active-recipe GetActiveRecipe" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --userName: string
+  --user-name: string
 ]: nothing -> record<Data: record, Message: string, StatusCode: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-bigoven-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "userName" $userName "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "userName" $user_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/recipe/get/active/recipe" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Gets recipe single step as text
 #
 # POST /recipe/get/saved/step
 # operationId: Recipe_GetStep
-export def "recipe-get-saved-step GetStep" [
+export def "recipe-get-saved-step get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -945,26 +985,27 @@ export def "recipe-get-saved-step GetStep" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --userName: string
-  --recipeId: int # format: int32
-  --stepId: int # format: int32
+  --user-name: string
+  --recipe-id: int # format: int32
+  --step-id: int # format: int32
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "x-bigoven-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "userName" $userName "scalar") (serialize-qp "recipeId" $recipeId "scalar") (serialize-qp "stepId" $stepId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "userName" $user_name "scalar") (serialize-qp "recipeId" $recipe_id "scalar") (serialize-qp "stepId" $step_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/recipe/get/saved/step" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Returns stored step number and number of steps in recipe
 #
 # POST /recipe/get/step/number
 # operationId: Recipe_GetStepNumber
-export def "recipe-get-step-number GetStepNumber" [
+export def "recipe-get-step-number get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -972,25 +1013,26 @@ export def "recipe-get-step-number GetStepNumber" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --userName: string
-  --recipeId: int # format: int32
+  --user-name: string
+  --recipe-id: int # format: int32
 ]: nothing -> record<Data: record, Message: string, StatusCode: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-bigoven-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "userName" $userName "scalar") (serialize-qp "recipeId" $recipeId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "userName" $user_name "scalar") (serialize-qp "recipeId" $recipe_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/recipe/get/step/number" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Gets the pending by user.
 #
 # GET /recipe/photos/pending
 # operationId: Images_GetPendingByUser
-export def "recipe-photos-pending GetPendingByUser" [
+export def "recipe-photos-pending get-images-by-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -998,6 +1040,7 @@ export def "recipe-photos-pending GetPendingByUser" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<ResultCount: int, Results: table<Caption: string, CreationDate: string, ImageID: int, IsPrimary: bool, MaxImageSquare: int, PhotoUrl: string, Poster: record>> {
@@ -1006,14 +1049,14 @@ export def "recipe-photos-pending GetPendingByUser" [
   let full_url = (build-url $base "/recipe/photos/pending")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Stores recipe step number and returns saved step data
 #
 # POST /recipe/post/step
 # operationId: Recipe_GetSteps
-export def "recipe-post-step GetSteps" [
+export def "recipe-post-step get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1021,27 +1064,28 @@ export def "recipe-post-step GetSteps" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --userName: string
-  --recipeId: int # format: int32
-  --stepId: int # format: int32
+  --user-name: string
+  --recipe-id: int # format: int32
+  --step-id: int # format: int32
 ]: nothing -> record<Data: record, Message: string, StatusCode: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-bigoven-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "userName" $userName "scalar") (serialize-qp "recipeId" $recipeId "scalar") (serialize-qp "stepId" $stepId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "userName" $user_name "scalar") (serialize-qp "recipeId" $recipe_id "scalar") (serialize-qp "stepId" $step_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/recipe/post/step" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # DELETE a reply to a given review. Authenticated user must be the one who originally posted the reply.
 #
 # DELETE /recipe/review/replies/{replyId}
 # operationId: Review_DeleteReply
-export def "recipe-review-replies DeleteReply" [
-  replyId: string
+export def "recipe-review-replies delete-reply" [
+  reply_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1049,23 +1093,24 @@ export def "recipe-review-replies DeleteReply" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "x-bigoven-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/recipe/review/replies/($replyId)")
+  let full_url = (build-url $base ({reply_id: (encode-path-segment $reply_id)} | format pattern "/recipe/review/replies/{reply_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Update (PUT) a reply to a given review. Authenticated user must be the original one that posted the reply.
 #
 # PUT /recipe/review/replies/{replyId}
 # operationId: Review_PutReply
-export def "recipe-review-replies PutReply" [
-  replyId: string
+export def "recipe-review-replies update-reply" [
+  reply_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1073,26 +1118,27 @@ export def "recipe-review-replies PutReply" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --Comment: string # The comment. If mentioning any user(s) (optional), include them as @username in the text body. Do not use @ symbol for anything but mentioning @usernames.
+  --comment: string # The comment. If mentioning any user(s) (optional), include them as @username in the text body. Do not use @ symbol for anything but mentioning @usernames.
 ]: any -> record<Comment: string, CreationDate: string, ID: string, LastModified: string, Poster: record<FirstName: string, LastName: string, PhotoUrl: string, UserID: int, UserName: string>, ReviewID: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-bigoven-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/recipe/review/replies/($replyId)")
-  let body = {Comment: $Comment} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({reply_id: (encode-path-segment $reply_id)} | format pattern "/recipe/review/replies/{reply_id}"))
+  let req_body = {"Comment": $comment} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
-# Get a given review by string-style ID. This will return a payload with FeaturedReply, ReplyCount.             Recommended display is to list top-level reviews with one featured reply underneath.              Currently, the FeaturedReply is the most recent one for that rating.
+# Get a given review by string-style ID. This will return a payload with FeaturedReply, ReplyCount. Recommended display is to list top-level reviews with one featured reply underneath. Currently, the FeaturedReply is the most recent one for that rating.
 #
 # GET /recipe/review/{reviewId}
 export def "recipe-review get-by-reviewId" [
-  reviewId: string
+  review_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1100,23 +1146,24 @@ export def "recipe-review get-by-reviewId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<ActiveMinutes: int, Comment: string, CreationDate: string, FeaturedReply: record<Comment: string, CreationDate: string, ID: string, LastModified: string, Poster: record<FirstName: string, LastName: string, PhotoUrl: string, UserID: int, UserName: string>, ReviewID: string>, GUID: string, ID: string, LastModified: string, ParentID: int, Poster: record<FirstName: string, ImageUrl48: string, IsKitchenHelper: bool, IsPremium: bool, IsUsingRecurly: bool, LastName: string, MemberSince: string, PhotoUrl: string, PhotoUrl48: string, PremiumExpiryDate: string, UserID: int, UserName: string, WebUrl: string>, Replies: list<any>, ReplyCount: int, ReviewID: int, StarRating: float, TotalMinutes: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-bigoven-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/recipe/review/($reviewId)")
+  let full_url = (build-url $base ({review_id: (encode-path-segment $review_id)} | format pattern "/recipe/review/{review_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Update a given top-level review.
 #
 # PUT /recipe/review/{reviewId}
 # operationId: Review_Put
-export def "recipe-review Put" [
-  reviewId: string
+export def "recipe-review update" [
+  review_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1124,31 +1171,32 @@ export def "recipe-review Put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --ActiveMinutes: int # How many minutes of ACTIVE time (i.e., actively working on the recipe, not waiting for rising, baking, etc.) did it              demand of the cook? Optional. (format: int32)
-  --Comment: string # The notes
-  --MakeAgain: string # "yes" or "no"
-  --StarRating: int # 1, 2, 3, 4, or 5 (format: int32)
-  --TotalMinutes: int # How long, start to finish, in minutes (integer) did it take? Optional. (format: int32)
+  --active-minutes: int # How many minutes of ACTIVE time (i.e., actively working on the recipe, not waiting for rising, baking, etc.) did it demand of the cook? Optional. (format: int32)
+  --comment: string # The notes
+  --make-again: string # "yes" or "no"
+  --star-rating: int # 1, 2, 3, 4, or 5 (format: int32)
+  --total-minutes: int # How long, start to finish, in minutes (integer) did it take? Optional. (format: int32)
 ]: any -> record<ActiveMinutes: int, Comment: string, CreationDate: string, FeaturedReply: record<Comment: string, CreationDate: string, ID: string, LastModified: string, Poster: record<FirstName: string, LastName: string, PhotoUrl: string, UserID: int, UserName: string>, ReviewID: string>, GUID: string, ID: string, LastModified: string, ParentID: int, Poster: record<FirstName: string, ImageUrl48: string, IsKitchenHelper: bool, IsPremium: bool, IsUsingRecurly: bool, LastName: string, MemberSince: string, PhotoUrl: string, PhotoUrl48: string, PremiumExpiryDate: string, UserID: int, UserName: string, WebUrl: string>, Replies: list<any>, ReplyCount: int, ReviewID: int, StarRating: float, TotalMinutes: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-bigoven-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/recipe/review/($reviewId)")
-  let body = {ActiveMinutes: $ActiveMinutes, Comment: $Comment, MakeAgain: $MakeAgain, StarRating: $StarRating, TotalMinutes: $TotalMinutes} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({review_id: (encode-path-segment $review_id)} | format pattern "/recipe/review/{review_id}"))
+  let req_body = {"ActiveMinutes": $active_minutes, "Comment": $comment, "MakeAgain": $make_again, "StarRating": $star_rating, "TotalMinutes": $total_minutes} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Get a paged list of replies for a given review.
 #
 # GET /recipe/review/{reviewId}/replies
 # operationId: Review_GetReplies
-export def "recipe-review-replies GetReplies" [
-  reviewId: string
+export def "recipe-review-replies get" [
+  review_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1156,6 +1204,7 @@ export def "recipe-review-replies GetReplies" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --pg: int # the page (int), starting with 1 (format: int32)
@@ -1164,18 +1213,18 @@ export def "recipe-review-replies GetReplies" [
   let auth = (build-auth $token ($auth_scheme | default "x-bigoven-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "pg" $pg "scalar") (serialize-qp "rpp" $rpp "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/recipe/review/($reviewId)/replies" $qp)
+  let full_url = (build-url $base ({review_id: (encode-path-segment $review_id)} | format pattern "/recipe/review/{review_id}/replies") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # POST a reply to a given review. The date will be set by server. Note that replies no longer have star ratings, only top-level reviews do.
 #
 # POST /recipe/review/{reviewId}/replies
 # operationId: Review_PostReply
-export def "recipe-review-replies PostReply" [
-  reviewId: string
+export def "recipe-review-replies create-reply" [
+  review_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1183,26 +1232,27 @@ export def "recipe-review-replies PostReply" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --Comment: string # The comment. If mentioning any user(s) (optional), include them as @username in the text body. Do not use @ symbol for anything but mentioning @usernames.
+  --comment: string # The comment. If mentioning any user(s) (optional), include them as @username in the text body. Do not use @ symbol for anything but mentioning @usernames.
 ]: any -> record<Comment: string, CreationDate: string, ID: string, LastModified: string, Poster: record<FirstName: string, LastName: string, PhotoUrl: string, UserID: int, UserName: string>, ReviewID: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-bigoven-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/recipe/review/($reviewId)/replies")
-  let body = {Comment: $Comment} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({review_id: (encode-path-segment $review_id)} | format pattern "/recipe/review/{review_id}/replies"))
+  let req_body = {"Comment": $comment} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
-# POST an image as a new RecipeScan request                 1)  Fetch the filename -- DONE                 2)  Copy it to the pics/scan folder - ENSURE NO NAMING COLLISIONS -- DONE                 3)  Create 120 thumbnail size  in pics/scan/120 -- DONE                 4)  Insert the CloudTasks record                 5)  Create the HIT                 6)  Update the CloudTasks record with the HIT ID                 7)  Email the requesing user                 8)  Call out to www.bigoven.com to fetch the image and re-create the thumbnail
+# POST an image as a new RecipeScan request 1) Fetch the filename -- DONE 2) Copy it to the pics/scan folder - ENSURE NO NAMING COLLISIONS -- DONE 3) Create 120 thumbnail size in pics/scan/120 -- DONE 4) Insert the CloudTasks record 5) Create the HIT 6) Update the CloudTasks record with the HIT ID 7) Email the requesing user 8) Call out to www.bigoven.com to fetch the image and re-create the thumbnail
 #
 # POST /recipe/scan
 # operationId: Recipe_Scan
-export def "recipe-scan Scan" [
+export def "recipe-scan create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1210,6 +1260,7 @@ export def "recipe-scan Scan" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --test: oneof<nothing, bool>
   --devicetype: string
@@ -1222,14 +1273,14 @@ export def "recipe-scan Scan" [
   let full_url = (build-url $base "/recipe/scan" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Return full Recipe detail with steps. Returns 403 if the recipe is owned by someone else.
 #
 # GET /recipe/steps/{id}
 # operationId: Recipe_GetRecipeWithSteps
-export def "recipe-steps GetRecipeWithSteps" [
+export def "recipe-steps get" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1238,6 +1289,7 @@ export def "recipe-steps GetRecipeWithSteps" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --prefetch: oneof<nothing, bool>
@@ -1245,17 +1297,17 @@ export def "recipe-steps GetRecipeWithSteps" [
   let auth = (build-auth $token ($auth_scheme | default "x-bigoven-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "prefetch" $prefetch "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/recipe/steps/($id)" $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/recipe/steps/{id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Delete a Recipe (you must be authenticated as an owner of the recipe)
 #
 # DELETE /recipe/{id}
 # operationId: Recipe_Delete
-export def "recipe Delete" [
+export def "recipe delete" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1264,22 +1316,23 @@ export def "recipe Delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "x-bigoven-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/recipe/($id)")
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/recipe/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Return full Recipe detail. Returns 403 if the recipe is owned by someone else.
 #
 # GET /recipe/{id}
 # operationId: Recipe_Get
-export def "recipe Get" [
+export def "recipe get" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1288,6 +1341,7 @@ export def "recipe Get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --prefetch: oneof<nothing, bool> # The prefetch.
@@ -1295,17 +1349,17 @@ export def "recipe Get" [
   let auth = (build-auth $token ($auth_scheme | default "x-bigoven-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "prefetch" $prefetch "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/recipe/($id)" $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/recipe/{id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Zaps the recipe.
 #
 # GET /recipe/{id}/zap
 # operationId: Recipe_ZapRecipe
-export def "recipe-zap ZapRecipe" [
+export def "recipe-zap get" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1314,23 +1368,24 @@ export def "recipe-zap ZapRecipe" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "x-bigoven-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/recipe/($id)/zap")
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/recipe/{id}/zap"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Feedback on a Recipe -- for internal BigOven editors
 #
 # POST /recipe/{recipeId}/feedback
 # operationId: Recipe_Feedback
-export def "recipe-feedback Feedback" [
-  recipeId: int
+export def "recipe-feedback create" [
+  recipe_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1338,6 +1393,7 @@ export def "recipe-feedback Feedback" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --feedback: string
@@ -1345,20 +1401,20 @@ export def "recipe-feedback Feedback" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-bigoven-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/recipe/($recipeId)/feedback")
-  let body = {feedback: $feedback} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({recipe_id: (encode-path-segment $recipe_id)} | format pattern "/recipe/{recipe_id}/feedback"))
+  let req_body = {"feedback": $feedback} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
-# POST: /recipe/{recipeId}/image?lat=42&amp;lng=21&amp;caption=this%20is%20my%20caption                            Note that caption, lng and lat are all optional, but must go on the request URI as params because this endpoint              needs a multipart/mime content header and will not parse JSON in the body along with it.                           Testing with Postman (validated 11/20/2015):              1) Remove the Content-Type header; add authentication information              2) On the request, click Body and choose "form-data", then add a line item with "key" column set to "file" and on the right,              change the type of the input from Text to File.  Browse and choose a JPG.
+# POST: /recipe/{recipeId}/image?lat=42&lng=21&caption=this%20is%20my%20caption Note that caption, lng and lat are all optional, but must go on the request URI as params because this endpoint needs a multipart/mime content header and will not parse JSON in the body along with it. Testing with Postman (validated 11/20/2015): 1) Remove the Content-Type header; add authentication information 2) On the request, click Body and choose "form-data", then add a line item with "key" column set to "file" and on the right, change the type of the input from Text to File. Browse and choose a JPG.
 #
 # POST /recipe/{recipeId}/image
 # operationId: Images_UploadRecipeImage
-export def "recipe-image UploadRecipeImage" [
-  recipeId: string
+export def "recipe-image upload" [
+  recipe_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1366,6 +1422,7 @@ export def "recipe-image UploadRecipeImage" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --caption: string
@@ -1375,18 +1432,18 @@ export def "recipe-image UploadRecipeImage" [
   let auth = (build-auth $token ($auth_scheme | default "x-bigoven-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "caption" $caption "scalar") (serialize-qp "lat" $lat "scalar") (serialize-qp "lng" $lng "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/recipe/($recipeId)/image" $qp)
+  let full_url = (build-url $base ({recipe_id: (encode-path-segment $recipe_id)} | format pattern "/recipe/{recipe_id}/image") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get all the images for a recipe. DEPRECATED. Please use /recipe/{recipeId}/photos.
 #
 # GET /recipe/{recipeId}/images
 # operationId: Images_Get
-export def "recipe-images Get" [
-  recipeId: int
+export def "recipe-images get" [
+  recipe_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1394,23 +1451,24 @@ export def "recipe-images Get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> table<Caption: string, CreationDate: string, ImageID: int, ImageSquares: list<int>, ImageURL: string, ImageURL120: string, ImageURL128: string, ImageURL200: string, ImageURL256: string, ImageURL48: string, ImageURL64: string, IsPrimary: bool, MaxImageSquare: int, Poster: record<FirstName: string, ImageUrl48: string, IsKitchenHelper: bool, IsPremium: bool, IsUsingRecurly: bool, LastName: string, MemberSince: string, PhotoUrl: string, PhotoUrl48: string, PremiumExpiryDate: string, UserID: int, UserName: string, WebUrl: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-bigoven-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/recipe/($recipeId)/images")
+  let full_url = (build-url $base ({recipe_id: (encode-path-segment $recipe_id)} | format pattern "/recipe/{recipe_id}/images"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # HTTP POST a new note into the system.
 #
 # POST /recipe/{recipeId}/note
 # operationId: Note_Post
-export def "recipe-note Post" [
-  recipeId: int
+export def "recipe-note create" [
+  recipe_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1418,37 +1476,38 @@ export def "recipe-note Post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --CreationDate: string # Gets or sets the creation date. (format: date-time)
-  --Date: string # Gets or sets the date. (format: date-time)
-  --DateDT: string # Gets or sets the date dt.
-  --GUID: string # Gets or sets the unique identifier.
-  --ID: int # Gets or sets the identifier. (format: int32)
-  --Notes: string # Gets or sets the notes.
-  --People: string # Gets or sets the people.
-  --RecipeID: int # Gets or sets the recipe identifier. (format: int32)
-  --UserID: int # Gets or sets the user identifier. (format: int32)
-  --Variations: string # Gets or sets the variations.
+  --creation-date: string # Gets or sets the creation date. (format: date-time)
+  --date: string # Gets or sets the date. (format: date-time)
+  --date-dt: string # Gets or sets the date dt.
+  --guid: string # Gets or sets the unique identifier.
+  --id: int # Gets or sets the identifier. (format: int32)
+  --notes: string # Gets or sets the notes.
+  --people: string # Gets or sets the people.
+  --body-recipe-id: int # Gets or sets the recipe identifier. (format: int32)
+  --user-id: int # Gets or sets the user identifier. (format: int32)
+  --variations: string # Gets or sets the variations.
 ]: any -> record<CreationDate: string, Date: string, DateDT: string, GUID: string, ID: int, Notes: string, People: string, RecipeID: int, UserID: int, Variations: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-bigoven-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/recipe/($recipeId)/note")
-  let body = {CreationDate: $CreationDate, Date: $Date, DateDT: $DateDT, GUID: $GUID, ID: $ID, Notes: $Notes, People: $People, RecipeID: $RecipeID, UserID: $UserID, Variations: $Variations} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({recipe_id: (encode-path-segment $recipe_id)} | format pattern "/recipe/{recipe_id}/note"))
+  let req_body = {"CreationDate": $creation_date, "Date": $date, "DateDT": $date_dt, "GUID": $guid, "ID": $id, "Notes": $notes, "People": $people, "RecipeID": $body_recipe_id, "UserID": $user_id, "Variations": $variations} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
-# Delete a review                 do a DELETE Http request of /note/{ID}
+# Delete a review do a DELETE Http request of /note/{ID}
 #
 # DELETE /recipe/{recipeId}/note/{noteId}
 # operationId: Note_Delete
-export def "recipe-note Delete" [
-  recipeId: int
-  noteId: int
+export def "recipe-note delete" [
+  recipe_id: int
+  note_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1456,24 +1515,25 @@ export def "recipe-note Delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "x-bigoven-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/recipe/($recipeId)/note/($noteId)")
+  let full_url = (build-url $base ({recipe_id: (encode-path-segment $recipe_id), note_id: (encode-path-segment $note_id)} | format pattern "/recipe/{recipe_id}/note/{note_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get a given note. Make sure you're passing authentication information in the header for the user who owns the note.
 #
 # GET /recipe/{recipeId}/note/{noteId}
 # operationId: Note_Get
-export def "recipe-note Get" [
-  recipeId: int
-  noteId: int
+export def "recipe-note get" [
+  recipe_id: int
+  note_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1481,24 +1541,25 @@ export def "recipe-note Get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<CreationDate: string, Date: string, DateDT: string, GUID: string, ID: int, Notes: string, People: string, RecipeID: int, UserID: int, Variations: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-bigoven-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/recipe/($recipeId)/note/($noteId)")
+  let full_url = (build-url $base ({recipe_id: (encode-path-segment $recipe_id), note_id: (encode-path-segment $note_id)} | format pattern "/recipe/{recipe_id}/note/{note_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # HTTP PUT (update) a Recipe note (RecipeNote).
 #
 # PUT /recipe/{recipeId}/note/{noteId}
 # operationId: Note_Put
-export def "recipe-note Put" [
-  recipeId: int
-  noteId: int
+export def "recipe-note update" [
+  recipe_id: int
+  note_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1506,36 +1567,37 @@ export def "recipe-note Put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --CreationDate: string # Gets or sets the creation date. (format: date-time)
-  --Date: string # Gets or sets the date. (format: date-time)
-  --DateDT: string # Gets or sets the date dt.
-  --GUID: string # Gets or sets the unique identifier.
-  --ID: int # Gets or sets the identifier. (format: int32)
-  --Notes: string # Gets or sets the notes.
-  --People: string # Gets or sets the people.
-  --RecipeID: int # Gets or sets the recipe identifier. (format: int32)
-  --UserID: int # Gets or sets the user identifier. (format: int32)
-  --Variations: string # Gets or sets the variations.
+  --creation-date: string # Gets or sets the creation date. (format: date-time)
+  --date: string # Gets or sets the date. (format: date-time)
+  --date-dt: string # Gets or sets the date dt.
+  --guid: string # Gets or sets the unique identifier.
+  --id: int # Gets or sets the identifier. (format: int32)
+  --notes: string # Gets or sets the notes.
+  --people: string # Gets or sets the people.
+  --body-recipe-id: int # Gets or sets the recipe identifier. (format: int32)
+  --user-id: int # Gets or sets the user identifier. (format: int32)
+  --variations: string # Gets or sets the variations.
 ]: any -> record<CreationDate: string, Date: string, DateDT: string, GUID: string, ID: int, Notes: string, People: string, RecipeID: int, UserID: int, Variations: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-bigoven-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/recipe/($recipeId)/note/($noteId)")
-  let body = {CreationDate: $CreationDate, Date: $Date, DateDT: $DateDT, GUID: $GUID, ID: $ID, Notes: $Notes, People: $People, RecipeID: $RecipeID, UserID: $UserID, Variations: $Variations} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({recipe_id: (encode-path-segment $recipe_id), note_id: (encode-path-segment $note_id)} | format pattern "/recipe/{recipe_id}/note/{note_id}"))
+  let req_body = {"CreationDate": $creation_date, "Date": $date, "DateDT": $date_dt, "GUID": $guid, "ID": $id, "Notes": $notes, "People": $people, "RecipeID": $body_recipe_id, "UserID": $user_id, "Variations": $variations} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # recipe/100/notes
 #
 # GET /recipe/{recipeId}/notes
 # operationId: Note_GetNotes
-export def "recipe-notes GetNotes" [
-  recipeId: int
+export def "recipe-notes get" [
+  recipe_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1543,6 +1605,7 @@ export def "recipe-notes GetNotes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --pg: int # page (int, starting from 1) (format: int32)
@@ -1551,18 +1614,18 @@ export def "recipe-notes GetNotes" [
   let auth = (build-auth $token ($auth_scheme | default "x-bigoven-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "pg" $pg "scalar") (serialize-qp "rpp" $rpp "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/recipe/($recipeId)/notes" $qp)
+  let full_url = (build-url $base ({recipe_id: (encode-path-segment $recipe_id)} | format pattern "/recipe/{recipe_id}/notes") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get all the photos for a recipe
 #
 # GET /recipe/{recipeId}/photos
 # operationId: Images_GetRecipePhotos
-export def "recipe-photos GetRecipePhotos" [
-  recipeId: int
+export def "recipe-photos get-images" [
+  recipe_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1570,6 +1633,7 @@ export def "recipe-photos GetRecipePhotos" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --pg: int # format: int32
@@ -1578,18 +1642,18 @@ export def "recipe-photos GetRecipePhotos" [
   let auth = (build-auth $token ($auth_scheme | default "x-bigoven-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "pg" $pg "scalar") (serialize-qp "rpp" $rpp "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/recipe/($recipeId)/photos" $qp)
+  let full_url = (build-url $base ({recipe_id: (encode-path-segment $recipe_id)} | format pattern "/recipe/{recipe_id}/photos") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get recipes related to the given recipeId
 #
 # GET /recipe/{recipeId}/related
 # operationId: Recipe_Related
-export def "recipe-related Related" [
-  recipeId: int
+export def "recipe-related get" [
+  recipe_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1597,6 +1661,7 @@ export def "recipe-related Related" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --pg: int # The page (format: int32)
@@ -1605,17 +1670,17 @@ export def "recipe-related Related" [
   let auth = (build-auth $token ($auth_scheme | default "x-bigoven-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "pg" $pg "scalar") (serialize-qp "rpp" $rpp "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/recipe/($recipeId)/related" $qp)
+  let full_url = (build-url $base ({recipe_id: (encode-path-segment $recipe_id)} | format pattern "/recipe/{recipe_id}/related") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get *my* review for the recipe {recipeId}, where "me" is determined by standard authentication headers
 #
 # GET /recipe/{recipeId}/review
 export def "recipe-review get-by-recipeId" [
-  recipeId: int
+  recipe_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1623,23 +1688,24 @@ export def "recipe-review get-by-recipeId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<ActiveMinutes: int, Comment: string, CreationDate: string, FeaturedReply: record<Comment: string, CreationDate: string, ID: string, LastModified: string, Poster: record<FirstName: string, LastName: string, PhotoUrl: string, UserID: int, UserName: string>, ReviewID: string>, GUID: string, ID: string, LastModified: string, ParentID: int, Poster: record<FirstName: string, ImageUrl48: string, IsKitchenHelper: bool, IsPremium: bool, IsUsingRecurly: bool, LastName: string, MemberSince: string, PhotoUrl: string, PhotoUrl48: string, PremiumExpiryDate: string, UserID: int, UserName: string, WebUrl: string>, Replies: list<any>, ReplyCount: int, ReviewID: int, StarRating: float, TotalMinutes: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-bigoven-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/recipe/($recipeId)/review")
+  let full_url = (build-url $base ({recipe_id: (encode-path-segment $recipe_id)} | format pattern "/recipe/{recipe_id}/review"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Add a new review. Only one review can be provided per {userId, recipeId} pair. Otherwise your review will be updated.
 #
 # POST /recipe/{recipeId}/review
 # operationId: Review_Post
-export def "recipe-review Post" [
-  recipeId: int
+export def "recipe-review create" [
+  recipe_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1647,32 +1713,33 @@ export def "recipe-review Post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --ActiveMinutes: int # How many minutes of ACTIVE time (i.e., actively working on the recipe, not waiting for rising, baking, etc.) did it              demand of the cook? Optional. (format: int32)
-  --Comment: string # The notes
-  --MakeAgain: string # "yes" or "no"
-  --StarRating: int # 1, 2, 3, 4, or 5 (format: int32)
-  --TotalMinutes: int # How long, start to finish, in minutes (integer) did it take? Optional. (format: int32)
+  --active-minutes: int # How many minutes of ACTIVE time (i.e., actively working on the recipe, not waiting for rising, baking, etc.) did it demand of the cook? Optional. (format: int32)
+  --comment: string # The notes
+  --make-again: string # "yes" or "no"
+  --star-rating: int # 1, 2, 3, 4, or 5 (format: int32)
+  --total-minutes: int # How long, start to finish, in minutes (integer) did it take? Optional. (format: int32)
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-bigoven-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/recipe/($recipeId)/review")
-  let body = {ActiveMinutes: $ActiveMinutes, Comment: $Comment, MakeAgain: $MakeAgain, StarRating: $StarRating, TotalMinutes: $TotalMinutes} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({recipe_id: (encode-path-segment $recipe_id)} | format pattern "/recipe/{recipe_id}/review"))
+  let req_body = {"ActiveMinutes": $active_minutes, "Comment": $comment, "MakeAgain": $make_again, "StarRating": $star_rating, "TotalMinutes": $total_minutes} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # DEPRECATED! - Deletes a review by recipeId and reviewId. Please use recipe/review/{reviewId} instead.
 #
 # DELETE /recipe/{recipeId}/review/{reviewId}
 # operationId: Review_Delete
-export def "recipe-review Delete" [
-  recipeId: int
-  reviewId: int
+export def "recipe-review delete" [
+  recipe_id: int
+  review_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1680,24 +1747,25 @@ export def "recipe-review Delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "x-bigoven-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/recipe/($recipeId)/review/($reviewId)")
+  let full_url = (build-url $base ({recipe_id: (encode-path-segment $recipe_id), review_id: (encode-path-segment $review_id)} | format pattern "/recipe/{recipe_id}/review/{review_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
-# Get a given review - DEPRECATED. See recipe/review/{reviewId} for the current usage.             Beginning in January 2017, BigOven moded from an integer-based ID system to a GUID-style string-based ID system for reviews and replies.             We are also supporting more of a "Google Play" style model for Reviews and Replies. That is, there are top-level Reviews and then             an unlimited list of replies (which do not carry star ratings) underneath existing reviews. Also, a given user can only have one review              per recipe. Existing legacy endpoints will continue to work, but we strongly recommend you migrate to using the newer endpoints listed             which do NOT carry the "DEPRECATED" flag.
+# Get a given review - DEPRECATED. See recipe/review/{reviewId} for the current usage. Beginning in January 2017, BigOven moded from an integer-based ID system to a GUID-style string-based ID system for reviews and replies. We are also supporting more of a "Google Play" style model for Reviews and Replies. That is, there are top-level Reviews and then an unlimited list of replies (which do not carry star ratings) underneath existing reviews. Also, a given user can only have one review per recipe. Existing legacy endpoints will continue to work, but we strongly recommend you migrate to using the newer endpoints listed which do NOT carry the "DEPRECATED" flag.
 #
 # GET /recipe/{recipeId}/review/{reviewId}
 # operationId: Review_Get
-export def "recipe-review Get" [
-  reviewId: int
-  recipeId: int
+export def "recipe-review get-by-recipeId-reviewId" [
+  recipe_id: int
+  review_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1705,24 +1773,25 @@ export def "recipe-review Get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<ActiveMinutes: int, Comment: string, CreationDate: string, FeaturedReply: record<Comment: string, CreationDate: string, ID: string, LastModified: string, Poster: record<FirstName: string, LastName: string, PhotoUrl: string, UserID: int, UserName: string>, ReviewID: string>, GUID: string, ID: string, LastModified: string, ParentID: int, Poster: record<FirstName: string, ImageUrl48: string, IsKitchenHelper: bool, IsPremium: bool, IsUsingRecurly: bool, LastName: string, MemberSince: string, PhotoUrl: string, PhotoUrl48: string, PremiumExpiryDate: string, UserID: int, UserName: string, WebUrl: string>, Replies: list<any>, ReplyCount: int, ReviewID: int, StarRating: float, TotalMinutes: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-bigoven-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/recipe/($recipeId)/review/($reviewId)")
+  let full_url = (build-url $base ({recipe_id: (encode-path-segment $recipe_id), review_id: (encode-path-segment $review_id)} | format pattern "/recipe/{recipe_id}/review/{review_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
-# HTTP PUT (update) a recipe review. DEPRECATED. Please see recipe/review/{reviewId} PUT for the new endpoint.             We are moving to a string-based primary key system, no longer integers, for reviews and replies.
+# HTTP PUT (update) a recipe review. DEPRECATED. Please see recipe/review/{reviewId} PUT for the new endpoint. We are moving to a string-based primary key system, no longer integers, for reviews and replies.
 #
 # PUT /recipe/{recipeId}/review/{reviewId}
 # operationId: Review_PutLegacy
-export def "recipe-review PutLegacy" [
-  reviewId: int
-  recipeId: int
+export def "recipe-review update-legacy" [
+  recipe_id: int
+  review_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1730,33 +1799,34 @@ export def "recipe-review PutLegacy" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --ActiveMinutes: int # format: int32
-  --Comment: string
-  --GUID: string
-  --MakeAgain: string
-  --ParentID: int # format: int32
-  --StarRating: int # format: int32
-  --TotalMinutes: int # format: int32
+  --active-minutes: int # format: int32
+  --comment: string
+  --guid: string
+  --make-again: string
+  --parent-id: int # format: int32
+  --star-rating: int # format: int32
+  --total-minutes: int # format: int32
 ]: any -> record<ActiveMinutes: int, Comment: string, CreationDate: string, FeaturedReply: record<Comment: string, CreationDate: string, ID: string, LastModified: string, Poster: record<FirstName: string, LastName: string, PhotoUrl: string, UserID: int, UserName: string>, ReviewID: string>, GUID: string, ID: string, LastModified: string, ParentID: int, Poster: record<FirstName: string, ImageUrl48: string, IsKitchenHelper: bool, IsPremium: bool, IsUsingRecurly: bool, LastName: string, MemberSince: string, PhotoUrl: string, PhotoUrl48: string, PremiumExpiryDate: string, UserID: int, UserName: string, WebUrl: string>, Replies: list<any>, ReplyCount: int, ReviewID: int, StarRating: float, TotalMinutes: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-bigoven-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/recipe/($recipeId)/review/($reviewId)")
-  let body = {ActiveMinutes: $ActiveMinutes, Comment: $Comment, GUID: $GUID, MakeAgain: $MakeAgain, ParentID: $ParentID, StarRating: $StarRating, TotalMinutes: $TotalMinutes} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({recipe_id: (encode-path-segment $recipe_id), review_id: (encode-path-segment $review_id)} | format pattern "/recipe/{recipe_id}/review/{review_id}"))
+  let req_body = {"ActiveMinutes": $active_minutes, "Comment": $comment, "GUID": $guid, "MakeAgain": $make_again, "ParentID": $parent_id, "StarRating": $star_rating, "TotalMinutes": $total_minutes} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Get paged list of reviews for a recipe. Each review will have at most one FeaturedReply, as well as a ReplyCount.
 #
 # GET /recipe/{recipeId}/reviews
 # operationId: Review_GetReviews
-export def "recipe-reviews GetReviews" [
-  recipeId: int
+export def "recipe-reviews get" [
+  recipe_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1764,6 +1834,7 @@ export def "recipe-reviews GetReviews" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --pg: int # the page (int), starting with 1 (format: int32)
@@ -1772,18 +1843,18 @@ export def "recipe-reviews GetReviews" [
   let auth = (build-auth $token ($auth_scheme | default "x-bigoven-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "pg" $pg "scalar") (serialize-qp "rpp" $rpp "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/recipe/($recipeId)/reviews" $qp)
+  let full_url = (build-url $base ({recipe_id: (encode-path-segment $recipe_id)} | format pattern "/recipe/{recipe_id}/reviews") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Gets a list of RecipeScan images for the recipe. There will be at most 3 per recipe.
 #
 # GET /recipe/{recipeId}/scans
 # operationId: Images_GetScanImages
-export def "recipe-scans GetScanImages" [
-  recipeId: int
+export def "recipe-scans get-images-images" [
+  recipe_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1791,22 +1862,23 @@ export def "recipe-scans GetScanImages" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> table<Caption: string, CreationDate: string, ImageID: int, ImageSquares: list<int>, ImageURL: string, ImageURL120: string, ImageURL128: string, ImageURL200: string, ImageURL256: string, ImageURL48: string, ImageURL64: string, IsPrimary: bool, MaxImageSquare: int, Poster: record<FirstName: string, ImageUrl48: string, IsKitchenHelper: bool, IsPremium: bool, IsUsingRecurly: bool, LastName: string, MemberSince: string, PhotoUrl: string, PhotoUrl48: string, PremiumExpiryDate: string, UserID: int, UserName: string, WebUrl: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-bigoven-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/recipe/($recipeId)/scans")
+  let full_url = (build-url $base ({recipe_id: (encode-path-segment $recipe_id)} | format pattern "/recipe/{recipe_id}/scans"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
-# Search for recipes. There are many parameters that you can apply. Starting with the most common, use title_kw to search within a title.             Use any_kw to search across the entire recipe.             If you'd like to limit by course, set the parameter "include_primarycat" to one of (appetizers,bread,breakfast,dessert,drinks,maindish,salad,sidedish,soup,marinades,other).             If you'd like to exclude a category, set exclude_cat to one or more (comma-separated) list of those categories to exclude.             If you'd like to include a category, set include_cat to one or more (comma-separated) of those categories to include.             To explicitly include an ingredient in your search, set the parameter "include_ing" to a CSV of up to three ingredients, e.g.:include_ing=mustard,chicken,beef%20tips             To explicitly exclude an ingredient in your search, set the parameter "exclude_ing" to a CSV of up to three ingredients.             All searches must contain the paging parameters pg and rpp, which are integers, and represent the page number (1-based) and results per page (rpp).             So, to get the third page of a result set paged with 25 recipes per page, you'd pass pg=3&amp;rpp=25             If you'd like to target searches to just a single target user's recipes, set userId=the target userId (number).             Or, you can set username=theirusername             vtn;vgn;chs;glf;ntf;dyf;sff;slf;tnf;wmf;rmf;cps             cuisine             photos             filter=added,try,favorites,myrecipes\r\n\r\n             folder=FolderNameCaseSensitive             coll=ID of Collection
+# Search for recipes. There are many parameters that you can apply. Starting with the most common, use title_kw to search within a title. Use any_kw to search across the entire recipe. If you'd like to limit by course, set the parameter "include_primarycat" to one of (appetizers,bread,breakfast,dessert,drinks,maindish,salad,sidedish,soup,marinades,other). If you'd like to exclude a category, set exclude_cat to one or more (comma-separated) list of those categories to exclude. If you'd like to include a category, set include_cat to one or more (comma-separated) of those categories to include. To explicitly include an ingredient in your search, set the parameter "include_ing" to a CSV of up to three ingredients, e.g.:include_ing=mustard,chicken,beef%20tips To explicitly exclude an ingredient in your search, set the parameter "exclude_ing" to a CSV of up to three ingredients. All searches must contain the paging parameters pg and rpp, which are integers, and represent the page number (1-based) and results per page (rpp). So, to get the third page of a result set paged with 25 recipes per page, you'd pass pg=3&rpp=25 If you'd like to target searches to just a single target user's recipes, set userId=the target userId (number). Or, you can set username=theirusername vtn;vgn;chs;glf;ntf;dyf;sff;slf;tnf;wmf;rmf;cps cuisine photos filter=added,try,favorites,myrecipes\r\n\r\n folder=FolderNameCaseSensitive coll=ID of Collection
 #
 # GET /recipes
 # operationId: Recipe_RecipeSearch
-export def "recipes RecipeSearch" [
+export def "recipes list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1814,6 +1886,7 @@ export def "recipes RecipeSearch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --any-kw: string # Search anywhere in the recipe for the keyword
@@ -1821,24 +1894,24 @@ export def "recipes RecipeSearch" [
   --coll: int # Limit to a collection ID number (format: int32)
   --filter: string # optionally set to either "myrecipes", "try", "favorites","added" to filter to just the authenticated user's recipe set
   --title-kw: string # Search just in the recipe title for the keyword
-  --userId: int # Set the target userid to search their public recipes (format: int32)
+  --user-id: int # Set the target userid to search their public recipes (format: int32)
   --username: string # Set the target username to search their public recipes
   --qp-token: string
   --photos: oneof<nothing, bool> # if set to true, limit search results to photos only
   --boostmine: oneof<nothing, bool> # if set to true, boost my own recipes in my folders so they show up high in the list (at the expense of other sort orders)
-  --include-cat: string # integer of the subcategory you'd like to limit searches to (see the /recipe/categories endpoint for available id numbers). For instance, 58 is "Main Dish &gt; Casseroles".
+  --include-cat: string # integer of the subcategory you'd like to limit searches to (see the /recipe/categories endpoint for available id numbers). For instance, 58 is "Main Dish > Casseroles".
   --exclude-cat: string # like include_cat, set this to an integer to exclude a specific category
   --include-primarycat: string # csv indicating up to three top-level categories -- valid values are [appetizers,bread,breakfast,desserts,drinks,maindish,salads,sidedish,soups,marinades,other]
   --exclude-primarycat: string # csv indicating integer values for up to 3 top-level categories -- valid values are 1...11 [appetizers,bread,breakfast,desserts,drinks,maindish,salads,sidedish,soups,marinades,other]
   --include-ing: string # A CSV representing up to 3 ingredients to include, e.g., tomatoes,corn%20%starch,chicken
-  --exclude-ing: string # A CSV representing up to 3 ingredients to exclude  (Powersearch-capable plan required)
+  --exclude-ing: string # A CSV representing up to 3 ingredients to exclude (Powersearch-capable plan required)
   --cuisine: string # Limit to a specific cuisine. Cooks can enter anything free-form, but the few dozen preconfigured values are Afghan,African,American,American-South,Asian,Australian,Brazilian,Cajun,Canadian,Caribbean,Chinese,Croatian,Cuban,Dessert,Eastern European,English,French,German,Greek,Hawaiian,Hungarian,India,Indian,Irish,Italian,Japanese,Jewish,Korean,Latin,Mediterranean,Mexican,Middle Eastern,Moroccan,Polish,Russian,Scandanavian,Seafood,Southern,Southwestern,Spanish,Tex-Mex,Thai,Vegan,Vegetarian,Vietnamese
   --db: string
   --userset: string # If set to a given username, it'll force the search to filter to just that username
-  --servingsMin: float # Limit to yield of a given number size or greater. Note that cooks usually enter recipes by Servings, but sometimes they are posted by "dozen", etc. This parameter simply specifies the minimum number for that value entered in "yield." (format: double)
-  --totalMins: int # Optional. If supplied, will restrict results to recipes that can be made in {totalMins} or less. (Convert "1 hour, 15 minutes" to 75 before passing in.) (format: int32)
-  --maxIngredients: int # Optional. If supplied, will restrict results to recipes that can be made with {maxIngredients} ingredients or less (format: int32)
-  --minIngredients: int # Optional. If supplied, will restrict results to recipes that have at least {minIngredients} (format: int32)
+  --servings-min: float # Limit to yield of a given number size or greater. Note that cooks usually enter recipes by Servings, but sometimes they are posted by "dozen", etc. This parameter simply specifies the minimum number for that value entered in "yield." (format: double)
+  --total-mins: int # Optional. If supplied, will restrict results to recipes that can be made in {totalMins} or less. (Convert "1 hour, 15 minutes" to 75 before passing in.) (format: int32)
+  --max-ingredients: int # Optional. If supplied, will restrict results to recipes that can be made with {maxIngredients} ingredients or less (format: int32)
+  --min-ingredients: int # Optional. If supplied, will restrict results to recipes that have at least {minIngredients} (format: int32)
   --rpp: int # integer; results per page (format: int32)
   --pg: int # integer: the page number (format: int32)
   --vtn: int # when set to 1, limit to vegetarian (Powersearch-capable plan required) (format: int32)
@@ -1858,18 +1931,18 @@ export def "recipes RecipeSearch" [
 ]: nothing -> record<ResultCount: int, Results: table<Category: string, CreationDate: string, Cuisine: string, HasVideos: bool, IsBookmark: bool, IsPrivate: bool, IsRecipeScan: bool, Microcategory: string, PhotoUrl: string, Poster: record, RecipeID: int, ReviewCount: int, Servings: float, StarRating: float, Subcategory: string, Title: string, TotalTries: int, WebURL: string>, SpellSuggest: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-bigoven-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "any_kw" $any_kw "scalar") (serialize-qp "folder" $folder "scalar") (serialize-qp "coll" $coll "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "title_kw" $title_kw "scalar") (serialize-qp "userId" $userId "scalar") (serialize-qp "username" $username "scalar") (serialize-qp "token" $qp_token "scalar") (serialize-qp "photos" $photos "scalar") (serialize-qp "boostmine" $boostmine "scalar") (serialize-qp "include_cat" $include_cat "scalar") (serialize-qp "exclude_cat" $exclude_cat "scalar") (serialize-qp "include_primarycat" $include_primarycat "scalar") (serialize-qp "exclude_primarycat" $exclude_primarycat "scalar") (serialize-qp "include_ing" $include_ing "scalar") (serialize-qp "exclude_ing" $exclude_ing "scalar") (serialize-qp "cuisine" $cuisine "scalar") (serialize-qp "db" $db "scalar") (serialize-qp "userset" $userset "scalar") (serialize-qp "servingsMin" $servingsMin "scalar") (serialize-qp "totalMins" $totalMins "scalar") (serialize-qp "maxIngredients" $maxIngredients "scalar") (serialize-qp "minIngredients" $minIngredients "scalar") (serialize-qp "rpp" $rpp "scalar") (serialize-qp "pg" $pg "scalar") (serialize-qp "vtn" $vtn "scalar") (serialize-qp "vgn" $vgn "scalar") (serialize-qp "chs" $chs "scalar") (serialize-qp "glf" $glf "scalar") (serialize-qp "ntf" $ntf "scalar") (serialize-qp "dyf" $dyf "scalar") (serialize-qp "sff" $sff "scalar") (serialize-qp "slf" $slf "scalar") (serialize-qp "tnf" $tnf "scalar") (serialize-qp "wmf" $wmf "scalar") (serialize-qp "rmf" $rmf "scalar") (serialize-qp "cps" $cps "scalar") (serialize-qp "champion" $champion "scalar") (serialize-qp "synonyms" $synonyms "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "any_kw" $any_kw "scalar") (serialize-qp "folder" $folder "scalar") (serialize-qp "coll" $coll "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "title_kw" $title_kw "scalar") (serialize-qp "userId" $user_id "scalar") (serialize-qp "username" $username "scalar") (serialize-qp "token" $qp_token "scalar") (serialize-qp "photos" $photos "scalar") (serialize-qp "boostmine" $boostmine "scalar") (serialize-qp "include_cat" $include_cat "scalar") (serialize-qp "exclude_cat" $exclude_cat "scalar") (serialize-qp "include_primarycat" $include_primarycat "scalar") (serialize-qp "exclude_primarycat" $exclude_primarycat "scalar") (serialize-qp "include_ing" $include_ing "scalar") (serialize-qp "exclude_ing" $exclude_ing "scalar") (serialize-qp "cuisine" $cuisine "scalar") (serialize-qp "db" $db "scalar") (serialize-qp "userset" $userset "scalar") (serialize-qp "servingsMin" $servings_min "scalar") (serialize-qp "totalMins" $total_mins "scalar") (serialize-qp "maxIngredients" $max_ingredients "scalar") (serialize-qp "minIngredients" $min_ingredients "scalar") (serialize-qp "rpp" $rpp "scalar") (serialize-qp "pg" $pg "scalar") (serialize-qp "vtn" $vtn "scalar") (serialize-qp "vgn" $vgn "scalar") (serialize-qp "chs" $chs "scalar") (serialize-qp "glf" $glf "scalar") (serialize-qp "ntf" $ntf "scalar") (serialize-qp "dyf" $dyf "scalar") (serialize-qp "sff" $sff "scalar") (serialize-qp "slf" $slf "scalar") (serialize-qp "tnf" $tnf "scalar") (serialize-qp "wmf" $wmf "scalar") (serialize-qp "rmf" $rmf "scalar") (serialize-qp "cps" $cps "scalar") (serialize-qp "champion" $champion "scalar") (serialize-qp "synonyms" $synonyms "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/recipes" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get a random, home-page-quality Recipe.
 #
 # GET /recipes/random
 # operationId: Recipe_GetRandomRecipe
-export def "recipes-random GetRandomRecipe" [
+export def "recipes-random get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1877,6 +1950,7 @@ export def "recipes-random GetRandomRecipe" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<ActiveMinutes: int, AdTags: string, AdminBoost: int, AllCategoriesText: string, BookmarkImageURL: string, BookmarkSiteLogo: string, BookmarkURL: string, Category: string, Collection: string, CollectionID: int, CreationDate: string, Cuisine: string, Description: string, FavoriteCount: int, HeroPhotoUrl: string, ImageSquares: list<int>, ImageURL: string, Ingredients: table<DisplayIndex: int, DisplayQuantity: string, HTMLName: string, IngredientID: int, IngredientInfo: record, IsHeading: bool, IsLinked: bool, MetricDisplayQuantity: string, MetricQuantity: float, MetricUnit: string, Name: string, PreparationNotes: string, Quantity: float, Unit: string>, IngredientsTextBlock: string, Instructions: string, IsBookmark: bool, IsPrivate: bool, IsRecipeScan: bool, IsSponsored: bool, LastModified: string, MaxImageSquare: int, MedalCount: int, MenuCount: int, Microcategory: string, NotesCount: int, NutritionInfo: record<CaloriesFromFat: float, Cholesterol: float, CholesterolPct: float, DietaryFiber: float, DietaryFiberPct: float, MonoFat: float, PolyFat: float, Potassium: float, PotassiumPct: float, Protein: float, ProteinPct: float, SatFat: float, SatFatPct: float, SingularYieldUnit: string, Sodium: float, SodiumPct: float, Sugar: float, TotalCalories: float, TotalCarbs: float, TotalCarbsPct: float, TotalFat: float, TotalFatPct: float, TransFat: float>, Poster: record<FirstName: string, ImageUrl48: string, IsKitchenHelper: bool, IsPremium: bool, IsUsingRecurly: bool, LastName: string, MemberSince: string, PhotoUrl: string, PhotoUrl48: string, PremiumExpiryDate: string, UserID: int, UserName: string, WebUrl: string>, PrimaryIngredient: string, RecipeID: int, ReviewCount: int, StarRating: float, Subcategory: string, Title: string, TotalMinutes: int, VariantOfRecipeID: int, VerifiedByClass: string, VerifiedDateTime: string, WebURL: string, YieldNumber: float, YieldUnit: string> {
@@ -1885,14 +1959,14 @@ export def "recipes-random GetRandomRecipe" [
   let full_url = (build-url $base "/recipes/random")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get the recipe/comment tuples for those recipes with 4 or 5 star ratings
 #
 # GET /recipes/raves
 # operationId: Recipe_Raves
-export def "recipes-raves Raves" [
+export def "recipes-raves get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1900,6 +1974,7 @@ export def "recipes-raves Raves" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --pg: int # page, starting with 1 (format: int32)
@@ -1911,14 +1986,14 @@ export def "recipes-raves Raves" [
   let full_url = (build-url $base "/recipes/raves" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get a list of recipes that the authenticated user has most recently viewed
 #
 # GET /recipes/recentviews
 # operationId: Recipe_RecentViews
-export def "recipes-recentviews RecentViews" [
+export def "recipes-recentviews get-recent-views" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1926,6 +2001,7 @@ export def "recipes-recentviews RecentViews" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --pg: int # Page number starting with 1 (format: int32)
@@ -1937,14 +2013,14 @@ export def "recipes-recentviews RecentViews" [
   let full_url = (build-url $base "/recipes/recentviews" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
-# Search for recipes. There are many parameters that you can apply. Starting with the most common, use title_kw to search within a title.             Use any_kw to search across the entire recipe.             If you'd like to limit by course, set the parameter "include_primarycat" to one of (appetizers,bread,breakfast,dessert,drinks,maindish,salad,sidedish,soup,marinades,other).             If you'd like to exclude a category, set exclude_cat to one or more (comma-separated) list of those categories to exclude.             If you'd like to include a category, set include_cat to one or more (comma-separated) of those categories to include.             To explicitly include an ingredient in your search, set the parameter "include_ing" to a CSV of up to three ingredients, e.g.:include_ing=mustard,chicken,beef%20tips             To explicitly exclude an ingredient in your search, set the parameter "exclude_ing" to a CSV of up to three ingredients.             All searches must contain the paging parameters pg and rpp, which are integers, and represent the page number (1-based) and results per page (rpp).             So, to get the third page of a result set paged with 25 recipes per page, you'd pass pg=3&amp;rpp=25             If you'd like to target searches to just a single target user's recipes, set userId=the target userId (number).             Or, you can set username=theirusername             vtn;vgn;chs;glf;ntf;dyf;sff;slf;tnf;wmf;rmf;cps             cuisine             photos             filter=added,try,favorites,myrecipes\r\n\r\n             folder=FolderNameCaseSensitive             coll=ID of Collection
+# Search for recipes. There are many parameters that you can apply. Starting with the most common, use title_kw to search within a title. Use any_kw to search across the entire recipe. If you'd like to limit by course, set the parameter "include_primarycat" to one of (appetizers,bread,breakfast,dessert,drinks,maindish,salad,sidedish,soup,marinades,other). If you'd like to exclude a category, set exclude_cat to one or more (comma-separated) list of those categories to exclude. If you'd like to include a category, set include_cat to one or more (comma-separated) of those categories to include. To explicitly include an ingredient in your search, set the parameter "include_ing" to a CSV of up to three ingredients, e.g.:include_ing=mustard,chicken,beef%20tips To explicitly exclude an ingredient in your search, set the parameter "exclude_ing" to a CSV of up to three ingredients. All searches must contain the paging parameters pg and rpp, which are integers, and represent the page number (1-based) and results per page (rpp). So, to get the third page of a result set paged with 25 recipes per page, you'd pass pg=3&rpp=25 If you'd like to target searches to just a single target user's recipes, set userId=the target userId (number). Or, you can set username=theirusername vtn;vgn;chs;glf;ntf;dyf;sff;slf;tnf;wmf;rmf;cps cuisine photos filter=added,try,favorites,myrecipes\r\n\r\n folder=FolderNameCaseSensitive coll=ID of Collection
 #
 # GET /recipes/top25random
 # operationId: Recipe_RecipeSearchRandom
-export def "recipes-top25random RecipeSearchRandom" [
+export def "recipes-top25random list-random" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1952,6 +2028,7 @@ export def "recipes-top25random RecipeSearchRandom" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --any-kw: string # Search anywhere in the recipe for the keyword
@@ -1959,24 +2036,24 @@ export def "recipes-top25random RecipeSearchRandom" [
   --coll: int # Limit to a collection ID number (format: int32)
   --filter: string # optionally set to either "myrecipes", "try", "favorites","added" to filter to just the authenticated user's recipe set
   --title-kw: string # Search just in the recipe title for the keyword
-  --userId: int # Set the target userid to search their public recipes (format: int32)
+  --user-id: int # Set the target userid to search their public recipes (format: int32)
   --username: string # Set the target username to search their public recipes
   --qp-token: string
   --photos: oneof<nothing, bool> # if set to true, limit search results to photos only
   --boostmine: oneof<nothing, bool> # if set to true, boost my own recipes in my folders so they show up high in the list (at the expense of other sort orders)
-  --include-cat: string # integer of the subcategory you'd like to limit searches to (see the /recipe/categories endpoint for available id numbers). For instance, 58 is "Main Dish &gt; Casseroles".
+  --include-cat: string # integer of the subcategory you'd like to limit searches to (see the /recipe/categories endpoint for available id numbers). For instance, 58 is "Main Dish > Casseroles".
   --exclude-cat: string # like include_cat, set this to an integer to exclude a specific category
   --include-primarycat: string # csv indicating up to three top-level categories -- valid values are [appetizers,bread,breakfast,desserts,drinks,maindish,salads,sidedish,soups,marinades,other]
   --exclude-primarycat: string # csv indicating integer values for up to 3 top-level categories -- valid values are 1...11 [appetizers,bread,breakfast,desserts,drinks,maindish,salads,sidedish,soups,marinades,other]
   --include-ing: string # A CSV representing up to 3 ingredients to include, e.g., tomatoes,corn%20%starch,chicken
-  --exclude-ing: string # A CSV representing up to 3 ingredients to exclude  (Powersearch-capable plan required)
+  --exclude-ing: string # A CSV representing up to 3 ingredients to exclude (Powersearch-capable plan required)
   --cuisine: string # Limit to a specific cuisine. Cooks can enter anything free-form, but the few dozen preconfigured values are Afghan,African,American,American-South,Asian,Australian,Brazilian,Cajun,Canadian,Caribbean,Chinese,Croatian,Cuban,Dessert,Eastern European,English,French,German,Greek,Hawaiian,Hungarian,India,Indian,Irish,Italian,Japanese,Jewish,Korean,Latin,Mediterranean,Mexican,Middle Eastern,Moroccan,Polish,Russian,Scandanavian,Seafood,Southern,Southwestern,Spanish,Tex-Mex,Thai,Vegan,Vegetarian,Vietnamese
   --db: string
   --userset: string # If set to a given username, it'll force the search to filter to just that username
-  --servingsMin: float # Limit to yield of a given number size or greater. Note that cooks usually enter recipes by Servings, but sometimes they are posted by "dozen", etc. This parameter simply specifies the minimum number for that value entered in "yield." (format: double)
-  --totalMins: int # Optional. If supplied, will restrict results to recipes that can be made in {totalMins} or less. (Convert "1 hour, 15 minutes" to 75 before passing in.) (format: int32)
-  --maxIngredients: int # Optional. If supplied, will restrict results to recipes that can be made with {maxIngredients} ingredients or less (format: int32)
-  --minIngredients: int # Optional. If supplied, will restrict results to recipes that have at least {minIngredients} (format: int32)
+  --servings-min: float # Limit to yield of a given number size or greater. Note that cooks usually enter recipes by Servings, but sometimes they are posted by "dozen", etc. This parameter simply specifies the minimum number for that value entered in "yield." (format: double)
+  --total-mins: int # Optional. If supplied, will restrict results to recipes that can be made in {totalMins} or less. (Convert "1 hour, 15 minutes" to 75 before passing in.) (format: int32)
+  --max-ingredients: int # Optional. If supplied, will restrict results to recipes that can be made with {maxIngredients} ingredients or less (format: int32)
+  --min-ingredients: int # Optional. If supplied, will restrict results to recipes that have at least {minIngredients} (format: int32)
   --vtn: int # when set to 1, limit to vegetarian (Powersearch-capable plan required) (format: int32)
   --vgn: int # when set to 1, limit to vegan (Powersearch-capable plan required) (format: int32)
   --chs: int # when set to 1, limit to contains-cheese (Powersearch-capable plan required) (format: int32)
@@ -1994,18 +2071,18 @@ export def "recipes-top25random RecipeSearchRandom" [
 ]: nothing -> record<ResultCount: int, Results: table<Category: string, CreationDate: string, Cuisine: string, HasVideos: bool, IsBookmark: bool, IsPrivate: bool, IsRecipeScan: bool, Microcategory: string, PhotoUrl: string, Poster: record, RecipeID: int, ReviewCount: int, Servings: float, StarRating: float, Subcategory: string, Title: string, TotalTries: int, WebURL: string>, SpellSuggest: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-bigoven-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "any_kw" $any_kw "scalar") (serialize-qp "folder" $folder "scalar") (serialize-qp "coll" $coll "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "title_kw" $title_kw "scalar") (serialize-qp "userId" $userId "scalar") (serialize-qp "username" $username "scalar") (serialize-qp "token" $qp_token "scalar") (serialize-qp "photos" $photos "scalar") (serialize-qp "boostmine" $boostmine "scalar") (serialize-qp "include_cat" $include_cat "scalar") (serialize-qp "exclude_cat" $exclude_cat "scalar") (serialize-qp "include_primarycat" $include_primarycat "scalar") (serialize-qp "exclude_primarycat" $exclude_primarycat "scalar") (serialize-qp "include_ing" $include_ing "scalar") (serialize-qp "exclude_ing" $exclude_ing "scalar") (serialize-qp "cuisine" $cuisine "scalar") (serialize-qp "db" $db "scalar") (serialize-qp "userset" $userset "scalar") (serialize-qp "servingsMin" $servingsMin "scalar") (serialize-qp "totalMins" $totalMins "scalar") (serialize-qp "maxIngredients" $maxIngredients "scalar") (serialize-qp "minIngredients" $minIngredients "scalar") (serialize-qp "vtn" $vtn "scalar") (serialize-qp "vgn" $vgn "scalar") (serialize-qp "chs" $chs "scalar") (serialize-qp "glf" $glf "scalar") (serialize-qp "ntf" $ntf "scalar") (serialize-qp "dyf" $dyf "scalar") (serialize-qp "sff" $sff "scalar") (serialize-qp "slf" $slf "scalar") (serialize-qp "tnf" $tnf "scalar") (serialize-qp "wmf" $wmf "scalar") (serialize-qp "rmf" $rmf "scalar") (serialize-qp "cps" $cps "scalar") (serialize-qp "champion" $champion "scalar") (serialize-qp "synonyms" $synonyms "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "any_kw" $any_kw "scalar") (serialize-qp "folder" $folder "scalar") (serialize-qp "coll" $coll "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "title_kw" $title_kw "scalar") (serialize-qp "userId" $user_id "scalar") (serialize-qp "username" $username "scalar") (serialize-qp "token" $qp_token "scalar") (serialize-qp "photos" $photos "scalar") (serialize-qp "boostmine" $boostmine "scalar") (serialize-qp "include_cat" $include_cat "scalar") (serialize-qp "exclude_cat" $exclude_cat "scalar") (serialize-qp "include_primarycat" $include_primarycat "scalar") (serialize-qp "exclude_primarycat" $exclude_primarycat "scalar") (serialize-qp "include_ing" $include_ing "scalar") (serialize-qp "exclude_ing" $exclude_ing "scalar") (serialize-qp "cuisine" $cuisine "scalar") (serialize-qp "db" $db "scalar") (serialize-qp "userset" $userset "scalar") (serialize-qp "servingsMin" $servings_min "scalar") (serialize-qp "totalMins" $total_mins "scalar") (serialize-qp "maxIngredients" $max_ingredients "scalar") (serialize-qp "minIngredients" $min_ingredients "scalar") (serialize-qp "vtn" $vtn "scalar") (serialize-qp "vgn" $vgn "scalar") (serialize-qp "chs" $chs "scalar") (serialize-qp "glf" $glf "scalar") (serialize-qp "ntf" $ntf "scalar") (serialize-qp "dyf" $dyf "scalar") (serialize-qp "sff" $sff "scalar") (serialize-qp "slf" $slf "scalar") (serialize-qp "tnf" $tnf "scalar") (serialize-qp "wmf" $wmf "scalar") (serialize-qp "rmf" $rmf "scalar") (serialize-qp "cps" $cps "scalar") (serialize-qp "champion" $champion "scalar") (serialize-qp "synonyms" $synonyms "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/recipes/top25random" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Same as GET recipe but also includes the recipe videos (if any)
 #
 # GET /recipes/{id}
 # operationId: Recipe_GetV2
-export def "recipes GetV2" [
+export def "recipes get" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2014,6 +2091,7 @@ export def "recipes GetV2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --prefetch: oneof<nothing, bool> # The prefetch.
@@ -2021,8 +2099,8 @@ export def "recipes GetV2" [
   let auth = (build-auth $token ($auth_scheme | default "x-bigoven-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "prefetch" $prefetch "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/recipes/($id)" $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/recipes/{id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }

@@ -17,21 +17,32 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 }
 
 # Serialize a single query parameter based on collection style
+# Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
+# ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = ($name | url encode)
+  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
-  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
-    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
-    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
+    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
+    _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
+}
+
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Build URL from base, path, and optional query string
@@ -43,7 +54,7 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
@@ -52,13 +63,13 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
     "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "put" => { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "patch" => { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
   if ($method in ["head" "options"]) { return $resp }
-  if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
+  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
 def base-url-completer [] { ["http://localhost/v1"] }
@@ -67,8 +78,8 @@ def auth-scheme-completer [] { ["bearer"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "domains-search item" } } | get name | first)
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "domains-search get-item" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -92,7 +103,7 @@ export def commands []: nothing -> table {
 #
 # GET /domains/search
 # operationId: get_search_domain_item
-export def "domains-search item" [
+export def "domains-search get-item" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -100,6 +111,7 @@ export def "domains-search item" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # API key
   --date: string # Request date
@@ -108,27 +120,27 @@ export def "domains-search item" [
   --domain: string # Domain includes
   --zone: string # In Zone
   --country: string # Hosting Country
-  --isDead: oneof<nothing, bool> # Dead or Not, default not
-  --A: string # A record includes
-  --NS: string # NS record includes
-  --CNAME: string # CNAME record includes
-  --MX: string # MX record includes
-  --TXT: string # TXT record includes
+  --is-dead: oneof<nothing, bool> # Dead or Not, default not
+  --a: string # A record includes
+  --ns: string # NS record includes
+  --cname: string # CNAME record includes
+  --mx: string # MX record includes
+  --txt: string # TXT record includes
 ]: nothing -> record<next_page: string, time: string, total: int, domains: table<A: list, CNAME: list, MX: list, NS: list, TXT: list, country: string, create_date: string, domain: string, isDead: string, update_date: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "date" $date "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "domain" $domain "scalar") (serialize-qp "zone" $zone "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "isDead" $isDead "scalar") (serialize-qp "A" $A "scalar") (serialize-qp "NS" $NS "scalar") (serialize-qp "CNAME" $CNAME "scalar") (serialize-qp "MX" $MX "scalar") (serialize-qp "TXT" $TXT "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "date" $date "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "domain" $domain "scalar") (serialize-qp "zone" $zone "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "isDead" $is_dead "scalar") (serialize-qp "A" $a "scalar") (serialize-qp "NS" $ns "scalar") (serialize-qp "CNAME" $cname "scalar") (serialize-qp "MX" $mx "scalar") (serialize-qp "TXT" $txt "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/domains/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get TLD records
 #
 # GET /domains/tld/{zone_id}
 # operationId: get_tld_domain_item
-export def "domains-tld item" [
+export def "domains-tld get-item" [
   zone_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -137,6 +149,7 @@ export def "domains-tld item" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # API key
   --date: string # Request date
@@ -144,20 +157,20 @@ export def "domains-tld item" [
   --limit: int # Results per page (default: 50)
   --domain: string # Domain includes
   --country: string # Hosting Country
-  --isDead: oneof<nothing, bool> # Dead or Not, default not
-  --A: string # A record includes
-  --NS: string # NS record includes
-  --CNAME: string # CNAME record includes
-  --MX: string # MX record includes
-  --TXT: string # TXT record includes
+  --is-dead: oneof<nothing, bool> # Dead or Not, default not
+  --a: string # A record includes
+  --ns: string # NS record includes
+  --cname: string # CNAME record includes
+  --mx: string # MX record includes
+  --txt: string # TXT record includes
 ]: nothing -> record<next_page: string, time: string, total: int, domains: table<A: list, CNAME: list, MX: list, NS: list, TXT: list, country: string, create_date: string, domain: string, isDead: string, update_date: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "date" $date "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "domain" $domain "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "isDead" $isDead "scalar") (serialize-qp "A" $A "scalar") (serialize-qp "NS" $NS "scalar") (serialize-qp "CNAME" $CNAME "scalar") (serialize-qp "MX" $MX "scalar") (serialize-qp "TXT" $TXT "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/domains/tld/($zone_id)" $qp)
+  let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "date" $date "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "domain" $domain "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "isDead" $is_dead "scalar") (serialize-qp "A" $a "scalar") (serialize-qp "NS" $ns "scalar") (serialize-qp "CNAME" $cname "scalar") (serialize-qp "MX" $mx "scalar") (serialize-qp "TXT" $txt "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({zone_id: (encode-path-segment $zone_id)} | format pattern "/domains/tld/{zone_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Download Whole Dataset for TLD
@@ -172,6 +185,7 @@ export def "domains-tld-download get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # API key
   --date: string # Request date
@@ -179,10 +193,10 @@ export def "domains-tld-download get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "date" $date "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/domains/tld/($zone_id)/download" $qp)
+  let full_url = (build-url $base ({zone_id: (encode-path-segment $zone_id)} | format pattern "/domains/tld/{zone_id}/download") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Domains Search for TLD
@@ -197,6 +211,7 @@ export def "domains-tld-search get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # API key
   --date: string # Request date
@@ -204,20 +219,20 @@ export def "domains-tld-search get" [
   --limit: int # Results per page (default: 50)
   --domain: string # Domain includes
   --country: string # Hosting Country
-  --isDead: oneof<nothing, bool> # Dead or Not, default not
-  --A: string # A record includes
-  --NS: string # NS record includes
-  --CNAME: string # CNAME record includes
-  --MX: string # MX record includes
-  --TXT: string # TXT record includes
+  --is-dead: oneof<nothing, bool> # Dead or Not, default not
+  --a: string # A record includes
+  --ns: string # NS record includes
+  --cname: string # CNAME record includes
+  --mx: string # MX record includes
+  --txt: string # TXT record includes
 ]: nothing -> record<next_page: string, time: string, total: int, domains: table<A: list, CNAME: list, MX: list, NS: list, TXT: list, country: string, create_date: string, domain: string, isDead: string, update_date: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "date" $date "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "domain" $domain "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "isDead" $isDead "scalar") (serialize-qp "A" $A "scalar") (serialize-qp "NS" $NS "scalar") (serialize-qp "CNAME" $CNAME "scalar") (serialize-qp "MX" $MX "scalar") (serialize-qp "TXT" $TXT "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/domains/tld/($zone_id)/search" $qp)
+  let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "date" $date "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "domain" $domain "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "isDead" $is_dead "scalar") (serialize-qp "A" $a "scalar") (serialize-qp "NS" $ns "scalar") (serialize-qp "CNAME" $cname "scalar") (serialize-qp "MX" $mx "scalar") (serialize-qp "TXT" $txt "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({zone_id: (encode-path-segment $zone_id)} | format pattern "/domains/tld/{zone_id}/search") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get added domains, latest if date not specified
@@ -231,6 +246,7 @@ export def "domains-updates-added get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # API key
   --date: string # Request date
@@ -243,7 +259,7 @@ export def "domains-updates-added get" [
   let full_url = (build-url $base "/domains/updates/added" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Download added domains, latest if date not specified
@@ -257,6 +273,7 @@ export def "domains-updates-added-download get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # API key
   --date: string # Request date
@@ -267,7 +284,7 @@ export def "domains-updates-added-download get" [
   let full_url = (build-url $base "/domains/updates/added/download" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get deleted domains, latest if date not specified
@@ -281,6 +298,7 @@ export def "domains-updates-deleted get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # API key
   --date: string # Request date
@@ -293,7 +311,7 @@ export def "domains-updates-deleted get" [
   let full_url = (build-url $base "/domains/updates/deleted" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Download deleted domains, latest if date not specified
@@ -307,6 +325,7 @@ export def "domains-updates-deleted-download get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # API key
   --date: string # Request date
@@ -317,7 +336,7 @@ export def "domains-updates-deleted-download get" [
   let full_url = (build-url $base "/domains/updates/deleted/download" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # List of updates
@@ -331,6 +350,7 @@ export def "domains-updates-list get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # API key
 ]: nothing -> record<added: string, added_download: string, date: string, deleted: string, deleted_download: string> {
@@ -340,13 +360,13 @@ export def "domains-updates-list get" [
   let full_url = (build-url $base "/domains/updates/list" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # GET /info/api
 #
 # operationId: get_api_info_item
-export def "info item" [
+export def "info get-item" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -354,6 +374,7 @@ export def "info item" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # API key
 ]: nothing -> record<customer_email: string, customer_name: string, expires: string, item_id: string, item_name: string, license: string, license_limit: string, price_id: string, success: string> {
@@ -363,14 +384,14 @@ export def "info item" [
   let full_url = (build-url $base "/info/api" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Returns overall stagtistics
 #
 # GET /info/stat/
 # operationId: get_statistics_collection
-export def "info-stat collection" [
+export def "info-stat get-statistics-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -378,6 +399,7 @@ export def "info-stat collection" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: string # Search page to request
   --limit: int # Results per page (default: 50)
@@ -388,14 +410,14 @@ export def "info-stat collection" [
   let full_url = (build-url $base "/info/stat/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Returns statistics for specific zone
 #
 # GET /info/stat/{zone}
 # operationId: get_statistics_item
-export def "info-stat item" [
+export def "info-stat get-statistics-item" [
   zone: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -404,6 +426,7 @@ export def "info-stat item" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: string # Search page to request
   --limit: int # Results per page (default: 50)
@@ -411,10 +434,10 @@ export def "info-stat item" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/info/stat/($zone)" $qp)
+  let full_url = (build-url $base ({zone: (encode-path-segment $zone)} | format pattern "/info/stat/{zone}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Returns overall Tld info
@@ -428,6 +451,7 @@ export def "info-tld list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<description: list<string>, in_bundles: list<string>, includes: list<string>, type: string, zone: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -435,7 +459,7 @@ export def "info-tld list" [
   let full_url = (build-url $base "/info/tld/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Returns statistics for specific zone
@@ -450,6 +474,7 @@ export def "info-tld get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: string # Search page to request
   --limit: int # Results per page (default: 50)
@@ -457,8 +482,8 @@ export def "info-tld get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/info/tld/($zone)" $qp)
+  let full_url = (build-url $base ({zone: (encode-path-segment $zone)} | format pattern "/info/tld/{zone}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }

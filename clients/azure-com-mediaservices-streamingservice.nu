@@ -18,21 +18,32 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 }
 
 # Serialize a single query parameter based on collection style
+# Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
+# ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = ($name | url encode)
+  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
-  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
-    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
-    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
+    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
+    _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
+}
+
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Build URL from base, path, and optional query string
@@ -44,7 +55,7 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
@@ -53,13 +64,13 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
     "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "put" => { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "patch" => { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
   if ($method in ["head" "options"]) { return $resp }
-  if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
+  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
 def base-url-completer [] { ["https://management.azure.com"] }
@@ -68,8 +79,8 @@ def auth-scheme-completer [] { ["bearer"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-media-mediaservices-live-events List" } } | get name | first)
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-media-mediaservices-live-events list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -93,10 +104,10 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Media/mediaservices/{accountName}/liveEvents
 # operationId: LiveEvents_List
-export def "subscriptions-resource-groups-providers-microsoft-media-mediaservices-live-events List" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
+export def "subscriptions-resource-groups-providers-microsoft-media-mediaservices-live-events list" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -104,27 +115,28 @@ export def "subscriptions-resource-groups-providers-microsoft-media-mediaservice
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The Version of the API to be used with the client request.
 ]: nothing -> record<_odata_count: int, _odata_nextLink: string, value: table<properties: record, location: string, tags: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Media/mediaservices/($accountName)/liveEvents" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Media/mediaservices/{account_name}/liveEvents") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Delete Live Event
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Media/mediaservices/{accountName}/liveEvents/{liveEventName}
 # operationId: LiveEvents_Delete
-export def "subscriptions-resource-groups-providers-microsoft-media-mediaservices-live-events Delete" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  liveEventName: string
+export def "subscriptions-resource-groups-providers-microsoft-media-mediaservices-live-events delete" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  live_event_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -132,27 +144,28 @@ export def "subscriptions-resource-groups-providers-microsoft-media-mediaservice
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The Version of the API to be used with the client request.
 ]: nothing -> record<error: record<code: string, details: list<any>, message: string, target: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Media/mediaservices/($accountName)/liveEvents/($liveEventName)" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name), live_event_name: (encode-path-segment $live_event_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Media/mediaservices/{account_name}/liveEvents/{live_event_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get Live Event
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Media/mediaservices/{accountName}/liveEvents/{liveEventName}
 # operationId: LiveEvents_Get
-export def "subscriptions-resource-groups-providers-microsoft-media-mediaservices-live-events Get" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  liveEventName: string
+export def "subscriptions-resource-groups-providers-microsoft-media-mediaservices-live-events get" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  live_event_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -160,28 +173,29 @@ export def "subscriptions-resource-groups-providers-microsoft-media-mediaservice
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The Version of the API to be used with the client request.
 ]: nothing -> record<properties: record<created: string, crossSiteAccessPolicies: record<clientAccessPolicy: string, crossDomainPolicy: string>, description: string, encoding: record<encodingType: string, presetName: string>, input: record<accessControl: record, accessToken: string, endpoints: list, keyFrameIntervalDuration: string, streamingProtocol: string>, lastModified: string, preview: record<accessControl: record, alternativeMediaId: string, endpoints: list, previewLocator: string, streamingPolicyName: string>, provisioningState: string, resourceState: string, streamOptions: list<string>, transcriptions: list<record>, vanityUrl: bool>, location: string, tags: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Media/mediaservices/($accountName)/liveEvents/($liveEventName)" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name), live_event_name: (encode-path-segment $live_event_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Media/mediaservices/{account_name}/liveEvents/{live_event_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Updates a existing Live Event.
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Media/mediaservices/{accountName}/liveEvents/{liveEventName}
 # operationId: LiveEvents_Update
-# --properties shape: {crossSiteAccessPolicies?: any, description?: string, encoding?: any, input: any, preview?: any, streamOptions?: list, transcriptions?: list, vanityUrl?: bool}
-export def "subscriptions-resource-groups-providers-microsoft-media-mediaservices-live-events Update" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  liveEventName: string
+# --properties shape: {crossSiteAccessPolicies?: any, description?: string, encoding?: any, input: any, preview?: any, streamOptions?: list<string>, transcriptions?: list, vanityUrl?: bool}
+export def "subscriptions-resource-groups-providers-microsoft-media-mediaservices-live-events update" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  live_event_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -189,9 +203,10 @@ export def "subscriptions-resource-groups-providers-microsoft-media-mediaservice
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The Version of the API to be used with the client request.
-  --properties: any # The Live Event properties. — shape: {crossSiteAccessPolicies?: any, description?: string, encoding?: any, input: any, preview?: any, streamOptions?: list, transcriptions?: list, vanityUrl?: bool}
+  --properties: any # The Live Event properties. — shape: {crossSiteAccessPolicies?: any, description?: string, encoding?: any, input: any, preview?: any, streamOptions?: list<string>, transcriptions?: list, vanityUrl?: bool}
   --location: string # The Azure Region of the resource.
   --tags: record # Resource tags.
 ]: any -> record<properties: record<created: string, crossSiteAccessPolicies: record<clientAccessPolicy: string, crossDomainPolicy: string>, description: string, encoding: record<encodingType: string, presetName: string>, input: record<accessControl: record, accessToken: string, endpoints: list, keyFrameIntervalDuration: string, streamingProtocol: string>, lastModified: string, preview: record<accessControl: record, alternativeMediaId: string, endpoints: list, previewLocator: string, streamingPolicyName: string>, provisioningState: string, resourceState: string, streamOptions: list<string>, transcriptions: list<record>, vanityUrl: bool>, location: string, tags: record> {
@@ -199,24 +214,24 @@ export def "subscriptions-resource-groups-providers-microsoft-media-mediaservice
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Media/mediaservices/($accountName)/liveEvents/($liveEventName)" $qp)
-  let body = {properties: $properties, location: $location, tags: $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name), live_event_name: (encode-path-segment $live_event_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Media/mediaservices/{account_name}/liveEvents/{live_event_name}") $qp)
+  let req_body = {"properties": $properties, "location": $location, "tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Create Live Event
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Media/mediaservices/{accountName}/liveEvents/{liveEventName}
 # operationId: LiveEvents_Create
-# --properties shape: {crossSiteAccessPolicies?: any, description?: string, encoding?: any, input: any, preview?: any, streamOptions?: list, transcriptions?: list, vanityUrl?: bool}
-export def "subscriptions-resource-groups-providers-microsoft-media-mediaservices-live-events Create" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  liveEventName: string
+# --properties shape: {crossSiteAccessPolicies?: any, description?: string, encoding?: any, input: any, preview?: any, streamOptions?: list<string>, transcriptions?: list, vanityUrl?: bool}
+export def "subscriptions-resource-groups-providers-microsoft-media-mediaservices-live-events create" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  live_event_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -224,34 +239,35 @@ export def "subscriptions-resource-groups-providers-microsoft-media-mediaservice
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The Version of the API to be used with the client request.
-  --autoStart: oneof<nothing, bool> # The flag indicates if the resource should be automatically started on creation.
-  --properties: any # The Live Event properties. — shape: {crossSiteAccessPolicies?: any, description?: string, encoding?: any, input: any, preview?: any, streamOptions?: list, transcriptions?: list, vanityUrl?: bool}
+  --auto-start: oneof<nothing, bool> # The flag indicates if the resource should be automatically started on creation.
+  --properties: any # The Live Event properties. — shape: {crossSiteAccessPolicies?: any, description?: string, encoding?: any, input: any, preview?: any, streamOptions?: list<string>, transcriptions?: list, vanityUrl?: bool}
   --location: string # The Azure Region of the resource.
   --tags: record # Resource tags.
 ]: any -> record<properties: record<created: string, crossSiteAccessPolicies: record<clientAccessPolicy: string, crossDomainPolicy: string>, description: string, encoding: record<encodingType: string, presetName: string>, input: record<accessControl: record, accessToken: string, endpoints: list, keyFrameIntervalDuration: string, streamingProtocol: string>, lastModified: string, preview: record<accessControl: record, alternativeMediaId: string, endpoints: list, previewLocator: string, streamingPolicyName: string>, provisioningState: string, resourceState: string, streamOptions: list<string>, transcriptions: list<record>, vanityUrl: bool>, location: string, tags: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "autoStart" $autoStart "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Media/mediaservices/($accountName)/liveEvents/($liveEventName)" $qp)
-  let body = {properties: $properties, location: $location, tags: $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "autoStart" $auto_start "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name), live_event_name: (encode-path-segment $live_event_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Media/mediaservices/{account_name}/liveEvents/{live_event_name}") $qp)
+  let req_body = {"properties": $properties, "location": $location, "tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # List Live Outputs
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Media/mediaservices/{accountName}/liveEvents/{liveEventName}/liveOutputs
 # operationId: LiveOutputs_List
-export def "subscriptions-resource-groups-providers-microsoft-media-mediaservices-live-events-live-outputs List" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  liveEventName: string
+export def "subscriptions-resource-groups-providers-microsoft-media-mediaservices-live-events-live-outputs list" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  live_event_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -259,28 +275,29 @@ export def "subscriptions-resource-groups-providers-microsoft-media-mediaservice
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The Version of the API to be used with the client request.
 ]: nothing -> record<_odata_count: int, _odata_nextLink: string, value: table<properties: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Media/mediaservices/($accountName)/liveEvents/($liveEventName)/liveOutputs" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name), live_event_name: (encode-path-segment $live_event_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Media/mediaservices/{account_name}/liveEvents/{live_event_name}/liveOutputs") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Delete Live Output
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Media/mediaservices/{accountName}/liveEvents/{liveEventName}/liveOutputs/{liveOutputName}
 # operationId: LiveOutputs_Delete
-export def "subscriptions-resource-groups-providers-microsoft-media-mediaservices-live-events-live-outputs Delete" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  liveEventName: string
-  liveOutputName: string
+export def "subscriptions-resource-groups-providers-microsoft-media-mediaservices-live-events-live-outputs delete" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  live_event_name: string
+  live_output_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -288,28 +305,29 @@ export def "subscriptions-resource-groups-providers-microsoft-media-mediaservice
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The Version of the API to be used with the client request.
 ]: nothing -> record<error: record<code: string, details: list<any>, message: string, target: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Media/mediaservices/($accountName)/liveEvents/($liveEventName)/liveOutputs/($liveOutputName)" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name), live_event_name: (encode-path-segment $live_event_name), live_output_name: (encode-path-segment $live_output_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Media/mediaservices/{account_name}/liveEvents/{live_event_name}/liveOutputs/{live_output_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get Live Output
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Media/mediaservices/{accountName}/liveEvents/{liveEventName}/liveOutputs/{liveOutputName}
 # operationId: LiveOutputs_Get
-export def "subscriptions-resource-groups-providers-microsoft-media-mediaservices-live-events-live-outputs Get" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  liveEventName: string
-  liveOutputName: string
+export def "subscriptions-resource-groups-providers-microsoft-media-mediaservices-live-events-live-outputs get" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  live_event_name: string
+  live_output_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -317,16 +335,17 @@ export def "subscriptions-resource-groups-providers-microsoft-media-mediaservice
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The Version of the API to be used with the client request.
 ]: nothing -> record<properties: record<archiveWindowLength: string, assetName: string, created: string, description: string, hls: record<fragmentsPerTsSegment: int>, lastModified: string, manifestName: string, outputSnapTime: int, provisioningState: string, resourceState: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Media/mediaservices/($accountName)/liveEvents/($liveEventName)/liveOutputs/($liveOutputName)" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name), live_event_name: (encode-path-segment $live_event_name), live_output_name: (encode-path-segment $live_output_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Media/mediaservices/{account_name}/liveEvents/{live_event_name}/liveOutputs/{live_output_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Create Live Output
@@ -334,12 +353,12 @@ export def "subscriptions-resource-groups-providers-microsoft-media-mediaservice
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Media/mediaservices/{accountName}/liveEvents/{liveEventName}/liveOutputs/{liveOutputName}
 # operationId: LiveOutputs_Create
 # --properties shape: {archiveWindowLength: string, assetName: string, description?: string, hls?: any, manifestName?: string, outputSnapTime?: int}
-export def "subscriptions-resource-groups-providers-microsoft-media-mediaservices-live-events-live-outputs Create" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  liveEventName: string
-  liveOutputName: string
+export def "subscriptions-resource-groups-providers-microsoft-media-mediaservices-live-events-live-outputs create" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  live_event_name: string
+  live_output_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -347,6 +366,7 @@ export def "subscriptions-resource-groups-providers-microsoft-media-mediaservice
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The Version of the API to be used with the client request.
   --properties: any # The JSON object that contains the properties required to create a Live Output. — shape: {archiveWindowLength: string, assetName: string, description?: string, hls?: any, manifestName?: string, outputSnapTime?: int}
@@ -355,23 +375,23 @@ export def "subscriptions-resource-groups-providers-microsoft-media-mediaservice
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Media/mediaservices/($accountName)/liveEvents/($liveEventName)/liveOutputs/($liveOutputName)" $qp)
-  let body = {properties: $properties} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name), live_event_name: (encode-path-segment $live_event_name), live_output_name: (encode-path-segment $live_output_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Media/mediaservices/{account_name}/liveEvents/{live_event_name}/liveOutputs/{live_output_name}") $qp)
+  let req_body = {"properties": $properties} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Reset Live Event
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Media/mediaservices/{accountName}/liveEvents/{liveEventName}/reset
 # operationId: LiveEvents_Reset
-export def "subscriptions-resource-groups-providers-microsoft-media-mediaservices-live-events-reset Reset" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  liveEventName: string
+export def "subscriptions-resource-groups-providers-microsoft-media-mediaservices-live-events-reset reset" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  live_event_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -379,27 +399,28 @@ export def "subscriptions-resource-groups-providers-microsoft-media-mediaservice
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The Version of the API to be used with the client request.
 ]: nothing -> record<error: record<code: string, details: list<any>, message: string, target: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Media/mediaservices/($accountName)/liveEvents/($liveEventName)/reset" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name), live_event_name: (encode-path-segment $live_event_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Media/mediaservices/{account_name}/liveEvents/{live_event_name}/reset") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Start Live Event
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Media/mediaservices/{accountName}/liveEvents/{liveEventName}/start
 # operationId: LiveEvents_Start
-export def "subscriptions-resource-groups-providers-microsoft-media-mediaservices-live-events-start Start" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  liveEventName: string
+export def "subscriptions-resource-groups-providers-microsoft-media-mediaservices-live-events-start start" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  live_event_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -407,27 +428,28 @@ export def "subscriptions-resource-groups-providers-microsoft-media-mediaservice
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The Version of the API to be used with the client request.
 ]: nothing -> record<error: record<code: string, details: list<any>, message: string, target: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Media/mediaservices/($accountName)/liveEvents/($liveEventName)/start" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name), live_event_name: (encode-path-segment $live_event_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Media/mediaservices/{account_name}/liveEvents/{live_event_name}/start") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Stop Live Event
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Media/mediaservices/{accountName}/liveEvents/{liveEventName}/stop
 # operationId: LiveEvents_Stop
-export def "subscriptions-resource-groups-providers-microsoft-media-mediaservices-live-events-stop Stop" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  liveEventName: string
+export def "subscriptions-resource-groups-providers-microsoft-media-mediaservices-live-events-stop stop" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  live_event_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -435,30 +457,31 @@ export def "subscriptions-resource-groups-providers-microsoft-media-mediaservice
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The Version of the API to be used with the client request.
-  --removeOutputsOnStop: oneof<nothing, bool> # The flag indicates if remove LiveOutputs on Stop.
+  --remove-outputs-on-stop: oneof<nothing, bool> # The flag indicates if remove LiveOutputs on Stop.
 ]: any -> record<error: record<code: string, details: list<any>, message: string, target: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Media/mediaservices/($accountName)/liveEvents/($liveEventName)/stop" $qp)
-  let body = {removeOutputsOnStop: $removeOutputsOnStop} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name), live_event_name: (encode-path-segment $live_event_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Media/mediaservices/{account_name}/liveEvents/{live_event_name}/stop") $qp)
+  let req_body = {"removeOutputsOnStop": $remove_outputs_on_stop} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # List StreamingEndpoints
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Media/mediaservices/{accountName}/streamingEndpoints
 # operationId: StreamingEndpoints_List
-export def "subscriptions-resource-groups-providers-microsoft-media-mediaservices-streaming-endpoints List" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
+export def "subscriptions-resource-groups-providers-microsoft-media-mediaservices-streaming-endpoints list" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -466,27 +489,28 @@ export def "subscriptions-resource-groups-providers-microsoft-media-mediaservice
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The Version of the API to be used with the client request.
 ]: nothing -> record<_odata_count: int, _odata_nextLink: string, value: table<properties: record, location: string, tags: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Media/mediaservices/($accountName)/streamingEndpoints" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Media/mediaservices/{account_name}/streamingEndpoints") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Delete StreamingEndpoint
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Media/mediaservices/{accountName}/streamingEndpoints/{streamingEndpointName}
 # operationId: StreamingEndpoints_Delete
-export def "subscriptions-resource-groups-providers-microsoft-media-mediaservices-streaming-endpoints Delete" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  streamingEndpointName: string
+export def "subscriptions-resource-groups-providers-microsoft-media-mediaservices-streaming-endpoints delete" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  streaming_endpoint_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -494,27 +518,28 @@ export def "subscriptions-resource-groups-providers-microsoft-media-mediaservice
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The Version of the API to be used with the client request.
 ]: nothing -> record<error: record<code: string, details: list<any>, message: string, target: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Media/mediaservices/($accountName)/streamingEndpoints/($streamingEndpointName)" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name), streaming_endpoint_name: (encode-path-segment $streaming_endpoint_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Media/mediaservices/{account_name}/streamingEndpoints/{streaming_endpoint_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get StreamingEndpoint
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Media/mediaservices/{accountName}/streamingEndpoints/{streamingEndpointName}
 # operationId: StreamingEndpoints_Get
-export def "subscriptions-resource-groups-providers-microsoft-media-mediaservices-streaming-endpoints Get" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  streamingEndpointName: string
+export def "subscriptions-resource-groups-providers-microsoft-media-mediaservices-streaming-endpoints get" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  streaming_endpoint_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -522,28 +547,29 @@ export def "subscriptions-resource-groups-providers-microsoft-media-mediaservice
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The Version of the API to be used with the client request.
 ]: nothing -> record<properties: record<accessControl: record<akamai: record, ip: record>, availabilitySetName: string, cdnEnabled: bool, cdnProfile: string, cdnProvider: string, created: string, crossSiteAccessPolicies: record<clientAccessPolicy: string, crossDomainPolicy: string>, customHostNames: list<string>, description: string, freeTrialEndTime: string, hostName: string, lastModified: string, maxCacheAge: int, provisioningState: string, resourceState: string, scaleUnits: int>, location: string, tags: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Media/mediaservices/($accountName)/streamingEndpoints/($streamingEndpointName)" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name), streaming_endpoint_name: (encode-path-segment $streaming_endpoint_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Media/mediaservices/{account_name}/streamingEndpoints/{streaming_endpoint_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Update StreamingEndpoint
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Media/mediaservices/{accountName}/streamingEndpoints/{streamingEndpointName}
 # operationId: StreamingEndpoints_Update
-# --properties shape: {accessControl?: any, availabilitySetName?: string, cdnEnabled?: bool, cdnProfile?: string, cdnProvider?: string, crossSiteAccessPolicies?: any, customHostNames?: list, description?: string, maxCacheAge?: int, scaleUnits: int}
-export def "subscriptions-resource-groups-providers-microsoft-media-mediaservices-streaming-endpoints Update" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  streamingEndpointName: string
+# --properties shape: {accessControl?: any, availabilitySetName?: string, cdnEnabled?: bool, cdnProfile?: string, cdnProvider?: string, crossSiteAccessPolicies?: any, customHostNames?: list<string>, description?: string, maxCacheAge?: int, scaleUnits: int}
+export def "subscriptions-resource-groups-providers-microsoft-media-mediaservices-streaming-endpoints update" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  streaming_endpoint_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -551,9 +577,10 @@ export def "subscriptions-resource-groups-providers-microsoft-media-mediaservice
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The Version of the API to be used with the client request.
-  --properties: any # The StreamingEndpoint properties. — shape: {accessControl?: any, availabilitySetName?: string, cdnEnabled?: bool, cdnProfile?: string, cdnProvider?: string, crossSiteAccessPolicies?: any, customHostNames?: list, description?: string, maxCacheAge?: int, scaleUnits: int}
+  --properties: any # The StreamingEndpoint properties. — shape: {accessControl?: any, availabilitySetName?: string, cdnEnabled?: bool, cdnProfile?: string, cdnProvider?: string, crossSiteAccessPolicies?: any, customHostNames?: list<string>, description?: string, maxCacheAge?: int, scaleUnits: int}
   --location: string # The Azure Region of the resource.
   --tags: record # Resource tags.
 ]: any -> record<properties: record<accessControl: record<akamai: record, ip: record>, availabilitySetName: string, cdnEnabled: bool, cdnProfile: string, cdnProvider: string, created: string, crossSiteAccessPolicies: record<clientAccessPolicy: string, crossDomainPolicy: string>, customHostNames: list<string>, description: string, freeTrialEndTime: string, hostName: string, lastModified: string, maxCacheAge: int, provisioningState: string, resourceState: string, scaleUnits: int>, location: string, tags: record> {
@@ -561,24 +588,24 @@ export def "subscriptions-resource-groups-providers-microsoft-media-mediaservice
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Media/mediaservices/($accountName)/streamingEndpoints/($streamingEndpointName)" $qp)
-  let body = {properties: $properties, location: $location, tags: $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name), streaming_endpoint_name: (encode-path-segment $streaming_endpoint_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Media/mediaservices/{account_name}/streamingEndpoints/{streaming_endpoint_name}") $qp)
+  let req_body = {"properties": $properties, "location": $location, "tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Create StreamingEndpoint
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Media/mediaservices/{accountName}/streamingEndpoints/{streamingEndpointName}
 # operationId: StreamingEndpoints_Create
-# --properties shape: {accessControl?: any, availabilitySetName?: string, cdnEnabled?: bool, cdnProfile?: string, cdnProvider?: string, crossSiteAccessPolicies?: any, customHostNames?: list, description?: string, maxCacheAge?: int, scaleUnits: int}
-export def "subscriptions-resource-groups-providers-microsoft-media-mediaservices-streaming-endpoints Create" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  streamingEndpointName: string
+# --properties shape: {accessControl?: any, availabilitySetName?: string, cdnEnabled?: bool, cdnProfile?: string, cdnProvider?: string, crossSiteAccessPolicies?: any, customHostNames?: list<string>, description?: string, maxCacheAge?: int, scaleUnits: int}
+export def "subscriptions-resource-groups-providers-microsoft-media-mediaservices-streaming-endpoints create" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  streaming_endpoint_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -586,34 +613,35 @@ export def "subscriptions-resource-groups-providers-microsoft-media-mediaservice
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The Version of the API to be used with the client request.
-  --autoStart: oneof<nothing, bool> # The flag indicates if the resource should be automatically started on creation.
-  --properties: any # The StreamingEndpoint properties. — shape: {accessControl?: any, availabilitySetName?: string, cdnEnabled?: bool, cdnProfile?: string, cdnProvider?: string, crossSiteAccessPolicies?: any, customHostNames?: list, description?: string, maxCacheAge?: int, scaleUnits: int}
+  --auto-start: oneof<nothing, bool> # The flag indicates if the resource should be automatically started on creation.
+  --properties: any # The StreamingEndpoint properties. — shape: {accessControl?: any, availabilitySetName?: string, cdnEnabled?: bool, cdnProfile?: string, cdnProvider?: string, crossSiteAccessPolicies?: any, customHostNames?: list<string>, description?: string, maxCacheAge?: int, scaleUnits: int}
   --location: string # The Azure Region of the resource.
   --tags: record # Resource tags.
 ]: any -> record<properties: record<accessControl: record<akamai: record, ip: record>, availabilitySetName: string, cdnEnabled: bool, cdnProfile: string, cdnProvider: string, created: string, crossSiteAccessPolicies: record<clientAccessPolicy: string, crossDomainPolicy: string>, customHostNames: list<string>, description: string, freeTrialEndTime: string, hostName: string, lastModified: string, maxCacheAge: int, provisioningState: string, resourceState: string, scaleUnits: int>, location: string, tags: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "autoStart" $autoStart "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Media/mediaservices/($accountName)/streamingEndpoints/($streamingEndpointName)" $qp)
-  let body = {properties: $properties, location: $location, tags: $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "autoStart" $auto_start "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name), streaming_endpoint_name: (encode-path-segment $streaming_endpoint_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Media/mediaservices/{account_name}/streamingEndpoints/{streaming_endpoint_name}") $qp)
+  let req_body = {"properties": $properties, "location": $location, "tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Scale StreamingEndpoint
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Media/mediaservices/{accountName}/streamingEndpoints/{streamingEndpointName}/scale
 # operationId: StreamingEndpoints_Scale
-export def "subscriptions-resource-groups-providers-microsoft-media-mediaservices-streaming-endpoints-scale Scale" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  streamingEndpointName: string
+export def "subscriptions-resource-groups-providers-microsoft-media-mediaservices-streaming-endpoints-scale create" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  streaming_endpoint_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -621,31 +649,32 @@ export def "subscriptions-resource-groups-providers-microsoft-media-mediaservice
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The Version of the API to be used with the client request.
-  --scaleUnit: int # The scale unit number of the StreamingEndpoint. (format: int32)
+  --scale-unit: int # The scale unit number of the StreamingEndpoint. (format: int32)
 ]: any -> record<error: record<code: string, details: list<any>, message: string, target: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Media/mediaservices/($accountName)/streamingEndpoints/($streamingEndpointName)/scale" $qp)
-  let body = {scaleUnit: $scaleUnit} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name), streaming_endpoint_name: (encode-path-segment $streaming_endpoint_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Media/mediaservices/{account_name}/streamingEndpoints/{streaming_endpoint_name}/scale") $qp)
+  let req_body = {"scaleUnit": $scale_unit} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Start StreamingEndpoint
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Media/mediaservices/{accountName}/streamingEndpoints/{streamingEndpointName}/start
 # operationId: StreamingEndpoints_Start
-export def "subscriptions-resource-groups-providers-microsoft-media-mediaservices-streaming-endpoints-start Start" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  streamingEndpointName: string
+export def "subscriptions-resource-groups-providers-microsoft-media-mediaservices-streaming-endpoints-start start" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  streaming_endpoint_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -653,27 +682,28 @@ export def "subscriptions-resource-groups-providers-microsoft-media-mediaservice
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The Version of the API to be used with the client request.
 ]: nothing -> record<error: record<code: string, details: list<any>, message: string, target: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Media/mediaservices/($accountName)/streamingEndpoints/($streamingEndpointName)/start" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name), streaming_endpoint_name: (encode-path-segment $streaming_endpoint_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Media/mediaservices/{account_name}/streamingEndpoints/{streaming_endpoint_name}/start") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Stop StreamingEndpoint
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Media/mediaservices/{accountName}/streamingEndpoints/{streamingEndpointName}/stop
 # operationId: StreamingEndpoints_Stop
-export def "subscriptions-resource-groups-providers-microsoft-media-mediaservices-streaming-endpoints-stop Stop" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  streamingEndpointName: string
+export def "subscriptions-resource-groups-providers-microsoft-media-mediaservices-streaming-endpoints-stop stop" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  streaming_endpoint_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -681,14 +711,15 @@ export def "subscriptions-resource-groups-providers-microsoft-media-mediaservice
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The Version of the API to be used with the client request.
 ]: nothing -> record<error: record<code: string, details: list<any>, message: string, target: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Media/mediaservices/($accountName)/streamingEndpoints/($streamingEndpointName)/stop" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name), streaming_endpoint_name: (encode-path-segment $streaming_endpoint_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Media/mediaservices/{account_name}/streamingEndpoints/{streaming_endpoint_name}/stop") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }

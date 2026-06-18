@@ -17,21 +17,32 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 }
 
 # Serialize a single query parameter based on collection style
+# Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
+# ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = ($name | url encode)
+  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
-  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
-    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
-    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
+    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
+    _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
+}
+
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Build URL from base, path, and optional query string
@@ -43,7 +54,7 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
@@ -52,26 +63,26 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
     "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "put" => { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "patch" => { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
   if ($method in ["head" "options"]) { return $resp }
-  if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
+  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
 def base-url-completer [] { ["https://test.api.amadeus.com/v3"] }
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
-def paymentPolicy-completer [] { ["DEPOSIT" "GUARANTEE" "NONE"] }
-def boardType-completer [] { ["ALL_INCLUSIVE" "BREAKFAST" "FULL_BOARD" "HALF_BOARD" "ROOM_ONLY"] }
+def payment-policy-completer [] { ["DEPOSIT" "GUARANTEE" "NONE"] }
+def board-type-completer [] { ["ALL_INCLUSIVE" "BREAKFAST" "FULL_BOARD" "HALF_BOARD" "ROOM_ONLY"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "shopping-hotel-offers list" } } | get name | first)
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "shopping-hotel-offers get-multi" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -95,7 +106,7 @@ export def commands []: nothing -> table {
 #
 # GET /shopping/hotel-offers
 # operationId: getMultiHotelOffers
-export def "shopping-hotel-offers list" [
+export def "shopping-hotel-offers get-multi" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -103,36 +114,37 @@ export def "shopping-hotel-offers list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hotelIds: list # Amadeus property codes on 8 chars. Mandatory parameter for a search by predefined list of hotels. (e.g. [MCLONGHM])
+  --hotel-ids: list<string> # Amadeus property codes on 8 chars. Mandatory parameter for a search by predefined list of hotels. (e.g. [MCLONGHM])
   --adults: int # Number of adult guests (1-9) per room. (format: int32, default: 1, e.g. 1)
-  --checkInDate: string # Check-in date of the stay (hotel local date). Format YYYY-MM-DD. The lowest accepted value is the present date (no dates in the past). If not present, the default value will be today's date in the GMT time zone. (format: date, e.g. 2023-11-22)
-  --checkOutDate: string # Check-out date of the stay (hotel local date). Format YYYY-MM-DD. The lowest accepted value is checkInDate+1. If not present, it will default to checkInDate +1. (format: date)
-  --countryOfResidence: string # Code of the country of residence of the traveler expressed using ISO 3166-1 format.
-  --roomQuantity: int # Number of rooms requested (1-9). (format: int32, default: 1)
-  --priceRange: string # Filter hotel offers by price per night interval (ex: 200-300 or -300 or 100). It is mandatory to include a currency when this field is set.
+  --check-in-date: string # Check-in date of the stay (hotel local date). Format YYYY-MM-DD. The lowest accepted value is the present date (no dates in the past). If not present, the default value will be today's date in the GMT time zone. (format: date, e.g. 2023-11-22)
+  --check-out-date: string # Check-out date of the stay (hotel local date). Format YYYY-MM-DD. The lowest accepted value is checkInDate+1. If not present, it will default to checkInDate +1. (format: date)
+  --country-of-residence: string # Code of the country of residence of the traveler expressed using ISO 3166-1 format.
+  --room-quantity: int # Number of rooms requested (1-9). (format: int32, default: 1)
+  --price-range: string # Filter hotel offers by price per night interval (ex: 200-300 or -300 or 100). It is mandatory to include a currency when this field is set.
   --currency: string # Use this parameter to request a specific currency. ISO currency code (http://www.iso.org/iso/home/standards/currency_codes.htm). If a hotel does not support the requested currency, the prices for the hotel will be returned in the local currency of the hotel.
-  --paymentPolicy: string@paymentPolicy-completer # Filter the response based on a specific payment type. NONE means all types (default). (default: NONE)
-  --boardType: string@boardType-completer # Filter response based on available meals:         * ROOM_ONLY = Room Only         * BREAKFAST = Breakfast         * HALF_BOARD = Diner & Breakfast (only for Aggregators)         * FULL_BOARD = Full Board (only for Aggregators)         * ALL_INCLUSIVE = All Inclusive (only for Aggregators)
-  --includeClosed: oneof<nothing, bool> # Show all properties (include sold out) or available only. For sold out properties, please check availability on other dates.
-  --bestRateOnly: oneof<nothing, bool> # Used to return only the cheapest offer per hotel or all available offers. (default: true)
-  --lang: string # Requested language of descriptive texts.  Examples: FR , fr , fr-FR. If a language is not available the text will be returned in english. ISO language code (https://www.iso.org/iso-639-language-codes.html).
+  --payment-policy: string@payment-policy-completer # Filter the response based on a specific payment type. NONE means all types (default). (default: NONE)
+  --board-type: string@board-type-completer # Filter response based on available meals: * ROOM_ONLY = Room Only * BREAKFAST = Breakfast * HALF_BOARD = Diner & Breakfast (only for Aggregators) * FULL_BOARD = Full Board (only for Aggregators) * ALL_INCLUSIVE = All Inclusive (only for Aggregators)
+  --include-closed: oneof<nothing, bool> # Show all properties (include sold out) or available only. For sold out properties, please check availability on other dates.
+  --best-rate-only: oneof<nothing, bool> # Used to return only the cheapest offer per hotel or all available offers. (default: true)
+  --lang: string # Requested language of descriptive texts. Examples: FR , fr , fr-FR. If a language is not available the text will be returned in english. ISO language code (https://www.iso.org/iso-639-language-codes.html).
 ]: nothing -> record<data: record<available: bool, hotel: record<brandCode: string, chainCode: string, cityCode: string, dupeId: string, hotelId: string, name: string>, offers: list<record>, self: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "hotelIds" $hotelIds "csv") (serialize-qp "adults" $adults "scalar") (serialize-qp "checkInDate" $checkInDate "scalar") (serialize-qp "checkOutDate" $checkOutDate "scalar") (serialize-qp "countryOfResidence" $countryOfResidence "scalar") (serialize-qp "roomQuantity" $roomQuantity "scalar") (serialize-qp "priceRange" $priceRange "scalar") (serialize-qp "currency" $currency "scalar") (serialize-qp "paymentPolicy" $paymentPolicy "scalar") (serialize-qp "boardType" $boardType "scalar") (serialize-qp "includeClosed" $includeClosed "scalar") (serialize-qp "bestRateOnly" $bestRateOnly "scalar") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "hotelIds" $hotel_ids "csv") (serialize-qp "adults" $adults "scalar") (serialize-qp "checkInDate" $check_in_date "scalar") (serialize-qp "checkOutDate" $check_out_date "scalar") (serialize-qp "countryOfResidence" $country_of_residence "scalar") (serialize-qp "roomQuantity" $room_quantity "scalar") (serialize-qp "priceRange" $price_range "scalar") (serialize-qp "currency" $currency "scalar") (serialize-qp "paymentPolicy" $payment_policy "scalar") (serialize-qp "boardType" $board_type "scalar") (serialize-qp "includeClosed" $include_closed "scalar") (serialize-qp "bestRateOnly" $best_rate_only "scalar") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/shopping/hotel-offers" $qp)
   let accept_val = "application/vnd.amadeus+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # getOfferPricing
 #
 # GET /shopping/hotel-offers/{offerId}
 # operationId: getOfferPricing
-export def "shopping-hotel-offers get" [
-  offerId: string
+export def "shopping-hotel-offers get-pricing" [
+  offer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -140,14 +152,15 @@ export def "shopping-hotel-offers get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --lang: string # Requested language of descriptive texts.  Examples: FR , fr , fr-FR. If a language is not available the text will be returned in english. ISO language code (https://www.iso.org/iso-639-language-codes.html).
+  --lang: string # Requested language of descriptive texts. Examples: FR , fr , fr-FR. If a language is not available the text will be returned in english. ISO language code (https://www.iso.org/iso-639-language-codes.html).
 ]: nothing -> record<data: record<available: bool, hotel: record<brandCode: string, chainCode: string, cityCode: string, dupeId: string, hotelId: string, name: string>, offers: list<record>, self: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/shopping/hotel-offers/($offerId)" $qp)
+  let full_url = (build-url $base ({offer_id: (encode-path-segment $offer_id)} | format pattern "/shopping/hotel-offers/{offer_id}") $qp)
   let accept_val = "application/vnd.amadeus+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }

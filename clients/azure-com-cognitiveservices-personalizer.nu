@@ -18,21 +18,32 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 }
 
 # Serialize a single query parameter based on collection style
+# Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
+# ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = ($name | url encode)
+  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
-  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
-    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
-    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
+    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
+    _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
+}
+
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Build URL from base, path, and optional query string
@@ -44,7 +55,7 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
@@ -53,13 +64,13 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
     "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "put" => { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "patch" => { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
   if ($method in ["head" "options"]) { return $resp }
-  if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
+  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
 def base-url-completer [] { ["https://azure.local/personalizer/v1.0"] }
@@ -68,8 +79,8 @@ def auth-scheme-completer [] { ["ocp-apim-subscription-key"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "configurations-policy Reset" } } | get name | first)
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "configurations-policy reset" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -93,7 +104,7 @@ export def commands []: nothing -> table {
 #
 # DELETE /configurations/policy
 # operationId: Policy_Reset
-export def "configurations-policy Reset" [
+export def "configurations-policy reset" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -101,6 +112,7 @@ export def "configurations-policy Reset" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<arguments: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
@@ -108,14 +120,14 @@ export def "configurations-policy Reset" [
   let full_url = (build-url $base "/configurations/policy")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get Policy.
 #
 # GET /configurations/policy
 # operationId: Policy_Get
-export def "configurations-policy Get" [
+export def "configurations-policy get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -123,6 +135,7 @@ export def "configurations-policy Get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<arguments: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
@@ -130,14 +143,14 @@ export def "configurations-policy Get" [
   let full_url = (build-url $base "/configurations/policy")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Update Policy.
 #
 # PUT /configurations/policy
 # operationId: Policy_Update
-export def "configurations-policy Update" [
+export def "configurations-policy update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -145,6 +158,7 @@ export def "configurations-policy Update" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   arguments: string # Arguments of the Learning settings.
   name: string # Name of the Learning settings.
@@ -153,18 +167,18 @@ export def "configurations-policy Update" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/configurations/policy")
-  let body = {arguments: $arguments, name: $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"arguments": $arguments, "name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Get Service Configuration.
 #
 # GET /configurations/service
 # operationId: ServiceConfiguration_Get
-export def "configurations-service Get" [
+export def "configurations-service get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -172,6 +186,7 @@ export def "configurations-service Get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<defaultReward: float, explorationPercentage: float, logMirrorEnabled: bool, logMirrorSasUri: string, logRetentionDays: int, modelExportFrequency: string, rewardAggregation: string, rewardWaitTime: string> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
@@ -179,14 +194,14 @@ export def "configurations-service Get" [
   let full_url = (build-url $base "/configurations/service")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Update Service Configuration.
 #
 # PUT /configurations/service
 # operationId: ServiceConfiguration_Update
-export def "configurations-service Update" [
+export def "configurations-service update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -194,32 +209,33 @@ export def "configurations-service Update" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  defaultReward: float # The reward given if a reward is not received within the specified wait time. (format: float)
-  explorationPercentage: float # The percentage of rank responses that will use exploration. (format: float)
-  --logMirrorEnabled: oneof<nothing, bool> # Flag indicates whether log mirroring is enabled.
-  --logMirrorSasUri: string # Azure storage account container SAS URI for log mirroring.
-  logRetentionDays: int # Number of days historical logs are to be maintained. -1 implies the logs will never be deleted. (format: int32)
-  modelExportFrequency: string # Personalizer will start using the most updated trained model for online ranks automatically every specified time period. For example, PT5M (5 mins). For information about the time format, see http://en.wikipedia.org/wiki/ISO_8601#Durations (format: duration)
-  rewardAggregation: string # The function used to process rewards, if multiple reward scores are received before rewardWaitTime is over.
-  rewardWaitTime: string # The time span waited until a request is marked with the default reward. For example, PT5M (5 mins). For information about the time format, see http://en.wikipedia.org/wiki/ISO_8601#Durations (format: duration)
+  default_reward: float # The reward given if a reward is not received within the specified wait time. (format: float)
+  exploration_percentage: float # The percentage of rank responses that will use exploration. (format: float)
+  --log-mirror-enabled: oneof<nothing, bool> # Flag indicates whether log mirroring is enabled.
+  --log-mirror-sas-uri: string # Azure storage account container SAS URI for log mirroring.
+  log_retention_days: int # Number of days historical logs are to be maintained. -1 implies the logs will never be deleted. (format: int32)
+  model_export_frequency: string # Personalizer will start using the most updated trained model for online ranks automatically every specified time period. For example, PT5M (5 mins). For information about the time format, see http://en.wikipedia.org/wiki/ISO_8601#Durations (format: duration)
+  reward_aggregation: string # The function used to process rewards, if multiple reward scores are received before rewardWaitTime is over.
+  reward_wait_time: string # The time span waited until a request is marked with the default reward. For example, PT5M (5 mins). For information about the time format, see http://en.wikipedia.org/wiki/ISO_8601#Durations (format: duration)
 ]: any -> record<defaultReward: float, explorationPercentage: float, logMirrorEnabled: bool, logMirrorSasUri: string, logRetentionDays: int, modelExportFrequency: string, rewardAggregation: string, rewardWaitTime: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/configurations/service")
-  let body = {defaultReward: $defaultReward, explorationPercentage: $explorationPercentage, logMirrorEnabled: $logMirrorEnabled, logMirrorSasUri: $logMirrorSasUri, logRetentionDays: $logRetentionDays, modelExportFrequency: $modelExportFrequency, rewardAggregation: $rewardAggregation, rewardWaitTime: $rewardWaitTime} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"defaultReward": $default_reward, "explorationPercentage": $exploration_percentage, "logMirrorEnabled": $log_mirror_enabled, "logMirrorSasUri": $log_mirror_sas_uri, "logRetentionDays": $log_retention_days, "modelExportFrequency": $model_export_frequency, "rewardAggregation": $reward_aggregation, "rewardWaitTime": $reward_wait_time} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # List Evaluations.
 #
 # GET /evaluations
 # operationId: Evaluations_List
-export def "evaluations List" [
+export def "evaluations list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -227,6 +243,7 @@ export def "evaluations List" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<endTime: string, featureImportance: list<list>, id: string, jobId: string, name: string, policyResults: list<record>, startTime: string, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
@@ -234,7 +251,7 @@ export def "evaluations List" [
   let full_url = (build-url $base "/evaluations")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Create Evaluation.
@@ -242,7 +259,7 @@ export def "evaluations List" [
 # POST /evaluations
 # operationId: Evaluations_Create
 # --policies item shape: {arguments: string, name: string}
-export def "evaluations Create" [
+export def "evaluations create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -250,30 +267,31 @@ export def "evaluations Create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --enableOfflineExperimentation: oneof<nothing, bool> # True if the evaluation should explore for a more optimal Learning settings.
-  endTime: string # The end time of the evaluation. (format: date-time)
+  --enable-offline-experimentation: oneof<nothing, bool> # True if the evaluation should explore for a more optimal Learning settings.
+  end_time: string # The end time of the evaluation. (format: date-time)
   name: string # The name of the evaluation.
   policies: list # Additional Learning settings to evaluate. — item shape: {arguments: string, name: string}
-  startTime: string # The start time of the evaluation. (format: date-time)
+  start_time: string # The start time of the evaluation. (format: date-time)
 ]: any -> record<endTime: string, featureImportance: list<list<string>>, id: string, jobId: string, name: string, policyResults: table<arguments: string, name: string, summary: list, totalSummary: record>, startTime: string, status: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/evaluations")
-  let body = {enableOfflineExperimentation: $enableOfflineExperimentation, endTime: $endTime, name: $name, policies: $policies, startTime: $startTime} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"enableOfflineExperimentation": $enable_offline_experimentation, "endTime": $end_time, "name": $name, "policies": $policies, "startTime": $start_time} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Delete Evaluation.
 #
 # DELETE /evaluations/{evaluationId}
 # operationId: Evaluations_Delete
-export def "evaluations Delete" [
-  evaluationId: string
+export def "evaluations delete" [
+  evaluation_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -281,22 +299,23 @@ export def "evaluations Delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/evaluations/($evaluationId)")
+  let full_url = (build-url $base ({evaluation_id: (encode-path-segment $evaluation_id)} | format pattern "/evaluations/{evaluation_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get Evaluation.
 #
 # GET /evaluations/{evaluationId}
 # operationId: Evaluations_Get
-export def "evaluations Get" [
-  evaluationId: string
+export def "evaluations get" [
+  evaluation_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -304,22 +323,23 @@ export def "evaluations Get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<endTime: string, featureImportance: list<list<string>>, id: string, jobId: string, name: string, policyResults: table<arguments: string, name: string, summary: list, totalSummary: record>, startTime: string, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/evaluations/($evaluationId)")
+  let full_url = (build-url $base ({evaluation_id: (encode-path-segment $evaluation_id)} | format pattern "/evaluations/{evaluation_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Activate Event.
 #
 # POST /events/{eventId}/activate
 # operationId: Events_Activate
-export def "events-activate Activate" [
-  eventId: string
+export def "events-activate create" [
+  event_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -327,22 +347,23 @@ export def "events-activate Activate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<error: record<code: string, details: list<any>, innerError: record<code: string, innererror: any>, message: string, target: string>> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/events/($eventId)/activate")
+  let full_url = (build-url $base ({event_id: (encode-path-segment $event_id)} | format pattern "/events/{event_id}/activate"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Post Reward.
 #
 # POST /events/{eventId}/reward
 # operationId: Events_Reward
-export def "events-reward Reward" [
-  eventId: string
+export def "events-reward create" [
+  event_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -350,25 +371,26 @@ export def "events-reward Reward" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   value: float # Reward to be assigned to an action. Value should be between -1 and 1 inclusive. (format: float)
 ]: any -> record<error: record<code: string, details: list<any>, innerError: record<code: string, innererror: any>, message: string, target: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/events/($eventId)/reward")
-  let body = {value: $value} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({event_id: (encode-path-segment $event_id)} | format pattern "/events/{event_id}/reward"))
+  let req_body = {"value": $value} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Deletes Logs.
 #
 # DELETE /logs
 # operationId: Log_Delete
-export def "logs Delete" [
+export def "logs delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -376,6 +398,7 @@ export def "logs Delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
@@ -383,14 +406,14 @@ export def "logs Delete" [
   let full_url = (build-url $base "/logs")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get Log Properties.
 #
 # GET /logs/properties
 # operationId: Log_GetProperties
-export def "logs-properties GetProperties" [
+export def "logs-properties get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -398,6 +421,7 @@ export def "logs-properties GetProperties" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<dateRange: record<from: string, to: string>> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
@@ -405,14 +429,14 @@ export def "logs-properties GetProperties" [
   let full_url = (build-url $base "/logs/properties")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Reset Model.
 #
 # DELETE /model
 # operationId: Model_Reset
-export def "model Reset" [
+export def "model reset" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -420,6 +444,7 @@ export def "model Reset" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<error: record<code: string, details: list<any>, innerError: record<code: string, innererror: any>, message: string, target: string>> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
@@ -427,14 +452,14 @@ export def "model Reset" [
   let full_url = (build-url $base "/model")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get Model.
 #
 # GET /model
 # operationId: Model_Get
-export def "model Get" [
+export def "model get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -442,6 +467,7 @@ export def "model Get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
@@ -449,14 +475,14 @@ export def "model Get" [
   let full_url = (build-url $base "/model")
   let accept_val = "application/octet-stream"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get Model Properties.
 #
 # GET /model/properties
 # operationId: Model_GetProperties
-export def "model-properties GetProperties" [
+export def "model-properties get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -464,6 +490,7 @@ export def "model-properties GetProperties" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<creationTime: string, lastModifiedTime: string> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
@@ -471,7 +498,7 @@ export def "model-properties GetProperties" [
   let full_url = (build-url $base "/model/properties")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Post Rank.
@@ -479,7 +506,7 @@ export def "model-properties GetProperties" [
 # POST /rank
 # operationId: Rank
 # --actions item shape: {features: list, id: string}
-export def "rank Rank" [
+export def "rank create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -487,20 +514,21 @@ export def "rank Rank" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   actions: list # The set of actions the Personalizer service can pick from. The set should not contain more than 50 actions. The order of the actions does not affect the rank result but the order should match the sequence your application would have used to display them. The first item in the array will be used as Baseline item in Offline evaluations. — item shape: {features: list, id: string}
-  --contextFeatures: list # Features of the context used for Personalizer as a dictionary of dictionaries. This depends on the application, and typically includes features about the current user, their device, profile information, aggregated data about time and date, etc. Features should not include personally identifiable information (PII), unique UserIDs, or precise timestamps.
-  --deferActivation: oneof<nothing, bool> # Send false if it is certain the rewardActionId in rank results will be shown to the user, therefore Personalizer will expect a Reward call, otherwise it will assign the default Reward to the event. Send true if it is possible the user will not see the action specified in the rank results, because the page is rendering later, or the Rank results may be overridden by code further downstream. (default: false)
-  --eventId: string # Optionally pass an eventId that uniquely identifies this Rank event. If null, the service generates a unique eventId. The eventId will be used for associating this request with its reward, as well as seeding the pseudo-random generator when making a Personalizer call.
-  --excludedActions: list # The set of action ids to exclude from ranking.
+  --context-features: list # Features of the context used for Personalizer as a dictionary of dictionaries. This depends on the application, and typically includes features about the current user, their device, profile information, aggregated data about time and date, etc. Features should not include personally identifiable information (PII), unique UserIDs, or precise timestamps.
+  --defer-activation: oneof<nothing, bool> # Send false if it is certain the rewardActionId in rank results will be shown to the user, therefore Personalizer will expect a Reward call, otherwise it will assign the default Reward to the event. Send true if it is possible the user will not see the action specified in the rank results, because the page is rendering later, or the Rank results may be overridden by code further downstream. (default: false)
+  --event-id: string # Optionally pass an eventId that uniquely identifies this Rank event. If null, the service generates a unique eventId. The eventId will be used for associating this request with its reward, as well as seeding the pseudo-random generator when making a Personalizer call.
+  --excluded-actions: list<string> # The set of action ids to exclude from ranking.
 ]: any -> record<eventId: string, ranking: table<id: string, probability: float>, rewardActionId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rank")
-  let body = {actions: $actions, contextFeatures: $contextFeatures, deferActivation: $deferActivation, eventId: $eventId, excludedActions: $excludedActions} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"actions": $actions, "contextFeatures": $context_features, "deferActivation": $defer_activation, "eventId": $event_id, "excludedActions": $excluded_actions} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }

@@ -18,21 +18,32 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 }
 
 # Serialize a single query parameter based on collection style
+# Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
+# ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = ($name | url encode)
+  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
-  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
-    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
-    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
+    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
+    _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
+}
+
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Build URL from base, path, and optional query string
@@ -44,7 +55,7 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
@@ -53,13 +64,13 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
     "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "put" => { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "patch" => { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
   if ($method in ["head" "options"]) { return $resp }
-  if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
+  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
 def base-url-completer [] { ["https://management.azure.com"] }
@@ -70,8 +81,8 @@ def mode-completer [] { ["poweroff" "reboot" "shutdown" "suspend"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-v-mware-cloud-simple-operations List" } } | get name | first)
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-v-mware-cloud-simple-operations list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -95,7 +106,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.VMwareCloudSimple/operations
 # operationId: Operations_List
-export def "providers-microsoft-v-mware-cloud-simple-operations List" [
+export def "providers-microsoft-v-mware-cloud-simple-operations list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -103,6 +114,7 @@ export def "providers-microsoft-v-mware-cloud-simple-operations List" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version.
 ]: nothing -> record<nextLink: string, value: table<display: record, isDataAction: bool, name: string, origin: string, properties: record>> {
@@ -112,15 +124,15 @@ export def "providers-microsoft-v-mware-cloud-simple-operations List" [
   let full_url = (build-url $base "/providers/Microsoft.VMwareCloudSimple/operations" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Implements list of dedicated cloud nodes within subscription method
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.VMwareCloudSimple/dedicatedCloudNodes
 # operationId: DedicatedCloudNodes_ListBySubscription
-export def "subscriptions-providers-microsoft-v-mware-cloud-simple-dedicated-cloud-nodes ListBySubscription" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-v-mware-cloud-simple-dedicated-cloud-nodes list" [
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -128,27 +140,28 @@ export def "subscriptions-providers-microsoft-v-mware-cloud-simple-dedicated-clo
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version.
   --filter: string # The filter to apply on the list operation
   --top: int # The maximum number of record sets to return (format: int32)
-  --skipToken: string # to be used by nextLink implementation
+  --skip-token: string # to be used by nextLink implementation
 ]: nothing -> record<nextLink: string, value: table<id: string, location: string, name: string, properties: record, sku: record, tags: any, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$skipToken" $skipToken "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.VMwareCloudSimple/dedicatedCloudNodes" $qp)
+  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$skipToken" $skip_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.VMwareCloudSimple/dedicatedCloudNodes") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Implements list of dedicatedCloudService objects within subscription method
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.VMwareCloudSimple/dedicatedCloudServices
 # operationId: DedicatedCloudServices_ListBySubscription
-export def "subscriptions-providers-microsoft-v-mware-cloud-simple-dedicated-cloud-services ListBySubscription" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-v-mware-cloud-simple-dedicated-cloud-services list" [
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -156,28 +169,29 @@ export def "subscriptions-providers-microsoft-v-mware-cloud-simple-dedicated-clo
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version.
   --filter: string # The filter to apply on the list operation
   --top: int # The maximum number of record sets to return (format: int32)
-  --skipToken: string # to be used by nextLink implementation
+  --skip-token: string # to be used by nextLink implementation
 ]: nothing -> record<nextLink: string, value: table<id: string, location: string, name: string, properties: record, tags: any, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$skipToken" $skipToken "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.VMwareCloudSimple/dedicatedCloudServices" $qp)
+  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$skipToken" $skip_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.VMwareCloudSimple/dedicatedCloudServices") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Implements SkuAvailability List method
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.VMwareCloudSimple/locations/{regionId}/availabilities
 # operationId: SkusAvailability_List
-export def "subscriptions-providers-microsoft-v-mware-cloud-simple-locations-availabilities List" [
-  subscriptionId: string
-  regionId: string
+export def "subscriptions-providers-microsoft-v-mware-cloud-simple-locations-availabilities list-skus-availability" [
+  subscription_id: string
+  region_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -185,27 +199,28 @@ export def "subscriptions-providers-microsoft-v-mware-cloud-simple-locations-ava
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --skuId: string # sku id, if no sku is passed availability for all skus will be returned
+  --sku-id: string # sku id, if no sku is passed availability for all skus will be returned
   --api-version: string # Client API version.
 ]: nothing -> record<nextLink: string, value: table<dedicatedAvailabilityZoneId: string, dedicatedAvailabilityZoneName: string, dedicatedPlacementGroupId: string, dedicatedPlacementGroupName: string, limit: int, resourceType: string, skuId: string, skuName: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "skuId" $skuId "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.VMwareCloudSimple/locations/($regionId)/availabilities" $qp)
+  let qp = [(serialize-qp "skuId" $sku_id "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), region_id: (encode-path-segment $region_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.VMwareCloudSimple/locations/{region_id}/availabilities") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Implements get of async operation
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.VMwareCloudSimple/locations/{regionId}/operationResults/{operationId}
 # operationId: Operations_Get
-export def "subscriptions-providers-microsoft-v-mware-cloud-simple-locations-operation-results Get" [
-  subscriptionId: string
-  regionId: string
-  operationId: string
+export def "subscriptions-providers-microsoft-v-mware-cloud-simple-locations-operation-results get" [
+  subscription_id: string
+  region_id: string
+  operation_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -213,28 +228,29 @@ export def "subscriptions-providers-microsoft-v-mware-cloud-simple-locations-ope
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version.
-  --Referer: string # referer url
+  --referer: string # referer url
 ]: nothing -> record<endTime: string, error: record<code: string, message: string>, id: string, name: string, startTime: string, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.VMwareCloudSimple/locations/($regionId)/operationResults/($operationId)" $qp)
-  let extra_headers = {"Referer": $Referer} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), region_id: (encode-path-segment $region_id), operation_id: (encode-path-segment $operation_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.VMwareCloudSimple/locations/{region_id}/operationResults/{operation_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"Referer": $referer} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Implements private cloud list GET method
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.VMwareCloudSimple/locations/{regionId}/privateClouds
 # operationId: PrivateClouds_List
-export def "subscriptions-providers-microsoft-v-mware-cloud-simple-locations-private-clouds List" [
-  subscriptionId: string
-  regionId: string
+export def "subscriptions-providers-microsoft-v-mware-cloud-simple-locations-private-clouds list" [
+  subscription_id: string
+  region_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -242,26 +258,27 @@ export def "subscriptions-providers-microsoft-v-mware-cloud-simple-locations-pri
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version.
 ]: nothing -> record<nextLink: string, value: table<id: string, location: string, name: string, properties: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.VMwareCloudSimple/locations/($regionId)/privateClouds" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), region_id: (encode-path-segment $region_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.VMwareCloudSimple/locations/{region_id}/privateClouds") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Implements private cloud GET method
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.VMwareCloudSimple/locations/{regionId}/privateClouds/{pcName}
 # operationId: PrivateClouds_Get
-export def "subscriptions-providers-microsoft-v-mware-cloud-simple-locations-private-clouds Get" [
-  subscriptionId: string
-  pcName: string
-  regionId: string
+export def "subscriptions-providers-microsoft-v-mware-cloud-simple-locations-private-clouds get" [
+  subscription_id: string
+  region_id: string
+  pc_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -269,26 +286,27 @@ export def "subscriptions-providers-microsoft-v-mware-cloud-simple-locations-pri
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version.
 ]: nothing -> record<id: string, location: string, name: string, properties: record<availabilityZoneId: string, availabilityZoneName: string, clustersNumber: int, createdBy: string, createdOn: string, dnsServers: list<string>, expires: string, nsxType: string, placementGroupId: string, placementGroupName: string, privateCloudId: string, resourcePools: list<record>, state: string, totalCpuCores: int, totalNodes: int, totalRam: int, totalStorage: float, type: string, vSphereVersion: string, vcenterFqdn: string, vcenterRefid: string, virtualMachineTemplates: list<record>, virtualNetworks: list<record>, vrOpsEnabled: bool>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.VMwareCloudSimple/locations/($regionId)/privateClouds/($pcName)" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), region_id: (encode-path-segment $region_id), pc_name: (encode-path-segment $pc_name)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.VMwareCloudSimple/locations/{region_id}/privateClouds/{pc_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Implements get of customization policies list
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.VMwareCloudSimple/locations/{regionId}/privateClouds/{pcName}/customizationPolicies
 # operationId: customizationPolicies_List
-export def "subscriptions-providers-microsoft-v-mware-cloud-simple-locations-private-clouds-customization-policies List" [
-  subscriptionId: string
-  regionId: string
-  pcName: string
+export def "subscriptions-providers-microsoft-v-mware-cloud-simple-locations-private-clouds-customization-policies list" [
+  subscription_id: string
+  region_id: string
+  pc_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -296,6 +314,7 @@ export def "subscriptions-providers-microsoft-v-mware-cloud-simple-locations-pri
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version.
   --filter: string # The filter to apply on the list operation. only type is allowed here as a filter e.g. $filter=type eq 'xxxx'
@@ -303,21 +322,21 @@ export def "subscriptions-providers-microsoft-v-mware-cloud-simple-locations-pri
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.VMwareCloudSimple/locations/($regionId)/privateClouds/($pcName)/customizationPolicies" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), region_id: (encode-path-segment $region_id), pc_name: (encode-path-segment $pc_name)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.VMwareCloudSimple/locations/{region_id}/privateClouds/{pc_name}/customizationPolicies") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Implements get of customization policy
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.VMwareCloudSimple/locations/{regionId}/privateClouds/{pcName}/customizationPolicies/{customizationPolicyName}
 # operationId: customizationPolicies_Get
-export def "subscriptions-providers-microsoft-v-mware-cloud-simple-locations-private-clouds-customization-policies Get" [
-  subscriptionId: string
-  regionId: string
-  pcName: string
-  customizationPolicyName: string
+export def "subscriptions-providers-microsoft-v-mware-cloud-simple-locations-private-clouds-customization-policies get" [
+  subscription_id: string
+  region_id: string
+  pc_name: string
+  customization_policy_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -325,26 +344,27 @@ export def "subscriptions-providers-microsoft-v-mware-cloud-simple-locations-pri
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version.
 ]: nothing -> record<id: string, location: string, name: string, properties: record<description: string, privateCloudId: string, specification: record<identity: record, nicSettings: list>, type: string, version: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.VMwareCloudSimple/locations/($regionId)/privateClouds/($pcName)/customizationPolicies/($customizationPolicyName)" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), region_id: (encode-path-segment $region_id), pc_name: (encode-path-segment $pc_name), customization_policy_name: (encode-path-segment $customization_policy_name)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.VMwareCloudSimple/locations/{region_id}/privateClouds/{pc_name}/customizationPolicies/{customization_policy_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Implements get of resource pools list
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.VMwareCloudSimple/locations/{regionId}/privateClouds/{pcName}/resourcePools
 # operationId: ResourcePools_List
-export def "subscriptions-providers-microsoft-v-mware-cloud-simple-locations-private-clouds-resource-pools List" [
-  subscriptionId: string
-  regionId: string
-  pcName: string
+export def "subscriptions-providers-microsoft-v-mware-cloud-simple-locations-private-clouds-resource-pools list" [
+  subscription_id: string
+  region_id: string
+  pc_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -352,27 +372,28 @@ export def "subscriptions-providers-microsoft-v-mware-cloud-simple-locations-pri
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version.
 ]: nothing -> record<nextLink: string, value: table<id: string, location: string, name: string, privateCloudId: string, properties: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.VMwareCloudSimple/locations/($regionId)/privateClouds/($pcName)/resourcePools" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), region_id: (encode-path-segment $region_id), pc_name: (encode-path-segment $pc_name)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.VMwareCloudSimple/locations/{region_id}/privateClouds/{pc_name}/resourcePools") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Implements get of resource pool
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.VMwareCloudSimple/locations/{regionId}/privateClouds/{pcName}/resourcePools/{resourcePoolName}
 # operationId: ResourcePools_Get
-export def "subscriptions-providers-microsoft-v-mware-cloud-simple-locations-private-clouds-resource-pools Get" [
-  subscriptionId: string
-  regionId: string
-  pcName: string
-  resourcePoolName: string
+export def "subscriptions-providers-microsoft-v-mware-cloud-simple-locations-private-clouds-resource-pools get" [
+  subscription_id: string
+  region_id: string
+  pc_name: string
+  resource_pool_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -380,26 +401,27 @@ export def "subscriptions-providers-microsoft-v-mware-cloud-simple-locations-pri
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version.
 ]: nothing -> record<id: string, location: string, name: string, privateCloudId: string, properties: record<fullName: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.VMwareCloudSimple/locations/($regionId)/privateClouds/($pcName)/resourcePools/($resourcePoolName)" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), region_id: (encode-path-segment $region_id), pc_name: (encode-path-segment $pc_name), resource_pool_name: (encode-path-segment $resource_pool_name)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.VMwareCloudSimple/locations/{region_id}/privateClouds/{pc_name}/resourcePools/{resource_pool_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Implements list of available VM templates
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.VMwareCloudSimple/locations/{regionId}/privateClouds/{pcName}/virtualMachineTemplates
 # operationId: VirtualMachineTemplates_List
-export def "subscriptions-providers-microsoft-v-mware-cloud-simple-locations-private-clouds-virtual-machine-templates List" [
-  subscriptionId: string
-  pcName: string
-  regionId: string
+export def "subscriptions-providers-microsoft-v-mware-cloud-simple-locations-private-clouds-virtual-machine-templates list" [
+  subscription_id: string
+  region_id: string
+  pc_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -407,28 +429,29 @@ export def "subscriptions-providers-microsoft-v-mware-cloud-simple-locations-pri
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version.
-  --resourcePoolName: string # Resource pool used to derive vSphere cluster which contains VM templates
+  --resource-pool-name: string # Resource pool used to derive vSphere cluster which contains VM templates
 ]: nothing -> record<nextLink: string, value: table<id: string, location: string, name: string, properties: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "resourcePoolName" $resourcePoolName "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.VMwareCloudSimple/locations/($regionId)/privateClouds/($pcName)/virtualMachineTemplates" $qp)
+  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "resourcePoolName" $resource_pool_name "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), region_id: (encode-path-segment $region_id), pc_name: (encode-path-segment $pc_name)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.VMwareCloudSimple/locations/{region_id}/privateClouds/{pc_name}/virtualMachineTemplates") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Implements virtual machine template GET method
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.VMwareCloudSimple/locations/{regionId}/privateClouds/{pcName}/virtualMachineTemplates/{virtualMachineTemplateName}
 # operationId: VirtualMachineTemplates_Get
-export def "subscriptions-providers-microsoft-v-mware-cloud-simple-locations-private-clouds-virtual-machine-templates Get" [
-  subscriptionId: string
-  regionId: string
-  pcName: string
-  virtualMachineTemplateName: string
+export def "subscriptions-providers-microsoft-v-mware-cloud-simple-locations-private-clouds-virtual-machine-templates get" [
+  subscription_id: string
+  region_id: string
+  pc_name: string
+  virtual_machine_template_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -436,26 +459,27 @@ export def "subscriptions-providers-microsoft-v-mware-cloud-simple-locations-pri
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version.
 ]: nothing -> record<id: string, location: string, name: string, properties: record<amountOfRam: int, controllers: list<record>, description: string, disks: list<record>, exposeToGuestVM: bool, guestOS: string, guestOSType: string, nics: list<record>, numberOfCores: int, path: string, privateCloudId: string, vSphereNetworks: list<string>, vSphereTags: list<string>, vmwaretools: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.VMwareCloudSimple/locations/($regionId)/privateClouds/($pcName)/virtualMachineTemplates/($virtualMachineTemplateName)" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), region_id: (encode-path-segment $region_id), pc_name: (encode-path-segment $pc_name), virtual_machine_template_name: (encode-path-segment $virtual_machine_template_name)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.VMwareCloudSimple/locations/{region_id}/privateClouds/{pc_name}/virtualMachineTemplates/{virtual_machine_template_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Implements list available virtual networks within a subscription method
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.VMwareCloudSimple/locations/{regionId}/privateClouds/{pcName}/virtualNetworks
 # operationId: VirtualNetworks_List
-export def "subscriptions-providers-microsoft-v-mware-cloud-simple-locations-private-clouds-virtual-networks List" [
-  subscriptionId: string
-  regionId: string
-  pcName: string
+export def "subscriptions-providers-microsoft-v-mware-cloud-simple-locations-private-clouds-virtual-networks list" [
+  subscription_id: string
+  region_id: string
+  pc_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -463,28 +487,29 @@ export def "subscriptions-providers-microsoft-v-mware-cloud-simple-locations-pri
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version.
-  --resourcePoolName: string # Resource pool used to derive vSphere cluster which contains virtual networks
+  --resource-pool-name: string # Resource pool used to derive vSphere cluster which contains virtual networks
 ]: nothing -> record<nextLink: string, value: table<assignable: bool, id: string, location: string, name: string, properties: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "resourcePoolName" $resourcePoolName "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.VMwareCloudSimple/locations/($regionId)/privateClouds/($pcName)/virtualNetworks" $qp)
+  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "resourcePoolName" $resource_pool_name "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), region_id: (encode-path-segment $region_id), pc_name: (encode-path-segment $pc_name)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.VMwareCloudSimple/locations/{region_id}/privateClouds/{pc_name}/virtualNetworks") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Implements virtual network GET method
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.VMwareCloudSimple/locations/{regionId}/privateClouds/{pcName}/virtualNetworks/{virtualNetworkName}
 # operationId: VirtualNetworks_Get
-export def "subscriptions-providers-microsoft-v-mware-cloud-simple-locations-private-clouds-virtual-networks Get" [
-  subscriptionId: string
-  regionId: string
-  pcName: string
-  virtualNetworkName: string
+export def "subscriptions-providers-microsoft-v-mware-cloud-simple-locations-private-clouds-virtual-networks get" [
+  subscription_id: string
+  region_id: string
+  pc_name: string
+  virtual_network_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -492,25 +517,26 @@ export def "subscriptions-providers-microsoft-v-mware-cloud-simple-locations-pri
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version.
 ]: nothing -> record<assignable: bool, id: string, location: string, name: string, properties: record<privateCloudId: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.VMwareCloudSimple/locations/($regionId)/privateClouds/($pcName)/virtualNetworks/($virtualNetworkName)" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), region_id: (encode-path-segment $region_id), pc_name: (encode-path-segment $pc_name), virtual_network_name: (encode-path-segment $virtual_network_name)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.VMwareCloudSimple/locations/{region_id}/privateClouds/{pc_name}/virtualNetworks/{virtual_network_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Implements Usages List method
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.VMwareCloudSimple/locations/{regionId}/usages
 # operationId: Usages_List
-export def "subscriptions-providers-microsoft-v-mware-cloud-simple-locations-usages List" [
-  subscriptionId: string
-  regionId: string
+export def "subscriptions-providers-microsoft-v-mware-cloud-simple-locations-usages list" [
+  subscription_id: string
+  region_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -518,6 +544,7 @@ export def "subscriptions-providers-microsoft-v-mware-cloud-simple-locations-usa
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string # The filter to apply on the list operation. only name.value is allowed here as a filter e.g. $filter=name.value eq 'xxxx'
   --api-version: string # Client API version.
@@ -525,18 +552,18 @@ export def "subscriptions-providers-microsoft-v-mware-cloud-simple-locations-usa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.VMwareCloudSimple/locations/($regionId)/usages" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), region_id: (encode-path-segment $region_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.VMwareCloudSimple/locations/{region_id}/usages") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Implements list virtual machine within subscription method
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.VMwareCloudSimple/virtualMachines
 # operationId: VirtualMachines_ListBySubscription
-export def "subscriptions-providers-microsoft-v-mware-cloud-simple-virtual-machines ListBySubscription" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-v-mware-cloud-simple-virtual-machines list" [
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -544,28 +571,29 @@ export def "subscriptions-providers-microsoft-v-mware-cloud-simple-virtual-machi
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version.
   --filter: string # The filter to apply on the list operation
   --top: int # The maximum number of record sets to return (format: int32)
-  --skipToken: string # to be used by nextLink implementation
+  --skip-token: string # to be used by nextLink implementation
 ]: nothing -> record<nextLink: string, value: table<id: string, location: string, name: string, properties: record, tags: any, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$skipToken" $skipToken "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.VMwareCloudSimple/virtualMachines" $qp)
+  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$skipToken" $skip_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.VMwareCloudSimple/virtualMachines") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Implements list of dedicated cloud nodes within RG method
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.VMwareCloudSimple/dedicatedCloudNodes
 # operationId: DedicatedCloudNodes_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-v-mware-cloud-simple-dedicated-cloud-nodes ListByResourceGroup" [
-  subscriptionId: string
-  resourceGroupName: string
+export def "subscriptions-resource-groups-providers-microsoft-v-mware-cloud-simple-dedicated-cloud-nodes list" [
+  subscription_id: string
+  resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -573,29 +601,30 @@ export def "subscriptions-resource-groups-providers-microsoft-v-mware-cloud-simp
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version.
   --filter: string # The filter to apply on the list operation
   --top: int # The maximum number of record sets to return (format: int32)
-  --skipToken: string # to be used by nextLink implementation
+  --skip-token: string # to be used by nextLink implementation
 ]: nothing -> record<nextLink: string, value: table<id: string, location: string, name: string, properties: record, sku: record, tags: any, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$skipToken" $skipToken "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.VMwareCloudSimple/dedicatedCloudNodes" $qp)
+  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$skipToken" $skip_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.VMwareCloudSimple/dedicatedCloudNodes") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Implements dedicated cloud node DELETE method
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.VMwareCloudSimple/dedicatedCloudNodes/{dedicatedCloudNodeName}
 # operationId: DedicatedCloudNodes_Delete
-export def "subscriptions-resource-groups-providers-microsoft-v-mware-cloud-simple-dedicated-cloud-nodes Delete" [
-  subscriptionId: string
-  resourceGroupName: string
-  dedicatedCloudNodeName: string
+export def "subscriptions-resource-groups-providers-microsoft-v-mware-cloud-simple-dedicated-cloud-nodes delete" [
+  subscription_id: string
+  resource_group_name: string
+  dedicated_cloud_node_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -603,26 +632,27 @@ export def "subscriptions-resource-groups-providers-microsoft-v-mware-cloud-simp
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version.
 ]: nothing -> record<error: record<code: string, details: list<any>, message: string, target: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.VMwareCloudSimple/dedicatedCloudNodes/($dedicatedCloudNodeName)" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), dedicated_cloud_node_name: (encode-path-segment $dedicated_cloud_node_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.VMwareCloudSimple/dedicatedCloudNodes/{dedicated_cloud_node_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Implements dedicated cloud node GET method
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.VMwareCloudSimple/dedicatedCloudNodes/{dedicatedCloudNodeName}
 # operationId: DedicatedCloudNodes_Get
-export def "subscriptions-resource-groups-providers-microsoft-v-mware-cloud-simple-dedicated-cloud-nodes Get" [
-  subscriptionId: string
-  resourceGroupName: string
-  dedicatedCloudNodeName: string
+export def "subscriptions-resource-groups-providers-microsoft-v-mware-cloud-simple-dedicated-cloud-nodes get" [
+  subscription_id: string
+  resource_group_name: string
+  dedicated_cloud_node_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -630,26 +660,27 @@ export def "subscriptions-resource-groups-providers-microsoft-v-mware-cloud-simp
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version.
 ]: nothing -> record<id: string, location: string, name: string, properties: record<availabilityZoneId: string, availabilityZoneName: string, cloudRackName: string, created: any, nodesCount: int, placementGroupId: string, placementGroupName: string, privateCloudId: string, privateCloudName: string, provisioningState: string, purchaseId: string, skuDescription: record<id: string, name: string>, status: string, vmwareClusterName: string>, sku: record<capacity: string, description: string, family: string, name: string, tier: string>, tags: any, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.VMwareCloudSimple/dedicatedCloudNodes/($dedicatedCloudNodeName)" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), dedicated_cloud_node_name: (encode-path-segment $dedicated_cloud_node_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.VMwareCloudSimple/dedicatedCloudNodes/{dedicated_cloud_node_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Implements dedicated cloud node PATCH method
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.VMwareCloudSimple/dedicatedCloudNodes/{dedicatedCloudNodeName}
 # operationId: DedicatedCloudNodes_Update
-export def "subscriptions-resource-groups-providers-microsoft-v-mware-cloud-simple-dedicated-cloud-nodes Update" [
-  subscriptionId: string
-  resourceGroupName: string
-  dedicatedCloudNodeName: string
+export def "subscriptions-resource-groups-providers-microsoft-v-mware-cloud-simple-dedicated-cloud-nodes update" [
+  subscription_id: string
+  resource_group_name: string
+  dedicated_cloud_node_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -657,6 +688,7 @@ export def "subscriptions-resource-groups-providers-microsoft-v-mware-cloud-simp
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version.
   --tags: any # Tags model
@@ -665,12 +697,12 @@ export def "subscriptions-resource-groups-providers-microsoft-v-mware-cloud-simp
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.VMwareCloudSimple/dedicatedCloudNodes/($dedicatedCloudNodeName)" $qp)
-  let body = {tags: $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), dedicated_cloud_node_name: (encode-path-segment $dedicated_cloud_node_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.VMwareCloudSimple/dedicatedCloudNodes/{dedicated_cloud_node_name}") $qp)
+  let req_body = {"tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Implements dedicated cloud node PUT method
@@ -679,10 +711,10 @@ export def "subscriptions-resource-groups-providers-microsoft-v-mware-cloud-simp
 # operationId: DedicatedCloudNodes_CreateOrUpdate
 # --properties shape: {availabilityZoneId: string, nodesCount: int, placementGroupId: string, purchaseId: string, skuDescription?: any}
 # --sku shape: {capacity?: string, description?: string, family?: string, name: string, tier?: string}
-export def "subscriptions-resource-groups-providers-microsoft-v-mware-cloud-simple-dedicated-cloud-nodes CreateOrUpdate" [
-  subscriptionId: string
-  resourceGroupName: string
-  dedicatedCloudNodeName: string
+export def "subscriptions-resource-groups-providers-microsoft-v-mware-cloud-simple-dedicated-cloud-nodes create-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  dedicated_cloud_node_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -690,9 +722,10 @@ export def "subscriptions-resource-groups-providers-microsoft-v-mware-cloud-simp
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version.
-  --Referer: string # referer url
+  --referer: string # referer url
   location: string # Azure region
   --properties: any # Properties of dedicated cloud node — shape: {availabilityZoneId: string, nodesCount: int, placementGroupId: string, purchaseId: string, skuDescription?: any}
   --sku: any # The purchase SKU for CloudSimple paid resources — shape: {capacity?: string, description?: string, family?: string, name: string, tier?: string}
@@ -702,23 +735,23 @@ export def "subscriptions-resource-groups-providers-microsoft-v-mware-cloud-simp
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.VMwareCloudSimple/dedicatedCloudNodes/($dedicatedCloudNodeName)" $qp)
-  let body = {location: $location, properties: $properties, sku: $sku, tags: $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Referer": $Referer} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), dedicated_cloud_node_name: (encode-path-segment $dedicated_cloud_node_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.VMwareCloudSimple/dedicatedCloudNodes/{dedicated_cloud_node_name}") $qp)
+  let req_body = {"location": $location, "properties": $properties, "sku": $sku, "tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Referer": $referer} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Implements list of dedicatedCloudService objects within RG method
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.VMwareCloudSimple/dedicatedCloudServices
 # operationId: DedicatedCloudServices_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-v-mware-cloud-simple-dedicated-cloud-services ListByResourceGroup" [
-  subscriptionId: string
-  resourceGroupName: string
+export def "subscriptions-resource-groups-providers-microsoft-v-mware-cloud-simple-dedicated-cloud-services list" [
+  subscription_id: string
+  resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -726,29 +759,30 @@ export def "subscriptions-resource-groups-providers-microsoft-v-mware-cloud-simp
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version.
   --filter: string # The filter to apply on the list operation
   --top: int # The maximum number of record sets to return (format: int32)
-  --skipToken: string # to be used by nextLink implementation
+  --skip-token: string # to be used by nextLink implementation
 ]: nothing -> record<nextLink: string, value: table<id: string, location: string, name: string, properties: record, tags: any, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$skipToken" $skipToken "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.VMwareCloudSimple/dedicatedCloudServices" $qp)
+  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$skipToken" $skip_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.VMwareCloudSimple/dedicatedCloudServices") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Implements dedicatedCloudService DELETE method
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.VMwareCloudSimple/dedicatedCloudServices/{dedicatedCloudServiceName}
 # operationId: DedicatedCloudServices_Delete
-export def "subscriptions-resource-groups-providers-microsoft-v-mware-cloud-simple-dedicated-cloud-services Delete" [
-  subscriptionId: string
-  resourceGroupName: string
-  dedicatedCloudServiceName: string
+export def "subscriptions-resource-groups-providers-microsoft-v-mware-cloud-simple-dedicated-cloud-services delete" [
+  subscription_id: string
+  resource_group_name: string
+  dedicated_cloud_service_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -756,26 +790,27 @@ export def "subscriptions-resource-groups-providers-microsoft-v-mware-cloud-simp
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version.
 ]: nothing -> record<error: record<code: string, details: list<any>, message: string, target: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.VMwareCloudSimple/dedicatedCloudServices/($dedicatedCloudServiceName)" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), dedicated_cloud_service_name: (encode-path-segment $dedicated_cloud_service_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.VMwareCloudSimple/dedicatedCloudServices/{dedicated_cloud_service_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Implements dedicatedCloudService GET method
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.VMwareCloudSimple/dedicatedCloudServices/{dedicatedCloudServiceName}
 # operationId: DedicatedCloudServices_Get
-export def "subscriptions-resource-groups-providers-microsoft-v-mware-cloud-simple-dedicated-cloud-services Get" [
-  subscriptionId: string
-  resourceGroupName: string
-  dedicatedCloudServiceName: string
+export def "subscriptions-resource-groups-providers-microsoft-v-mware-cloud-simple-dedicated-cloud-services get" [
+  subscription_id: string
+  resource_group_name: string
+  dedicated_cloud_service_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -783,26 +818,27 @@ export def "subscriptions-resource-groups-providers-microsoft-v-mware-cloud-simp
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version.
 ]: nothing -> record<id: string, location: string, name: string, properties: record<gatewaySubnet: string, isAccountOnboarded: string, nodes: int, serviceURL: string>, tags: any, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.VMwareCloudSimple/dedicatedCloudServices/($dedicatedCloudServiceName)" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), dedicated_cloud_service_name: (encode-path-segment $dedicated_cloud_service_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.VMwareCloudSimple/dedicatedCloudServices/{dedicated_cloud_service_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Implements dedicatedCloudService PATCH method
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.VMwareCloudSimple/dedicatedCloudServices/{dedicatedCloudServiceName}
 # operationId: DedicatedCloudServices_Update
-export def "subscriptions-resource-groups-providers-microsoft-v-mware-cloud-simple-dedicated-cloud-services Update" [
-  subscriptionId: string
-  resourceGroupName: string
-  dedicatedCloudServiceName: string
+export def "subscriptions-resource-groups-providers-microsoft-v-mware-cloud-simple-dedicated-cloud-services update" [
+  subscription_id: string
+  resource_group_name: string
+  dedicated_cloud_service_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -810,6 +846,7 @@ export def "subscriptions-resource-groups-providers-microsoft-v-mware-cloud-simp
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version.
   --tags: any # Tags model
@@ -818,12 +855,12 @@ export def "subscriptions-resource-groups-providers-microsoft-v-mware-cloud-simp
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.VMwareCloudSimple/dedicatedCloudServices/($dedicatedCloudServiceName)" $qp)
-  let body = {tags: $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), dedicated_cloud_service_name: (encode-path-segment $dedicated_cloud_service_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.VMwareCloudSimple/dedicatedCloudServices/{dedicated_cloud_service_name}") $qp)
+  let req_body = {"tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Implements dedicated cloud service PUT method
@@ -831,10 +868,10 @@ export def "subscriptions-resource-groups-providers-microsoft-v-mware-cloud-simp
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.VMwareCloudSimple/dedicatedCloudServices/{dedicatedCloudServiceName}
 # operationId: DedicatedCloudServices_CreateOrUpdate
 # --properties shape: {gatewaySubnet: string}
-export def "subscriptions-resource-groups-providers-microsoft-v-mware-cloud-simple-dedicated-cloud-services CreateOrUpdate" [
-  subscriptionId: string
-  resourceGroupName: string
-  dedicatedCloudServiceName: string
+export def "subscriptions-resource-groups-providers-microsoft-v-mware-cloud-simple-dedicated-cloud-services create-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  dedicated_cloud_service_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -842,6 +879,7 @@ export def "subscriptions-resource-groups-providers-microsoft-v-mware-cloud-simp
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version.
   location: string # Azure region
@@ -852,21 +890,21 @@ export def "subscriptions-resource-groups-providers-microsoft-v-mware-cloud-simp
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.VMwareCloudSimple/dedicatedCloudServices/($dedicatedCloudServiceName)" $qp)
-  let body = {location: $location, properties: $properties, tags: $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), dedicated_cloud_service_name: (encode-path-segment $dedicated_cloud_service_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.VMwareCloudSimple/dedicatedCloudServices/{dedicated_cloud_service_name}") $qp)
+  let req_body = {"location": $location, "properties": $properties, "tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Implements list virtual machine within RG method
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.VMwareCloudSimple/virtualMachines
 # operationId: VirtualMachines_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-v-mware-cloud-simple-virtual-machines ListByResourceGroup" [
-  subscriptionId: string
-  resourceGroupName: string
+export def "subscriptions-resource-groups-providers-microsoft-v-mware-cloud-simple-virtual-machines list" [
+  subscription_id: string
+  resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -874,29 +912,30 @@ export def "subscriptions-resource-groups-providers-microsoft-v-mware-cloud-simp
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version.
   --filter: string # The filter to apply on the list operation
   --top: int # The maximum number of record sets to return (format: int32)
-  --skipToken: string # to be used by nextLink implementation
+  --skip-token: string # to be used by nextLink implementation
 ]: nothing -> record<nextLink: string, value: table<id: string, location: string, name: string, properties: record, tags: any, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$skipToken" $skipToken "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.VMwareCloudSimple/virtualMachines" $qp)
+  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$skipToken" $skip_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.VMwareCloudSimple/virtualMachines") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Implements virtual machine DELETE method
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.VMwareCloudSimple/virtualMachines/{virtualMachineName}
 # operationId: VirtualMachines_Delete
-export def "subscriptions-resource-groups-providers-microsoft-v-mware-cloud-simple-virtual-machines Delete" [
-  subscriptionId: string
-  resourceGroupName: string
-  virtualMachineName: string
+export def "subscriptions-resource-groups-providers-microsoft-v-mware-cloud-simple-virtual-machines delete" [
+  subscription_id: string
+  resource_group_name: string
+  virtual_machine_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -904,29 +943,30 @@ export def "subscriptions-resource-groups-providers-microsoft-v-mware-cloud-simp
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version.
-  --Referer: string # referer url
+  --referer: string # referer url
 ]: nothing -> record<error: record<code: string, details: list<any>, message: string, target: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.VMwareCloudSimple/virtualMachines/($virtualMachineName)" $qp)
-  let extra_headers = {"Referer": $Referer} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), virtual_machine_name: (encode-path-segment $virtual_machine_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.VMwareCloudSimple/virtualMachines/{virtual_machine_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"Referer": $referer} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Implements virtual machine GET method
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.VMwareCloudSimple/virtualMachines/{virtualMachineName}
 # operationId: VirtualMachines_Get
-export def "subscriptions-resource-groups-providers-microsoft-v-mware-cloud-simple-virtual-machines Get" [
-  subscriptionId: string
-  resourceGroupName: string
-  virtualMachineName: string
+export def "subscriptions-resource-groups-providers-microsoft-v-mware-cloud-simple-virtual-machines get" [
+  subscription_id: string
+  resource_group_name: string
+  virtual_machine_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -934,26 +974,27 @@ export def "subscriptions-resource-groups-providers-microsoft-v-mware-cloud-simp
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version.
 ]: nothing -> record<id: string, location: string, name: string, properties: record<amountOfRam: int, controllers: list<record>, customization: record<dnsServers: list, hostName: string, password: string, policyId: string, username: string>, disks: list<record>, dnsname: string, exposeToGuestVM: bool, folder: string, guestOS: string, guestOSType: string, nics: list<record>, numberOfCores: int, password: string, privateCloudId: string, provisioningState: string, publicIP: string, resourcePool: record<id: string, location: string, name: string, privateCloudId: string, properties: record, type: string>, status: string, templateId: string, username: string, vSphereNetworks: list<string>, vmId: string, vmwaretools: string>, tags: any, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.VMwareCloudSimple/virtualMachines/($virtualMachineName)" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), virtual_machine_name: (encode-path-segment $virtual_machine_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.VMwareCloudSimple/virtualMachines/{virtual_machine_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Implements virtual machine PATCH method
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.VMwareCloudSimple/virtualMachines/{virtualMachineName}
 # operationId: VirtualMachines_Update
-export def "subscriptions-resource-groups-providers-microsoft-v-mware-cloud-simple-virtual-machines Update" [
-  subscriptionId: string
-  resourceGroupName: string
-  virtualMachineName: string
+export def "subscriptions-resource-groups-providers-microsoft-v-mware-cloud-simple-virtual-machines update" [
+  subscription_id: string
+  resource_group_name: string
+  virtual_machine_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -961,6 +1002,7 @@ export def "subscriptions-resource-groups-providers-microsoft-v-mware-cloud-simp
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version.
   --tags: any # Tags model
@@ -969,23 +1011,23 @@ export def "subscriptions-resource-groups-providers-microsoft-v-mware-cloud-simp
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.VMwareCloudSimple/virtualMachines/($virtualMachineName)" $qp)
-  let body = {tags: $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), virtual_machine_name: (encode-path-segment $virtual_machine_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.VMwareCloudSimple/virtualMachines/{virtual_machine_name}") $qp)
+  let req_body = {"tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Implements virtual machine PUT method
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.VMwareCloudSimple/virtualMachines/{virtualMachineName}
 # operationId: VirtualMachines_CreateOrUpdate
-# --properties shape: {amountOfRam: int, customization?: any, disks?: list, exposeToGuestVM?: bool, nics?: list, numberOfCores: int, password?: string, privateCloudId: string, resourcePool?: any, templateId?: string, username?: string, vSphereNetworks?: list}
-export def "subscriptions-resource-groups-providers-microsoft-v-mware-cloud-simple-virtual-machines CreateOrUpdate" [
-  subscriptionId: string
-  resourceGroupName: string
-  virtualMachineName: string
+# --properties shape: {amountOfRam: int, customization?: any, disks?: list, exposeToGuestVM?: bool, nics?: list, numberOfCores: int, password?: string, privateCloudId: string, resourcePool?: any, templateId?: string, username?: string, vSphereNetworks?: list<string>}
+export def "subscriptions-resource-groups-providers-microsoft-v-mware-cloud-simple-virtual-machines create-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  virtual_machine_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -993,35 +1035,36 @@ export def "subscriptions-resource-groups-providers-microsoft-v-mware-cloud-simp
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version.
-  --Referer: string # referer url
+  --referer: string # referer url
   location: string # Azure region
-  --properties: any # Properties of virtual machine — shape: {amountOfRam: int, customization?: any, disks?: list, exposeToGuestVM?: bool, nics?: list, numberOfCores: int, password?: string, privateCloudId: string, resourcePool?: any, templateId?: string, username?: string, vSphereNetworks?: list}
+  --properties: any # Properties of virtual machine — shape: {amountOfRam: int, customization?: any, disks?: list, exposeToGuestVM?: bool, nics?: list, numberOfCores: int, password?: string, privateCloudId: string, resourcePool?: any, templateId?: string, username?: string, vSphereNetworks?: list<string>}
   --tags: any # Tags model
 ]: any -> record<id: string, location: string, name: string, properties: record<amountOfRam: int, controllers: list<record>, customization: record<dnsServers: list, hostName: string, password: string, policyId: string, username: string>, disks: list<record>, dnsname: string, exposeToGuestVM: bool, folder: string, guestOS: string, guestOSType: string, nics: list<record>, numberOfCores: int, password: string, privateCloudId: string, provisioningState: string, publicIP: string, resourcePool: record<id: string, location: string, name: string, privateCloudId: string, properties: record, type: string>, status: string, templateId: string, username: string, vSphereNetworks: list<string>, vmId: string, vmwaretools: string>, tags: any, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.VMwareCloudSimple/virtualMachines/($virtualMachineName)" $qp)
-  let body = {location: $location, properties: $properties, tags: $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Referer": $Referer} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), virtual_machine_name: (encode-path-segment $virtual_machine_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.VMwareCloudSimple/virtualMachines/{virtual_machine_name}") $qp)
+  let req_body = {"location": $location, "properties": $properties, "tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Referer": $referer} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Implements a start method for a virtual machine
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.VMwareCloudSimple/virtualMachines/{virtualMachineName}/start
 # operationId: VirtualMachines_Start
-export def "subscriptions-resource-groups-providers-microsoft-v-mware-cloud-simple-virtual-machines-start Start" [
-  subscriptionId: string
-  resourceGroupName: string
-  virtualMachineName: string
+export def "subscriptions-resource-groups-providers-microsoft-v-mware-cloud-simple-virtual-machines-start start" [
+  subscription_id: string
+  resource_group_name: string
+  virtual_machine_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1029,29 +1072,30 @@ export def "subscriptions-resource-groups-providers-microsoft-v-mware-cloud-simp
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version.
-  --Referer: string # referer url
+  --referer: string # referer url
 ]: nothing -> record<error: record<code: string, details: list<any>, message: string, target: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.VMwareCloudSimple/virtualMachines/($virtualMachineName)/start" $qp)
-  let extra_headers = {"Referer": $Referer} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), virtual_machine_name: (encode-path-segment $virtual_machine_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.VMwareCloudSimple/virtualMachines/{virtual_machine_name}/start") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"Referer": $referer} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Implements shutdown, poweroff, and suspend method for a virtual machine
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.VMwareCloudSimple/virtualMachines/{virtualMachineName}/stop
 # operationId: VirtualMachines_Stop
-export def "subscriptions-resource-groups-providers-microsoft-v-mware-cloud-simple-virtual-machines-stop Stop" [
-  subscriptionId: string
-  resourceGroupName: string
-  virtualMachineName: string
+export def "subscriptions-resource-groups-providers-microsoft-v-mware-cloud-simple-virtual-machines-stop stop" [
+  subscription_id: string
+  resource_group_name: string
+  virtual_machine_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1059,22 +1103,23 @@ export def "subscriptions-resource-groups-providers-microsoft-v-mware-cloud-simp
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --mode: string@mode-completer # query stop mode parameter (reboot, shutdown, etc...)
   --api-version: string # Client API version.
-  --Referer: string # referer url
+  --referer: string # referer url
   --mode: string@mode-completer # mode indicates a type of stop operation - reboot, suspend, shutdown or power-off
 ]: any -> record<error: record<code: string, details: list<any>, message: string, target: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "mode" $mode "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.VMwareCloudSimple/virtualMachines/($virtualMachineName)/stop" $qp)
-  let body = {mode: $mode} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Referer": $Referer} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), virtual_machine_name: (encode-path-segment $virtual_machine_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.VMwareCloudSimple/virtualMachines/{virtual_machine_name}/stop") $qp)
+  let req_body = {"mode": $mode} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Referer": $referer} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }

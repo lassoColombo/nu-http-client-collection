@@ -17,21 +17,32 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 }
 
 # Serialize a single query parameter based on collection style
+# Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
+# ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = ($name | url encode)
+  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
-  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
-    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
-    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
+    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
+    _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
+}
+
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Build URL from base, path, and optional query string
@@ -43,7 +54,7 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
@@ -52,13 +63,13 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
     "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "put" => { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "patch" => { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
   if ($method in ["head" "options"]) { return $resp }
-  if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
+  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
 def base-url-completer [] { ["https://api.mercedes-benz.com/image_tryout/v1/vehicles"] }
@@ -67,8 +78,8 @@ def auth-scheme-completer [] { ["bearer"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "components imageComponentsGET" } } | get name | first)
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "components get-image" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -88,11 +99,11 @@ export def commands []: nothing -> table {
   }
 }
 
-# Returns URLs pointing to images in JPG format in the highest available resolution (depending on the component) of the vehicle's:   * engine (1024x576 px),    * rim (710x710 px),    * trim (800x600 px),    * paints (800x600 px),    * upholstery (800x600 px) and    * equipments (740x416 px).
+# Returns URLs pointing to images in JPG format in the highest available resolution (depending on the component) of the vehicle's: * engine (1024x576 px), * rim (710x710 px), * trim (800x600 px), * paints (800x600 px), * upholstery (800x600 px) and * equipments (740x416 px).
 #
 # GET /{finorvin}/components
 # operationId: imageComponentsGET
-export def "components imageComponentsGET" [
+export def "components get-image" [
   finorvin: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -101,21 +112,22 @@ export def "components imageComponentsGET" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<components: record<engine: record<url: string>, equipments: record, paint: record<lowerPaint: record, upperPaint: record>, rim: record<code: string, url: string>, trim: record<code: string, url: string>, upholstery: record<code: string, url: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($finorvin)/components")
+  let full_url = (build-url $base ({finorvin: (encode-path-segment $finorvin)} | format pattern "/{finorvin}/components"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
-# Returns a URL pointing to an image of the vehicles engine.  These images are available in the resolution 1024x576 px.
+# Returns a URL pointing to an image of the vehicles engine. These images are available in the resolution 1024x576 px.
 #
 # GET /{finorvin}/components/engine
 # operationId: imageComponentsEngineGET
-export def "components-engine imageComponentsEngineGET" [
+export def "components-engine get-image" [
   finorvin: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -124,21 +136,22 @@ export def "components-engine imageComponentsEngineGET" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<engine: record<url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($finorvin)/components/engine")
+  let full_url = (build-url $base ({finorvin: (encode-path-segment $finorvin)} | format pattern "/{finorvin}/components/engine"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Returns URLs pointing to images of this vehicle's equipments. The images are available in the highest possible resolution (usually 740x416 px).
 #
 # GET /{finorvin}/components/equipments
 # operationId: imageComponentsEquipmentsGET
-export def "components-equipments imageComponentsEquipmentsGET" [
+export def "components-equipments get-image" [
   finorvin: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -147,21 +160,22 @@ export def "components-equipments imageComponentsEquipmentsGET" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<equipments: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($finorvin)/components/equipments")
+  let full_url = (build-url $base ({finorvin: (encode-path-segment $finorvin)} | format pattern "/{finorvin}/components/equipments"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
-# Returns URLs pointing to images of this vehicles paint.  These images are available in resolution 800x600 px.  Note there might be two paints (e.g. Smart, 'paint' for body panel and 'paint2' for the tridion cell)
+# Returns URLs pointing to images of this vehicles paint. These images are available in resolution 800x600 px. Note there might be two paints (e.g. Smart, 'paint' for body panel and 'paint2' for the tridion cell)
 #
 # GET /{finorvin}/components/paint
 # operationId: imageComponentsPaintGET
-export def "components-paint imageComponentsPaintGET" [
+export def "components-paint get-image" [
   finorvin: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -170,21 +184,22 @@ export def "components-paint imageComponentsPaintGET" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<paint: record<lowerPaint: record<code: string, url: string>, upperPaint: record<code: string, url: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($finorvin)/components/paint")
+  let full_url = (build-url $base ({finorvin: (encode-path-segment $finorvin)} | format pattern "/{finorvin}/components/paint"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
-# Returns a URL pointing to an image of the vehicles rim.  These images are available in the resolution 710x710 px.
+# Returns a URL pointing to an image of the vehicles rim. These images are available in the resolution 710x710 px.
 #
 # GET /{finorvin}/components/rim
 # operationId: imageComponentsRimGET
-export def "components-rim imageComponentsRimGET" [
+export def "components-rim get-image" [
   finorvin: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -193,21 +208,22 @@ export def "components-rim imageComponentsRimGET" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<rim: record<code: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($finorvin)/components/rim")
+  let full_url = (build-url $base ({finorvin: (encode-path-segment $finorvin)} | format pattern "/{finorvin}/components/rim"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
-# Returns a URL pointing to an image of this vehicles trim.  These images are available in resolution 800x600 px.
+# Returns a URL pointing to an image of this vehicles trim. These images are available in resolution 800x600 px.
 #
 # GET /{finorvin}/components/trim
 # operationId: imageComponentsTrimGET
-export def "components-trim imageComponentsTrimGET" [
+export def "components-trim get-image" [
   finorvin: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -216,21 +232,22 @@ export def "components-trim imageComponentsTrimGET" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<trim: record<code: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($finorvin)/components/trim")
+  let full_url = (build-url $base ({finorvin: (encode-path-segment $finorvin)} | format pattern "/{finorvin}/components/trim"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Returns URLs pointing to images of the vehicle's upholsteries. Tge images are available in the highest possible resolution (usually 800x600 px).
 #
 # GET /{finorvin}/components/upholstery
 # operationId: imageComponentsUpholsteryGET
-export def "components-upholstery imageComponentsUpholsteryGET" [
+export def "components-upholstery get-image" [
   finorvin: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -239,21 +256,22 @@ export def "components-upholstery imageComponentsUpholsteryGET" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<upholstery: record<code: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($finorvin)/components/upholstery")
+  let full_url = (build-url $base ({finorvin: (encode-path-segment $finorvin)} | format pattern "/{finorvin}/components/upholstery"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Returns URLs pointing to PNG images of a vehicle with a transparent background.
 #
 # GET /{finorvin}/vehicle
 # operationId: imageVehicleGET
-export def "vehicle imageVehicleGET" [
+export def "vehicle get-image" [
   finorvin: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -262,16 +280,17 @@ export def "vehicle imageVehicleGET" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --perspectives: string # One or more perspectives as a comma separated String list e.g. 'EXT000,EXT010,INT1'.  The following perspectives are available:   * EXT000-EXT350: EXT000 defines the front view, EXT010 defines a rotation of 10 degress and so forth.   * INT1-INT4: These are the 4 available interior perspectives.                                   The default value is EXT020,INT1 if no value is provided. (default: EXT020,INT1)
-  --roofOpen: oneof<nothing, bool> # Set 'true', if you are looking for images with the roof open. This option is only valid for cabrios. Default is 'false'. (default: false)
+  --perspectives: string # One or more perspectives as a comma separated String list e.g. 'EXT000,EXT010,INT1'. The following perspectives are available: * EXT000-EXT350: EXT000 defines the front view, EXT010 defines a rotation of 10 degress and so forth. * INT1-INT4: These are the 4 available interior perspectives. The default value is EXT020,INT1 if no value is provided. (default: EXT020,INT1)
+  --roof-open: oneof<nothing, bool> # Set 'true', if you are looking for images with the roof open. This option is only valid for cabrios. Default is 'false'. (default: false)
   --night: oneof<nothing, bool> # Set 'true', if you are looking for images with a darker background and the vehicle's headlights turned on. Default is 'false'. (default: false)
 ]: nothing -> record<vehicle: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "perspectives" $perspectives "scalar") (serialize-qp "roofOpen" $roofOpen "scalar") (serialize-qp "night" $night "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($finorvin)/vehicle" $qp)
+  let qp = [(serialize-qp "perspectives" $perspectives "scalar") (serialize-qp "roofOpen" $roof_open "scalar") (serialize-qp "night" $night "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({finorvin: (encode-path-segment $finorvin)} | format pattern "/{finorvin}/vehicle") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }

@@ -18,21 +18,32 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 }
 
 # Serialize a single query parameter based on collection style
+# Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
+# ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = ($name | url encode)
+  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
-  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
-    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
-    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
+    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
+    _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
+}
+
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Build URL from base, path, and optional query string
@@ -44,7 +55,7 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
@@ -53,13 +64,13 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
     "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "put" => { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "patch" => { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
   if ($method in ["head" "options"]) { return $resp }
-  if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
+  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
 def base-url-completer [] { ["https://api.shop-pro.jp"] }
@@ -68,8 +79,8 @@ def auth-scheme-completer [] { ["bearer"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "appstore-application-chargesjson post" } } | get name | first)
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "appstore-application-charges-json create" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -94,7 +105,7 @@ export def commands []: nothing -> table {
 # POST /appstore/v1/application_charges.json
 # operationId: postApplicationCharge
 # --application_charge shape: {application_charge_source_id?: string}
-export def "appstore-application-chargesjson post" [
+export def "appstore-application-charges-json create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -102,6 +113,7 @@ export def "appstore-application-chargesjson post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --application-charge: record # shape: {application_charge_source_id?: string}
 ]: any -> record<application_charge: record<id: string, make_date: int, point: int, update_date: int>> {
@@ -109,18 +121,18 @@ export def "appstore-application-chargesjson post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/appstore/v1/application_charges.json")
-  let body = {application_charge: $application_charge} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"application_charge": $application_charge} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # アプリストアアプリのアンインストール
 #
 # DELETE /appstore/v1/installation.json
 # operationId: deleteInstallation
-export def "appstore-installationjson delete" [
+export def "appstore-installation-json delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -128,6 +140,7 @@ export def "appstore-installationjson delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<account_id: string, application_charge_source_id: string, recurring_application_charge_id: string, uninstalled_at: int, usage_charge: record<api_token: string, closing_on: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -135,7 +148,7 @@ export def "appstore-installationjson delete" [
   let full_url = (build-url $base "/appstore/v1/installation.json")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # 従量課金データの作成
@@ -143,8 +156,8 @@ export def "appstore-installationjson delete" [
 # POST /appstore/v1/recurring_application_charges/{recurringApplicationChargeId}/usage_charges.json
 # operationId: createUsageCharge
 # --usage_charge shape: {description: string, point: int}
-export def "appstore-recurring-application-charges-usage-chargesjson createUsageCharge" [
-  recurringApplicationChargeId: string
+export def "appstore-recurring-application-charges-usage-charges-json create" [
+  recurring_application_charge_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -152,28 +165,29 @@ export def "appstore-recurring-application-charges-usage-chargesjson createUsage
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Appstore-Usage-Charge-Token: string # アンインストール後の従量課金の精算をする際に、 `Authorization` ヘッダへアクセストークンを指定する代わりにこのヘッダを指定することで、このAPIを実行することができます。 インストール中は指定不要で、アンインストール後のみ必須となります。 アンインストールフックで通知される `usage_charge.api_token` の値を指定してください。 このヘッダは、アンインストールフックで通知される `usage_charge.closing_on` まで有効です。この期間を過ぎると従量課金を精算できなくなりますのでご注意ください。詳しくは [アプリのアンインストール](#section/API/アプリのアンインストール) をご確認ください。
+  --x-appstore-usage-charge-token: string # アンインストール後の従量課金の精算をする際に、 `Authorization` ヘッダへアクセストークンを指定する代わりにこのヘッダを指定することで、このAPIを実行することができます。 インストール中は指定不要で、アンインストール後のみ必須となります。 アンインストールフックで通知される `usage_charge.api_token` の値を指定してください。 このヘッダは、アンインストールフックで通知される `usage_charge.closing_on` まで有効です。この期間を過ぎると従量課金を精算できなくなりますのでご注意ください。詳しくは [アプリのアンインストール](#section/API/アプリのアンインストール) をご確認ください。
   --usage-charge: record # shape: {description: string, point: int}
 ]: any -> record<usage_charge: record<description: string, id: string, make_date: int, point: int, update_date: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/appstore/v1/recurring_application_charges/($recurringApplicationChargeId)/usage_charges.json")
-  let body = {usage_charge: $usage_charge} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Appstore-Usage-Charge-Token": $X_Appstore_Usage_Charge_Token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({recurring_application_charge_id: (encode-path-segment $recurring_application_charge_id)} | format pattern "/appstore/v1/recurring_application_charges/{recurring_application_charge_id}/usage_charges.json"))
+  let req_body = {"usage_charge": $usage_charge} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Appstore-Usage-Charge-Token": $x_appstore_usage_charge_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # スクリプトタグの取得
 #
 # GET /appstore/v1/script_tags.json
 # operationId: getShopScriptTags
-export def "appstore-script-tagsjson get" [
+export def "appstore-script-tags-json get-shop" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -181,6 +195,7 @@ export def "appstore-script-tagsjson get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<script_tags: table<account_id: string, display_scope: string, id: int, integrity: string, make_date: int, oauth_application_id: int, src: string, update_date: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -188,7 +203,7 @@ export def "appstore-script-tagsjson get" [
   let full_url = (build-url $base "/appstore/v1/script_tags.json")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # スクリプトタグの作成
@@ -196,7 +211,7 @@ export def "appstore-script-tagsjson get" [
 # POST /appstore/v1/script_tags.json
 # operationId: createShopScriptTag
 # --script_tag shape: {display_scope?: "shop"|"thanks_page", integrity?: string, src?: string}
-export def "appstore-script-tagsjson createShopScriptTag" [
+export def "appstore-script-tags-json create-shop" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -204,6 +219,7 @@ export def "appstore-script-tagsjson createShopScriptTag" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --script-tag: record # shape: {display_scope?: "shop"|"thanks_page", integrity?: string, src?: string}
 ]: any -> record<script_tag: record<account_id: string, display_scope: string, id: int, integrity: string, make_date: int, oauth_application_id: int, src: string, update_date: int>> {
@@ -211,11 +227,11 @@ export def "appstore-script-tagsjson createShopScriptTag" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/appstore/v1/script_tags.json")
-  let body = {script_tag: $script_tag} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"script_tag": $script_tag} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # スクリプトタグの削除
@@ -223,7 +239,7 @@ export def "appstore-script-tagsjson createShopScriptTag" [
 # DELETE /appstore/v1/script_tags/{scriptTagId}.json
 # operationId: deleteScriptTag
 export def "appstore-script-tags delete" [
-  scriptTagId: int
+  script_tag_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -231,22 +247,23 @@ export def "appstore-script-tags delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/appstore/v1/script_tags/($scriptTagId).json")
+  let full_url = (build-url $base ({script_tag_id: (encode-path-segment $script_tag_id)} | format pattern "/appstore/v1/script_tags/{script_tag_id}.json"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # スクリプトタグの取得
 #
 # GET /appstore/v1/script_tags/{scriptTagId}.json
 # operationId: getShopScriptTag
-export def "appstore-script-tags get" [
-  scriptTagId: int
+export def "appstore-script-tags get-shop" [
+  script_tag_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -254,14 +271,15 @@ export def "appstore-script-tags get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<script_tag: record<account_id: string, display_scope: string, id: int, integrity: string, make_date: int, oauth_application_id: int, src: string, update_date: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/appstore/v1/script_tags/($scriptTagId).json")
+  let full_url = (build-url $base ({script_tag_id: (encode-path-segment $script_tag_id)} | format pattern "/appstore/v1/script_tags/{script_tag_id}.json"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # スクリプトタグの更新
@@ -269,8 +287,8 @@ export def "appstore-script-tags get" [
 # PUT /appstore/v1/script_tags/{scriptTagId}.json
 # operationId: updateShopScriptTag
 # --script_tag shape: {display_scope?: "shop"|"thanks_page", integrity?: string, src?: string}
-export def "appstore-script-tags updateShopScriptTag" [
-  scriptTagId: int
+export def "appstore-script-tags update-shop" [
+  script_tag_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -278,25 +296,26 @@ export def "appstore-script-tags updateShopScriptTag" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --script-tag: record # shape: {display_scope?: "shop"|"thanks_page", integrity?: string, src?: string}
 ]: any -> record<script_tag: record<account_id: string, display_scope: string, id: int, integrity: string, make_date: int, oauth_application_id: int, src: string, update_date: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/appstore/v1/script_tags/($scriptTagId).json")
-  let body = {script_tag: $script_tag} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({script_tag_id: (encode-path-segment $script_tag_id)} | format pattern "/appstore/v1/script_tags/{script_tag_id}.json"))
+  let req_body = {"script_tag": $script_tag} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # インラインスクリプトタグの取得
 #
 # GET /v1/inline_script_tags.json
 # operationId: getInlineScriptTags
-export def "inline-script-tagsjson get" [
+export def "inline-script-tags-json get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -304,6 +323,7 @@ export def "inline-script-tagsjson get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<inline_script_tags: table<account_id: string, display_scope: string, id: int, make_date: int, oauth_application_id: int, script: string, trigger_event: string, update_date: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -311,7 +331,7 @@ export def "inline-script-tagsjson get" [
   let full_url = (build-url $base "/v1/inline_script_tags.json")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # インラインスクリプトタグの登録
@@ -319,7 +339,7 @@ export def "inline-script-tagsjson get" [
 # POST /v1/inline_script_tags.json
 # operationId: createInlineScriptTag
 # --inline_script_tag shape: {display_scope?: "all"|"thanks_page"|"cart", script?: string, trigger_event?: "object_builded"}
-export def "inline-script-tagsjson createInlineScriptTag" [
+export def "inline-script-tags-json create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -327,6 +347,7 @@ export def "inline-script-tagsjson createInlineScriptTag" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --inline-script-tag: record # shape: {display_scope?: "all"|"thanks_page"|"cart", script?: string, trigger_event?: "object_builded"}
 ]: any -> record<inline_script_tag: record<account_id: string, display_scope: string, id: int, make_date: int, oauth_application_id: int, script: string, trigger_event: string, update_date: int>> {
@@ -334,11 +355,11 @@ export def "inline-script-tagsjson createInlineScriptTag" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/inline_script_tags.json")
-  let body = {inline_script_tag: $inline_script_tag} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"inline_script_tag": $inline_script_tag} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # インラインスクリプトタグの削除
@@ -346,7 +367,7 @@ export def "inline-script-tagsjson createInlineScriptTag" [
 # DELETE /v1/inline_script_tags/{inlineScriptTagId}.json
 # operationId: deleteInlineScriptTag
 export def "inline-script-tags delete" [
-  inlineScriptTagId: int
+  inline_script_tag_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -354,14 +375,15 @@ export def "inline-script-tags delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/inline_script_tags/($inlineScriptTagId).json")
+  let full_url = (build-url $base ({inline_script_tag_id: (encode-path-segment $inline_script_tag_id)} | format pattern "/v1/inline_script_tags/{inline_script_tag_id}.json"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # インラインスクリプトタグの取得
@@ -369,7 +391,7 @@ export def "inline-script-tags delete" [
 # GET /v1/inline_script_tags/{inlineScriptTagId}.json
 # operationId: getInlineScriptTag
 export def "inline-script-tags get" [
-  inlineScriptTagId: int
+  inline_script_tag_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -377,14 +399,15 @@ export def "inline-script-tags get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<inline_script_tag: record<account_id: string, display_scope: string, id: int, make_date: int, oauth_application_id: int, script: string, trigger_event: string, update_date: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/inline_script_tags/($inlineScriptTagId).json")
+  let full_url = (build-url $base ({inline_script_tag_id: (encode-path-segment $inline_script_tag_id)} | format pattern "/v1/inline_script_tags/{inline_script_tag_id}.json"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # インラインスクリプトタグの更新
@@ -392,8 +415,8 @@ export def "inline-script-tags get" [
 # PUT /v1/inline_script_tags/{inlineScriptTagId}.json
 # operationId: updateInlineScriptTag
 # --inline_script_tag shape: {display_scope?: "all"|"thanks_page"|"cart", script?: string, trigger_event?: "object_builded"}
-export def "inline-script-tags updateInlineScriptTag" [
-  inlineScriptTagId: int
+export def "inline-script-tags update" [
+  inline_script_tag_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -401,25 +424,26 @@ export def "inline-script-tags updateInlineScriptTag" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --inline-script-tag: record # shape: {display_scope?: "all"|"thanks_page"|"cart", script?: string, trigger_event?: "object_builded"}
 ]: any -> record<inline_script_tag: record<account_id: string, display_scope: string, id: int, make_date: int, oauth_application_id: int, script: string, trigger_event: string, update_date: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/inline_script_tags/($inlineScriptTagId).json")
-  let body = {inline_script_tag: $inline_script_tag} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({inline_script_tag_id: (encode-path-segment $inline_script_tag_id)} | format pattern "/v1/inline_script_tags/{inline_script_tag_id}.json"))
+  let req_body = {"inline_script_tag": $inline_script_tag} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # スクリプトタグの取得
 #
 # GET /v1/script_tags.json
 # operationId: getScriptTags
-export def "script-tagsjson get" [
+export def "script-tags-json get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -427,6 +451,7 @@ export def "script-tagsjson get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<script_tags: table<display_scope: string, id: int, make_date: int, src: string, update_date: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -434,7 +459,7 @@ export def "script-tagsjson get" [
   let full_url = (build-url $base "/v1/script_tags.json")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # スクリプトタグの作成
@@ -442,7 +467,7 @@ export def "script-tagsjson get" [
 # POST /v1/script_tags.json
 # operationId: createScriptTag
 # --script_tag shape: {display_scope?: "all"|"shop"|"thanks_page"|"cart", src?: string}
-export def "script-tagsjson createScriptTag" [
+export def "script-tags-json create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -450,6 +475,7 @@ export def "script-tagsjson createScriptTag" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --script-tag: record # shape: {display_scope?: "all"|"shop"|"thanks_page"|"cart", src?: string}
 ]: any -> record<script_tag: record<display_scope: string, id: int, make_date: int, src: string, update_date: int>> {
@@ -457,18 +483,18 @@ export def "script-tagsjson createScriptTag" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/script_tags.json")
-  let body = {script_tag: $script_tag} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"script_tag": $script_tag} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # スクリプトタグの削除
 #
 # DELETE /v1/script_tags/{scriptTagId}.json
 export def "script-tags delete" [
-  scriptTagId: int
+  script_tag_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -476,14 +502,15 @@ export def "script-tags delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/script_tags/($scriptTagId).json")
+  let full_url = (build-url $base ({script_tag_id: (encode-path-segment $script_tag_id)} | format pattern "/v1/script_tags/{script_tag_id}.json"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # スクリプトタグの取得
@@ -491,7 +518,7 @@ export def "script-tags delete" [
 # GET /v1/script_tags/{scriptTagId}.json
 # operationId: getScriptTag
 export def "script-tags get" [
-  scriptTagId: int
+  script_tag_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -499,14 +526,15 @@ export def "script-tags get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<script_tag: record<display_scope: string, id: int, make_date: int, src: string, update_date: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/script_tags/($scriptTagId).json")
+  let full_url = (build-url $base ({script_tag_id: (encode-path-segment $script_tag_id)} | format pattern "/v1/script_tags/{script_tag_id}.json"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # スクリプトタグの更新
@@ -514,8 +542,8 @@ export def "script-tags get" [
 # PUT /v1/script_tags/{scriptTagId}.json
 # operationId: updateScriptTag
 # --script_tag shape: {display_scope?: "all"|"shop"|"thanks_page"|"cart", src?: string}
-export def "script-tags updateScriptTag" [
-  scriptTagId: int
+export def "script-tags update" [
+  script_tag_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -523,16 +551,17 @@ export def "script-tags updateScriptTag" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --script-tag: record # shape: {display_scope?: "all"|"shop"|"thanks_page"|"cart", src?: string}
 ]: any -> record<script_tag: record<display_scope: string, id: int, make_date: int, src: string, update_date: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/script_tags/($scriptTagId).json")
-  let body = {script_tag: $script_tag} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({script_tag_id: (encode-path-segment $script_tag_id)} | format pattern "/v1/script_tags/{script_tag_id}.json"))
+  let req_body = {"script_tag": $script_tag} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }

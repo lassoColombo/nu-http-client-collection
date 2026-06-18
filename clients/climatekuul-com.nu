@@ -17,21 +17,32 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 }
 
 # Serialize a single query parameter based on collection style
+# Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
+# ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = ($name | url encode)
+  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
-  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
-    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
-    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
+    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
+    _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
+}
+
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Build URL from base, path, and optional query string
@@ -43,7 +54,7 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
@@ -52,13 +63,13 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
     "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "put" => { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "patch" => { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
   if ($method in ["head" "options"]) { return $resp }
-  if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
+  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
 def base-url-completer [] { ["http://api.climatekuul.com:8000/footprint"] }
@@ -67,8 +78,8 @@ def auth-scheme-completer [] { ["bearer"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "airtravel-coordinates airtravelCoordinates" } } | get name | first)
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "airtravel-coordinates create" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -92,7 +103,7 @@ export def commands []: nothing -> table {
 #
 # POST /airtravelCoordinates
 # operationId: airtravelCoordinates
-export def "airtravel-coordinates airtravelCoordinates" [
+export def "airtravel-coordinates create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -100,12 +111,13 @@ export def "airtravel-coordinates airtravelCoordinates" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # e.g. application/x-www-form-urlencoded
-  apiKey_l1: string # Client Api Key (e.g. d95fead6-e8a6-4547-9fb9-7835101a3960)
-  apiKey_l2: string # Integration Partner Api Key (e.g. c60f8db5-7204-4427-960d-27400c38b166)
-  destination_airport_latitude: float # Destination latitude (like:  50.870752, value = -90<=x<=90) (format: double, e.g. 24.9056)
-  destination_airport_longitude: float # Destination longitude (like:  4.669490, value = -180<=x<=180) (format: double, e.g. 67.1569)
+  --content-type: string # e.g. application/x-www-form-urlencoded
+  api_key_l1: string # Client Api Key (e.g. d95fead6-e8a6-4547-9fb9-7835101a3960)
+  api_key_l2: string # Integration Partner Api Key (e.g. c60f8db5-7204-4427-960d-27400c38b166)
+  destination_airport_latitude: float # Destination latitude (like: 50.870752, value = -90<=x<=90) (format: double, e.g. 24.9056)
+  destination_airport_longitude: float # Destination longitude (like: 4.669490, value = -180<=x<=180) (format: double, e.g. 67.1569)
   number_of_passengers: int # Number of passengers (like: 1, 2 ,3 ) (format: int32, e.g. 2)
   origin_airport_latitude: float # Origin latitude (like: 23.372628 value = -90<=x<=90 ) (format: double, e.g. 31.5208)
   origin_airport_longitude: float # Origin longitude (like: 113.159339, value = -180<=x<=180 ) (format: double, e.g. 74.4028)
@@ -116,20 +128,22 @@ export def "airtravel-coordinates airtravelCoordinates" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "http://api.climatekuul.com:8000/footprint")
   let full_url = (build-url $base "/airtravelCoordinates")
-  let body = {apiKey_l1: $apiKey_l1, apiKey_l2: $apiKey_l2, destination_airport_latitude: $destination_airport_latitude, destination_airport_longitude: $destination_airport_longitude, number_of_passengers: $number_of_passengers, origin_airport_latitude: $origin_airport_latitude, origin_airport_longitude: $origin_airport_longitude, travel_class: $travel_class, travel_mode: $travel_mode} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $Content_Type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"apiKey_l1": $api_key_l1, "apiKey_l2": $api_key_l2, "destination_airport_latitude": $destination_airport_latitude, "destination_airport_longitude": $destination_airport_longitude, "number_of_passengers": $number_of_passengers, "origin_airport_latitude": $origin_airport_latitude, "origin_airport_longitude": $origin_airport_longitude, "travel_class": $travel_class, "travel_mode": $travel_mode} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let extra_headers = {"Content-Type": $content_type} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let effective_ct = ($content_type | default "application/x-www-form-urlencoded")
+  let req_body = if $effective_ct == "application/x-www-form-urlencoded" { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else { $req_body }
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $effective_ct $req_body
 }
 
 # confirmCarbonOffset
 #
 # PATCH /airtravelCoordinates/confirmCarbonOffset
 # operationId: confirmCarbonOffset4
-export def "airtravel-coordinates-confirm-carbon-offset confirmCarbonOffset4" [
+export def "airtravel-coordinates-confirm-carbon-offset confirm-offset4" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -137,29 +151,31 @@ export def "airtravel-coordinates-confirm-carbon-offset confirmCarbonOffset4" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  carbonOffset: string # Confirm Carbon Offset (Value = y/n) (e.g. y)
-  --contactEmail: string # Contact email (e.g. example@example.com)
-  --contactFirstName: string # Contact first name (e.g. abc)
-  --contactLastName: string # Contact last name (e.g. xyz)
+  carbon_offset: string # Confirm Carbon Offset (Value = y/n) (e.g. y)
+  --contact-email: string # Contact email (e.g. example@example.com)
+  --contact-first-name: string # Contact first name (e.g. abc)
+  --contact-last-name: string # Contact last name (e.g. xyz)
   transaction_id: string # transaction_id (e.g. 60a78ed201d88997746c91b5)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "http://api.climatekuul.com:8000/footprint")
   let full_url = (build-url $base "/airtravelCoordinates/confirmCarbonOffset")
-  let body = {carbonOffset: $carbonOffset, contactEmail: $contactEmail, contactFirstName: $contactFirstName, contactLastName: $contactLastName, transaction_id: $transaction_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"carbonOffset": $carbon_offset, "contactEmail": $contact_email, "contactFirstName": $contact_first_name, "contactLastName": $contact_last_name, "transaction_id": $transaction_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # confirmPayment
 #
 # PATCH /airtravelCoordinates/confirmPayment
 # operationId: confirmPayment4
-export def "airtravel-coordinates-confirm-payment confirmPayment4" [
+export def "airtravel-coordinates-confirm-payment confirm-payment4" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -167,29 +183,31 @@ export def "airtravel-coordinates-confirm-payment confirmPayment4" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  apiKey_l1: string # apikey_l1 (Like: d95fead6-e8a6-4247-9fb9-7835101a4560) (e.g. d95fead6-e8a6-4247-9fb9-7835101a4560)
-  apiKey_l2: string # apikey_l2 (Like: c60f8db5-7904-4227-960d-27400c38b166) (e.g. c60f8db5-7904-4227-960d-27400c38b166)
-  confirmPayment: string # Confirm Payment (Value = y/n) (e.g. y)
-  paymentID: int # Payment Id (format: int32, e.g. 34567878)
+  api_key_l1: string # apikey_l1 (Like: d95fead6-e8a6-4247-9fb9-7835101a4560) (e.g. d95fead6-e8a6-4247-9fb9-7835101a4560)
+  api_key_l2: string # apikey_l2 (Like: c60f8db5-7904-4227-960d-27400c38b166) (e.g. c60f8db5-7904-4227-960d-27400c38b166)
+  confirm_payment: string # Confirm Payment (Value = y/n) (e.g. y)
+  payment_id: int # Payment Id (format: int32, e.g. 34567878)
   transaction_id: string # transaction_id (e.g. 60a78ed201d88997746c91b5)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "http://api.climatekuul.com:8000/footprint")
   let full_url = (build-url $base "/airtravelCoordinates/confirmPayment")
-  let body = {apiKey_l1: $apiKey_l1, apiKey_l2: $apiKey_l2, confirmPayment: $confirmPayment, paymentID: $paymentID, transaction_id: $transaction_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"apiKey_l1": $api_key_l1, "apiKey_l2": $api_key_l2, "confirmPayment": $confirm_payment, "paymentID": $payment_id, "transaction_id": $transaction_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # confirmPlanting
 #
 # PATCH /airtravelCoordinates/confirmPlanting
 # operationId: confirmsPlanting4
-export def "airtravel-coordinates-confirm-planting confirmsPlanting4" [
+export def "airtravel-coordinates-confirm-planting update-planting4" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -197,28 +215,30 @@ export def "airtravel-coordinates-confirm-planting confirmsPlanting4" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  apiKey_l1: string # apikey_l1 (Like: d95fead6-e8a6-4247-9fb9-7835101a4560) (e.g. d95fead6-e8a6-4247-9fb9-7835101a4560)
-  apiKey_l2: string # apikey_l2 (Like: c60f8db5-7904-4227-960d-27400c38b166) (e.g. c60f8db5-7904-4227-960d-27400c38b166)
-  confirmPlanting: string # Confirm Planting (Value = y/n) (e.g. y)
+  api_key_l1: string # apikey_l1 (Like: d95fead6-e8a6-4247-9fb9-7835101a4560) (e.g. d95fead6-e8a6-4247-9fb9-7835101a4560)
+  api_key_l2: string # apikey_l2 (Like: c60f8db5-7904-4227-960d-27400c38b166) (e.g. c60f8db5-7904-4227-960d-27400c38b166)
+  confirm_planting: string # Confirm Planting (Value = y/n) (e.g. y)
   transaction_id: string # transaction_id (e.g. 60a78ed201d88997746c91b5)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "http://api.climatekuul.com:8000/footprint")
   let full_url = (build-url $base "/airtravelCoordinates/confirmPlanting")
-  let body = {apiKey_l1: $apiKey_l1, apiKey_l2: $apiKey_l2, confirmPlanting: $confirmPlanting, transaction_id: $transaction_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"apiKey_l1": $api_key_l1, "apiKey_l2": $api_key_l2, "confirmPlanting": $confirm_planting, "transaction_id": $transaction_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # confirmTransaction
 #
 # PATCH /airtravelCoordinates/confirmTransaction
 # operationId: confirmPaymentOfTransaction4
-export def "airtravel-coordinates-confirm-transaction confirmPaymentOfTransaction4" [
+export def "airtravel-coordinates-confirm-transaction confirm-payment-of-transaction4" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -226,19 +246,21 @@ export def "airtravel-coordinates-confirm-transaction confirmPaymentOfTransactio
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  confirmTransaction: string # Confirm Payment Of Transaction (Value = y/n) (e.g. y)
+  confirm_transaction: string # Confirm Payment Of Transaction (Value = y/n) (e.g. y)
   transaction_id: string # transaction_id (e.g. 60a78ed201d88997746c91b5)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "http://api.climatekuul.com:8000/footprint")
   let full_url = (build-url $base "/airtravelCoordinates/confirmTransaction")
-  let body = {confirmTransaction: $confirmTransaction, transaction_id: $transaction_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"confirmTransaction": $confirm_transaction, "transaction_id": $transaction_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # airtravelMultileg
@@ -248,7 +270,7 @@ export def "airtravel-coordinates-confirm-transaction confirmPaymentOfTransactio
 # --leg1 shape: {destination_airport_code: string, origin_airport_code: string, travel_class: string}
 # --leg2 shape: {destination_airport_code: string, origin_airport_code: string, travel_class: string}
 # --leg3 shape: {destination_airport_code: string, origin_airport_code: string, travel_class: string}
-export def "airtravel-multileg airtravelMultileg" [
+export def "airtravel-multileg create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -256,12 +278,13 @@ export def "airtravel-multileg airtravelMultileg" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  apiKey_l1: string
-  apiKey_l2: string
-  contactEmail: string
-  contactFirstName: string
-  contactLastName: string
+  api_key_l1: string
+  api_key_l2: string
+  contact_email: string
+  contact_first_name: string
+  contact_last_name: string
   leg1: record # e.g. {destination_airport_code: DXB, origin_airport_code: KHI, travel_class: Economy} — shape: {destination_airport_code: string, origin_airport_code: string, travel_class: string}
   leg2: record # e.g. {destination_airport_code: DXB, origin_airport_code: KHI, travel_class: Economy} — shape: {destination_airport_code: string, origin_airport_code: string, travel_class: string}
   leg3: record # e.g. {destination_airport_code: DXB, origin_airport_code: KHI, travel_class: Economy} — shape: {destination_airport_code: string, origin_airport_code: string, travel_class: string}
@@ -273,18 +296,18 @@ export def "airtravel-multileg airtravelMultileg" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "http://api.climatekuul.com:8000/footprint")
   let full_url = (build-url $base "/airtravelMultileg")
-  let body = {apiKey_l1: $apiKey_l1, apiKey_l2: $apiKey_l2, contactEmail: $contactEmail, contactFirstName: $contactFirstName, contactLastName: $contactLastName, leg1: $leg1, leg2: $leg2, leg3: $leg3, legs_count: $legs_count, number_of_passengers: $number_of_passengers, travel_mode: $travel_mode} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"apiKey_l1": $api_key_l1, "apiKey_l2": $api_key_l2, "contactEmail": $contact_email, "contactFirstName": $contact_first_name, "contactLastName": $contact_last_name, "leg1": $leg1, "leg2": $leg2, "leg3": $leg3, "legs_count": $legs_count, "number_of_passengers": $number_of_passengers, "travel_mode": $travel_mode} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # confirmCarbonOffset
 #
 # PATCH /airtravelMultileg/confirmCarbonOffset
 # operationId: confirmCarbonOffset3
-export def "airtravel-multileg-confirm-carbon-offset confirmCarbonOffset3" [
+export def "airtravel-multileg-confirm-carbon-offset confirm-offset3" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -292,29 +315,31 @@ export def "airtravel-multileg-confirm-carbon-offset confirmCarbonOffset3" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  carbonOffset: string # Confirm Carbon Offset (Value = y/n) (e.g. y)
-  --contactEmail: string # Contact email (e.g. example@example.com)
-  --contactFirstName: string # Contact first name (e.g. abc)
-  --contactLastName: string # Contact last name (e.g. xyz)
+  carbon_offset: string # Confirm Carbon Offset (Value = y/n) (e.g. y)
+  --contact-email: string # Contact email (e.g. example@example.com)
+  --contact-first-name: string # Contact first name (e.g. abc)
+  --contact-last-name: string # Contact last name (e.g. xyz)
   transaction_id: string # transaction_id (e.g. 60a75c0e94c8cb95a6d0e02e)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "http://api.climatekuul.com:8000/footprint")
   let full_url = (build-url $base "/airtravelMultileg/confirmCarbonOffset")
-  let body = {carbonOffset: $carbonOffset, contactEmail: $contactEmail, contactFirstName: $contactFirstName, contactLastName: $contactLastName, transaction_id: $transaction_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"carbonOffset": $carbon_offset, "contactEmail": $contact_email, "contactFirstName": $contact_first_name, "contactLastName": $contact_last_name, "transaction_id": $transaction_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # confirmPayment
 #
 # PATCH /airtravelMultileg/confirmPayment
 # operationId: confirmPayment3
-export def "airtravel-multileg-confirm-payment confirmPayment3" [
+export def "airtravel-multileg-confirm-payment confirm-payment3" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -322,29 +347,31 @@ export def "airtravel-multileg-confirm-payment confirmPayment3" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  apiKey_l1: string # apikey_l1 (Like: d95fead6-e8a6-4247-9fb9-7835101a4560) (e.g. d95fead6-e8a6-4247-9fb9-7835101a4560)
-  apiKey_l2: string # apikey_l2 (Like: c60f8db5-7904-4227-960d-27400c38b166) (e.g. c60f8db5-7904-4227-960d-27400c38b166)
-  confirmPayment: string # Confirm Payment (Value = y/n) (e.g. y)
-  paymentID: int # Payment Id (format: int32, e.g. 34567878)
+  api_key_l1: string # apikey_l1 (Like: d95fead6-e8a6-4247-9fb9-7835101a4560) (e.g. d95fead6-e8a6-4247-9fb9-7835101a4560)
+  api_key_l2: string # apikey_l2 (Like: c60f8db5-7904-4227-960d-27400c38b166) (e.g. c60f8db5-7904-4227-960d-27400c38b166)
+  confirm_payment: string # Confirm Payment (Value = y/n) (e.g. y)
+  payment_id: int # Payment Id (format: int32, e.g. 34567878)
   transaction_id: string # transaction_id (e.g. 60a75c0e94c8cb95a6d0e02e)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "http://api.climatekuul.com:8000/footprint")
   let full_url = (build-url $base "/airtravelMultileg/confirmPayment")
-  let body = {apiKey_l1: $apiKey_l1, apiKey_l2: $apiKey_l2, confirmPayment: $confirmPayment, paymentID: $paymentID, transaction_id: $transaction_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"apiKey_l1": $api_key_l1, "apiKey_l2": $api_key_l2, "confirmPayment": $confirm_payment, "paymentID": $payment_id, "transaction_id": $transaction_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # confirmPlanting
 #
 # PATCH /airtravelMultileg/confirmPlanting
 # operationId: confirmsPlanting3
-export def "airtravel-multileg-confirm-planting confirmsPlanting3" [
+export def "airtravel-multileg-confirm-planting update-planting3" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -352,28 +379,30 @@ export def "airtravel-multileg-confirm-planting confirmsPlanting3" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  apiKey_l1: string # apikey_l1 (Like: d95fead6-e8a6-4247-9fb9-7835101a4560) (e.g. d95fead6-e8a6-4247-9fb9-7835101a4560)
-  apiKey_l2: string # apikey_l2 (Like: c60f8db5-7904-4227-960d-27400c38b166) (e.g. c60f8db5-7904-4227-960d-27400c38b166)
-  confirmPlanting: string # Confirm Planting (Value = y/n) (e.g. y)
+  api_key_l1: string # apikey_l1 (Like: d95fead6-e8a6-4247-9fb9-7835101a4560) (e.g. d95fead6-e8a6-4247-9fb9-7835101a4560)
+  api_key_l2: string # apikey_l2 (Like: c60f8db5-7904-4227-960d-27400c38b166) (e.g. c60f8db5-7904-4227-960d-27400c38b166)
+  confirm_planting: string # Confirm Planting (Value = y/n) (e.g. y)
   transaction_id: string # transaction_id (e.g. 60a75c0e94c8cb95a6d0e02e)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "http://api.climatekuul.com:8000/footprint")
   let full_url = (build-url $base "/airtravelMultileg/confirmPlanting")
-  let body = {apiKey_l1: $apiKey_l1, apiKey_l2: $apiKey_l2, confirmPlanting: $confirmPlanting, transaction_id: $transaction_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"apiKey_l1": $api_key_l1, "apiKey_l2": $api_key_l2, "confirmPlanting": $confirm_planting, "transaction_id": $transaction_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # confirmTransaction
 #
 # PATCH /airtravelMultileg/confirmTransaction
 # operationId: confirmPaymentOfTransaction3
-export def "airtravel-multileg-confirm-transaction confirmPaymentOfTransaction3" [
+export def "airtravel-multileg-confirm-transaction confirm-payment-of-transaction3" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -381,26 +410,28 @@ export def "airtravel-multileg-confirm-transaction confirmPaymentOfTransaction3"
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  confirmTransaction: string # Confirm Payment Of Transaction (Value = y/n) (e.g. y)
+  confirm_transaction: string # Confirm Payment Of Transaction (Value = y/n) (e.g. y)
   transaction_id: string # transaction_id (e.g. 60a75c0e94c8cb95a6d0e02e)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "http://api.climatekuul.com:8000/footprint")
   let full_url = (build-url $base "/airtravelMultileg/confirmTransaction")
-  let body = {confirmTransaction: $confirmTransaction, transaction_id: $transaction_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"confirmTransaction": $confirm_transaction, "transaction_id": $transaction_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # ecommerceDelivery
 #
 # POST /ecommerceDelivery
 # operationId: ecommerceDelivery
-export def "ecommerce-delivery ecommerceDelivery" [
+export def "ecommerce-delivery create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -408,10 +439,11 @@ export def "ecommerce-delivery ecommerceDelivery" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # e.g. application/x-www-form-urlencoded
-  apiKey_l1: string # Client Api Key (e.g. d95fead6-e8a6-4547-9fb9-7835101a3960)
-  apiKey_l2: string # Integration Partner Api Key (e.g. c60f8db5-7204-4427-960d-27400c38b166)
+  --content-type: string # e.g. application/x-www-form-urlencoded
+  api_key_l1: string # Client Api Key (e.g. d95fead6-e8a6-4547-9fb9-7835101a3960)
+  api_key_l2: string # Integration Partner Api Key (e.g. c60f8db5-7204-4427-960d-27400c38b166)
   --destination-airport-code: string # valid airport code of destination (e.g. BRU)
   destination_latitude: float # valid latitude of destination (format: double, e.g. 50.870752)
   destination_longitude: float # valid longitude of destination (format: double, e.g. 4.66949)
@@ -425,20 +457,22 @@ export def "ecommerce-delivery ecommerceDelivery" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "http://api.climatekuul.com:8000/footprint")
   let full_url = (build-url $base "/ecommerceDelivery")
-  let body = {apiKey_l1: $apiKey_l1, apiKey_l2: $apiKey_l2, destination_airport_code: $destination_airport_code, destination_latitude: $destination_latitude, destination_longitude: $destination_longitude, origin_airport_code: $origin_airport_code, origin_latitude: $origin_latitude, origin_longitude: $origin_longitude, volumetric_weight: $volumetric_weight, waybill_type: $waybill_type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $Content_Type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"apiKey_l1": $api_key_l1, "apiKey_l2": $api_key_l2, "destination_airport_code": $destination_airport_code, "destination_latitude": $destination_latitude, "destination_longitude": $destination_longitude, "origin_airport_code": $origin_airport_code, "origin_latitude": $origin_latitude, "origin_longitude": $origin_longitude, "volumetric_weight": $volumetric_weight, "waybill_type": $waybill_type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let extra_headers = {"Content-Type": $content_type} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let effective_ct = ($content_type | default "application/x-www-form-urlencoded")
+  let req_body = if $effective_ct == "application/x-www-form-urlencoded" { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else { $req_body }
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $effective_ct $req_body
 }
 
 # confirmCarbonOffset
 #
 # PATCH /ecommerceDelivery/confirmCarbonOffset
 # operationId: confirmCarbonOffset1
-export def "ecommerce-delivery-confirm-carbon-offset confirmCarbonOffset1" [
+export def "ecommerce-delivery-confirm-carbon-offset confirm-offset1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -446,29 +480,31 @@ export def "ecommerce-delivery-confirm-carbon-offset confirmCarbonOffset1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  carbonOffset: string # Confirm Carbon Offset (Value = y/n) (e.g. y)
-  --contactEmail: string # Contact email (e.g. example@example.com)
-  --contactFirstName: string # Contact first name (e.g. abc)
-  --contactLastName: string # Contact last name (e.g. xyz)
+  carbon_offset: string # Confirm Carbon Offset (Value = y/n) (e.g. y)
+  --contact-email: string # Contact email (e.g. example@example.com)
+  --contact-first-name: string # Contact first name (e.g. abc)
+  --contact-last-name: string # Contact last name (e.g. xyz)
   transaction_id: string # transaction_id (e.g. 60a766d401d88997746c91a0)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "http://api.climatekuul.com:8000/footprint")
   let full_url = (build-url $base "/ecommerceDelivery/confirmCarbonOffset")
-  let body = {carbonOffset: $carbonOffset, contactEmail: $contactEmail, contactFirstName: $contactFirstName, contactLastName: $contactLastName, transaction_id: $transaction_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"carbonOffset": $carbon_offset, "contactEmail": $contact_email, "contactFirstName": $contact_first_name, "contactLastName": $contact_last_name, "transaction_id": $transaction_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # confirmPayment
 #
 # PATCH /ecommerceDelivery/confirmPayment
 # operationId: confirmPayment1
-export def "ecommerce-delivery-confirm-payment confirmPayment1" [
+export def "ecommerce-delivery-confirm-payment confirm-payment1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -476,29 +512,31 @@ export def "ecommerce-delivery-confirm-payment confirmPayment1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  apiKey_l1: string # apikey_l1 (Like: d95fead6-e8a6-4247-9fb9-7835101a4560) (e.g. d95fead6-e8a6-4247-9fb9-7835101a4560)
-  apiKey_l2: string # apikey_l2 (Like: c60f8db5-7904-4227-960d-27400c38b166) (e.g. c60f8db5-7904-4227-960d-27400c38b166)
-  confirmPayment: string # Confirm Payment (Value = y/n) (e.g. y)
-  paymentID: int # Payment Id (format: int32, e.g. 34567878)
+  api_key_l1: string # apikey_l1 (Like: d95fead6-e8a6-4247-9fb9-7835101a4560) (e.g. d95fead6-e8a6-4247-9fb9-7835101a4560)
+  api_key_l2: string # apikey_l2 (Like: c60f8db5-7904-4227-960d-27400c38b166) (e.g. c60f8db5-7904-4227-960d-27400c38b166)
+  confirm_payment: string # Confirm Payment (Value = y/n) (e.g. y)
+  payment_id: int # Payment Id (format: int32, e.g. 34567878)
   transaction_id: string # transaction_id (e.g. 60a766d401d88997746c91a0)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "http://api.climatekuul.com:8000/footprint")
   let full_url = (build-url $base "/ecommerceDelivery/confirmPayment")
-  let body = {apiKey_l1: $apiKey_l1, apiKey_l2: $apiKey_l2, confirmPayment: $confirmPayment, paymentID: $paymentID, transaction_id: $transaction_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"apiKey_l1": $api_key_l1, "apiKey_l2": $api_key_l2, "confirmPayment": $confirm_payment, "paymentID": $payment_id, "transaction_id": $transaction_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # confirmPlanting
 #
 # PATCH /ecommerceDelivery/confirmPlanting
 # operationId: confirmsPlanting2
-export def "ecommerce-delivery-confirm-planting confirmsPlanting2" [
+export def "ecommerce-delivery-confirm-planting update-planting2" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -506,28 +544,30 @@ export def "ecommerce-delivery-confirm-planting confirmsPlanting2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  apiKey_l1: string # apikey_l1 (Like: d95fead6-e8a6-4247-9fb9-7835101a4560) (e.g. d95fead6-e8a6-4247-9fb9-7835101a4560)
-  apiKey_l2: string # apikey_l2 (Like: c60f8db5-7904-4227-960d-27400c38b166) (e.g. c60f8db5-7904-4227-960d-27400c38b166)
-  confirmPlanting: string # Confirm Planting (Value = y/n) (e.g. y)
+  api_key_l1: string # apikey_l1 (Like: d95fead6-e8a6-4247-9fb9-7835101a4560) (e.g. d95fead6-e8a6-4247-9fb9-7835101a4560)
+  api_key_l2: string # apikey_l2 (Like: c60f8db5-7904-4227-960d-27400c38b166) (e.g. c60f8db5-7904-4227-960d-27400c38b166)
+  confirm_planting: string # Confirm Planting (Value = y/n) (e.g. y)
   transaction_id: string # transaction_id (e.g. 60a766d401d88997746c91a0)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "http://api.climatekuul.com:8000/footprint")
   let full_url = (build-url $base "/ecommerceDelivery/confirmPlanting")
-  let body = {apiKey_l1: $apiKey_l1, apiKey_l2: $apiKey_l2, confirmPlanting: $confirmPlanting, transaction_id: $transaction_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"apiKey_l1": $api_key_l1, "apiKey_l2": $api_key_l2, "confirmPlanting": $confirm_planting, "transaction_id": $transaction_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # confirmTransaction
 #
 # PATCH /ecommerceDelivery/confirmTransaction
 # operationId: confirmPaymentOfTransaction1
-export def "ecommerce-delivery-confirm-transaction confirmPaymentOfTransaction1" [
+export def "ecommerce-delivery-confirm-transaction confirm-payment-of-transaction1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -535,26 +575,28 @@ export def "ecommerce-delivery-confirm-transaction confirmPaymentOfTransaction1"
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  confirmTransaction: string # Confirm Payment Of Transaction (Value = y/n) (e.g. y)
+  confirm_transaction: string # Confirm Payment Of Transaction (Value = y/n) (e.g. y)
   transaction_id: string # transaction_id (e.g. 60a766d401d88997746c91a0)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "http://api.climatekuul.com:8000/footprint")
   let full_url = (build-url $base "/ecommerceDelivery/confirmTransaction")
-  let body = {confirmTransaction: $confirmTransaction, transaction_id: $transaction_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"confirmTransaction": $confirm_transaction, "transaction_id": $transaction_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # requestApiKey
 #
 # POST /requestApiKey
 # operationId: requestApiKey
-export def "request-api-key requestApiKey" [
+export def "request-api-key request" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -562,30 +604,32 @@ export def "request-api-key requestApiKey" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  apiKey_l1: string # Api Key for client (e.g. qNahlSrEaduQ)
-  apiKey_l2: string # Integration Partner Api Key (e.g. eCqMeAfaDBWG)
+  api_key_l1: string # Api Key for client (e.g. qNahlSrEaduQ)
+  api_key_l2: string # Integration Partner Api Key (e.g. eCqMeAfaDBWG)
   email: string # User email (e.g. abcd@gmail.com)
   password: int # User password (format: int32, e.g. 234)
-  userFirstName: string # User first name (e.g. usman)
-  userLastName: string # User last name (e.g. ch)
+  user_first_name: string # User first name (e.g. usman)
+  user_last_name: string # User last name (e.g. ch)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "http://api.climatekuul.com:8000/footprint")
   let full_url = (build-url $base "/requestApiKey")
-  let body = {apiKey_l1: $apiKey_l1, apiKey_l2: $apiKey_l2, email: $email, password: $password, userFirstName: $userFirstName, userLastName: $userLastName} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"apiKey_l1": $api_key_l1, "apiKey_l2": $api_key_l2, "email": $email, "password": $password, "userFirstName": $user_first_name, "userLastName": $user_last_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # RoadDistance
 #
 # POST /roadDistance
 # operationId: roadDistance
-export def "road-distance roadDistance" [
+export def "road-distance create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -593,32 +637,34 @@ export def "road-distance roadDistance" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  apiKey_l1: string # Client Api Key (e.g. d95fead6-e8a6-4547-9fb9-7835101a3960)
-  apiKey_l2: string # Integration Partner Api Key (e.g. c60f8db5-7204-4427-960d-27400c38b166)
+  api_key_l1: string # Client Api Key (e.g. d95fead6-e8a6-4547-9fb9-7835101a3960)
+  api_key_l2: string # Integration Partner Api Key (e.g. c60f8db5-7204-4427-960d-27400c38b166)
   travel_distance: int # format: int32, e.g. 2450
   trip_end: int # timestamp in epoch time (like: 1606780799) (format: int32, e.g. 18)
   trip_start: int # timestamp in epoch time (like: 1604188800) (format: int32, e.g. 16)
-  --vehicle-make: string # vehicle make (like: Honda, Toyota, Smart), Required only when vehicle_type is 'personal car'  (e.g. Honda)
+  --vehicle-make: string # vehicle make (like: Honda, Toyota, Smart), Required only when vehicle_type is 'personal car' (e.g. Honda)
   vehicle_type: string # Vehicle type can be 'personal car', 'light truck' or 'heavy-duty truck' (e.g. personal car)
-  --vehicle-year: int # vehicle year (like: 2010, 2015, 2019), Required only when vehicle_type is 'personal car'  (format: int32, e.g. 2010)
+  --vehicle-year: int # vehicle year (like: 2010, 2015, 2019), Required only when vehicle_type is 'personal car' (format: int32, e.g. 2010)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "http://api.climatekuul.com:8000/footprint")
   let full_url = (build-url $base "/roadDistance")
-  let body = {apiKey_l1: $apiKey_l1, apiKey_l2: $apiKey_l2, travel_distance: $travel_distance, trip_end: $trip_end, trip_start: $trip_start, vehicle_make: $vehicle_make, vehicle_type: $vehicle_type, vehicle_year: $vehicle_year} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"apiKey_l1": $api_key_l1, "apiKey_l2": $api_key_l2, "travel_distance": $travel_distance, "trip_end": $trip_end, "trip_start": $trip_start, "vehicle_make": $vehicle_make, "vehicle_type": $vehicle_type, "vehicle_year": $vehicle_year} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # confirmCarbonOffset
 #
 # PATCH /roadDistance/confirmCarbonOffset
 # operationId: confirmCarbonOffset5
-export def "road-distance-confirm-carbon-offset confirmCarbonOffset5" [
+export def "road-distance-confirm-carbon-offset confirm-offset5" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -626,29 +672,31 @@ export def "road-distance-confirm-carbon-offset confirmCarbonOffset5" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  carbonOffset: string # Confirm Carbon Offset (Value = y/n) (e.g. y)
-  --contactEmail: string # Contact email (e.g. example@example.com)
-  --contactFirstName: string # Contact first name (e.g. abc)
-  --contactLastName: string # Contact last name (e.g. xyz)
+  carbon_offset: string # Confirm Carbon Offset (Value = y/n) (e.g. y)
+  --contact-email: string # Contact email (e.g. example@example.com)
+  --contact-first-name: string # Contact first name (e.g. abc)
+  --contact-last-name: string # Contact last name (e.g. xyz)
   transaction_id: string # transaction_id (e.g. 60a7823401d88997746c91a7)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "http://api.climatekuul.com:8000/footprint")
   let full_url = (build-url $base "/roadDistance/confirmCarbonOffset")
-  let body = {carbonOffset: $carbonOffset, contactEmail: $contactEmail, contactFirstName: $contactFirstName, contactLastName: $contactLastName, transaction_id: $transaction_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"carbonOffset": $carbon_offset, "contactEmail": $contact_email, "contactFirstName": $contact_first_name, "contactLastName": $contact_last_name, "transaction_id": $transaction_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # confirmPayment
 #
 # PATCH /roadDistance/confirmPayment
 # operationId: confirmPayment5
-export def "road-distance-confirm-payment confirmPayment5" [
+export def "road-distance-confirm-payment confirm-payment5" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -656,29 +704,31 @@ export def "road-distance-confirm-payment confirmPayment5" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  apiKey_l1: string # apikey_l1 (Like: d95fead6-e8a6-4247-9fb9-7835101a4560) (e.g. d95fead6-e8a6-4247-9fb9-7835101a4560)
-  apiKey_l2: string # apikey_l2 (Like: c60f8db5-7904-4227-960d-27400c38b166) (e.g. c60f8db5-7904-4227-960d-27400c38b166)
-  confirmPayment: string # Confirm Payment (Value = y/n) (e.g. y)
-  paymentID: int # Payment Id (format: int32, e.g. 34567878)
+  api_key_l1: string # apikey_l1 (Like: d95fead6-e8a6-4247-9fb9-7835101a4560) (e.g. d95fead6-e8a6-4247-9fb9-7835101a4560)
+  api_key_l2: string # apikey_l2 (Like: c60f8db5-7904-4227-960d-27400c38b166) (e.g. c60f8db5-7904-4227-960d-27400c38b166)
+  confirm_payment: string # Confirm Payment (Value = y/n) (e.g. y)
+  payment_id: int # Payment Id (format: int32, e.g. 34567878)
   transaction_id: string # transaction_id (e.g. 60a7823401d88997746c91a7)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "http://api.climatekuul.com:8000/footprint")
   let full_url = (build-url $base "/roadDistance/confirmPayment")
-  let body = {apiKey_l1: $apiKey_l1, apiKey_l2: $apiKey_l2, confirmPayment: $confirmPayment, paymentID: $paymentID, transaction_id: $transaction_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"apiKey_l1": $api_key_l1, "apiKey_l2": $api_key_l2, "confirmPayment": $confirm_payment, "paymentID": $payment_id, "transaction_id": $transaction_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # confirmPlanting
 #
 # PATCH /roadDistance/confirmPlanting
 # operationId: confirmsPlanting5
-export def "road-distance-confirm-planting confirmsPlanting5" [
+export def "road-distance-confirm-planting update-planting5" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -686,28 +736,30 @@ export def "road-distance-confirm-planting confirmsPlanting5" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  apiKey_l1: string # apikey_l1 (Like: d95fead6-e8a6-4247-9fb9-7835101a4560) (e.g. d95fead6-e8a6-4247-9fb9-7835101a4560)
-  apiKey_l2: string # apikey_l2 (Like: c60f8db5-7904-4227-960d-27400c38b166) (e.g. c60f8db5-7904-4227-960d-27400c38b166)
-  confirmPlanting: string # Confirm Planting (Value = y/n) (e.g. y)
+  api_key_l1: string # apikey_l1 (Like: d95fead6-e8a6-4247-9fb9-7835101a4560) (e.g. d95fead6-e8a6-4247-9fb9-7835101a4560)
+  api_key_l2: string # apikey_l2 (Like: c60f8db5-7904-4227-960d-27400c38b166) (e.g. c60f8db5-7904-4227-960d-27400c38b166)
+  confirm_planting: string # Confirm Planting (Value = y/n) (e.g. y)
   transaction_id: string # transaction_id (e.g. 60a7823401d88997746c91a7)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "http://api.climatekuul.com:8000/footprint")
   let full_url = (build-url $base "/roadDistance/confirmPlanting")
-  let body = {apiKey_l1: $apiKey_l1, apiKey_l2: $apiKey_l2, confirmPlanting: $confirmPlanting, transaction_id: $transaction_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"apiKey_l1": $api_key_l1, "apiKey_l2": $api_key_l2, "confirmPlanting": $confirm_planting, "transaction_id": $transaction_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # confirmTransaction
 #
 # PATCH /roadDistance/confirmTransaction
 # operationId: confirmPaymentOfTransaction5
-export def "road-distance-confirm-transaction confirmPaymentOfTransaction5" [
+export def "road-distance-confirm-transaction confirm-payment-of-transaction5" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -715,26 +767,28 @@ export def "road-distance-confirm-transaction confirmPaymentOfTransaction5" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  confirmTransaction: string # Confirm Payment Of Transaction (Value = y/n) (e.g. y)
+  confirm_transaction: string # Confirm Payment Of Transaction (Value = y/n) (e.g. y)
   transaction_id: string # transaction_id (e.g. 60a7823401d88997746c91a7)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "http://api.climatekuul.com:8000/footprint")
   let full_url = (build-url $base "/roadDistance/confirmTransaction")
-  let body = {confirmTransaction: $confirmTransaction, transaction_id: $transaction_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"confirmTransaction": $confirm_transaction, "transaction_id": $transaction_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # urbanDelivery
 #
 # POST /urbanDelivery
 # operationId: urbanDelivery
-export def "urban-delivery urbanDelivery" [
+export def "urban-delivery create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -742,9 +796,10 @@ export def "urban-delivery urbanDelivery" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  apiKey_l1: string # Client Api Key (e.g. d95fead6-e8a6-4547-9fb9-7835101a3960)
-  apiKey_l2: string # Integration Partner Api Key (e.g. c60f8db5-7204-4427-960d-27400c38b166)
+  api_key_l1: string # Client Api Key (e.g. d95fead6-e8a6-4547-9fb9-7835101a3960)
+  api_key_l2: string # Integration Partner Api Key (e.g. c60f8db5-7204-4427-960d-27400c38b166)
   destination_latitude: float # Destination latitude (like: 50.870752, value = -90<=x<=90) (format: double, e.g. -89.870752)
   destination_longitude: float # Destination longitude (like: 4.669490, value = -180<=x<=180) (format: double, e.g. 179.66949)
   item_count: int # item_count' (like:2, value = 0<x<=100) (format: int32, e.g. 3)
@@ -756,18 +811,19 @@ export def "urban-delivery urbanDelivery" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "http://api.climatekuul.com:8000/footprint")
   let full_url = (build-url $base "/urbanDelivery")
-  let body = {apiKey_l1: $apiKey_l1, apiKey_l2: $apiKey_l2, destination_latitude: $destination_latitude, destination_longitude: $destination_longitude, item_count: $item_count, origin_latitude: $origin_latitude, origin_longitude: $origin_longitude, vehicle_type: $vehicle_type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"apiKey_l1": $api_key_l1, "apiKey_l2": $api_key_l2, "destination_latitude": $destination_latitude, "destination_longitude": $destination_longitude, "item_count": $item_count, "origin_latitude": $origin_latitude, "origin_longitude": $origin_longitude, "vehicle_type": $vehicle_type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # confirmCarbonOffset
 #
 # PATCH /urbanDelivery/confirmCarbonOffset
 # operationId: confirmCarbonOffset
-export def "urban-delivery-confirm-carbon-offset confirmCarbonOffset" [
+export def "urban-delivery-confirm-carbon-offset confirm" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -775,29 +831,31 @@ export def "urban-delivery-confirm-carbon-offset confirmCarbonOffset" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  carbonOffset: string # Confirm Carbon Offset (Value = y/n) (e.g. y)
-  --contactEmail: string # Contact email (e.g. example@example.com)
-  --contactFirstName: string # Contact first name (e.g. abc)
-  --contactLastName: string # Contact last name (e.g. xyz)
+  carbon_offset: string # Confirm Carbon Offset (Value = y/n) (e.g. y)
+  --contact-email: string # Contact email (e.g. example@example.com)
+  --contact-first-name: string # Contact first name (e.g. abc)
+  --contact-last-name: string # Contact last name (e.g. xyz)
   transaction_id: string # transaction_id (e.g. 60a7875a01d88997746c91ae)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "http://api.climatekuul.com:8000/footprint")
   let full_url = (build-url $base "/urbanDelivery/confirmCarbonOffset")
-  let body = {carbonOffset: $carbonOffset, contactEmail: $contactEmail, contactFirstName: $contactFirstName, contactLastName: $contactLastName, transaction_id: $transaction_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"carbonOffset": $carbon_offset, "contactEmail": $contact_email, "contactFirstName": $contact_first_name, "contactLastName": $contact_last_name, "transaction_id": $transaction_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # confirmPayment
 #
 # PATCH /urbanDelivery/confirmPayment
 # operationId: confirmPayment
-export def "urban-delivery-confirm-payment confirmPayment" [
+export def "urban-delivery-confirm-payment confirm" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -805,29 +863,31 @@ export def "urban-delivery-confirm-payment confirmPayment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  apiKey_l1: string # apikey_l1 (Like: d95fead6-e8a6-4247-9fb9-7835101a4560) (e.g. d95fead6-e8a6-4247-9fb9-7835101a4560)
-  apiKey_l2: string # apikey_l2 (Like: c60f8db5-7904-4227-960d-27400c38b166) (e.g. c60f8db5-7904-4227-960d-27400c38b166)
-  confirmPayment: string # Confirm Payment (Value = y/n) (e.g. y)
-  paymentID: int # Payment Id (format: int32, e.g. 34567878)
+  api_key_l1: string # apikey_l1 (Like: d95fead6-e8a6-4247-9fb9-7835101a4560) (e.g. d95fead6-e8a6-4247-9fb9-7835101a4560)
+  api_key_l2: string # apikey_l2 (Like: c60f8db5-7904-4227-960d-27400c38b166) (e.g. c60f8db5-7904-4227-960d-27400c38b166)
+  confirm_payment: string # Confirm Payment (Value = y/n) (e.g. y)
+  payment_id: int # Payment Id (format: int32, e.g. 34567878)
   transaction_id: string # transaction_id (e.g. 60a7875a01d88997746c91ae)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "http://api.climatekuul.com:8000/footprint")
   let full_url = (build-url $base "/urbanDelivery/confirmPayment")
-  let body = {apiKey_l1: $apiKey_l1, apiKey_l2: $apiKey_l2, confirmPayment: $confirmPayment, paymentID: $paymentID, transaction_id: $transaction_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"apiKey_l1": $api_key_l1, "apiKey_l2": $api_key_l2, "confirmPayment": $confirm_payment, "paymentID": $payment_id, "transaction_id": $transaction_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # confirmPlanting
 #
 # PATCH /urbanDelivery/confirmPlanting
 # operationId: confirmsPlanting
-export def "urban-delivery-confirm-planting confirmsPlanting" [
+export def "urban-delivery-confirm-planting update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -835,28 +895,30 @@ export def "urban-delivery-confirm-planting confirmsPlanting" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  apiKey_l1: string # apikey_l1 (Like: d95fead6-e8a6-4247-9fb9-7835101a4560) (e.g. d95fead6-e8a6-4247-9fb9-7835101a4560)
-  apiKey_l2: string # apikey_l2 (Like: c60f8db5-7904-4227-960d-27400c38b166) (e.g. c60f8db5-7904-4227-960d-27400c38b166)
-  confirmPlanting: string # Confirm Planting (Value = y/n) (e.g. y)
+  api_key_l1: string # apikey_l1 (Like: d95fead6-e8a6-4247-9fb9-7835101a4560) (e.g. d95fead6-e8a6-4247-9fb9-7835101a4560)
+  api_key_l2: string # apikey_l2 (Like: c60f8db5-7904-4227-960d-27400c38b166) (e.g. c60f8db5-7904-4227-960d-27400c38b166)
+  confirm_planting: string # Confirm Planting (Value = y/n) (e.g. y)
   transaction_id: string # transaction_id (e.g. 60a7875a01d88997746c91ae)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "http://api.climatekuul.com:8000/footprint")
   let full_url = (build-url $base "/urbanDelivery/confirmPlanting")
-  let body = {apiKey_l1: $apiKey_l1, apiKey_l2: $apiKey_l2, confirmPlanting: $confirmPlanting, transaction_id: $transaction_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"apiKey_l1": $api_key_l1, "apiKey_l2": $api_key_l2, "confirmPlanting": $confirm_planting, "transaction_id": $transaction_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # confirmTransaction
 #
 # PATCH /urbanDelivery/confirmTransaction
 # operationId: confirmPaymentOfTransaction
-export def "urban-delivery-confirm-transaction confirmPaymentOfTransaction" [
+export def "urban-delivery-confirm-transaction confirm-payment" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -864,17 +926,19 @@ export def "urban-delivery-confirm-transaction confirmPaymentOfTransaction" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  confirmTransaction: string # Confirm Payment Of Transaction (Value = y/n) (e.g. y)
+  confirm_transaction: string # Confirm Payment Of Transaction (Value = y/n) (e.g. y)
   transaction_id: string # transaction_id (e.g. 60a7875a01d88997746c91ae)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "http://api.climatekuul.com:8000/footprint")
   let full_url = (build-url $base "/urbanDelivery/confirmTransaction")
-  let body = {confirmTransaction: $confirmTransaction, transaction_id: $transaction_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"confirmTransaction": $confirm_transaction, "transaction_id": $transaction_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }

@@ -17,21 +17,32 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 }
 
 # Serialize a single query parameter based on collection style
+# Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
+# ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = ($name | url encode)
+  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
-  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
-    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
-    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
+    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
+    _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
+}
+
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Build URL from base, path, and optional query string
@@ -43,7 +54,7 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
@@ -52,13 +63,13 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
     "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "put" => { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "patch" => { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
   if ($method in ["head" "options"]) { return $resp }
-  if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
+  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
 def base-url-completer [] { ["https://hub.docker.com" "https://docker.com/1.33"] }
@@ -67,11 +78,11 @@ def auth-scheme-completer [] { ["bearer"] }
 # Completers for enum parameters
 def status-completer [] { ["active" "inactive"] }
 def ordering-completer [] { ["-digest" "-last_activity" "digest" "last_activity"] }
-def sortOrder-completer [] { ["ascending" "descending"] }
+def sort-order-completer [] { ["ascending" "descending"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "access-tokens list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -103,6 +114,7 @@ export def "access-tokens list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: float # default: 1
   --page-size: float # default: 10
@@ -113,13 +125,13 @@ export def "access-tokens list" [
   let full_url = (build-url $base "/v2/access-tokens" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Create a personal access token
 #
 # POST /v2/access-tokens
-export def "access-tokens post" [
+export def "access-tokens create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -127,19 +139,20 @@ export def "access-tokens post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  scopes: list # Valid scopes: "repo:admin", "repo:write", "repo:read", "repo:public_read"  (e.g. [repo:read])
+  scopes: list<string> # Valid scopes: "repo:admin", "repo:write", "repo:read", "repo:public_read" (e.g. [repo:read])
   token_label: string # Friendly name for you to identify the token. (e.g. My read only token)
 ]: any -> record<client_id: string, created_at: string, creator_ip: string, creator_ua: string, generated_by: string, is_active: bool, last_used: string, scopes: list<string>, token: string, token_label: string, uuid: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/access-tokens")
-  let body = {scopes: $scopes, token_label: $token_label} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"scopes": $scopes, "token_label": $token_label} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Delete a personal access token
@@ -154,14 +167,15 @@ export def "access-tokens delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/access-tokens/($uuid)")
+  let full_url = (build-url $base ({uuid: (encode-path-segment $uuid)} | format pattern "/v2/access-tokens/{uuid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get a personal access token
@@ -176,20 +190,21 @@ export def "access-tokens get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<client_id: string, created_at: string, creator_ip: string, creator_ua: string, generated_by: string, is_active: bool, last_used: string, scopes: list<string>, token: string, token_label: string, uuid: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/access-tokens/($uuid)")
+  let full_url = (build-url $base ({uuid: (encode-path-segment $uuid)} | format pattern "/v2/access-tokens/{uuid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Update a personal access token
 #
 # PATCH /v2/access-tokens/{uuid}
-export def "access-tokens patch" [
+export def "access-tokens update" [
   uuid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -198,6 +213,7 @@ export def "access-tokens patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --is-active: oneof<nothing, bool> # e.g. false
   --token-label: string # e.g. My read only token
@@ -205,19 +221,19 @@ export def "access-tokens patch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/access-tokens/($uuid)")
-  let body = {is_active: $is_active, token_label: $token_label} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({uuid: (encode-path-segment $uuid)} | format pattern "/v2/access-tokens/{uuid}"))
+  let req_body = {"is_active": $is_active, "token_label": $token_label} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
-# Returns list of audit log  events.
+# Returns list of audit log events.
 #
 # GET /v2/auditlogs/{account}
 # operationId: AuditLogs_GetAuditLogs
-export def "auditlogs GetAuditLogs" [
+export def "auditlogs logs-audit-get-audit-logs" [
   account: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -226,6 +242,7 @@ export def "auditlogs GetAuditLogs" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --action: string # action name one of ["repo.tag.push", ...]. Optional parameter to filter specific audit log actions.
   --name: string # name. Optional parameter to filter audit log events to a specific name. For repository events, this is the name of the repository. For organization events, this is the name of the organization. For team member events, this is the username of the team member.
@@ -238,17 +255,17 @@ export def "auditlogs GetAuditLogs" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "action" $action "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "actor" $actor "scalar") (serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v2/auditlogs/($account)" $qp)
+  let full_url = (build-url $base ({account: (encode-path-segment $account)} | format pattern "/v2/auditlogs/{account}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Returns list of audit log actions.
 #
 # GET /v2/auditlogs/{account}/actions
 # operationId: AuditLogs_GetAuditActions
-export def "auditlogs-actions GetAuditActions" [
+export def "auditlogs-actions logs-audit-get-audit" [
   account: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -257,23 +274,24 @@ export def "auditlogs-actions GetAuditActions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<actions: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/auditlogs/($account)/actions")
+  let full_url = (build-url $base ({account: (encode-path-segment $account)} | format pattern "/v2/auditlogs/{account}/actions"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Delete images
 #
 # POST /v2/namespaces/{namespace}/delete-images
 # operationId: PostNamespacesDeleteImages
-# --ignore_warnings item shape: {digest: string, repository: string, tags?: list, warning: "is_active"|"current_tag"}
+# --ignore_warnings item shape: {digest: string, repository: string, tags?: list<string>, warning: "is_active"|"current_tag"}
 # --manifests item shape: {digest: string, repository: string}
-export def "namespaces-delete-images PostNamespacesDeleteImages" [
+export def "namespaces-delete-images create" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -282,28 +300,29 @@ export def "namespaces-delete-images PostNamespacesDeleteImages" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --active-from: string # Sets the time from which an image must have been pushed or pulled to be counted as active.  Defaults to 1 month before the current time.  (e.g. 2020-12-01T12:00:00Z)
+  --active-from: string # Sets the time from which an image must have been pushed or pulled to be counted as active. Defaults to 1 month before the current time. (e.g. 2020-12-01T12:00:00Z)
   --body-dry-run: oneof<nothing, bool> # If `true` then will check and return errors and unignored warnings for the deletion request but will not delete any images. (e.g. false)
-  --ignore-warnings: list # Warnings to ignore. If a warning is not ignored then no deletions will happen and the  warning is returned in the response.  These warnings include:  - is_active: warning when attempting to delete an image that is marked as active. - current_tag: warning when attempting to delete an image that has one or more current  tags in the repository.  Warnings can be copied from the response to the request. — item shape: {digest: string, repository: string, tags?: list, warning: "is_active"|"current_tag"}
+  --ignore-warnings: list # Warnings to ignore. If a warning is not ignored then no deletions will happen and the warning is returned in the response. These warnings include: - is_active: warning when attempting to delete an image that is marked as active. - current_tag: warning when attempting to delete an image that has one or more current tags in the repository. Warnings can be copied from the response to the request. — item shape: {digest: string, repository: string, tags?: list<string>, warning: "is_active"|"current_tag"}
   --manifests: list # Image manifests to delete. — item shape: {digest: string, repository: string}
 ]: any -> record<dry_run: bool, metrics: record<manifest_deletes: int, manifest_errors: int, tag_deletes: int, tag_errors: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/namespaces/($namespace)/delete-images")
-  let body = {active_from: $active_from, dry_run: $body_dry_run, ignore_warnings: $ignore_warnings, manifests: $manifests} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace)} | format pattern "/v2/namespaces/{namespace}/delete-images"))
+  let req_body = {"active_from": $active_from, "dry_run": $body_dry_run, "ignore_warnings": $ignore_warnings, "manifests": $manifests} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Get details of repository's images
 #
 # GET /v2/namespaces/{namespace}/repositories/{repository}/images
 # operationId: GetNamespacesRepositoriesImages
-export def "namespaces-repositories-images GetNamespacesRepositoriesImages" [
+export def "namespaces-repositories-images get" [
   namespace: string
   repository: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -313,28 +332,29 @@ export def "namespaces-repositories-images GetNamespacesRepositoriesImages" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --status: string@status-completer # Filters to only show images of this status.
   --currently-tagged: oneof<nothing, bool> # Filters to only show images with: - `true`: at least 1 current tag. - `false`: no current tags.
-  --ordering: string@ordering-completer # Orders the results by this property.  Prefixing with `-` sorts by descending order.
-  --active-from: string # Sets the time from which an image must have been pushed or pulled to be counted as active.  Defaults to 1 month before the current time.
+  --ordering: string@ordering-completer # Orders the results by this property. Prefixing with `-` sorts by descending order.
+  --active-from: string # Sets the time from which an image must have been pushed or pulled to be counted as active. Defaults to 1 month before the current time.
   --page: int # Page number to get. Defaults to 1.
   --page-size: int # Number of images to get per page. Defaults to 10. Max of 100.
 ]: nothing -> record<count: int, next: string, previous: string, results: table<digest: string, last_pulled: string, last_pushed: string, namespace: string, repository: string, status: string, tags: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "status" $status "scalar") (serialize-qp "currently_tagged" $currently_tagged "scalar") (serialize-qp "ordering" $ordering "scalar") (serialize-qp "active_from" $active_from "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v2/namespaces/($namespace)/repositories/($repository)/images" $qp)
+  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), repository: (encode-path-segment $repository)} | format pattern "/v2/namespaces/{namespace}/repositories/{repository}/images") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get summary of repository's images
 #
 # GET /v2/namespaces/{namespace}/repositories/{repository}/images-summary
 # operationId: GetNamespacesRepositoriesImagesSummary
-export def "namespaces-repositories-images-summary GetNamespacesRepositoriesImagesSummary" [
+export def "namespaces-repositories-images-summary get" [
   namespace: string
   repository: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -344,23 +364,24 @@ export def "namespaces-repositories-images-summary GetNamespacesRepositoriesImag
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --active-from: string # Sets the time from which an image must have been pushed or pulled to be counted as active.  Defaults to 1 month before the current time.
+  --active-from: string # Sets the time from which an image must have been pushed or pulled to be counted as active. Defaults to 1 month before the current time.
 ]: nothing -> record<active_from: string, statistics: record<active: int, inactive: int, total: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "active_from" $active_from "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v2/namespaces/($namespace)/repositories/($repository)/images-summary" $qp)
+  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), repository: (encode-path-segment $repository)} | format pattern "/v2/namespaces/{namespace}/repositories/{repository}/images-summary") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get image's tags
 #
 # GET /v2/namespaces/{namespace}/repositories/{repository}/images/{digest}/tags
 # operationId: GetNamespacesRepositoriesImagesTags
-export def "namespaces-repositories-images-tags GetNamespacesRepositoriesImagesTags" [
+export def "namespaces-repositories-images-tags get" [
   namespace: string
   repository: string
   digest: string
@@ -371,6 +392,7 @@ export def "namespaces-repositories-images-tags GetNamespacesRepositoriesImagesT
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Page number to get. Defaults to 1.
   --page-size: int # Number of images to get per page. Defaults to 10. Max of 100.
@@ -378,10 +400,10 @@ export def "namespaces-repositories-images-tags GetNamespacesRepositoriesImagesT
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v2/namespaces/($namespace)/repositories/($repository)/images/($digest)/tags" $qp)
+  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), repository: (encode-path-segment $repository), digest: (encode-path-segment $digest)} | format pattern "/v2/namespaces/{namespace}/repositories/{repository}/images/{digest}/tags") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # List repository tags
@@ -397,6 +419,7 @@ export def "namespaces-repositories-tags list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Page number to get. Defaults to 1.
   --page-size: int # Number of items to get per page. Defaults to 10. Max of 100.
@@ -404,16 +427,16 @@ export def "namespaces-repositories-tags list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v2/namespaces/($namespace)/repositories/($repository)/tags" $qp)
+  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), repository: (encode-path-segment $repository)} | format pattern "/v2/namespaces/{namespace}/repositories/{repository}/tags") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Check repository tags
 #
 # HEAD /v2/namespaces/{namespace}/repositories/{repository}/tags
-export def "namespaces-repositories-tags head-by-namespace-repository" [
+export def "namespaces-repositories-tags head-head-by-namespace-repository" [
   namespace: string
   repository: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -423,14 +446,15 @@ export def "namespaces-repositories-tags head-by-namespace-repository" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/namespaces/($namespace)/repositories/($repository)/tags")
+  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), repository: (encode-path-segment $repository)} | format pattern "/v2/namespaces/{namespace}/repositories/{repository}/tags"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "head" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "head" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Read repository tag
@@ -447,20 +471,21 @@ export def "namespaces-repositories-tags get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/namespaces/($namespace)/repositories/($repository)/tags/($tag)")
+  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), repository: (encode-path-segment $repository), tag: (encode-path-segment $tag)} | format pattern "/v2/namespaces/{namespace}/repositories/{repository}/tags/{tag}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Check repository tag
 #
 # HEAD /v2/namespaces/{namespace}/repositories/{repository}/tags/{tag}
-export def "namespaces-repositories-tags head-by-namespace-repository-tag" [
+export def "namespaces-repositories-tags head-head-by-namespace-repository-tag" [
   namespace: string
   repository: string
   tag: string
@@ -471,14 +496,15 @@ export def "namespaces-repositories-tags head-by-namespace-repository-tag" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/namespaces/($namespace)/repositories/($repository)/tags/($tag)")
+  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), repository: (encode-path-segment $repository), tag: (encode-path-segment $tag)} | format pattern "/v2/namespaces/{namespace}/repositories/{repository}/tags/{tag}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "head" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "head" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get organization settings
@@ -493,20 +519,21 @@ export def "orgs-settings get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<restricted_images: record<allow_official_images: bool, allow_verified_publishers: bool, enabled: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/orgs/($name)/settings")
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v2/orgs/{name}/settings"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Update organization settings
 #
 # PUT /v2/orgs/{name}/settings
-export def "orgs-settings put" [
+export def "orgs-settings update" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -515,24 +542,25 @@ export def "orgs-settings put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   restricted_images: any
 ]: any -> record<restricted_images: record<allow_official_images: bool, allow_verified_publishers: bool, enabled: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/orgs/($name)/settings")
-  let body = {restricted_images: $restricted_images} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v2/orgs/{name}/settings"))
+  let req_body = {"restricted_images": $restricted_images} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # List resource types
 #
 # GET /v2/scim/2.0/ResourceTypes
-export def "scim-20-resource-types list" [
+export def "scim-2-0-resource-types list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -540,6 +568,7 @@ export def "scim-20-resource-types list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -547,13 +576,13 @@ export def "scim-20-resource-types list" [
   let full_url = (build-url $base "/v2/scim/2.0/ResourceTypes")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get a resource type
 #
 # GET /v2/scim/2.0/ResourceTypes/{name}
-export def "scim-20-resource-types get" [
+export def "scim-2-0-resource-types get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -562,20 +591,21 @@ export def "scim-20-resource-types get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/scim/2.0/ResourceTypes/($name)")
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v2/scim/2.0/ResourceTypes/{name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # List schemas
 #
 # GET /v2/scim/2.0/Schemas
-export def "scim-20-schemas list" [
+export def "scim-2-0-schemas list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -583,6 +613,7 @@ export def "scim-20-schemas list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -590,13 +621,13 @@ export def "scim-20-schemas list" [
   let full_url = (build-url $base "/v2/scim/2.0/Schemas")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get a schema
 #
 # GET /v2/scim/2.0/Schemas/{id}
-export def "scim-20-schemas get" [
+export def "scim-2-0-schemas get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -605,20 +636,21 @@ export def "scim-20-schemas get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/scim/2.0/Schemas/($id)")
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/scim/2.0/Schemas/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get service provider config
 #
 # GET /v2/scim/2.0/ServiceProviderConfig
-export def "scim-20-service-provider-config get" [
+export def "scim-2-0-service-provider-config get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -626,6 +658,7 @@ export def "scim-20-service-provider-config get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -633,13 +666,13 @@ export def "scim-20-service-provider-config get" [
   let full_url = (build-url $base "/v2/scim/2.0/ServiceProviderConfig")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # List users
 #
 # GET /v2/scim/2.0/Users
-export def "scim-20-users list" [
+export def "scim-2-0-users list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -647,27 +680,28 @@ export def "scim-20-users list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --startIndex: int # e.g. 1
+  --start-index: int # e.g. 1
   --count: int # e.g. 10
   --filter: string # e.g. userName eq "jon.snow@docker.com"
   --attributes: string # Comma delimited list of attributes to limit to in the response. (e.g. userName,displayName)
-  --sortOrder: string@sortOrder-completer
-  --sortBy: string # User attribute to sort by. (e.g. userName)
+  --sort-order: string@sort-order-completer
+  --sort-by: string # User attribute to sort by. (e.g. userName)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "startIndex" $startIndex "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "attributes" $attributes "scalar") (serialize-qp "sortOrder" $sortOrder "scalar") (serialize-qp "sortBy" $sortBy "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "startIndex" $start_index "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "attributes" $attributes "scalar") (serialize-qp "sortOrder" $sort_order "scalar") (serialize-qp "sortBy" $sort_by "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/scim/2.0/Users" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Create user
 #
 # POST /v2/scim/2.0/Users
-export def "scim-20-users post" [
+export def "scim-2-0-users create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -675,23 +709,25 @@ export def "scim-20-users post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body: record
+  --body: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/scim/2.0/Users")
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/scim+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/scim+json" $req_body
 }
 
 # Get a user
 #
 # GET /v2/scim/2.0/Users/{id}
-export def "scim-20-users get" [
+export def "scim-2-0-users get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -700,20 +736,21 @@ export def "scim-20-users get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/scim/2.0/Users/($id)")
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/scim/2.0/Users/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Update a user
 #
 # PUT /v2/scim/2.0/Users/{id}
-export def "scim-20-users put" [
+export def "scim-2-0-users update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -722,24 +759,26 @@ export def "scim-20-users put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body: record
+  --body: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/scim/2.0/Users/($id)")
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/scim/2.0/Users/{id}"))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/scim+json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/scim+json" $req_body
 }
 
 # Second factor authentication.
 #
 # POST /v2/users/2fa-login
 # operationId: PostUsers2FALogin
-export def "users-2fa-login PostUsers2FALogin" [
+export def "users-2fa-login create-users2-fa" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -747,6 +786,7 @@ export def "users-2fa-login PostUsers2FALogin" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   code: string # The Time-based One-Time Password of the Docker Hub account to authenticate with. (e.g. 123456)
   login_2fa_token: string # The intermediate 2FA token returned from `/v2/users/login` API. (e.g. eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c)
@@ -755,18 +795,18 @@ export def "users-2fa-login PostUsers2FALogin" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/users/2fa-login")
-  let body = {code: $code, login_2fa_token: $login_2fa_token} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"code": $code, "login_2fa_token": $login_2fa_token} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Create an authentication token
 #
 # POST /v2/users/login
 # operationId: PostUsersLogin
-export def "users-login PostUsersLogin" [
+export def "users-login create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -774,6 +814,7 @@ export def "users-login PostUsersLogin" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   password: string # The password or personal access token (PAT) of the Docker Hub account to authenticate with. (e.g. hunter2)
   username: string # The username of the Docker Hub account to authenticate with. (e.g. myusername)
@@ -782,9 +823,9 @@ export def "users-login PostUsersLogin" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/users/login")
-  let body = {password: $password, username: $username} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"password": $password, "username": $username} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }

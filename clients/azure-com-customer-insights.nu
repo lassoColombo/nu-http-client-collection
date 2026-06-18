@@ -18,21 +18,32 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 }
 
 # Serialize a single query parameter based on collection style
+# Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
+# ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = ($name | url encode)
+  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
-  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
-    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
-    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
+    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
+    _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
+}
+
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Build URL from base, path, and optional query string
@@ -44,7 +55,7 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
@@ -53,13 +64,13 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
     "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "put" => { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "patch" => { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
   if ($method in ["head" "options"]) { return $resp }
-  if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
+  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
 def base-url-completer [] { ["https://management.azure.com"] }
@@ -70,8 +81,8 @@ def status-completer [] { ["Active" "Deleted" "Discovering" "Evaluating" "Evalua
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-customer-insights-operations List" } } | get name | first)
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-customer-insights-operations list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -95,7 +106,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.CustomerInsights/operations
 # operationId: Operations_List
-export def "providers-microsoft-customer-insights-operations List" [
+export def "providers-microsoft-customer-insights-operations list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -103,6 +114,7 @@ export def "providers-microsoft-customer-insights-operations List" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
 ]: nothing -> record<nextLink: string, value: table<display: record, name: string>> {
@@ -112,15 +124,15 @@ export def "providers-microsoft-customer-insights-operations List" [
   let full_url = (build-url $base "/providers/Microsoft.CustomerInsights/operations" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Gets all hubs in the specified subscription.
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.CustomerInsights/hubs
 # operationId: Hubs_List
-export def "subscriptions-providers-microsoft-customer-insights-hubs List" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-customer-insights-hubs list" [
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -128,25 +140,26 @@ export def "subscriptions-providers-microsoft-customer-insights-hubs List" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
 ]: nothing -> record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.CustomerInsights/hubs" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.CustomerInsights/hubs") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Gets all the hubs in a resource group.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CustomerInsights/hubs
 # operationId: Hubs_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs ListByResourceGroup" [
-  resourceGroupName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs list" [
+  subscription_id: string
+  resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -154,26 +167,27 @@ export def "subscriptions-resource-groups-providers-microsoft-customer-insights-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
 ]: nothing -> record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.CustomerInsights/hubs" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.CustomerInsights/hubs") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Deletes the specified hub.
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CustomerInsights/hubs/{hubName}
 # operationId: Hubs_Delete
-export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs Delete" [
-  resourceGroupName: string
-  hubName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs delete" [
+  subscription_id: string
+  resource_group_name: string
+  hub_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -181,26 +195,27 @@ export def "subscriptions-resource-groups-providers-microsoft-customer-insights-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.CustomerInsights/hubs/($hubName)" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), hub_name: (encode-path-segment $hub_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.CustomerInsights/hubs/{hub_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Gets information about the specified hub.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CustomerInsights/hubs/{hubName}
 # operationId: Hubs_Get
-export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs Get" [
-  resourceGroupName: string
-  hubName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs get" [
+  subscription_id: string
+  resource_group_name: string
+  hub_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -208,16 +223,17 @@ export def "subscriptions-resource-groups-providers-microsoft-customer-insights-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
 ]: nothing -> record<properties: record<apiEndpoint: string, hubBillingInfo: record<maxUnits: int, minUnits: int, skuName: string>, provisioningState: string, tenantFeatures: int, webEndpoint: string>, id: string, location: string, name: string, tags: record, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.CustomerInsights/hubs/($hubName)" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), hub_name: (encode-path-segment $hub_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.CustomerInsights/hubs/{hub_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Updates a Hub.
@@ -225,10 +241,10 @@ export def "subscriptions-resource-groups-providers-microsoft-customer-insights-
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CustomerInsights/hubs/{hubName}
 # operationId: Hubs_Update
 # --properties shape: {hubBillingInfo?: any, tenantFeatures?: int}
-export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs Update" [
-  resourceGroupName: string
-  hubName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs update" [
+  subscription_id: string
+  resource_group_name: string
+  hub_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -236,6 +252,7 @@ export def "subscriptions-resource-groups-providers-microsoft-customer-insights-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
   --properties: any # Properties of hub. — shape: {hubBillingInfo?: any, tenantFeatures?: int}
@@ -246,12 +263,12 @@ export def "subscriptions-resource-groups-providers-microsoft-customer-insights-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.CustomerInsights/hubs/($hubName)" $qp)
-  let body = {properties: $properties, location: $location, tags: $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), hub_name: (encode-path-segment $hub_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.CustomerInsights/hubs/{hub_name}") $qp)
+  let req_body = {"properties": $properties, "location": $location, "tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Creates a hub, or updates an existing hub.
@@ -259,10 +276,10 @@ export def "subscriptions-resource-groups-providers-microsoft-customer-insights-
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CustomerInsights/hubs/{hubName}
 # operationId: Hubs_CreateOrUpdate
 # --properties shape: {hubBillingInfo?: any, tenantFeatures?: int}
-export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs CreateOrUpdate" [
-  resourceGroupName: string
-  hubName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs create-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  hub_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -270,6 +287,7 @@ export def "subscriptions-resource-groups-providers-microsoft-customer-insights-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
   --properties: any # Properties of hub. — shape: {hubBillingInfo?: any, tenantFeatures?: int}
@@ -280,22 +298,22 @@ export def "subscriptions-resource-groups-providers-microsoft-customer-insights-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.CustomerInsights/hubs/($hubName)" $qp)
-  let body = {properties: $properties, location: $location, tags: $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), hub_name: (encode-path-segment $hub_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.CustomerInsights/hubs/{hub_name}") $qp)
+  let req_body = {"properties": $properties, "location": $location, "tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Gets all the authorization policies in a specified hub.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CustomerInsights/hubs/{hubName}/authorizationPolicies
 # operationId: AuthorizationPolicies_ListByHub
-export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-authorization-policies ListByHub" [
-  resourceGroupName: string
-  hubName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-authorization-policies list" [
+  subscription_id: string
+  resource_group_name: string
+  hub_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -303,27 +321,28 @@ export def "subscriptions-resource-groups-providers-microsoft-customer-insights-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
 ]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.CustomerInsights/hubs/($hubName)/authorizationPolicies" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), hub_name: (encode-path-segment $hub_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.CustomerInsights/hubs/{hub_name}/authorizationPolicies") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Gets an authorization policy in the hub.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CustomerInsights/hubs/{hubName}/authorizationPolicies/{authorizationPolicyName}
 # operationId: AuthorizationPolicies_Get
-export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-authorization-policies Get" [
-  resourceGroupName: string
-  hubName: string
-  authorizationPolicyName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-authorization-policies get" [
+  subscription_id: string
+  resource_group_name: string
+  hub_name: string
+  authorization_policy_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -331,28 +350,29 @@ export def "subscriptions-resource-groups-providers-microsoft-customer-insights-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
 ]: nothing -> record<properties: record<permissions: list<string>, policyName: string, primaryKey: string, secondaryKey: string>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.CustomerInsights/hubs/($hubName)/authorizationPolicies/($authorizationPolicyName)" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), hub_name: (encode-path-segment $hub_name), authorization_policy_name: (encode-path-segment $authorization_policy_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.CustomerInsights/hubs/{hub_name}/authorizationPolicies/{authorization_policy_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Creates an authorization policy or updates an existing authorization policy.
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CustomerInsights/hubs/{hubName}/authorizationPolicies/{authorizationPolicyName}
 # operationId: AuthorizationPolicies_CreateOrUpdate
-# --properties shape: {permissions: list, primaryKey?: string, secondaryKey?: string}
-export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-authorization-policies CreateOrUpdate" [
-  resourceGroupName: string
-  hubName: string
-  authorizationPolicyName: string
-  subscriptionId: string
+# --properties shape: {permissions: list<string>, primaryKey?: string, secondaryKey?: string}
+export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-authorization-policies create-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  hub_name: string
+  authorization_policy_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -360,31 +380,32 @@ export def "subscriptions-resource-groups-providers-microsoft-customer-insights-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
-  --properties: any # The authorization policy. — shape: {permissions: list, primaryKey?: string, secondaryKey?: string}
+  --properties: any # The authorization policy. — shape: {permissions: list<string>, primaryKey?: string, secondaryKey?: string}
 ]: any -> record<properties: record<permissions: list<string>, policyName: string, primaryKey: string, secondaryKey: string>, id: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.CustomerInsights/hubs/($hubName)/authorizationPolicies/($authorizationPolicyName)" $qp)
-  let body = {properties: $properties} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), hub_name: (encode-path-segment $hub_name), authorization_policy_name: (encode-path-segment $authorization_policy_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.CustomerInsights/hubs/{hub_name}/authorizationPolicies/{authorization_policy_name}") $qp)
+  let req_body = {"properties": $properties} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Regenerates the primary policy key of the specified authorization policy.
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CustomerInsights/hubs/{hubName}/authorizationPolicies/{authorizationPolicyName}/regeneratePrimaryKey
 # operationId: AuthorizationPolicies_RegeneratePrimaryKey
-export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-authorization-policies-regenerate-primary-key RegeneratePrimaryKey" [
-  resourceGroupName: string
-  hubName: string
-  authorizationPolicyName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-authorization-policies-regenerate-primary-key create" [
+  subscription_id: string
+  resource_group_name: string
+  hub_name: string
+  authorization_policy_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -392,27 +413,28 @@ export def "subscriptions-resource-groups-providers-microsoft-customer-insights-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
 ]: nothing -> record<permissions: list<string>, policyName: string, primaryKey: string, secondaryKey: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.CustomerInsights/hubs/($hubName)/authorizationPolicies/($authorizationPolicyName)/regeneratePrimaryKey" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), hub_name: (encode-path-segment $hub_name), authorization_policy_name: (encode-path-segment $authorization_policy_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.CustomerInsights/hubs/{hub_name}/authorizationPolicies/{authorization_policy_name}/regeneratePrimaryKey") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Regenerates the secondary policy key of the specified authorization policy.
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CustomerInsights/hubs/{hubName}/authorizationPolicies/{authorizationPolicyName}/regenerateSecondaryKey
 # operationId: AuthorizationPolicies_RegenerateSecondaryKey
-export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-authorization-policies-regenerate-secondary-key RegenerateSecondaryKey" [
-  resourceGroupName: string
-  hubName: string
-  authorizationPolicyName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-authorization-policies-regenerate-secondary-key create" [
+  subscription_id: string
+  resource_group_name: string
+  hub_name: string
+  authorization_policy_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -420,26 +442,27 @@ export def "subscriptions-resource-groups-providers-microsoft-customer-insights-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
 ]: nothing -> record<permissions: list<string>, policyName: string, primaryKey: string, secondaryKey: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.CustomerInsights/hubs/($hubName)/authorizationPolicies/($authorizationPolicyName)/regenerateSecondaryKey" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), hub_name: (encode-path-segment $hub_name), authorization_policy_name: (encode-path-segment $authorization_policy_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.CustomerInsights/hubs/{hub_name}/authorizationPolicies/{authorization_policy_name}/regenerateSecondaryKey") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Gets all the connectors in the specified hub.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CustomerInsights/hubs/{hubName}/connectors
 # operationId: Connectors_ListByHub
-export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-connectors ListByHub" [
-  resourceGroupName: string
-  hubName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-connectors list" [
+  subscription_id: string
+  resource_group_name: string
+  hub_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -447,27 +470,28 @@ export def "subscriptions-resource-groups-providers-microsoft-customer-insights-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
 ]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.CustomerInsights/hubs/($hubName)/connectors" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), hub_name: (encode-path-segment $hub_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.CustomerInsights/hubs/{hub_name}/connectors") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Deletes a connector in the hub.
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CustomerInsights/hubs/{hubName}/connectors/{connectorName}
 # operationId: Connectors_Delete
-export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-connectors Delete" [
-  resourceGroupName: string
-  hubName: string
-  connectorName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-connectors delete" [
+  subscription_id: string
+  resource_group_name: string
+  hub_name: string
+  connector_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -475,27 +499,28 @@ export def "subscriptions-resource-groups-providers-microsoft-customer-insights-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.CustomerInsights/hubs/($hubName)/connectors/($connectorName)" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), hub_name: (encode-path-segment $hub_name), connector_name: (encode-path-segment $connector_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.CustomerInsights/hubs/{hub_name}/connectors/{connector_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Gets a connector in the hub.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CustomerInsights/hubs/{hubName}/connectors/{connectorName}
 # operationId: Connectors_Get
-export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-connectors Get" [
-  resourceGroupName: string
-  hubName: string
-  connectorName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-connectors get" [
+  subscription_id: string
+  resource_group_name: string
+  hub_name: string
+  connector_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -503,16 +528,17 @@ export def "subscriptions-resource-groups-providers-microsoft-customer-insights-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
 ]: nothing -> record<properties: record<connectorId: int, connectorName: string, connectorProperties: record, connectorType: string, created: string, description: string, displayName: string, isInternal: bool, lastModified: string, state: string, tenantId: string>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.CustomerInsights/hubs/($hubName)/connectors/($connectorName)" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), hub_name: (encode-path-segment $hub_name), connector_name: (encode-path-segment $connector_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.CustomerInsights/hubs/{hub_name}/connectors/{connector_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Creates a connector or updates an existing connector in the hub.
@@ -520,11 +546,11 @@ export def "subscriptions-resource-groups-providers-microsoft-customer-insights-
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CustomerInsights/hubs/{hubName}/connectors/{connectorName}
 # operationId: Connectors_CreateOrUpdate
 # --properties shape: {connectorName?: string, connectorProperties: record, connectorType: "None"|"CRM"|"AzureBlob"|"Salesforce"|"ExchangeOnline"|"Outbound", description?: string, displayName?: string, isInternal?: bool}
-export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-connectors CreateOrUpdate" [
-  resourceGroupName: string
-  hubName: string
-  connectorName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-connectors create-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  hub_name: string
+  connector_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -532,6 +558,7 @@ export def "subscriptions-resource-groups-providers-microsoft-customer-insights-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
   --properties: any # Properties of connector. — shape: {connectorName?: string, connectorProperties: record, connectorType: "None"|"CRM"|"AzureBlob"|"Salesforce"|"ExchangeOnline"|"Outbound", description?: string, displayName?: string, isInternal?: bool}
@@ -540,23 +567,23 @@ export def "subscriptions-resource-groups-providers-microsoft-customer-insights-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.CustomerInsights/hubs/($hubName)/connectors/($connectorName)" $qp)
-  let body = {properties: $properties} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), hub_name: (encode-path-segment $hub_name), connector_name: (encode-path-segment $connector_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.CustomerInsights/hubs/{hub_name}/connectors/{connector_name}") $qp)
+  let req_body = {"properties": $properties} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Gets all the connector mappings in the specified connector.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CustomerInsights/hubs/{hubName}/connectors/{connectorName}/mappings
 # operationId: ConnectorMappings_ListByConnector
-export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-connectors-mappings ListByConnector" [
-  resourceGroupName: string
-  hubName: string
-  connectorName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-connectors-mappings list" [
+  subscription_id: string
+  resource_group_name: string
+  hub_name: string
+  connector_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -564,28 +591,29 @@ export def "subscriptions-resource-groups-providers-microsoft-customer-insights-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
 ]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.CustomerInsights/hubs/($hubName)/connectors/($connectorName)/mappings" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), hub_name: (encode-path-segment $hub_name), connector_name: (encode-path-segment $connector_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.CustomerInsights/hubs/{hub_name}/connectors/{connector_name}/mappings") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Deletes a connector mapping in the connector.
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CustomerInsights/hubs/{hubName}/connectors/{connectorName}/mappings/{mappingName}
 # operationId: ConnectorMappings_Delete
-export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-connectors-mappings Delete" [
-  resourceGroupName: string
-  hubName: string
-  connectorName: string
-  mappingName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-connectors-mappings delete" [
+  subscription_id: string
+  resource_group_name: string
+  hub_name: string
+  connector_name: string
+  mapping_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -593,28 +621,29 @@ export def "subscriptions-resource-groups-providers-microsoft-customer-insights-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.CustomerInsights/hubs/($hubName)/connectors/($connectorName)/mappings/($mappingName)" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), hub_name: (encode-path-segment $hub_name), connector_name: (encode-path-segment $connector_name), mapping_name: (encode-path-segment $mapping_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.CustomerInsights/hubs/{hub_name}/connectors/{connector_name}/mappings/{mapping_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Gets a connector mapping in the connector.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CustomerInsights/hubs/{hubName}/connectors/{connectorName}/mappings/{mappingName}
 # operationId: ConnectorMappings_Get
-export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-connectors-mappings Get" [
-  resourceGroupName: string
-  hubName: string
-  connectorName: string
-  mappingName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-connectors-mappings get" [
+  subscription_id: string
+  resource_group_name: string
+  hub_name: string
+  connector_name: string
+  mapping_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -622,16 +651,17 @@ export def "subscriptions-resource-groups-providers-microsoft-customer-insights-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
 ]: nothing -> record<properties: record<connectorMappingName: string, connectorName: string, connectorType: string, created: string, dataFormatId: string, description: string, displayName: string, entityType: string, entityTypeName: string, lastModified: string, mappingProperties: record<availability: record, completeOperation: record, errorManagement: record, fileFilter: string, folderPath: string, format: record, hasHeader: bool, structure: list>, nextRunTime: string, runId: string, state: string, tenantId: string>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.CustomerInsights/hubs/($hubName)/connectors/($connectorName)/mappings/($mappingName)" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), hub_name: (encode-path-segment $hub_name), connector_name: (encode-path-segment $connector_name), mapping_name: (encode-path-segment $mapping_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.CustomerInsights/hubs/{hub_name}/connectors/{connector_name}/mappings/{mapping_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Creates a connector mapping or updates an existing connector mapping in the connector.
@@ -639,12 +669,12 @@ export def "subscriptions-resource-groups-providers-microsoft-customer-insights-
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CustomerInsights/hubs/{hubName}/connectors/{connectorName}/mappings/{mappingName}
 # operationId: ConnectorMappings_CreateOrUpdate
 # --properties shape: {connectorType?: "None"|"CRM"|"AzureBlob"|"Salesforce"|"ExchangeOnline"|"Outbound", description?: string, displayName?: string, entityType: "None"|"Profile"|"Interaction"|"Relationship", entityTypeName: string, mappingProperties: any}
-export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-connectors-mappings CreateOrUpdate" [
-  resourceGroupName: string
-  hubName: string
-  connectorName: string
-  mappingName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-connectors-mappings create-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  hub_name: string
+  connector_name: string
+  mapping_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -652,6 +682,7 @@ export def "subscriptions-resource-groups-providers-microsoft-customer-insights-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
   --properties: any # The connector mapping definition. — shape: {connectorType?: "None"|"CRM"|"AzureBlob"|"Salesforce"|"ExchangeOnline"|"Outbound", description?: string, displayName?: string, entityType: "None"|"Profile"|"Interaction"|"Relationship", entityTypeName: string, mappingProperties: any}
@@ -660,22 +691,22 @@ export def "subscriptions-resource-groups-providers-microsoft-customer-insights-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.CustomerInsights/hubs/($hubName)/connectors/($connectorName)/mappings/($mappingName)" $qp)
-  let body = {properties: $properties} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), hub_name: (encode-path-segment $hub_name), connector_name: (encode-path-segment $connector_name), mapping_name: (encode-path-segment $mapping_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.CustomerInsights/hubs/{hub_name}/connectors/{connector_name}/mappings/{mapping_name}") $qp)
+  let req_body = {"properties": $properties} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Gets data image upload URL.
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CustomerInsights/hubs/{hubName}/images/getDataImageUploadUrl
 # operationId: Images_GetUploadUrlForData
-export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-images-get-data-image-upload-url GetUploadUrlForData" [
-  resourceGroupName: string
-  hubName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-images-get-data-image-upload-url get" [
+  subscription_id: string
+  resource_group_name: string
+  hub_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -683,32 +714,33 @@ export def "subscriptions-resource-groups-providers-microsoft-customer-insights-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
-  --entityType: string # Type of entity. Can be Profile or Interaction.
-  --entityTypeName: string # Name of the entity type.
-  --relativePath: string # Relative path of the image.
+  --entity-type: string # Type of entity. Can be Profile or Interaction.
+  --entity-type-name: string # Name of the entity type.
+  --relative-path: string # Relative path of the image.
 ]: any -> record<contentUrl: string, imageExists: bool, relativePath: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.CustomerInsights/hubs/($hubName)/images/getDataImageUploadUrl" $qp)
-  let body = {entityType: $entityType, entityTypeName: $entityTypeName, relativePath: $relativePath} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), hub_name: (encode-path-segment $hub_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.CustomerInsights/hubs/{hub_name}/images/getDataImageUploadUrl") $qp)
+  let req_body = {"entityType": $entity_type, "entityTypeName": $entity_type_name, "relativePath": $relative_path} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Gets entity type (profile or interaction) image upload URL.
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CustomerInsights/hubs/{hubName}/images/getEntityTypeImageUploadUrl
 # operationId: Images_GetUploadUrlForEntityType
-export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-images-get-entity-type-image-upload-url GetUploadUrlForEntityType" [
-  resourceGroupName: string
-  hubName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-images-get-entity-type-image-upload-url get" [
+  subscription_id: string
+  resource_group_name: string
+  hub_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -716,32 +748,33 @@ export def "subscriptions-resource-groups-providers-microsoft-customer-insights-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
-  --entityType: string # Type of entity. Can be Profile or Interaction.
-  --entityTypeName: string # Name of the entity type.
-  --relativePath: string # Relative path of the image.
+  --entity-type: string # Type of entity. Can be Profile or Interaction.
+  --entity-type-name: string # Name of the entity type.
+  --relative-path: string # Relative path of the image.
 ]: any -> record<contentUrl: string, imageExists: bool, relativePath: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.CustomerInsights/hubs/($hubName)/images/getEntityTypeImageUploadUrl" $qp)
-  let body = {entityType: $entityType, entityTypeName: $entityTypeName, relativePath: $relativePath} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), hub_name: (encode-path-segment $hub_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.CustomerInsights/hubs/{hub_name}/images/getEntityTypeImageUploadUrl") $qp)
+  let req_body = {"entityType": $entity_type, "entityTypeName": $entity_type_name, "relativePath": $relative_path} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Gets all interactions in the hub.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CustomerInsights/hubs/{hubName}/interactions
 # operationId: Interactions_ListByHub
-export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-interactions ListByHub" [
-  resourceGroupName: string
-  hubName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-interactions list" [
+  subscription_id: string
+  resource_group_name: string
+  hub_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -749,6 +782,7 @@ export def "subscriptions-resource-groups-providers-microsoft-customer-insights-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --locale-code: string # Locale of interaction to retrieve, default is en-us. (default: en-us)
   --api-version: string # Client Api Version.
@@ -756,21 +790,21 @@ export def "subscriptions-resource-groups-providers-microsoft-customer-insights-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "locale-code" $locale_code "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.CustomerInsights/hubs/($hubName)/interactions" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), hub_name: (encode-path-segment $hub_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.CustomerInsights/hubs/{hub_name}/interactions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Gets information about the specified interaction.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CustomerInsights/hubs/{hubName}/interactions/{interactionName}
 # operationId: Interactions_Get
-export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-interactions Get" [
-  resourceGroupName: string
-  hubName: string
-  interactionName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-interactions get" [
+  subscription_id: string
+  resource_group_name: string
+  hub_name: string
+  interaction_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -778,6 +812,7 @@ export def "subscriptions-resource-groups-providers-microsoft-customer-insights-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --locale-code: string # Locale of interaction to retrieve, default is en-us. (default: en-us)
   --api-version: string # Client Api Version.
@@ -785,22 +820,22 @@ export def "subscriptions-resource-groups-providers-microsoft-customer-insights-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "locale-code" $locale_code "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.CustomerInsights/hubs/($hubName)/interactions/($interactionName)" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), hub_name: (encode-path-segment $hub_name), interaction_name: (encode-path-segment $interaction_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.CustomerInsights/hubs/{hub_name}/interactions/{interaction_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Creates an interaction or updates an existing interaction within a hub.
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CustomerInsights/hubs/{hubName}/interactions/{interactionName}
 # operationId: Interactions_CreateOrUpdate
-# --properties shape: {defaultDataSource?: any, idPropertyNames?: list, isActivity?: bool, participantProfiles?: list, primaryParticipantProfilePropertyName?: string, apiEntitySetName?: string, entityType?: "None"|"Profile"|"Interaction"|"Relationship", fields?: list, instancesCount?: int, provisioningState?: "Provisioning"|"Succeeded"|"Expiring"|"Deleting"|"HumanIntervention"|"Failed", schemaItemTypeLink?: string, timestampFieldName?: string, typeName?: string}
-export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-interactions CreateOrUpdate" [
-  resourceGroupName: string
-  hubName: string
-  interactionName: string
-  subscriptionId: string
+# --properties shape: {defaultDataSource?: any, idPropertyNames?: list<string>, isActivity?: bool, participantProfiles?: list, primaryParticipantProfilePropertyName?: string, apiEntitySetName?: string, entityType?: "None"|"Profile"|"Interaction"|"Relationship", fields?: list, instancesCount?: int, provisioningState?: "Provisioning"|"Succeeded"|"Expiring"|"Deleting"|"HumanIntervention"|"Failed", schemaItemTypeLink?: string, timestampFieldName?: string, typeName?: string}
+export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-interactions create-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  hub_name: string
+  interaction_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -808,31 +843,32 @@ export def "subscriptions-resource-groups-providers-microsoft-customer-insights-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
-  --properties: any # The Interaction Type Definition — shape: {defaultDataSource?: any, idPropertyNames?: list, isActivity?: bool, participantProfiles?: list, primaryParticipantProfilePropertyName?: string, apiEntitySetName?: string, entityType?: "None"|"Profile"|"Interaction"|"Relationship", fields?: list, instancesCount?: int, provisioningState?: "Provisioning"|"Succeeded"|"Expiring"|"Deleting"|"HumanIntervention"|"Failed", schemaItemTypeLink?: string, timestampFieldName?: string, typeName?: string}
+  --properties: any # The Interaction Type Definition — shape: {defaultDataSource?: any, idPropertyNames?: list<string>, isActivity?: bool, participantProfiles?: list, primaryParticipantProfilePropertyName?: string, apiEntitySetName?: string, entityType?: "None"|"Profile"|"Interaction"|"Relationship", fields?: list, instancesCount?: int, provisioningState?: "Provisioning"|"Succeeded"|"Expiring"|"Deleting"|"HumanIntervention"|"Failed", schemaItemTypeLink?: string, timestampFieldName?: string, typeName?: string}
 ]: any -> record<properties: record<dataSourcePrecedenceRules: list<record>, defaultDataSource: record<dataSourceReferenceId: string, dataSourceType: string, id: int, name: string, status: string>, idPropertyNames: list<string>, isActivity: bool, participantProfiles: list<record>, primaryParticipantProfilePropertyName: string, apiEntitySetName: string, entityType: string, fields: list<record>, instancesCount: int, lastChangedUtc: string, provisioningState: string, schemaItemTypeLink: string, tenantId: string, timestampFieldName: string, typeName: string>, id: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.CustomerInsights/hubs/($hubName)/interactions/($interactionName)" $qp)
-  let body = {properties: $properties} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), hub_name: (encode-path-segment $hub_name), interaction_name: (encode-path-segment $interaction_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.CustomerInsights/hubs/{hub_name}/interactions/{interaction_name}") $qp)
+  let req_body = {"properties": $properties} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Suggests relationships to create relationship links.
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CustomerInsights/hubs/{hubName}/interactions/{interactionName}/suggestRelationshipLinks
 # operationId: Interactions_SuggestRelationshipLinks
-export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-interactions-suggest-relationship-links SuggestRelationshipLinks" [
-  resourceGroupName: string
-  hubName: string
-  interactionName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-interactions-suggest-relationship-links create" [
+  subscription_id: string
+  resource_group_name: string
+  hub_name: string
+  interaction_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -840,26 +876,27 @@ export def "subscriptions-resource-groups-providers-microsoft-customer-insights-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
 ]: nothing -> record<interactionName: string, suggestedRelationships: table<existingRelationshipName: string, profileName: string, profilePropertyReferences: list, relatedProfileName: string, relatedProfilePropertyReferences: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.CustomerInsights/hubs/($hubName)/interactions/($interactionName)/suggestRelationshipLinks" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), hub_name: (encode-path-segment $hub_name), interaction_name: (encode-path-segment $interaction_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.CustomerInsights/hubs/{hub_name}/interactions/{interaction_name}/suggestRelationshipLinks") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Gets all the KPIs in the specified hub.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CustomerInsights/hubs/{hubName}/kpi
 # operationId: Kpi_ListByHub
-export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-kpi ListByHub" [
-  resourceGroupName: string
-  hubName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-kpi list" [
+  subscription_id: string
+  resource_group_name: string
+  hub_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -867,27 +904,28 @@ export def "subscriptions-resource-groups-providers-microsoft-customer-insights-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
 ]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.CustomerInsights/hubs/($hubName)/kpi" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), hub_name: (encode-path-segment $hub_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.CustomerInsights/hubs/{hub_name}/kpi") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Deletes a KPI in the hub.
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CustomerInsights/hubs/{hubName}/kpi/{kpiName}
 # operationId: Kpi_Delete
-export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-kpi Delete" [
-  resourceGroupName: string
-  hubName: string
-  kpiName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-kpi delete" [
+  subscription_id: string
+  resource_group_name: string
+  hub_name: string
+  kpi_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -895,27 +933,28 @@ export def "subscriptions-resource-groups-providers-microsoft-customer-insights-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.CustomerInsights/hubs/($hubName)/kpi/($kpiName)" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), hub_name: (encode-path-segment $hub_name), kpi_name: (encode-path-segment $kpi_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.CustomerInsights/hubs/{hub_name}/kpi/{kpi_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Gets a KPI in the hub.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CustomerInsights/hubs/{hubName}/kpi/{kpiName}
 # operationId: Kpi_Get
-export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-kpi Get" [
-  resourceGroupName: string
-  hubName: string
-  kpiName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-kpi get" [
+  subscription_id: string
+  resource_group_name: string
+  hub_name: string
+  kpi_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -923,28 +962,29 @@ export def "subscriptions-resource-groups-providers-microsoft-customer-insights-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
 ]: nothing -> record<properties: record<aliases: list<record>, calculationWindow: string, calculationWindowFieldName: string, description: record, displayName: record, entityType: string, entityTypeName: string, expression: string, extracts: list<record>, filter: string, function: string, groupBy: list<string>, groupByMetadata: list<record>, kpiName: string, participantProfilesMetadata: list<record>, provisioningState: string, tenantId: string, thresHolds: record<increasingKpi: bool, lowerLimit: float, upperLimit: float>, unit: string>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.CustomerInsights/hubs/($hubName)/kpi/($kpiName)" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), hub_name: (encode-path-segment $hub_name), kpi_name: (encode-path-segment $kpi_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.CustomerInsights/hubs/{hub_name}/kpi/{kpi_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Creates a KPI or updates an existing KPI in the hub.
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CustomerInsights/hubs/{hubName}/kpi/{kpiName}
 # operationId: Kpi_CreateOrUpdate
-# --properties shape: {aliases?: list, calculationWindow: "Lifetime"|"Hour"|"Day"|"Week"|"Month", calculationWindowFieldName?: string, description?: record, displayName?: record, entityType: "None"|"Profile"|"Interaction"|"Relationship", entityTypeName: string, expression: string, extracts?: list, filter?: string, function: "Sum"|"Avg"|"Min"|"Max"|"Last"|"Count"|"None"|"CountDistinct", groupBy?: list, provisioningState?: "Provisioning"|"Succeeded"|"Expiring"|"Deleting"|"HumanIntervention"|"Failed", thresHolds?: any, unit?: string}
-export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-kpi CreateOrUpdate" [
-  resourceGroupName: string
-  hubName: string
-  kpiName: string
-  subscriptionId: string
+# --properties shape: {aliases?: list, calculationWindow: "Lifetime"|"Hour"|"Day"|"Week"|"Month", calculationWindowFieldName?: string, description?: record, displayName?: record, entityType: "None"|"Profile"|"Interaction"|"Relationship", entityTypeName: string, expression: string, extracts?: list, filter?: string, function: "Sum"|"Avg"|"Min"|"Max"|"Last"|"Count"|"None"|"CountDistinct", groupBy?: list<string>, provisioningState?: "Provisioning"|"Succeeded"|"Expiring"|"Deleting"|"HumanIntervention"|"Failed", ... (2 more fields)}
+export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-kpi create-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  hub_name: string
+  kpi_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -952,31 +992,32 @@ export def "subscriptions-resource-groups-providers-microsoft-customer-insights-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
-  --properties: any # Defines the KPI Threshold limits. — shape: {aliases?: list, calculationWindow: "Lifetime"|"Hour"|"Day"|"Week"|"Month", calculationWindowFieldName?: string, description?: record, displayName?: record, entityType: "None"|"Profile"|"Interaction"|"Relationship", entityTypeName: string, expression: string, extracts?: list, filter?: string, function: "Sum"|"Avg"|"Min"|"Max"|"Last"|"Count"|"None"|"CountDistinct", groupBy?: list, provisioningState?: "Provisioning"|"Succeeded"|"Expiring"|"Deleting"|"HumanIntervention"|"Failed", thresHolds?: any, unit?: string}
+  --properties: any # Defines the KPI Threshold limits. — shape: {aliases?: list, calculationWindow: "Lifetime"|"Hour"|"Day"|"Week"|"Month", calculationWindowFieldName?: string, description?: record, displayName?: record, entityType: "None"|"Profile"|"Interaction"|"Relationship", entityTypeName: string, expression: string, extracts?: list, filter?: string, function: "Sum"|"Avg"|"Min"|"Max"|"Last"|"Count"|"None"|"CountDistinct", groupBy?: list<string>, provisioningState?: "Provisioning"|"Succeeded"|"Expiring"|"Deleting"|"HumanIntervention"|"Failed", ... (2 more fields)}
 ]: any -> record<properties: record<aliases: list<record>, calculationWindow: string, calculationWindowFieldName: string, description: record, displayName: record, entityType: string, entityTypeName: string, expression: string, extracts: list<record>, filter: string, function: string, groupBy: list<string>, groupByMetadata: list<record>, kpiName: string, participantProfilesMetadata: list<record>, provisioningState: string, tenantId: string, thresHolds: record<increasingKpi: bool, lowerLimit: float, upperLimit: float>, unit: string>, id: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.CustomerInsights/hubs/($hubName)/kpi/($kpiName)" $qp)
-  let body = {properties: $properties} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), hub_name: (encode-path-segment $hub_name), kpi_name: (encode-path-segment $kpi_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.CustomerInsights/hubs/{hub_name}/kpi/{kpi_name}") $qp)
+  let req_body = {"properties": $properties} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Reprocesses the Kpi values of the specified KPI.
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CustomerInsights/hubs/{hubName}/kpi/{kpiName}/reprocess
 # operationId: Kpi_Reprocess
-export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-kpi-reprocess Reprocess" [
-  resourceGroupName: string
-  hubName: string
-  kpiName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-kpi-reprocess create" [
+  subscription_id: string
+  resource_group_name: string
+  hub_name: string
+  kpi_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -984,26 +1025,27 @@ export def "subscriptions-resource-groups-providers-microsoft-customer-insights-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.CustomerInsights/hubs/($hubName)/kpi/($kpiName)/reprocess" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), hub_name: (encode-path-segment $hub_name), kpi_name: (encode-path-segment $kpi_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.CustomerInsights/hubs/{hub_name}/kpi/{kpi_name}/reprocess") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Gets all the links in the specified hub.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CustomerInsights/hubs/{hubName}/links
 # operationId: Links_ListByHub
-export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-links ListByHub" [
-  resourceGroupName: string
-  hubName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-links list" [
+  subscription_id: string
+  resource_group_name: string
+  hub_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1011,27 +1053,28 @@ export def "subscriptions-resource-groups-providers-microsoft-customer-insights-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
 ]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.CustomerInsights/hubs/($hubName)/links" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), hub_name: (encode-path-segment $hub_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.CustomerInsights/hubs/{hub_name}/links") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Deletes a link in the hub.
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CustomerInsights/hubs/{hubName}/links/{linkName}
 # operationId: Links_Delete
-export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-links Delete" [
-  resourceGroupName: string
-  hubName: string
-  linkName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-links delete" [
+  subscription_id: string
+  resource_group_name: string
+  hub_name: string
+  link_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1039,27 +1082,28 @@ export def "subscriptions-resource-groups-providers-microsoft-customer-insights-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.CustomerInsights/hubs/($hubName)/links/($linkName)" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), hub_name: (encode-path-segment $hub_name), link_name: (encode-path-segment $link_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.CustomerInsights/hubs/{hub_name}/links/{link_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Gets a link in the hub.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CustomerInsights/hubs/{hubName}/links/{linkName}
 # operationId: Links_Get
-export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-links Get" [
-  resourceGroupName: string
-  hubName: string
-  linkName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-links get" [
+  subscription_id: string
+  resource_group_name: string
+  hub_name: string
+  link_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1067,16 +1111,17 @@ export def "subscriptions-resource-groups-providers-microsoft-customer-insights-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
 ]: nothing -> record<properties: record<description: record, displayName: record, linkName: string, mappings: list<record>, operationType: string, participantPropertyReferences: list<record>, provisioningState: string, referenceOnly: bool, sourceEntityType: string, sourceEntityTypeName: string, targetEntityType: string, targetEntityTypeName: string, tenantId: string>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.CustomerInsights/hubs/($hubName)/links/($linkName)" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), hub_name: (encode-path-segment $hub_name), link_name: (encode-path-segment $link_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.CustomerInsights/hubs/{hub_name}/links/{link_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Creates a link or updates an existing link in the hub.
@@ -1084,11 +1129,11 @@ export def "subscriptions-resource-groups-providers-microsoft-customer-insights-
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CustomerInsights/hubs/{hubName}/links/{linkName}
 # operationId: Links_CreateOrUpdate
 # --properties shape: {description?: record, displayName?: record, mappings?: list, operationType?: "Upsert"|"Delete", participantPropertyReferences: list, provisioningState?: "Provisioning"|"Succeeded"|"Expiring"|"Deleting"|"HumanIntervention"|"Failed", referenceOnly?: bool, sourceEntityType: "None"|"Profile"|"Interaction"|"Relationship", sourceEntityTypeName: string, targetEntityType: "None"|"Profile"|"Interaction"|"Relationship", targetEntityTypeName: string}
-export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-links CreateOrUpdate" [
-  resourceGroupName: string
-  hubName: string
-  linkName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-links create-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  hub_name: string
+  link_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1096,6 +1141,7 @@ export def "subscriptions-resource-groups-providers-microsoft-customer-insights-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
   --properties: any # The definition of Link. — shape: {description?: record, displayName?: record, mappings?: list, operationType?: "Upsert"|"Delete", participantPropertyReferences: list, provisioningState?: "Provisioning"|"Succeeded"|"Expiring"|"Deleting"|"HumanIntervention"|"Failed", referenceOnly?: bool, sourceEntityType: "None"|"Profile"|"Interaction"|"Relationship", sourceEntityTypeName: string, targetEntityType: "None"|"Profile"|"Interaction"|"Relationship", targetEntityTypeName: string}
@@ -1104,22 +1150,22 @@ export def "subscriptions-resource-groups-providers-microsoft-customer-insights-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.CustomerInsights/hubs/($hubName)/links/($linkName)" $qp)
-  let body = {properties: $properties} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), hub_name: (encode-path-segment $hub_name), link_name: (encode-path-segment $link_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.CustomerInsights/hubs/{hub_name}/links/{link_name}") $qp)
+  let req_body = {"properties": $properties} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Gets all the predictions in the specified hub.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CustomerInsights/hubs/{hubName}/predictions
 # operationId: Predictions_ListByHub
-export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-predictions ListByHub" [
-  resourceGroupName: string
-  hubName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-predictions list" [
+  subscription_id: string
+  resource_group_name: string
+  hub_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1127,27 +1173,28 @@ export def "subscriptions-resource-groups-providers-microsoft-customer-insights-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
 ]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.CustomerInsights/hubs/($hubName)/predictions" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), hub_name: (encode-path-segment $hub_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.CustomerInsights/hubs/{hub_name}/predictions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Deletes a Prediction in the hub.
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CustomerInsights/hubs/{hubName}/predictions/{predictionName}
 # operationId: Predictions_Delete
-export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-predictions Delete" [
-  resourceGroupName: string
-  hubName: string
-  predictionName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-predictions delete" [
+  subscription_id: string
+  resource_group_name: string
+  hub_name: string
+  prediction_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1155,27 +1202,28 @@ export def "subscriptions-resource-groups-providers-microsoft-customer-insights-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.CustomerInsights/hubs/($hubName)/predictions/($predictionName)" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), hub_name: (encode-path-segment $hub_name), prediction_name: (encode-path-segment $prediction_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.CustomerInsights/hubs/{hub_name}/predictions/{prediction_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Gets a Prediction in the hub.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CustomerInsights/hubs/{hubName}/predictions/{predictionName}
 # operationId: Predictions_Get
-export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-predictions Get" [
-  resourceGroupName: string
-  hubName: string
-  predictionName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-predictions get" [
+  subscription_id: string
+  resource_group_name: string
+  hub_name: string
+  prediction_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1183,28 +1231,29 @@ export def "subscriptions-resource-groups-providers-microsoft-customer-insights-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
 ]: nothing -> record<properties: record<autoAnalyze: bool, description: record, displayName: record, grades: list<record>, involvedInteractionTypes: list<string>, involvedKpiTypes: list<string>, involvedRelationships: list<string>, mappings: record<grade: string, reason: string, score: string>, negativeOutcomeExpression: string, positiveOutcomeExpression: string, predictionName: string, primaryProfileType: string, provisioningState: string, scopeExpression: string, scoreLabel: string, systemGeneratedEntities: record<generatedInteractionTypes: list, generatedKpis: record, generatedLinks: list>, tenantId: string>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.CustomerInsights/hubs/($hubName)/predictions/($predictionName)" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), hub_name: (encode-path-segment $hub_name), prediction_name: (encode-path-segment $prediction_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.CustomerInsights/hubs/{hub_name}/predictions/{prediction_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Creates a Prediction or updates an existing Prediction in the hub.
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CustomerInsights/hubs/{hubName}/predictions/{predictionName}
 # operationId: Predictions_CreateOrUpdate
-# --properties shape: {autoAnalyze: bool, description?: record, displayName?: record, grades?: list, involvedInteractionTypes?: list, involvedKpiTypes?: list, involvedRelationships?: list, mappings: record, negativeOutcomeExpression: string, positiveOutcomeExpression: string, predictionName?: string, primaryProfileType: string, provisioningState?: "Provisioning"|"Succeeded"|"Expiring"|"Deleting"|"HumanIntervention"|"Failed", scopeExpression: string, scoreLabel: string}
-export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-predictions CreateOrUpdate" [
-  resourceGroupName: string
-  hubName: string
-  predictionName: string
-  subscriptionId: string
+# --properties shape: {autoAnalyze: bool, description?: record, displayName?: record, grades?: list, involvedInteractionTypes?: list<string>, involvedKpiTypes?: list<string>, involvedRelationships?: list<string>, mappings: record, negativeOutcomeExpression: string, positiveOutcomeExpression: string, predictionName?: string, primaryProfileType: string, provisioningState?: "Provisioning"|"Succeeded"|"Expiring"|"Deleting"|"HumanIntervention"|"Failed", scopeExpression: string, scoreLabel: string}
+export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-predictions create-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  hub_name: string
+  prediction_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1212,31 +1261,32 @@ export def "subscriptions-resource-groups-providers-microsoft-customer-insights-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
-  --properties: any # The prediction definition. — shape: {autoAnalyze: bool, description?: record, displayName?: record, grades?: list, involvedInteractionTypes?: list, involvedKpiTypes?: list, involvedRelationships?: list, mappings: record, negativeOutcomeExpression: string, positiveOutcomeExpression: string, predictionName?: string, primaryProfileType: string, provisioningState?: "Provisioning"|"Succeeded"|"Expiring"|"Deleting"|"HumanIntervention"|"Failed", scopeExpression: string, scoreLabel: string}
+  --properties: any # The prediction definition. — shape: {autoAnalyze: bool, description?: record, displayName?: record, grades?: list, involvedInteractionTypes?: list<string>, involvedKpiTypes?: list<string>, involvedRelationships?: list<string>, mappings: record, negativeOutcomeExpression: string, positiveOutcomeExpression: string, predictionName?: string, primaryProfileType: string, provisioningState?: "Provisioning"|"Succeeded"|"Expiring"|"Deleting"|"HumanIntervention"|"Failed", scopeExpression: string, scoreLabel: string}
 ]: any -> record<properties: record<autoAnalyze: bool, description: record, displayName: record, grades: list<record>, involvedInteractionTypes: list<string>, involvedKpiTypes: list<string>, involvedRelationships: list<string>, mappings: record<grade: string, reason: string, score: string>, negativeOutcomeExpression: string, positiveOutcomeExpression: string, predictionName: string, primaryProfileType: string, provisioningState: string, scopeExpression: string, scoreLabel: string, systemGeneratedEntities: record<generatedInteractionTypes: list, generatedKpis: record, generatedLinks: list>, tenantId: string>, id: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.CustomerInsights/hubs/($hubName)/predictions/($predictionName)" $qp)
-  let body = {properties: $properties} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), hub_name: (encode-path-segment $hub_name), prediction_name: (encode-path-segment $prediction_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.CustomerInsights/hubs/{hub_name}/predictions/{prediction_name}") $qp)
+  let req_body = {"properties": $properties} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Gets model status of the prediction.
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CustomerInsights/hubs/{hubName}/predictions/{predictionName}/getModelStatus
 # operationId: Predictions_GetModelStatus
-export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-predictions-get-model-status GetModelStatus" [
-  resourceGroupName: string
-  hubName: string
-  predictionName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-predictions-get-model-status get" [
+  subscription_id: string
+  resource_group_name: string
+  hub_name: string
+  prediction_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1244,27 +1294,28 @@ export def "subscriptions-resource-groups-providers-microsoft-customer-insights-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
 ]: nothing -> record<message: string, modelVersion: string, predictionGuidId: string, predictionName: string, signalsUsed: int, status: string, tenantId: string, testSetCount: int, trainingAccuracy: int, trainingSetCount: int, validationSetCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.CustomerInsights/hubs/($hubName)/predictions/($predictionName)/getModelStatus" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), hub_name: (encode-path-segment $hub_name), prediction_name: (encode-path-segment $prediction_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.CustomerInsights/hubs/{hub_name}/predictions/{prediction_name}/getModelStatus") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Gets training results.
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CustomerInsights/hubs/{hubName}/predictions/{predictionName}/getTrainingResults
 # operationId: Predictions_GetTrainingResults
-export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-predictions-get-training-results GetTrainingResults" [
-  resourceGroupName: string
-  hubName: string
-  predictionName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-predictions-get-training-results get" [
+  subscription_id: string
+  resource_group_name: string
+  hub_name: string
+  prediction_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1272,27 +1323,28 @@ export def "subscriptions-resource-groups-providers-microsoft-customer-insights-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
 ]: nothing -> record<canonicalProfiles: table<canonicalProfileId: int, properties: list>, predictionDistribution: record<distributions: list<record>, totalNegatives: int, totalPositives: int>, primaryProfileInstanceCount: int, scoreName: string, tenantId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.CustomerInsights/hubs/($hubName)/predictions/($predictionName)/getTrainingResults" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), hub_name: (encode-path-segment $hub_name), prediction_name: (encode-path-segment $prediction_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.CustomerInsights/hubs/{hub_name}/predictions/{prediction_name}/getTrainingResults") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Creates or updates the model status of prediction.
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CustomerInsights/hubs/{hubName}/predictions/{predictionName}/modelStatus
 # operationId: Predictions_ModelStatus
-export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-predictions-model-status ModelStatus" [
-  resourceGroupName: string
-  hubName: string
-  predictionName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-predictions-model-status create" [
+  subscription_id: string
+  resource_group_name: string
+  hub_name: string
+  prediction_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1300,30 +1352,31 @@ export def "subscriptions-resource-groups-providers-microsoft-customer-insights-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
-  status: string@status-completer # Prediction model life cycle.  When prediction is in PendingModelConfirmation status, it is allowed to update the status to PendingFeaturing or Active through API.
+  status: string@status-completer # Prediction model life cycle. When prediction is in PendingModelConfirmation status, it is allowed to update the status to PendingFeaturing or Active through API.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.CustomerInsights/hubs/($hubName)/predictions/($predictionName)/modelStatus" $qp)
-  let body = {status: $status} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), hub_name: (encode-path-segment $hub_name), prediction_name: (encode-path-segment $prediction_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.CustomerInsights/hubs/{hub_name}/predictions/{prediction_name}/modelStatus") $qp)
+  let req_body = {"status": $status} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Gets all profile in the hub.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CustomerInsights/hubs/{hubName}/profiles
 # operationId: Profiles_ListByHub
-export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-profiles ListByHub" [
-  resourceGroupName: string
-  hubName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-profiles list" [
+  subscription_id: string
+  resource_group_name: string
+  hub_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1331,6 +1384,7 @@ export def "subscriptions-resource-groups-providers-microsoft-customer-insights-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --locale-code: string # Locale of profile to retrieve, default is en-us. (default: en-us)
   --api-version: string # Client Api Version.
@@ -1338,21 +1392,21 @@ export def "subscriptions-resource-groups-providers-microsoft-customer-insights-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "locale-code" $locale_code "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.CustomerInsights/hubs/($hubName)/profiles" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), hub_name: (encode-path-segment $hub_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.CustomerInsights/hubs/{hub_name}/profiles") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Deletes a profile within a hub
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CustomerInsights/hubs/{hubName}/profiles/{profileName}
 # operationId: Profiles_Delete
-export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-profiles Delete" [
-  resourceGroupName: string
-  hubName: string
-  profileName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-profiles delete" [
+  subscription_id: string
+  resource_group_name: string
+  hub_name: string
+  profile_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1360,6 +1414,7 @@ export def "subscriptions-resource-groups-providers-microsoft-customer-insights-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --locale-code: string # Locale of profile to retrieve, default is en-us. (default: en-us)
   --api-version: string # Client Api Version.
@@ -1367,21 +1422,21 @@ export def "subscriptions-resource-groups-providers-microsoft-customer-insights-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "locale-code" $locale_code "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.CustomerInsights/hubs/($hubName)/profiles/($profileName)" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), hub_name: (encode-path-segment $hub_name), profile_name: (encode-path-segment $profile_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.CustomerInsights/hubs/{hub_name}/profiles/{profile_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Gets information about the specified profile.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CustomerInsights/hubs/{hubName}/profiles/{profileName}
 # operationId: Profiles_Get
-export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-profiles Get" [
-  resourceGroupName: string
-  hubName: string
-  profileName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-profiles get" [
+  subscription_id: string
+  resource_group_name: string
+  hub_name: string
+  profile_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1389,6 +1444,7 @@ export def "subscriptions-resource-groups-providers-microsoft-customer-insights-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --locale-code: string # Locale of profile to retrieve, default is en-us. (default: en-us)
   --api-version: string # Client Api Version.
@@ -1396,10 +1452,10 @@ export def "subscriptions-resource-groups-providers-microsoft-customer-insights-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "locale-code" $locale_code "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.CustomerInsights/hubs/($hubName)/profiles/($profileName)" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), hub_name: (encode-path-segment $hub_name), profile_name: (encode-path-segment $profile_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.CustomerInsights/hubs/{hub_name}/profiles/{profile_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Creates a profile within a Hub, or updates an existing profile.
@@ -1407,11 +1463,11 @@ export def "subscriptions-resource-groups-providers-microsoft-customer-insights-
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CustomerInsights/hubs/{hubName}/profiles/{profileName}
 # operationId: Profiles_CreateOrUpdate
 # --properties shape: {strongIds?: list, apiEntitySetName?: string, entityType?: "None"|"Profile"|"Interaction"|"Relationship", fields?: list, instancesCount?: int, provisioningState?: "Provisioning"|"Succeeded"|"Expiring"|"Deleting"|"HumanIntervention"|"Failed", schemaItemTypeLink?: string, timestampFieldName?: string, typeName?: string}
-export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-profiles CreateOrUpdate" [
-  resourceGroupName: string
-  hubName: string
-  profileName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-profiles create-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  hub_name: string
+  profile_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1419,6 +1475,7 @@ export def "subscriptions-resource-groups-providers-microsoft-customer-insights-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
   --properties: any # The profile type definition. — shape: {strongIds?: list, apiEntitySetName?: string, entityType?: "None"|"Profile"|"Interaction"|"Relationship", fields?: list, instancesCount?: int, provisioningState?: "Provisioning"|"Succeeded"|"Expiring"|"Deleting"|"HumanIntervention"|"Failed", schemaItemTypeLink?: string, timestampFieldName?: string, typeName?: string}
@@ -1427,23 +1484,23 @@ export def "subscriptions-resource-groups-providers-microsoft-customer-insights-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.CustomerInsights/hubs/($hubName)/profiles/($profileName)" $qp)
-  let body = {properties: $properties} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), hub_name: (encode-path-segment $hub_name), profile_name: (encode-path-segment $profile_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.CustomerInsights/hubs/{hub_name}/profiles/{profile_name}") $qp)
+  let req_body = {"properties": $properties} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Gets the KPIs that enrich the profile Type identified by the supplied name. Enrichment happens through participants of the Interaction on an Interaction KPI and through Relationships for Profile KPIs.
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CustomerInsights/hubs/{hubName}/profiles/{profileName}/getEnrichingKpis
 # operationId: Profiles_GetEnrichingKpis
-export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-profiles-get-enriching-kpis GetEnrichingKpis" [
-  resourceGroupName: string
-  hubName: string
-  profileName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-profiles-get-enriching-kpis get" [
+  subscription_id: string
+  resource_group_name: string
+  hub_name: string
+  profile_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1451,26 +1508,27 @@ export def "subscriptions-resource-groups-providers-microsoft-customer-insights-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
 ]: nothing -> table<aliases: list<record>, calculationWindow: string, calculationWindowFieldName: string, description: record, displayName: record, entityType: string, entityTypeName: string, expression: string, extracts: list<record>, filter: string, function: string, groupBy: list<string>, groupByMetadata: list<record>, kpiName: string, participantProfilesMetadata: list<record>, provisioningState: string, tenantId: string, thresHolds: record<increasingKpi: bool, lowerLimit: float, upperLimit: float>, unit: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.CustomerInsights/hubs/($hubName)/profiles/($profileName)/getEnrichingKpis" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), hub_name: (encode-path-segment $hub_name), profile_name: (encode-path-segment $profile_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.CustomerInsights/hubs/{hub_name}/profiles/{profile_name}/getEnrichingKpis") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Gets all relationship links in the hub.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CustomerInsights/hubs/{hubName}/relationshipLinks
 # operationId: RelationshipLinks_ListByHub
-export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-relationship-links ListByHub" [
-  resourceGroupName: string
-  hubName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-relationship-links list" [
+  subscription_id: string
+  resource_group_name: string
+  hub_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1478,27 +1536,28 @@ export def "subscriptions-resource-groups-providers-microsoft-customer-insights-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
 ]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.CustomerInsights/hubs/($hubName)/relationshipLinks" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), hub_name: (encode-path-segment $hub_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.CustomerInsights/hubs/{hub_name}/relationshipLinks") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Deletes a relationship link within a hub.
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CustomerInsights/hubs/{hubName}/relationshipLinks/{relationshipLinkName}
 # operationId: RelationshipLinks_Delete
-export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-relationship-links Delete" [
-  resourceGroupName: string
-  hubName: string
-  relationshipLinkName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-relationship-links delete" [
+  subscription_id: string
+  resource_group_name: string
+  hub_name: string
+  relationship_link_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1506,27 +1565,28 @@ export def "subscriptions-resource-groups-providers-microsoft-customer-insights-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.CustomerInsights/hubs/($hubName)/relationshipLinks/($relationshipLinkName)" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), hub_name: (encode-path-segment $hub_name), relationship_link_name: (encode-path-segment $relationship_link_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.CustomerInsights/hubs/{hub_name}/relationshipLinks/{relationship_link_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Gets information about the specified relationship Link.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CustomerInsights/hubs/{hubName}/relationshipLinks/{relationshipLinkName}
 # operationId: RelationshipLinks_Get
-export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-relationship-links Get" [
-  resourceGroupName: string
-  hubName: string
-  relationshipLinkName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-relationship-links get" [
+  subscription_id: string
+  resource_group_name: string
+  hub_name: string
+  relationship_link_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1534,16 +1594,17 @@ export def "subscriptions-resource-groups-providers-microsoft-customer-insights-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
 ]: nothing -> record<properties: record<description: record, displayName: record, interactionType: string, linkName: string, mappings: list<record>, profilePropertyReferences: list<record>, provisioningState: string, relatedProfilePropertyReferences: list<record>, relationshipGuidId: string, relationshipName: string, tenantId: string>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.CustomerInsights/hubs/($hubName)/relationshipLinks/($relationshipLinkName)" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), hub_name: (encode-path-segment $hub_name), relationship_link_name: (encode-path-segment $relationship_link_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.CustomerInsights/hubs/{hub_name}/relationshipLinks/{relationship_link_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Creates a relationship link or updates an existing relationship link within a hub.
@@ -1551,11 +1612,11 @@ export def "subscriptions-resource-groups-providers-microsoft-customer-insights-
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CustomerInsights/hubs/{hubName}/relationshipLinks/{relationshipLinkName}
 # operationId: RelationshipLinks_CreateOrUpdate
 # --properties shape: {description?: record, displayName?: record, interactionType: string, mappings?: list, profilePropertyReferences: list, provisioningState?: "Provisioning"|"Succeeded"|"Expiring"|"Deleting"|"HumanIntervention"|"Failed", relatedProfilePropertyReferences: list, relationshipName: string}
-export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-relationship-links CreateOrUpdate" [
-  resourceGroupName: string
-  hubName: string
-  relationshipLinkName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-relationship-links create-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  hub_name: string
+  relationship_link_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1563,6 +1624,7 @@ export def "subscriptions-resource-groups-providers-microsoft-customer-insights-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
   --properties: any # The definition of relationship link. — shape: {description?: record, displayName?: record, interactionType: string, mappings?: list, profilePropertyReferences: list, provisioningState?: "Provisioning"|"Succeeded"|"Expiring"|"Deleting"|"HumanIntervention"|"Failed", relatedProfilePropertyReferences: list, relationshipName: string}
@@ -1571,22 +1633,22 @@ export def "subscriptions-resource-groups-providers-microsoft-customer-insights-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.CustomerInsights/hubs/($hubName)/relationshipLinks/($relationshipLinkName)" $qp)
-  let body = {properties: $properties} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), hub_name: (encode-path-segment $hub_name), relationship_link_name: (encode-path-segment $relationship_link_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.CustomerInsights/hubs/{hub_name}/relationshipLinks/{relationship_link_name}") $qp)
+  let req_body = {"properties": $properties} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Gets all relationships in the hub.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CustomerInsights/hubs/{hubName}/relationships
 # operationId: Relationships_ListByHub
-export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-relationships ListByHub" [
-  resourceGroupName: string
-  hubName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-relationships list" [
+  subscription_id: string
+  resource_group_name: string
+  hub_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1594,27 +1656,28 @@ export def "subscriptions-resource-groups-providers-microsoft-customer-insights-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
 ]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.CustomerInsights/hubs/($hubName)/relationships" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), hub_name: (encode-path-segment $hub_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.CustomerInsights/hubs/{hub_name}/relationships") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Deletes a relationship within a hub.
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CustomerInsights/hubs/{hubName}/relationships/{relationshipName}
 # operationId: Relationships_Delete
-export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-relationships Delete" [
-  resourceGroupName: string
-  hubName: string
-  relationshipName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-relationships delete" [
+  subscription_id: string
+  resource_group_name: string
+  hub_name: string
+  relationship_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1622,27 +1685,28 @@ export def "subscriptions-resource-groups-providers-microsoft-customer-insights-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.CustomerInsights/hubs/($hubName)/relationships/($relationshipName)" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), hub_name: (encode-path-segment $hub_name), relationship_name: (encode-path-segment $relationship_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.CustomerInsights/hubs/{hub_name}/relationships/{relationship_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Gets information about the specified relationship.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CustomerInsights/hubs/{hubName}/relationships/{relationshipName}
 # operationId: Relationships_Get
-export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-relationships Get" [
-  resourceGroupName: string
-  hubName: string
-  relationshipName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-relationships get" [
+  subscription_id: string
+  resource_group_name: string
+  hub_name: string
+  relationship_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1650,16 +1714,17 @@ export def "subscriptions-resource-groups-providers-microsoft-customer-insights-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
 ]: nothing -> record<properties: record<cardinality: string, description: record, displayName: record, expiryDateTimeUtc: string, fields: list<record>, lookupMappings: list<record>, profileType: string, provisioningState: string, relatedProfileType: string, relationshipGuidId: string, relationshipName: string, tenantId: string>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.CustomerInsights/hubs/($hubName)/relationships/($relationshipName)" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), hub_name: (encode-path-segment $hub_name), relationship_name: (encode-path-segment $relationship_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.CustomerInsights/hubs/{hub_name}/relationships/{relationship_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Creates a relationship or updates an existing relationship within a hub.
@@ -1667,11 +1732,11 @@ export def "subscriptions-resource-groups-providers-microsoft-customer-insights-
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CustomerInsights/hubs/{hubName}/relationships/{relationshipName}
 # operationId: Relationships_CreateOrUpdate
 # --properties shape: {cardinality?: "OneToOne"|"OneToMany"|"ManyToMany", description?: record, displayName?: record, expiryDateTimeUtc?: string, fields?: list, lookupMappings?: list, profileType: string, provisioningState?: "Provisioning"|"Succeeded"|"Expiring"|"Deleting"|"HumanIntervention"|"Failed", relatedProfileType: string}
-export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-relationships CreateOrUpdate" [
-  resourceGroupName: string
-  hubName: string
-  relationshipName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-relationships create-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  hub_name: string
+  relationship_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1679,6 +1744,7 @@ export def "subscriptions-resource-groups-providers-microsoft-customer-insights-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
   --properties: any # The definition of Relationship. — shape: {cardinality?: "OneToOne"|"OneToMany"|"ManyToMany", description?: record, displayName?: record, expiryDateTimeUtc?: string, fields?: list, lookupMappings?: list, profileType: string, provisioningState?: "Provisioning"|"Succeeded"|"Expiring"|"Deleting"|"HumanIntervention"|"Failed", relatedProfileType: string}
@@ -1687,22 +1753,22 @@ export def "subscriptions-resource-groups-providers-microsoft-customer-insights-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.CustomerInsights/hubs/($hubName)/relationships/($relationshipName)" $qp)
-  let body = {properties: $properties} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), hub_name: (encode-path-segment $hub_name), relationship_name: (encode-path-segment $relationship_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.CustomerInsights/hubs/{hub_name}/relationships/{relationship_name}") $qp)
+  let req_body = {"properties": $properties} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Gets all the role assignments for the specified hub.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CustomerInsights/hubs/{hubName}/roleAssignments
 # operationId: RoleAssignments_ListByHub
-export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-role-assignments ListByHub" [
-  resourceGroupName: string
-  hubName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-role-assignments list" [
+  subscription_id: string
+  resource_group_name: string
+  hub_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1710,27 +1776,28 @@ export def "subscriptions-resource-groups-providers-microsoft-customer-insights-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
 ]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.CustomerInsights/hubs/($hubName)/roleAssignments" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), hub_name: (encode-path-segment $hub_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.CustomerInsights/hubs/{hub_name}/roleAssignments") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Deletes the role assignment in the hub.
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CustomerInsights/hubs/{hubName}/roleAssignments/{assignmentName}
 # operationId: RoleAssignments_Delete
-export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-role-assignments Delete" [
-  resourceGroupName: string
-  hubName: string
-  assignmentName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-role-assignments delete" [
+  subscription_id: string
+  resource_group_name: string
+  hub_name: string
+  assignment_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1738,27 +1805,28 @@ export def "subscriptions-resource-groups-providers-microsoft-customer-insights-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.CustomerInsights/hubs/($hubName)/roleAssignments/($assignmentName)" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), hub_name: (encode-path-segment $hub_name), assignment_name: (encode-path-segment $assignment_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.CustomerInsights/hubs/{hub_name}/roleAssignments/{assignment_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Gets the role assignment in the hub.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CustomerInsights/hubs/{hubName}/roleAssignments/{assignmentName}
 # operationId: RoleAssignments_Get
-export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-role-assignments Get" [
-  resourceGroupName: string
-  hubName: string
-  assignmentName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-role-assignments get" [
+  subscription_id: string
+  resource_group_name: string
+  hub_name: string
+  assignment_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1766,16 +1834,17 @@ export def "subscriptions-resource-groups-providers-microsoft-customer-insights-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
 ]: nothing -> record<properties: record<assignmentName: string, conflationPolicies: record<elements: list, exceptions: list>, connectors: record<elements: list, exceptions: list>, description: record, displayName: record, interactions: record<elements: list, exceptions: list>, kpis: record<elements: list, exceptions: list>, links: record<elements: list, exceptions: list>, principals: list<record>, profiles: record<elements: list, exceptions: list>, provisioningState: string, relationshipLinks: record<elements: list, exceptions: list>, relationships: record<elements: list, exceptions: list>, role: string, roleAssignments: record<elements: list, exceptions: list>, sasPolicies: record<elements: list, exceptions: list>, segments: record<elements: list, exceptions: list>, tenantId: string, views: record<elements: list, exceptions: list>, widgetTypes: record<elements: list, exceptions: list>>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.CustomerInsights/hubs/($hubName)/roleAssignments/($assignmentName)" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), hub_name: (encode-path-segment $hub_name), assignment_name: (encode-path-segment $assignment_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.CustomerInsights/hubs/{hub_name}/roleAssignments/{assignment_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Creates or updates a role assignment in the hub.
@@ -1783,11 +1852,11 @@ export def "subscriptions-resource-groups-providers-microsoft-customer-insights-
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CustomerInsights/hubs/{hubName}/roleAssignments/{assignmentName}
 # operationId: RoleAssignments_CreateOrUpdate
 # --properties shape: {conflationPolicies?: any, connectors?: any, description?: record, displayName?: record, interactions?: any, kpis?: any, links?: any, principals: list, profiles?: any, provisioningState?: "Provisioning"|"Succeeded"|"Expiring"|"Deleting"|"HumanIntervention"|"Failed", relationshipLinks?: any, relationships?: any, role: "Admin"|"Reader"|"ManageAdmin"|"ManageReader"|"DataAdmin"|"DataReader", roleAssignments?: any, sasPolicies?: any, segments?: any, views?: any, widgetTypes?: any}
-export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-role-assignments CreateOrUpdate" [
-  resourceGroupName: string
-  hubName: string
-  assignmentName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-role-assignments create-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  hub_name: string
+  assignment_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1795,6 +1864,7 @@ export def "subscriptions-resource-groups-providers-microsoft-customer-insights-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
   --properties: any # The Role Assignment definition. — shape: {conflationPolicies?: any, connectors?: any, description?: record, displayName?: record, interactions?: any, kpis?: any, links?: any, principals: list, profiles?: any, provisioningState?: "Provisioning"|"Succeeded"|"Expiring"|"Deleting"|"HumanIntervention"|"Failed", relationshipLinks?: any, relationships?: any, role: "Admin"|"Reader"|"ManageAdmin"|"ManageReader"|"DataAdmin"|"DataReader", roleAssignments?: any, sasPolicies?: any, segments?: any, views?: any, widgetTypes?: any}
@@ -1803,22 +1873,22 @@ export def "subscriptions-resource-groups-providers-microsoft-customer-insights-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.CustomerInsights/hubs/($hubName)/roleAssignments/($assignmentName)" $qp)
-  let body = {properties: $properties} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), hub_name: (encode-path-segment $hub_name), assignment_name: (encode-path-segment $assignment_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.CustomerInsights/hubs/{hub_name}/roleAssignments/{assignment_name}") $qp)
+  let req_body = {"properties": $properties} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Gets all the roles for the hub.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CustomerInsights/hubs/{hubName}/roles
 # operationId: Roles_ListByHub
-export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-roles ListByHub" [
-  resourceGroupName: string
-  hubName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-roles list" [
+  subscription_id: string
+  resource_group_name: string
+  hub_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1826,26 +1896,27 @@ export def "subscriptions-resource-groups-providers-microsoft-customer-insights-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
 ]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.CustomerInsights/hubs/($hubName)/roles" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), hub_name: (encode-path-segment $hub_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.CustomerInsights/hubs/{hub_name}/roles") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Gets all available views for given user in the specified hub.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CustomerInsights/hubs/{hubName}/views
 # operationId: Views_ListByHub
-export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-views ListByHub" [
-  resourceGroupName: string
-  hubName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-views list" [
+  subscription_id: string
+  resource_group_name: string
+  hub_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1853,28 +1924,29 @@ export def "subscriptions-resource-groups-providers-microsoft-customer-insights-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
-  --userId: string # The user ID. Use * to retrieve hub level views.
+  --user-id: string # The user ID. Use * to retrieve hub level views.
 ]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "userId" $userId "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.CustomerInsights/hubs/($hubName)/views" $qp)
+  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "userId" $user_id "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), hub_name: (encode-path-segment $hub_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.CustomerInsights/hubs/{hub_name}/views") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Deletes a view in the specified hub.
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CustomerInsights/hubs/{hubName}/views/{viewName}
 # operationId: Views_Delete
-export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-views Delete" [
-  resourceGroupName: string
-  hubName: string
-  viewName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-views delete" [
+  subscription_id: string
+  resource_group_name: string
+  hub_name: string
+  view_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1882,28 +1954,29 @@ export def "subscriptions-resource-groups-providers-microsoft-customer-insights-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
-  --userId: string # The user ID. Use * to retrieve hub level view.
+  --user-id: string # The user ID. Use * to retrieve hub level view.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "userId" $userId "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.CustomerInsights/hubs/($hubName)/views/($viewName)" $qp)
+  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "userId" $user_id "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), hub_name: (encode-path-segment $hub_name), view_name: (encode-path-segment $view_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.CustomerInsights/hubs/{hub_name}/views/{view_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Gets a view in the hub.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CustomerInsights/hubs/{hubName}/views/{viewName}
 # operationId: Views_Get
-export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-views Get" [
-  resourceGroupName: string
-  hubName: string
-  viewName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-views get" [
+  subscription_id: string
+  resource_group_name: string
+  hub_name: string
+  view_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1911,17 +1984,18 @@ export def "subscriptions-resource-groups-providers-microsoft-customer-insights-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
-  --userId: string # The user ID. Use * to retrieve hub level view.
+  --user-id: string # The user ID. Use * to retrieve hub level view.
 ]: nothing -> record<properties: record<changed: string, created: string, definition: string, displayName: record, tenantId: string, userId: string, viewName: string>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "userId" $userId "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.CustomerInsights/hubs/($hubName)/views/($viewName)" $qp)
+  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "userId" $user_id "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), hub_name: (encode-path-segment $hub_name), view_name: (encode-path-segment $view_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.CustomerInsights/hubs/{hub_name}/views/{view_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Creates a view or updates an existing view in the hub.
@@ -1929,11 +2003,11 @@ export def "subscriptions-resource-groups-providers-microsoft-customer-insights-
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CustomerInsights/hubs/{hubName}/views/{viewName}
 # operationId: Views_CreateOrUpdate
 # --properties shape: {definition: string, displayName?: record, userId?: string}
-export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-views CreateOrUpdate" [
-  resourceGroupName: string
-  hubName: string
-  viewName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-views create-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  hub_name: string
+  view_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1941,6 +2015,7 @@ export def "subscriptions-resource-groups-providers-microsoft-customer-insights-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
   --properties: any # The view in Customer 360 web application. — shape: {definition: string, displayName?: record, userId?: string}
@@ -1949,22 +2024,22 @@ export def "subscriptions-resource-groups-providers-microsoft-customer-insights-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.CustomerInsights/hubs/($hubName)/views/($viewName)" $qp)
-  let body = {properties: $properties} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), hub_name: (encode-path-segment $hub_name), view_name: (encode-path-segment $view_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.CustomerInsights/hubs/{hub_name}/views/{view_name}") $qp)
+  let req_body = {"properties": $properties} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Gets all available widget types in the specified hub.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CustomerInsights/hubs/{hubName}/widgetTypes
 # operationId: WidgetTypes_ListByHub
-export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-widget-types ListByHub" [
-  resourceGroupName: string
-  hubName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-widget-types list" [
+  subscription_id: string
+  resource_group_name: string
+  hub_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1972,27 +2047,28 @@ export def "subscriptions-resource-groups-providers-microsoft-customer-insights-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
 ]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.CustomerInsights/hubs/($hubName)/widgetTypes" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), hub_name: (encode-path-segment $hub_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.CustomerInsights/hubs/{hub_name}/widgetTypes") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Gets a widget type in the specified hub.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CustomerInsights/hubs/{hubName}/widgetTypes/{widgetTypeName}
 # operationId: WidgetTypes_Get
-export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-widget-types Get" [
-  resourceGroupName: string
-  hubName: string
-  widgetTypeName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-widget-types get" [
+  subscription_id: string
+  resource_group_name: string
+  hub_name: string
+  widget_type_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2000,14 +2076,15 @@ export def "subscriptions-resource-groups-providers-microsoft-customer-insights-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
 ]: nothing -> record<properties: record<changed: string, created: string, definition: string, description: string, displayName: record, imageUrl: string, tenantId: string, widgetTypeName: string, widgetVersion: string>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.CustomerInsights/hubs/($hubName)/widgetTypes/($widgetTypeName)" $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), hub_name: (encode-path-segment $hub_name), widget_type_name: (encode-path-segment $widget_type_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.CustomerInsights/hubs/{hub_name}/widgetTypes/{widget_type_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }

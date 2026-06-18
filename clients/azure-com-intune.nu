@@ -17,21 +17,32 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 }
 
 # Serialize a single query parameter based on collection style
+# Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
+# ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = ($name | url encode)
+  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
-  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
-    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
-    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
+    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
+    _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
+}
+
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Build URL from base, path, and optional query string
@@ -43,7 +54,7 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
@@ -52,13 +63,13 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
     "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "put" => { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "patch" => { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
   if ($method in ["head" "options"]) { return $resp }
-  if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
+  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
 def base-url-completer [] { ["https://management.azure.com"] }
@@ -67,8 +78,8 @@ def auth-scheme-completer [] { ["bearer"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-intune-locations GetLocations" } } | get name | first)
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-intune-locations get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -92,7 +103,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.Intune/locations
 # operationId: GetLocations
-export def "providers-microsoft-intune-locations GetLocations" [
+export def "providers-microsoft-intune-locations get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -100,6 +111,7 @@ export def "providers-microsoft-intune-locations GetLocations" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Service Api Version.
 ]: nothing -> record<nextlink: string, value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>> {
@@ -109,14 +121,14 @@ export def "providers-microsoft-intune-locations GetLocations" [
   let full_url = (build-url $base "/providers/Microsoft.Intune/locations" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Returns location for given tenant.
 #
 # GET /providers/Microsoft.Intune/locations/hostName
 # operationId: GetLocationByHostName
-export def "providers-microsoft-intune-locations-host-name GetLocationByHostName" [
+export def "providers-microsoft-intune-locations-host-name get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -124,6 +136,7 @@ export def "providers-microsoft-intune-locations-host-name GetLocationByHostName
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Service Api Version.
 ]: nothing -> record<properties: record<hostName: string>, id: string, location: string, name: string, tags: record, type: string> {
@@ -133,16 +146,16 @@ export def "providers-microsoft-intune-locations-host-name GetLocationByHostName
   let full_url = (build-url $base "/providers/Microsoft.Intune/locations/hostName" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get apps for an AndroidMAMPolicy.
 #
 # GET /providers/Microsoft.Intune/locations/{hostName}/AndroidPolicies/{policyName}/apps
 # operationId: Android_GetAppForMAMPolicy
-export def "providers-microsoft-intune-locations-android-policies-apps GetAppForMAMPolicy" [
-  hostName: string
-  policyName: string
+export def "providers-microsoft-intune-locations-android-policies-apps get-for-mam-policy" [
+  host_name: string
+  policy_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -150,6 +163,7 @@ export def "providers-microsoft-intune-locations-android-policies-apps GetAppFor
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Service Api Version.
   --filter: string # The filter to apply on the operation.
@@ -159,18 +173,18 @@ export def "providers-microsoft-intune-locations-android-policies-apps GetAppFor
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$select" $select "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/providers/Microsoft.Intune/locations/($hostName)/AndroidPolicies/($policyName)/apps" $qp)
+  let full_url = (build-url $base ({host_name: (encode-path-segment $host_name), policy_name: (encode-path-segment $policy_name)} | format pattern "/providers/Microsoft.Intune/locations/{host_name}/AndroidPolicies/{policy_name}/apps") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Returns Intune Android policies.
 #
 # GET /providers/Microsoft.Intune/locations/{hostName}/androidPolicies
 # operationId: Android_GetMAMPolicies
-export def "providers-microsoft-intune-locations-android-policies GetMAMPolicies" [
-  hostName: string
+export def "providers-microsoft-intune-locations-android-policies get-mam" [
+  host_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -178,6 +192,7 @@ export def "providers-microsoft-intune-locations-android-policies GetMAMPolicies
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Service Api Version.
   --filter: string # The filter to apply on the operation.
@@ -187,19 +202,19 @@ export def "providers-microsoft-intune-locations-android-policies GetMAMPolicies
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$select" $select "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/providers/Microsoft.Intune/locations/($hostName)/androidPolicies" $qp)
+  let full_url = (build-url $base ({host_name: (encode-path-segment $host_name)} | format pattern "/providers/Microsoft.Intune/locations/{host_name}/androidPolicies") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Delete Android Policy
 #
 # DELETE /providers/Microsoft.Intune/locations/{hostName}/androidPolicies/{policyName}
 # operationId: Android_DeleteMAMPolicy
-export def "providers-microsoft-intune-locations-android-policies DeleteMAMPolicy" [
-  hostName: string
-  policyName: string
+export def "providers-microsoft-intune-locations-android-policies delete-mam-policy" [
+  host_name: string
+  policy_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -207,25 +222,26 @@ export def "providers-microsoft-intune-locations-android-policies DeleteMAMPolic
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Service Api Version.
 ]: nothing -> record<code: string, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/providers/Microsoft.Intune/locations/($hostName)/androidPolicies/($policyName)" $qp)
+  let full_url = (build-url $base ({host_name: (encode-path-segment $host_name), policy_name: (encode-path-segment $policy_name)} | format pattern "/providers/Microsoft.Intune/locations/{host_name}/androidPolicies/{policy_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Returns AndroidMAMPolicy with given name.
 #
 # GET /providers/Microsoft.Intune/locations/{hostName}/androidPolicies/{policyName}
 # operationId: Android_GetMAMPolicyByName
-export def "providers-microsoft-intune-locations-android-policies GetMAMPolicyByName" [
-  hostName: string
-  policyName: string
+export def "providers-microsoft-intune-locations-android-policies get-mam-policy-by-name" [
+  host_name: string
+  policy_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -233,6 +249,7 @@ export def "providers-microsoft-intune-locations-android-policies GetMAMPolicyBy
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Service Api Version.
   --select: string # select specific fields in entity.
@@ -240,20 +257,20 @@ export def "providers-microsoft-intune-locations-android-policies GetMAMPolicyBy
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$select" $select "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/providers/Microsoft.Intune/locations/($hostName)/androidPolicies/($policyName)" $qp)
+  let full_url = (build-url $base ({host_name: (encode-path-segment $host_name), policy_name: (encode-path-segment $policy_name)} | format pattern "/providers/Microsoft.Intune/locations/{host_name}/androidPolicies/{policy_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Patch AndroidMAMPolicy.
 #
 # PATCH /providers/Microsoft.Intune/locations/{hostName}/androidPolicies/{policyName}
 # operationId: Android_PatchMAMPolicy
-# --properties shape: {fileEncryption?: "required"|"notRequired", screenCapture?: "allow"|"block", accessRecheckOfflineTimeout?: string, accessRecheckOnlineTimeout?: string, appSharingFromLevel?: "none"|"policyManagedApps"|"allApps", appSharingToLevel?: "none"|"policyManagedApps"|"allApps", authentication?: "required"|"notRequired", clipboardSharingLevel?: "blocked"|"policyManagedApps"|"policyManagedAppsWithPasteIn"|"allApps", dataBackup?: "allow"|"block", description?: string, deviceCompliance?: "enable"|"disable", fileSharingSaveAs?: "allow"|"block", friendlyName: string, managedBrowser?: "required"|"notRequired", offlineWipeTimeout?: string, pin?: "required"|"notRequired", pinNumRetry?: int}
-export def "providers-microsoft-intune-locations-android-policies PatchMAMPolicy" [
-  hostName: string
-  policyName: string
+# --properties shape: {fileEncryption?: "required"|"notRequired", screenCapture?: "allow"|"block", accessRecheckOfflineTimeout?: string, accessRecheckOnlineTimeout?: string, appSharingFromLevel?: "none"|"policyManagedApps"|"allApps", appSharingToLevel?: "none"|"policyManagedApps"|"allApps", authentication?: "required"|"notRequired", clipboardSharingLevel?: "blocked"|"policyManagedApps"|"policyManagedAppsWithPasteIn"|"allApps", dataBackup?: "allow"|"block", description?: string, deviceCompliance?: "enable"|"disable", ... (6 more fields)}
+export def "providers-microsoft-intune-locations-android-policies update-mam-policy" [
+  host_name: string
+  policy_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -261,9 +278,10 @@ export def "providers-microsoft-intune-locations-android-policies PatchMAMPolicy
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Service Api Version.
-  --properties: any # Intune MAM iOS Policy Properties. — shape: {fileEncryption?: "required"|"notRequired", screenCapture?: "allow"|"block", accessRecheckOfflineTimeout?: string, accessRecheckOnlineTimeout?: string, appSharingFromLevel?: "none"|"policyManagedApps"|"allApps", appSharingToLevel?: "none"|"policyManagedApps"|"allApps", authentication?: "required"|"notRequired", clipboardSharingLevel?: "blocked"|"policyManagedApps"|"policyManagedAppsWithPasteIn"|"allApps", dataBackup?: "allow"|"block", description?: string, deviceCompliance?: "enable"|"disable", fileSharingSaveAs?: "allow"|"block", friendlyName: string, managedBrowser?: "required"|"notRequired", offlineWipeTimeout?: string, pin?: "required"|"notRequired", pinNumRetry?: int}
+  --properties: any # Intune MAM iOS Policy Properties. — shape: {fileEncryption?: "required"|"notRequired", screenCapture?: "allow"|"block", accessRecheckOfflineTimeout?: string, accessRecheckOnlineTimeout?: string, appSharingFromLevel?: "none"|"policyManagedApps"|"allApps", appSharingToLevel?: "none"|"policyManagedApps"|"allApps", authentication?: "required"|"notRequired", clipboardSharingLevel?: "blocked"|"policyManagedApps"|"policyManagedAppsWithPasteIn"|"allApps", dataBackup?: "allow"|"block", description?: string, deviceCompliance?: "enable"|"disable", ... (6 more fields)}
   --location: string # Resource Location
   --tags: record # Resource Tags
 ]: any -> record<properties: record<fileEncryption: string, screenCapture: string, accessRecheckOfflineTimeout: string, accessRecheckOnlineTimeout: string, appSharingFromLevel: string, appSharingToLevel: string, authentication: string, clipboardSharingLevel: string, dataBackup: string, description: string, deviceCompliance: string, fileSharingSaveAs: string, friendlyName: string, groupStatus: string, lastModifiedTime: string, managedBrowser: string, numOfApps: int, offlineWipeTimeout: string, pin: string, pinNumRetry: int>, id: string, location: string, name: string, tags: record, type: string> {
@@ -271,22 +289,22 @@ export def "providers-microsoft-intune-locations-android-policies PatchMAMPolicy
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/providers/Microsoft.Intune/locations/($hostName)/androidPolicies/($policyName)" $qp)
-  let body = {properties: $properties, location: $location, tags: $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({host_name: (encode-path-segment $host_name), policy_name: (encode-path-segment $policy_name)} | format pattern "/providers/Microsoft.Intune/locations/{host_name}/androidPolicies/{policy_name}") $qp)
+  let req_body = {"properties": $properties, "location": $location, "tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Creates or updates AndroidMAMPolicy.
 #
 # PUT /providers/Microsoft.Intune/locations/{hostName}/androidPolicies/{policyName}
 # operationId: Android_CreateOrUpdateMAMPolicy
-# --properties shape: {fileEncryption?: "required"|"notRequired", screenCapture?: "allow"|"block", accessRecheckOfflineTimeout?: string, accessRecheckOnlineTimeout?: string, appSharingFromLevel?: "none"|"policyManagedApps"|"allApps", appSharingToLevel?: "none"|"policyManagedApps"|"allApps", authentication?: "required"|"notRequired", clipboardSharingLevel?: "blocked"|"policyManagedApps"|"policyManagedAppsWithPasteIn"|"allApps", dataBackup?: "allow"|"block", description?: string, deviceCompliance?: "enable"|"disable", fileSharingSaveAs?: "allow"|"block", friendlyName: string, managedBrowser?: "required"|"notRequired", offlineWipeTimeout?: string, pin?: "required"|"notRequired", pinNumRetry?: int}
-export def "providers-microsoft-intune-locations-android-policies CreateOrUpdateMAMPolicy" [
-  hostName: string
-  policyName: string
+# --properties shape: {fileEncryption?: "required"|"notRequired", screenCapture?: "allow"|"block", accessRecheckOfflineTimeout?: string, accessRecheckOnlineTimeout?: string, appSharingFromLevel?: "none"|"policyManagedApps"|"allApps", appSharingToLevel?: "none"|"policyManagedApps"|"allApps", authentication?: "required"|"notRequired", clipboardSharingLevel?: "blocked"|"policyManagedApps"|"policyManagedAppsWithPasteIn"|"allApps", dataBackup?: "allow"|"block", description?: string, deviceCompliance?: "enable"|"disable", ... (6 more fields)}
+export def "providers-microsoft-intune-locations-android-policies create-or-update-mam-policy" [
+  host_name: string
+  policy_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -294,9 +312,10 @@ export def "providers-microsoft-intune-locations-android-policies CreateOrUpdate
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Service Api Version.
-  --properties: any # Intune MAM iOS Policy Properties. — shape: {fileEncryption?: "required"|"notRequired", screenCapture?: "allow"|"block", accessRecheckOfflineTimeout?: string, accessRecheckOnlineTimeout?: string, appSharingFromLevel?: "none"|"policyManagedApps"|"allApps", appSharingToLevel?: "none"|"policyManagedApps"|"allApps", authentication?: "required"|"notRequired", clipboardSharingLevel?: "blocked"|"policyManagedApps"|"policyManagedAppsWithPasteIn"|"allApps", dataBackup?: "allow"|"block", description?: string, deviceCompliance?: "enable"|"disable", fileSharingSaveAs?: "allow"|"block", friendlyName: string, managedBrowser?: "required"|"notRequired", offlineWipeTimeout?: string, pin?: "required"|"notRequired", pinNumRetry?: int}
+  --properties: any # Intune MAM iOS Policy Properties. — shape: {fileEncryption?: "required"|"notRequired", screenCapture?: "allow"|"block", accessRecheckOfflineTimeout?: string, accessRecheckOnlineTimeout?: string, appSharingFromLevel?: "none"|"policyManagedApps"|"allApps", appSharingToLevel?: "none"|"policyManagedApps"|"allApps", authentication?: "required"|"notRequired", clipboardSharingLevel?: "blocked"|"policyManagedApps"|"policyManagedAppsWithPasteIn"|"allApps", dataBackup?: "allow"|"block", description?: string, deviceCompliance?: "enable"|"disable", ... (6 more fields)}
   --location: string # Resource Location
   --tags: record # Resource Tags
 ]: any -> record<properties: record<fileEncryption: string, screenCapture: string, accessRecheckOfflineTimeout: string, accessRecheckOnlineTimeout: string, appSharingFromLevel: string, appSharingToLevel: string, authentication: string, clipboardSharingLevel: string, dataBackup: string, description: string, deviceCompliance: string, fileSharingSaveAs: string, friendlyName: string, groupStatus: string, lastModifiedTime: string, managedBrowser: string, numOfApps: int, offlineWipeTimeout: string, pin: string, pinNumRetry: int>, id: string, location: string, name: string, tags: record, type: string> {
@@ -304,22 +323,22 @@ export def "providers-microsoft-intune-locations-android-policies CreateOrUpdate
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/providers/Microsoft.Intune/locations/($hostName)/androidPolicies/($policyName)" $qp)
-  let body = {properties: $properties, location: $location, tags: $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({host_name: (encode-path-segment $host_name), policy_name: (encode-path-segment $policy_name)} | format pattern "/providers/Microsoft.Intune/locations/{host_name}/androidPolicies/{policy_name}") $qp)
+  let req_body = {"properties": $properties, "location": $location, "tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Delete App for Android Policy
 #
 # DELETE /providers/Microsoft.Intune/locations/{hostName}/androidPolicies/{policyName}/apps/{appName}
 # operationId: Android_DeleteAppForMAMPolicy
-export def "providers-microsoft-intune-locations-android-policies-apps DeleteAppForMAMPolicy" [
-  hostName: string
-  policyName: string
-  appName: string
+export def "providers-microsoft-intune-locations-android-policies-apps delete-for-mam-policy" [
+  host_name: string
+  policy_name: string
+  app_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -327,16 +346,17 @@ export def "providers-microsoft-intune-locations-android-policies-apps DeleteApp
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Service Api Version.
 ]: nothing -> record<code: string, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/providers/Microsoft.Intune/locations/($hostName)/androidPolicies/($policyName)/apps/($appName)" $qp)
+  let full_url = (build-url $base ({host_name: (encode-path-segment $host_name), policy_name: (encode-path-segment $policy_name), app_name: (encode-path-segment $app_name)} | format pattern "/providers/Microsoft.Intune/locations/{host_name}/androidPolicies/{policy_name}/apps/{app_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Add app to an AndroidMAMPolicy.
@@ -344,10 +364,10 @@ export def "providers-microsoft-intune-locations-android-policies-apps DeleteApp
 # PUT /providers/Microsoft.Intune/locations/{hostName}/androidPolicies/{policyName}/apps/{appName}
 # operationId: Android_AddAppForMAMPolicy
 # --properties shape: {url: string}
-export def "providers-microsoft-intune-locations-android-policies-apps AddAppForMAMPolicy" [
-  hostName: string
-  policyName: string
-  appName: string
+export def "providers-microsoft-intune-locations-android-policies-apps create-for-mam-policy" [
+  host_name: string
+  policy_name: string
+  app_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -355,6 +375,7 @@ export def "providers-microsoft-intune-locations-android-policies-apps AddAppFor
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Service Api Version.
   --properties: any # Android Policy request body for Intune MAM. — shape: {url: string}
@@ -363,21 +384,21 @@ export def "providers-microsoft-intune-locations-android-policies-apps AddAppFor
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/providers/Microsoft.Intune/locations/($hostName)/androidPolicies/($policyName)/apps/($appName)" $qp)
-  let body = {properties: $properties} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({host_name: (encode-path-segment $host_name), policy_name: (encode-path-segment $policy_name), app_name: (encode-path-segment $app_name)} | format pattern "/providers/Microsoft.Intune/locations/{host_name}/androidPolicies/{policy_name}/apps/{app_name}") $qp)
+  let req_body = {"properties": $properties} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Returns groups for a given AndroidMAMPolicy.
 #
 # GET /providers/Microsoft.Intune/locations/{hostName}/androidPolicies/{policyName}/groups
 # operationId: Android_GetGroupsForMAMPolicy
-export def "providers-microsoft-intune-locations-android-policies-groups GetGroupsForMAMPolicy" [
-  hostName: string
-  policyName: string
+export def "providers-microsoft-intune-locations-android-policies-groups get-for-mam-policy" [
+  host_name: string
+  policy_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -385,26 +406,27 @@ export def "providers-microsoft-intune-locations-android-policies-groups GetGrou
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Service Api Version.
 ]: nothing -> record<nextlink: string, value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/providers/Microsoft.Intune/locations/($hostName)/androidPolicies/($policyName)/groups" $qp)
+  let full_url = (build-url $base ({host_name: (encode-path-segment $host_name), policy_name: (encode-path-segment $policy_name)} | format pattern "/providers/Microsoft.Intune/locations/{host_name}/androidPolicies/{policy_name}/groups") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Delete Group for Android Policy
 #
 # DELETE /providers/Microsoft.Intune/locations/{hostName}/androidPolicies/{policyName}/groups/{groupId}
 # operationId: Android_DeleteGroupForMAMPolicy
-export def "providers-microsoft-intune-locations-android-policies-groups DeleteGroupForMAMPolicy" [
-  hostName: string
-  policyName: string
-  groupId: string
+export def "providers-microsoft-intune-locations-android-policies-groups delete-for-mam-policy" [
+  host_name: string
+  policy_name: string
+  group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -412,16 +434,17 @@ export def "providers-microsoft-intune-locations-android-policies-groups DeleteG
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Service Api Version.
 ]: nothing -> record<code: string, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/providers/Microsoft.Intune/locations/($hostName)/androidPolicies/($policyName)/groups/($groupId)" $qp)
+  let full_url = (build-url $base ({host_name: (encode-path-segment $host_name), policy_name: (encode-path-segment $policy_name), group_id: (encode-path-segment $group_id)} | format pattern "/providers/Microsoft.Intune/locations/{host_name}/androidPolicies/{policy_name}/groups/{group_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Add group to an AndroidMAMPolicy.
@@ -429,10 +452,10 @@ export def "providers-microsoft-intune-locations-android-policies-groups DeleteG
 # PUT /providers/Microsoft.Intune/locations/{hostName}/androidPolicies/{policyName}/groups/{groupId}
 # operationId: Android_AddGroupForMAMPolicy
 # --properties shape: {url: string}
-export def "providers-microsoft-intune-locations-android-policies-groups AddGroupForMAMPolicy" [
-  hostName: string
-  policyName: string
-  groupId: string
+export def "providers-microsoft-intune-locations-android-policies-groups create-for-mam-policy" [
+  host_name: string
+  policy_name: string
+  group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -440,6 +463,7 @@ export def "providers-microsoft-intune-locations-android-policies-groups AddGrou
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Service Api Version.
   --properties: any # Android Policy request body for Intune MAM. — shape: {url: string}
@@ -448,20 +472,20 @@ export def "providers-microsoft-intune-locations-android-policies-groups AddGrou
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/providers/Microsoft.Intune/locations/($hostName)/androidPolicies/($policyName)/groups/($groupId)" $qp)
-  let body = {properties: $properties} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({host_name: (encode-path-segment $host_name), policy_name: (encode-path-segment $policy_name), group_id: (encode-path-segment $group_id)} | format pattern "/providers/Microsoft.Intune/locations/{host_name}/androidPolicies/{policy_name}/groups/{group_id}") $qp)
+  let req_body = {"properties": $properties} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Returns Intune Manageable apps.
 #
 # GET /providers/Microsoft.Intune/locations/{hostName}/apps
 # operationId: GetApps
-export def "providers-microsoft-intune-locations-apps GetApps" [
-  hostName: string
+export def "providers-microsoft-intune-locations-apps get" [
+  host_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -469,6 +493,7 @@ export def "providers-microsoft-intune-locations-apps GetApps" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Service Api Version.
   --filter: string # The filter to apply on the operation.
@@ -478,18 +503,18 @@ export def "providers-microsoft-intune-locations-apps GetApps" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$select" $select "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/providers/Microsoft.Intune/locations/($hostName)/apps" $qp)
+  let full_url = (build-url $base ({host_name: (encode-path-segment $host_name)} | format pattern "/providers/Microsoft.Intune/locations/{host_name}/apps") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Returns Intune flagged user collection
 #
 # GET /providers/Microsoft.Intune/locations/{hostName}/flaggedUsers
 # operationId: GetMAMFlaggedUsers
-export def "providers-microsoft-intune-locations-flagged-users GetMAMFlaggedUsers" [
-  hostName: string
+export def "providers-microsoft-intune-locations-flagged-users get-mam" [
+  host_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -497,6 +522,7 @@ export def "providers-microsoft-intune-locations-flagged-users GetMAMFlaggedUser
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Service Api Version.
   --filter: string # The filter to apply on the operation.
@@ -506,19 +532,19 @@ export def "providers-microsoft-intune-locations-flagged-users GetMAMFlaggedUser
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$select" $select "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/providers/Microsoft.Intune/locations/($hostName)/flaggedUsers" $qp)
+  let full_url = (build-url $base ({host_name: (encode-path-segment $host_name)} | format pattern "/providers/Microsoft.Intune/locations/{host_name}/flaggedUsers") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Returns Intune flagged user details
 #
 # GET /providers/Microsoft.Intune/locations/{hostName}/flaggedUsers/{userName}
 # operationId: GetMAMFlaggedUserByName
-export def "providers-microsoft-intune-locations-flagged-users GetMAMFlaggedUserByName" [
-  hostName: string
-  userName: string
+export def "providers-microsoft-intune-locations-flagged-users get-mam-by-name" [
+  host_name: string
+  user_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -526,6 +552,7 @@ export def "providers-microsoft-intune-locations-flagged-users GetMAMFlaggedUser
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Service Api Version.
   --select: string # select specific fields in entity.
@@ -533,19 +560,19 @@ export def "providers-microsoft-intune-locations-flagged-users GetMAMFlaggedUser
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$select" $select "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/providers/Microsoft.Intune/locations/($hostName)/flaggedUsers/($userName)" $qp)
+  let full_url = (build-url $base ({host_name: (encode-path-segment $host_name), user_name: (encode-path-segment $user_name)} | format pattern "/providers/Microsoft.Intune/locations/{host_name}/flaggedUsers/{user_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Returns Intune flagged enrolled app collection for the User
 #
 # GET /providers/Microsoft.Intune/locations/{hostName}/flaggedUsers/{userName}/flaggedEnrolledApps
 # operationId: GetMAMUserFlaggedEnrolledApps
-export def "providers-microsoft-intune-locations-flagged-users-flagged-enrolled-apps GetMAMUserFlaggedEnrolledApps" [
-  hostName: string
-  userName: string
+export def "providers-microsoft-intune-locations-flagged-users-flagged-enrolled-apps get-mam" [
+  host_name: string
+  user_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -553,6 +580,7 @@ export def "providers-microsoft-intune-locations-flagged-users-flagged-enrolled-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Service Api Version.
   --filter: string # The filter to apply on the operation.
@@ -562,18 +590,18 @@ export def "providers-microsoft-intune-locations-flagged-users-flagged-enrolled-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$select" $select "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/providers/Microsoft.Intune/locations/($hostName)/flaggedUsers/($userName)/flaggedEnrolledApps" $qp)
+  let full_url = (build-url $base ({host_name: (encode-path-segment $host_name), user_name: (encode-path-segment $user_name)} | format pattern "/providers/Microsoft.Intune/locations/{host_name}/flaggedUsers/{user_name}/flaggedEnrolledApps") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Returns Intune iOSPolicies.
 #
 # GET /providers/Microsoft.Intune/locations/{hostName}/iosPolicies
 # operationId: Ios_GetMAMPolicies
-export def "providers-microsoft-intune-locations-ios-policies GetMAMPolicies" [
-  hostName: string
+export def "providers-microsoft-intune-locations-ios-policies get-mam" [
+  host_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -581,6 +609,7 @@ export def "providers-microsoft-intune-locations-ios-policies GetMAMPolicies" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Service Api Version.
   --filter: string # The filter to apply on the operation.
@@ -590,19 +619,19 @@ export def "providers-microsoft-intune-locations-ios-policies GetMAMPolicies" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$select" $select "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/providers/Microsoft.Intune/locations/($hostName)/iosPolicies" $qp)
+  let full_url = (build-url $base ({host_name: (encode-path-segment $host_name)} | format pattern "/providers/Microsoft.Intune/locations/{host_name}/iosPolicies") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Delete Ios Policy
 #
 # DELETE /providers/Microsoft.Intune/locations/{hostName}/iosPolicies/{policyName}
 # operationId: Ios_DeleteMAMPolicy
-export def "providers-microsoft-intune-locations-ios-policies DeleteMAMPolicy" [
-  hostName: string
-  policyName: string
+export def "providers-microsoft-intune-locations-ios-policies delete-mam-policy" [
+  host_name: string
+  policy_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -610,25 +639,26 @@ export def "providers-microsoft-intune-locations-ios-policies DeleteMAMPolicy" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Service Api Version.
 ]: nothing -> record<code: string, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/providers/Microsoft.Intune/locations/($hostName)/iosPolicies/($policyName)" $qp)
+  let full_url = (build-url $base ({host_name: (encode-path-segment $host_name), policy_name: (encode-path-segment $policy_name)} | format pattern "/providers/Microsoft.Intune/locations/{host_name}/iosPolicies/{policy_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Returns Intune iOS policies.
 #
 # GET /providers/Microsoft.Intune/locations/{hostName}/iosPolicies/{policyName}
 # operationId: Ios_GetMAMPolicyByName
-export def "providers-microsoft-intune-locations-ios-policies GetMAMPolicyByName" [
-  hostName: string
-  policyName: string
+export def "providers-microsoft-intune-locations-ios-policies get-mam-policy-by-name" [
+  host_name: string
+  policy_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -636,6 +666,7 @@ export def "providers-microsoft-intune-locations-ios-policies GetMAMPolicyByName
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Service Api Version.
   --select: string # select specific fields in entity.
@@ -643,20 +674,20 @@ export def "providers-microsoft-intune-locations-ios-policies GetMAMPolicyByName
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$select" $select "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/providers/Microsoft.Intune/locations/($hostName)/iosPolicies/($policyName)" $qp)
+  let full_url = (build-url $base ({host_name: (encode-path-segment $host_name), policy_name: (encode-path-segment $policy_name)} | format pattern "/providers/Microsoft.Intune/locations/{host_name}/iosPolicies/{policy_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
-#  patch an iOSMAMPolicy.
+# patch an iOSMAMPolicy.
 #
 # PATCH /providers/Microsoft.Intune/locations/{hostName}/iosPolicies/{policyName}
 # operationId: Ios_PatchMAMPolicy
-# --properties shape: {fileEncryptionLevel?: "deviceLocked"|"deviceLockedExceptFilesOpen"|"afterDeviceRestart"|"useDeviceSettings", touchId?: "enable"|"disable", accessRecheckOfflineTimeout?: string, accessRecheckOnlineTimeout?: string, appSharingFromLevel?: "none"|"policyManagedApps"|"allApps", appSharingToLevel?: "none"|"policyManagedApps"|"allApps", authentication?: "required"|"notRequired", clipboardSharingLevel?: "blocked"|"policyManagedApps"|"policyManagedAppsWithPasteIn"|"allApps", dataBackup?: "allow"|"block", description?: string, deviceCompliance?: "enable"|"disable", fileSharingSaveAs?: "allow"|"block", friendlyName: string, managedBrowser?: "required"|"notRequired", offlineWipeTimeout?: string, pin?: "required"|"notRequired", pinNumRetry?: int}
-export def "providers-microsoft-intune-locations-ios-policies PatchMAMPolicy" [
-  hostName: string
-  policyName: string
+# --properties shape: {fileEncryptionLevel?: "deviceLocked"|"deviceLockedExceptFilesOpen"|"afterDeviceRestart"|"useDeviceSettings", touchId?: "enable"|"disable", accessRecheckOfflineTimeout?: string, accessRecheckOnlineTimeout?: string, appSharingFromLevel?: "none"|"policyManagedApps"|"allApps", appSharingToLevel?: "none"|"policyManagedApps"|"allApps", authentication?: "required"|"notRequired", clipboardSharingLevel?: "blocked"|"policyManagedApps"|"policyManagedAppsWithPasteIn"|"allApps", dataBackup?: "allow"|"block", ... (8 more fields)}
+export def "providers-microsoft-intune-locations-ios-policies update-mam-policy" [
+  host_name: string
+  policy_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -664,9 +695,10 @@ export def "providers-microsoft-intune-locations-ios-policies PatchMAMPolicy" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Service Api Version.
-  --properties: any # Intune MAM iOS Policy Properties. — shape: {fileEncryptionLevel?: "deviceLocked"|"deviceLockedExceptFilesOpen"|"afterDeviceRestart"|"useDeviceSettings", touchId?: "enable"|"disable", accessRecheckOfflineTimeout?: string, accessRecheckOnlineTimeout?: string, appSharingFromLevel?: "none"|"policyManagedApps"|"allApps", appSharingToLevel?: "none"|"policyManagedApps"|"allApps", authentication?: "required"|"notRequired", clipboardSharingLevel?: "blocked"|"policyManagedApps"|"policyManagedAppsWithPasteIn"|"allApps", dataBackup?: "allow"|"block", description?: string, deviceCompliance?: "enable"|"disable", fileSharingSaveAs?: "allow"|"block", friendlyName: string, managedBrowser?: "required"|"notRequired", offlineWipeTimeout?: string, pin?: "required"|"notRequired", pinNumRetry?: int}
+  --properties: any # Intune MAM iOS Policy Properties. — shape: {fileEncryptionLevel?: "deviceLocked"|"deviceLockedExceptFilesOpen"|"afterDeviceRestart"|"useDeviceSettings", touchId?: "enable"|"disable", accessRecheckOfflineTimeout?: string, accessRecheckOnlineTimeout?: string, appSharingFromLevel?: "none"|"policyManagedApps"|"allApps", appSharingToLevel?: "none"|"policyManagedApps"|"allApps", authentication?: "required"|"notRequired", clipboardSharingLevel?: "blocked"|"policyManagedApps"|"policyManagedAppsWithPasteIn"|"allApps", dataBackup?: "allow"|"block", ... (8 more fields)}
   --location: string # Resource Location
   --tags: record # Resource Tags
 ]: any -> record<properties: record<fileEncryptionLevel: string, touchId: string, accessRecheckOfflineTimeout: string, accessRecheckOnlineTimeout: string, appSharingFromLevel: string, appSharingToLevel: string, authentication: string, clipboardSharingLevel: string, dataBackup: string, description: string, deviceCompliance: string, fileSharingSaveAs: string, friendlyName: string, groupStatus: string, lastModifiedTime: string, managedBrowser: string, numOfApps: int, offlineWipeTimeout: string, pin: string, pinNumRetry: int>, id: string, location: string, name: string, tags: record, type: string> {
@@ -674,22 +706,22 @@ export def "providers-microsoft-intune-locations-ios-policies PatchMAMPolicy" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/providers/Microsoft.Intune/locations/($hostName)/iosPolicies/($policyName)" $qp)
-  let body = {properties: $properties, location: $location, tags: $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({host_name: (encode-path-segment $host_name), policy_name: (encode-path-segment $policy_name)} | format pattern "/providers/Microsoft.Intune/locations/{host_name}/iosPolicies/{policy_name}") $qp)
+  let req_body = {"properties": $properties, "location": $location, "tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Creates or updates iOSMAMPolicy.
 #
 # PUT /providers/Microsoft.Intune/locations/{hostName}/iosPolicies/{policyName}
 # operationId: Ios_CreateOrUpdateMAMPolicy
-# --properties shape: {fileEncryptionLevel?: "deviceLocked"|"deviceLockedExceptFilesOpen"|"afterDeviceRestart"|"useDeviceSettings", touchId?: "enable"|"disable", accessRecheckOfflineTimeout?: string, accessRecheckOnlineTimeout?: string, appSharingFromLevel?: "none"|"policyManagedApps"|"allApps", appSharingToLevel?: "none"|"policyManagedApps"|"allApps", authentication?: "required"|"notRequired", clipboardSharingLevel?: "blocked"|"policyManagedApps"|"policyManagedAppsWithPasteIn"|"allApps", dataBackup?: "allow"|"block", description?: string, deviceCompliance?: "enable"|"disable", fileSharingSaveAs?: "allow"|"block", friendlyName: string, managedBrowser?: "required"|"notRequired", offlineWipeTimeout?: string, pin?: "required"|"notRequired", pinNumRetry?: int}
-export def "providers-microsoft-intune-locations-ios-policies CreateOrUpdateMAMPolicy" [
-  hostName: string
-  policyName: string
+# --properties shape: {fileEncryptionLevel?: "deviceLocked"|"deviceLockedExceptFilesOpen"|"afterDeviceRestart"|"useDeviceSettings", touchId?: "enable"|"disable", accessRecheckOfflineTimeout?: string, accessRecheckOnlineTimeout?: string, appSharingFromLevel?: "none"|"policyManagedApps"|"allApps", appSharingToLevel?: "none"|"policyManagedApps"|"allApps", authentication?: "required"|"notRequired", clipboardSharingLevel?: "blocked"|"policyManagedApps"|"policyManagedAppsWithPasteIn"|"allApps", dataBackup?: "allow"|"block", ... (8 more fields)}
+export def "providers-microsoft-intune-locations-ios-policies create-or-update-mam-policy" [
+  host_name: string
+  policy_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -697,9 +729,10 @@ export def "providers-microsoft-intune-locations-ios-policies CreateOrUpdateMAMP
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Service Api Version.
-  --properties: any # Intune MAM iOS Policy Properties. — shape: {fileEncryptionLevel?: "deviceLocked"|"deviceLockedExceptFilesOpen"|"afterDeviceRestart"|"useDeviceSettings", touchId?: "enable"|"disable", accessRecheckOfflineTimeout?: string, accessRecheckOnlineTimeout?: string, appSharingFromLevel?: "none"|"policyManagedApps"|"allApps", appSharingToLevel?: "none"|"policyManagedApps"|"allApps", authentication?: "required"|"notRequired", clipboardSharingLevel?: "blocked"|"policyManagedApps"|"policyManagedAppsWithPasteIn"|"allApps", dataBackup?: "allow"|"block", description?: string, deviceCompliance?: "enable"|"disable", fileSharingSaveAs?: "allow"|"block", friendlyName: string, managedBrowser?: "required"|"notRequired", offlineWipeTimeout?: string, pin?: "required"|"notRequired", pinNumRetry?: int}
+  --properties: any # Intune MAM iOS Policy Properties. — shape: {fileEncryptionLevel?: "deviceLocked"|"deviceLockedExceptFilesOpen"|"afterDeviceRestart"|"useDeviceSettings", touchId?: "enable"|"disable", accessRecheckOfflineTimeout?: string, accessRecheckOnlineTimeout?: string, appSharingFromLevel?: "none"|"policyManagedApps"|"allApps", appSharingToLevel?: "none"|"policyManagedApps"|"allApps", authentication?: "required"|"notRequired", clipboardSharingLevel?: "blocked"|"policyManagedApps"|"policyManagedAppsWithPasteIn"|"allApps", dataBackup?: "allow"|"block", ... (8 more fields)}
   --location: string # Resource Location
   --tags: record # Resource Tags
 ]: any -> record<properties: record<fileEncryptionLevel: string, touchId: string, accessRecheckOfflineTimeout: string, accessRecheckOnlineTimeout: string, appSharingFromLevel: string, appSharingToLevel: string, authentication: string, clipboardSharingLevel: string, dataBackup: string, description: string, deviceCompliance: string, fileSharingSaveAs: string, friendlyName: string, groupStatus: string, lastModifiedTime: string, managedBrowser: string, numOfApps: int, offlineWipeTimeout: string, pin: string, pinNumRetry: int>, id: string, location: string, name: string, tags: record, type: string> {
@@ -707,21 +740,21 @@ export def "providers-microsoft-intune-locations-ios-policies CreateOrUpdateMAMP
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/providers/Microsoft.Intune/locations/($hostName)/iosPolicies/($policyName)" $qp)
-  let body = {properties: $properties, location: $location, tags: $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({host_name: (encode-path-segment $host_name), policy_name: (encode-path-segment $policy_name)} | format pattern "/providers/Microsoft.Intune/locations/{host_name}/iosPolicies/{policy_name}") $qp)
+  let req_body = {"properties": $properties, "location": $location, "tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Get apps for an iOSMAMPolicy.
 #
 # GET /providers/Microsoft.Intune/locations/{hostName}/iosPolicies/{policyName}/apps
 # operationId: Ios_GetAppForMAMPolicy
-export def "providers-microsoft-intune-locations-ios-policies-apps GetAppForMAMPolicy" [
-  hostName: string
-  policyName: string
+export def "providers-microsoft-intune-locations-ios-policies-apps get-for-mam-policy" [
+  host_name: string
+  policy_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -729,6 +762,7 @@ export def "providers-microsoft-intune-locations-ios-policies-apps GetAppForMAMP
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Service Api Version.
   --filter: string # The filter to apply on the operation.
@@ -738,20 +772,20 @@ export def "providers-microsoft-intune-locations-ios-policies-apps GetAppForMAMP
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$select" $select "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/providers/Microsoft.Intune/locations/($hostName)/iosPolicies/($policyName)/apps" $qp)
+  let full_url = (build-url $base ({host_name: (encode-path-segment $host_name), policy_name: (encode-path-segment $policy_name)} | format pattern "/providers/Microsoft.Intune/locations/{host_name}/iosPolicies/{policy_name}/apps") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Delete App for Ios Policy
 #
 # DELETE /providers/Microsoft.Intune/locations/{hostName}/iosPolicies/{policyName}/apps/{appName}
 # operationId: Ios_DeleteAppForMAMPolicy
-export def "providers-microsoft-intune-locations-ios-policies-apps DeleteAppForMAMPolicy" [
-  hostName: string
-  policyName: string
-  appName: string
+export def "providers-microsoft-intune-locations-ios-policies-apps delete-for-mam-policy" [
+  host_name: string
+  policy_name: string
+  app_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -759,16 +793,17 @@ export def "providers-microsoft-intune-locations-ios-policies-apps DeleteAppForM
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Service Api Version.
 ]: nothing -> record<code: string, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/providers/Microsoft.Intune/locations/($hostName)/iosPolicies/($policyName)/apps/($appName)" $qp)
+  let full_url = (build-url $base ({host_name: (encode-path-segment $host_name), policy_name: (encode-path-segment $policy_name), app_name: (encode-path-segment $app_name)} | format pattern "/providers/Microsoft.Intune/locations/{host_name}/iosPolicies/{policy_name}/apps/{app_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Add app to an iOSMAMPolicy.
@@ -776,10 +811,10 @@ export def "providers-microsoft-intune-locations-ios-policies-apps DeleteAppForM
 # PUT /providers/Microsoft.Intune/locations/{hostName}/iosPolicies/{policyName}/apps/{appName}
 # operationId: Ios_AddAppForMAMPolicy
 # --properties shape: {url: string}
-export def "providers-microsoft-intune-locations-ios-policies-apps AddAppForMAMPolicy" [
-  hostName: string
-  policyName: string
-  appName: string
+export def "providers-microsoft-intune-locations-ios-policies-apps create-for-mam-policy" [
+  host_name: string
+  policy_name: string
+  app_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -787,6 +822,7 @@ export def "providers-microsoft-intune-locations-ios-policies-apps AddAppForMAMP
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Service Api Version.
   --properties: any # Android Policy request body for Intune MAM. — shape: {url: string}
@@ -795,21 +831,21 @@ export def "providers-microsoft-intune-locations-ios-policies-apps AddAppForMAMP
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/providers/Microsoft.Intune/locations/($hostName)/iosPolicies/($policyName)/apps/($appName)" $qp)
-  let body = {properties: $properties} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({host_name: (encode-path-segment $host_name), policy_name: (encode-path-segment $policy_name), app_name: (encode-path-segment $app_name)} | format pattern "/providers/Microsoft.Intune/locations/{host_name}/iosPolicies/{policy_name}/apps/{app_name}") $qp)
+  let req_body = {"properties": $properties} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Returns groups for a given iOSMAMPolicy.
 #
 # GET /providers/Microsoft.Intune/locations/{hostName}/iosPolicies/{policyName}/groups
 # operationId: Ios_GetGroupsForMAMPolicy
-export def "providers-microsoft-intune-locations-ios-policies-groups GetGroupsForMAMPolicy" [
-  hostName: string
-  policyName: string
+export def "providers-microsoft-intune-locations-ios-policies-groups get-for-mam-policy" [
+  host_name: string
+  policy_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -817,26 +853,27 @@ export def "providers-microsoft-intune-locations-ios-policies-groups GetGroupsFo
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Service Api Version.
 ]: nothing -> record<nextlink: string, value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/providers/Microsoft.Intune/locations/($hostName)/iosPolicies/($policyName)/groups" $qp)
+  let full_url = (build-url $base ({host_name: (encode-path-segment $host_name), policy_name: (encode-path-segment $policy_name)} | format pattern "/providers/Microsoft.Intune/locations/{host_name}/iosPolicies/{policy_name}/groups") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Delete Group for iOS Policy
 #
 # DELETE /providers/Microsoft.Intune/locations/{hostName}/iosPolicies/{policyName}/groups/{groupId}
 # operationId: Ios_DeleteGroupForMAMPolicy
-export def "providers-microsoft-intune-locations-ios-policies-groups DeleteGroupForMAMPolicy" [
-  hostName: string
-  policyName: string
-  groupId: string
+export def "providers-microsoft-intune-locations-ios-policies-groups delete-for-mam-policy" [
+  host_name: string
+  policy_name: string
+  group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -844,16 +881,17 @@ export def "providers-microsoft-intune-locations-ios-policies-groups DeleteGroup
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Service Api Version.
 ]: nothing -> record<code: string, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/providers/Microsoft.Intune/locations/($hostName)/iosPolicies/($policyName)/groups/($groupId)" $qp)
+  let full_url = (build-url $base ({host_name: (encode-path-segment $host_name), policy_name: (encode-path-segment $policy_name), group_id: (encode-path-segment $group_id)} | format pattern "/providers/Microsoft.Intune/locations/{host_name}/iosPolicies/{policy_name}/groups/{group_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Add group to an iOSMAMPolicy.
@@ -861,10 +899,10 @@ export def "providers-microsoft-intune-locations-ios-policies-groups DeleteGroup
 # PUT /providers/Microsoft.Intune/locations/{hostName}/iosPolicies/{policyName}/groups/{groupId}
 # operationId: Ios_AddGroupForMAMPolicy
 # --properties shape: {url: string}
-export def "providers-microsoft-intune-locations-ios-policies-groups AddGroupForMAMPolicy" [
-  hostName: string
-  policyName: string
-  groupId: string
+export def "providers-microsoft-intune-locations-ios-policies-groups create-for-mam-policy" [
+  host_name: string
+  policy_name: string
+  group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -872,6 +910,7 @@ export def "providers-microsoft-intune-locations-ios-policies-groups AddGroupFor
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Service Api Version.
   --properties: any # Android Policy request body for Intune MAM. — shape: {url: string}
@@ -880,20 +919,20 @@ export def "providers-microsoft-intune-locations-ios-policies-groups AddGroupFor
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/providers/Microsoft.Intune/locations/($hostName)/iosPolicies/($policyName)/groups/($groupId)" $qp)
-  let body = {properties: $properties} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({host_name: (encode-path-segment $host_name), policy_name: (encode-path-segment $policy_name), group_id: (encode-path-segment $group_id)} | format pattern "/providers/Microsoft.Intune/locations/{host_name}/iosPolicies/{policy_name}/groups/{group_id}") $qp)
+  let req_body = {"properties": $properties} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Returns operationResults.
 #
 # GET /providers/Microsoft.Intune/locations/{hostName}/operationResults
 # operationId: GetOperationResults
-export def "providers-microsoft-intune-locations-operation-results GetOperationResults" [
-  hostName: string
+export def "providers-microsoft-intune-locations-operation-results get" [
+  host_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -901,6 +940,7 @@ export def "providers-microsoft-intune-locations-operation-results GetOperationR
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Service Api Version.
   --filter: string # The filter to apply on the operation.
@@ -910,18 +950,18 @@ export def "providers-microsoft-intune-locations-operation-results GetOperationR
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$select" $select "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/providers/Microsoft.Intune/locations/($hostName)/operationResults" $qp)
+  let full_url = (build-url $base ({host_name: (encode-path-segment $host_name)} | format pattern "/providers/Microsoft.Intune/locations/{host_name}/operationResults") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Returns Intune Tenant level statuses.
 #
 # GET /providers/Microsoft.Intune/locations/{hostName}/statuses/default
 # operationId: GetMAMStatuses
-export def "providers-microsoft-intune-locations-statuses-default GetMAMStatuses" [
-  hostName: string
+export def "providers-microsoft-intune-locations-statuses-default get-mam" [
+  host_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -929,25 +969,26 @@ export def "providers-microsoft-intune-locations-statuses-default GetMAMStatuses
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Service Api Version.
 ]: nothing -> record<properties: record<deployedPolicies: int, enrolledUsers: int, flaggedUsers: int, lastModifiedTime: string, policyAppliedUsers: int, status: string, wipeFailedApps: int, wipePendingApps: int, wipeSucceededApps: int>, id: string, location: string, name: string, tags: record, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/providers/Microsoft.Intune/locations/($hostName)/statuses/default" $qp)
+  let full_url = (build-url $base ({host_name: (encode-path-segment $host_name)} | format pattern "/providers/Microsoft.Intune/locations/{host_name}/statuses/default") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get devices for a user.
 #
 # GET /providers/Microsoft.Intune/locations/{hostName}/users/{userName}/devices
 # operationId: GetMAMUserDevices
-export def "providers-microsoft-intune-locations-users-devices GetMAMUserDevices" [
-  hostName: string
-  userName: string
+export def "providers-microsoft-intune-locations-users-devices get-mam" [
+  host_name: string
+  user_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -955,6 +996,7 @@ export def "providers-microsoft-intune-locations-users-devices GetMAMUserDevices
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Service Api Version.
   --filter: string # The filter to apply on the operation.
@@ -964,20 +1006,20 @@ export def "providers-microsoft-intune-locations-users-devices GetMAMUserDevices
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$select" $select "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/providers/Microsoft.Intune/locations/($hostName)/users/($userName)/devices" $qp)
+  let full_url = (build-url $base ({host_name: (encode-path-segment $host_name), user_name: (encode-path-segment $user_name)} | format pattern "/providers/Microsoft.Intune/locations/{host_name}/users/{user_name}/devices") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get a unique device for a user.
 #
 # GET /providers/Microsoft.Intune/locations/{hostName}/users/{userName}/devices/{deviceName}
 # operationId: GetMAMUserDeviceByDeviceName
-export def "providers-microsoft-intune-locations-users-devices GetMAMUserDeviceByDeviceName" [
-  hostName: string
-  userName: string
-  deviceName: string
+export def "providers-microsoft-intune-locations-users-devices get-mam-by-name" [
+  host_name: string
+  user_name: string
+  device_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -985,6 +1027,7 @@ export def "providers-microsoft-intune-locations-users-devices GetMAMUserDeviceB
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Service Api Version.
   --select: string # select specific fields in entity.
@@ -992,20 +1035,20 @@ export def "providers-microsoft-intune-locations-users-devices GetMAMUserDeviceB
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$select" $select "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/providers/Microsoft.Intune/locations/($hostName)/users/($userName)/devices/($deviceName)" $qp)
+  let full_url = (build-url $base ({host_name: (encode-path-segment $host_name), user_name: (encode-path-segment $user_name), device_name: (encode-path-segment $device_name)} | format pattern "/providers/Microsoft.Intune/locations/{host_name}/users/{user_name}/devices/{device_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Wipe a device for a user.
 #
 # POST /providers/Microsoft.Intune/locations/{hostName}/users/{userName}/devices/{deviceName}/wipe
 # operationId: WipeMAMUserDevice
-export def "providers-microsoft-intune-locations-users-devices-wipe WipeMAMUserDevice" [
-  hostName: string
-  userName: string
-  deviceName: string
+export def "providers-microsoft-intune-locations-users-devices-wipe create-mam" [
+  host_name: string
+  user_name: string
+  device_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1013,14 +1056,15 @@ export def "providers-microsoft-intune-locations-users-devices-wipe WipeMAMUserD
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Service Api Version.
 ]: nothing -> record<properties: record<value: string>, id: string, location: string, name: string, tags: record, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/providers/Microsoft.Intune/locations/($hostName)/users/($userName)/devices/($deviceName)/wipe" $qp)
+  let full_url = (build-url $base ({host_name: (encode-path-segment $host_name), user_name: (encode-path-segment $user_name), device_name: (encode-path-segment $device_name)} | format pattern "/providers/Microsoft.Intune/locations/{host_name}/users/{user_name}/devices/{device_name}/wipe") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }

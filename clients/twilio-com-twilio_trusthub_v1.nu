@@ -12,27 +12,39 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {headers: {}, query: ""} }
   match $scheme {
     "basic" => { {headers: {Authorization: $"Basic ($token_val)"}, query: ""} }
+    "basic-credentials" => { {headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: ""} }
     "none" => { {headers: {}, query: ""} }
     _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
   }
 }
 
 # Serialize a single query parameter based on collection style
+# Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
+# ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = ($name | url encode)
+  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
-  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
-    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
-    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
+    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
+    _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
+}
+
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Build URL from base, path, and optional query string
@@ -44,7 +56,7 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
@@ -53,25 +65,25 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
     "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "put" => { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "patch" => { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
   if ($method in ["head" "options"]) { return $resp }
-  if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
+  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
 def base-url-completer [] { ["https://trusthub.twilio.com"] }
-def auth-scheme-completer [] { ["basic"] }
+def auth-scheme-completer [] { ["basic" "basic-credentials"] }
 
 # Completers for enum parameters
-def Status-completer [] { ["draft" "in-review" "pending-review" "twilio-approved" "twilio-rejected"] }
+def status-completer [] { ["draft" "in-review" "pending-review" "twilio-approved" "twilio-rejected"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "customer-profiles ListCustomerProfile" } } | get name | first)
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "customer-profiles list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -95,7 +107,7 @@ export def commands []: nothing -> table {
 #
 # GET /v1/CustomerProfiles
 # operationId: ListCustomerProfile
-export def "customer-profiles ListCustomerProfile" [
+export def "customer-profiles list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -103,28 +115,29 @@ export def "customer-profiles ListCustomerProfile" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Status: string@Status-completer # The verification status of the Customer-Profile resource.
-  --FriendlyName: string # The string that you assigned to describe the resource.
-  --PolicySid: string # The unique string of a policy that is associated to the Customer-Profile resource.
-  --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
-  --Page: int # The page index. This value is simply for client state.
-  --PageToken: string # The page token. This is provided by the API.
+  --status: string@status-completer # The verification status of the Customer-Profile resource.
+  --friendly-name: string # The string that you assigned to describe the resource.
+  --policy-sid: string # The unique string of a policy that is associated to the Customer-Profile resource.
+  --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
+  --page: int # The page index. This value is simply for client state.
+  --page-token: string # The page token. This is provided by the API.
 ]: nothing -> record<meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>, results: table<account_sid: string, date_created: string, date_updated: string, email: string, friendly_name: string, links: record, policy_sid: string, sid: string, status: string, status_callback: string, url: string, valid_until: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://trusthub.twilio.com")
-  let qp = [(serialize-qp "Status" $Status "scalar") (serialize-qp "FriendlyName" $FriendlyName "scalar") (serialize-qp "PolicySid" $PolicySid "scalar") (serialize-qp "PageSize" $PageSize "scalar") (serialize-qp "Page" $Page "scalar") (serialize-qp "PageToken" $PageToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "Status" $status "scalar") (serialize-qp "FriendlyName" $friendly_name "scalar") (serialize-qp "PolicySid" $policy_sid "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/CustomerProfiles" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Create a new Customer-Profile.
 #
 # POST /v1/CustomerProfiles
 # operationId: CreateCustomerProfile
-export def "customer-profiles CreateCustomerProfile" [
+export def "customer-profiles create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -132,29 +145,31 @@ export def "customer-profiles CreateCustomerProfile" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  Email: string # The email address that will receive updates when the Customer-Profile resource changes status.
-  FriendlyName: string # The string that you assigned to describe the resource.
-  PolicySid: string # The unique string of a policy that is associated to the Customer-Profile resource.
-  --StatusCallback: string # The URL we call to inform your application of status changes. (format: uri)
+  email: string # The email address that will receive updates when the Customer-Profile resource changes status.
+  friendly_name: string # The string that you assigned to describe the resource.
+  policy_sid: string # The unique string of a policy that is associated to the Customer-Profile resource.
+  --status-callback: string # The URL we call to inform your application of status changes. (format: uri)
 ]: any -> record<account_sid: string, date_created: string, date_updated: string, email: string, friendly_name: string, links: record, policy_sid: string, sid: string, status: string, status_callback: string, url: string, valid_until: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://trusthub.twilio.com")
   let full_url = (build-url $base "/v1/CustomerProfiles")
-  let body = {Email: $Email, FriendlyName: $FriendlyName, PolicySid: $PolicySid, StatusCallback: $StatusCallback} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"Email": $email, "FriendlyName": $friendly_name, "PolicySid": $policy_sid, "StatusCallback": $status_callback} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # Retrieve a list of all Assigned Items for an account.
 #
 # GET /v1/CustomerProfiles/{CustomerProfileSid}/ChannelEndpointAssignments
 # operationId: ListCustomerProfileChannelEndpointAssignment
-export def "customer-profiles-channel-endpoint-assignments ListCustomerProfileChannelEndpointAssignment" [
-  CustomerProfileSid: string
+export def "customer-profiles-channel-endpoint-assignments list" [
+  customer_profile_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -162,28 +177,29 @@ export def "customer-profiles-channel-endpoint-assignments ListCustomerProfileCh
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ChannelEndpointSid: string # The SID of an channel endpoint
-  --ChannelEndpointSids: string # comma separated list of channel endpoint sids
-  --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
-  --Page: int # The page index. This value is simply for client state.
-  --PageToken: string # The page token. This is provided by the API.
+  --channel-endpoint-sid: string # The SID of an channel endpoint
+  --channel-endpoint-sids: string # comma separated list of channel endpoint sids
+  --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
+  --page: int # The page index. This value is simply for client state.
+  --page-token: string # The page token. This is provided by the API.
 ]: nothing -> record<meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>, results: table<account_sid: string, channel_endpoint_sid: string, channel_endpoint_type: string, customer_profile_sid: string, date_created: string, sid: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://trusthub.twilio.com")
-  let qp = [(serialize-qp "ChannelEndpointSid" $ChannelEndpointSid "scalar") (serialize-qp "ChannelEndpointSids" $ChannelEndpointSids "scalar") (serialize-qp "PageSize" $PageSize "scalar") (serialize-qp "Page" $Page "scalar") (serialize-qp "PageToken" $PageToken "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/CustomerProfiles/($CustomerProfileSid)/ChannelEndpointAssignments" $qp)
+  let qp = [(serialize-qp "ChannelEndpointSid" $channel_endpoint_sid "scalar") (serialize-qp "ChannelEndpointSids" $channel_endpoint_sids "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({customer_profile_sid: (encode-path-segment $customer_profile_sid)} | format pattern "/v1/CustomerProfiles/{customer_profile_sid}/ChannelEndpointAssignments") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Create a new Assigned Item.
 #
 # POST /v1/CustomerProfiles/{CustomerProfileSid}/ChannelEndpointAssignments
 # operationId: CreateCustomerProfileChannelEndpointAssignment
-export def "customer-profiles-channel-endpoint-assignments CreateCustomerProfileChannelEndpointAssignment" [
-  CustomerProfileSid: string
+export def "customer-profiles-channel-endpoint-assignments create" [
+  customer_profile_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -191,28 +207,30 @@ export def "customer-profiles-channel-endpoint-assignments CreateCustomerProfile
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  ChannelEndpointSid: string # The SID of an channel endpoint
-  ChannelEndpointType: string # The type of channel endpoint. eg: phone-number
+  channel_endpoint_sid: string # The SID of an channel endpoint
+  channel_endpoint_type: string # The type of channel endpoint. eg: phone-number
 ]: any -> record<account_sid: string, channel_endpoint_sid: string, channel_endpoint_type: string, customer_profile_sid: string, date_created: string, sid: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://trusthub.twilio.com")
-  let full_url = (build-url $base $"/v1/CustomerProfiles/($CustomerProfileSid)/ChannelEndpointAssignments")
-  let body = {ChannelEndpointSid: $ChannelEndpointSid, ChannelEndpointType: $ChannelEndpointType} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({customer_profile_sid: (encode-path-segment $customer_profile_sid)} | format pattern "/v1/CustomerProfiles/{customer_profile_sid}/ChannelEndpointAssignments"))
+  let req_body = {"ChannelEndpointSid": $channel_endpoint_sid, "ChannelEndpointType": $channel_endpoint_type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # Remove an Assignment Item Instance.
 #
 # DELETE /v1/CustomerProfiles/{CustomerProfileSid}/ChannelEndpointAssignments/{Sid}
 # operationId: DeleteCustomerProfileChannelEndpointAssignment
-export def "customer-profiles-channel-endpoint-assignments DeleteCustomerProfileChannelEndpointAssignment" [
-  CustomerProfileSid: string
-  Sid: string
+export def "customer-profiles-channel-endpoint-assignments delete" [
+  customer_profile_sid: string
+  sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -220,23 +238,24 @@ export def "customer-profiles-channel-endpoint-assignments DeleteCustomerProfile
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://trusthub.twilio.com")
-  let full_url = (build-url $base $"/v1/CustomerProfiles/($CustomerProfileSid)/ChannelEndpointAssignments/($Sid)")
+  let full_url = (build-url $base ({customer_profile_sid: (encode-path-segment $customer_profile_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/CustomerProfiles/{customer_profile_sid}/ChannelEndpointAssignments/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Fetch specific Assigned Item Instance.
 #
 # GET /v1/CustomerProfiles/{CustomerProfileSid}/ChannelEndpointAssignments/{Sid}
 # operationId: FetchCustomerProfileChannelEndpointAssignment
-export def "customer-profiles-channel-endpoint-assignments FetchCustomerProfileChannelEndpointAssignment" [
-  CustomerProfileSid: string
-  Sid: string
+export def "customer-profiles-channel-endpoint-assignments get" [
+  customer_profile_sid: string
+  sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -244,22 +263,23 @@ export def "customer-profiles-channel-endpoint-assignments FetchCustomerProfileC
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<account_sid: string, channel_endpoint_sid: string, channel_endpoint_type: string, customer_profile_sid: string, date_created: string, sid: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://trusthub.twilio.com")
-  let full_url = (build-url $base $"/v1/CustomerProfiles/($CustomerProfileSid)/ChannelEndpointAssignments/($Sid)")
+  let full_url = (build-url $base ({customer_profile_sid: (encode-path-segment $customer_profile_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/CustomerProfiles/{customer_profile_sid}/ChannelEndpointAssignments/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Retrieve a list of all Assigned Items for an account.
 #
 # GET /v1/CustomerProfiles/{CustomerProfileSid}/EntityAssignments
 # operationId: ListCustomerProfileEntityAssignment
-export def "customer-profiles-entity-assignments ListCustomerProfileEntityAssignment" [
-  CustomerProfileSid: string
+export def "customer-profiles-entity-assignments list" [
+  customer_profile_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -267,26 +287,27 @@ export def "customer-profiles-entity-assignments ListCustomerProfileEntityAssign
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
-  --Page: int # The page index. This value is simply for client state.
-  --PageToken: string # The page token. This is provided by the API.
+  --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
+  --page: int # The page index. This value is simply for client state.
+  --page-token: string # The page token. This is provided by the API.
 ]: nothing -> record<meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>, results: table<account_sid: string, customer_profile_sid: string, date_created: string, object_sid: string, sid: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://trusthub.twilio.com")
-  let qp = [(serialize-qp "PageSize" $PageSize "scalar") (serialize-qp "Page" $Page "scalar") (serialize-qp "PageToken" $PageToken "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/CustomerProfiles/($CustomerProfileSid)/EntityAssignments" $qp)
+  let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({customer_profile_sid: (encode-path-segment $customer_profile_sid)} | format pattern "/v1/CustomerProfiles/{customer_profile_sid}/EntityAssignments") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Create a new Assigned Item.
 #
 # POST /v1/CustomerProfiles/{CustomerProfileSid}/EntityAssignments
 # operationId: CreateCustomerProfileEntityAssignment
-export def "customer-profiles-entity-assignments CreateCustomerProfileEntityAssignment" [
-  CustomerProfileSid: string
+export def "customer-profiles-entity-assignments create" [
+  customer_profile_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -294,27 +315,29 @@ export def "customer-profiles-entity-assignments CreateCustomerProfileEntityAssi
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  ObjectSid: string # The SID of an object bag that holds information of the different items.
+  object_sid: string # The SID of an object bag that holds information of the different items.
 ]: any -> record<account_sid: string, customer_profile_sid: string, date_created: string, object_sid: string, sid: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://trusthub.twilio.com")
-  let full_url = (build-url $base $"/v1/CustomerProfiles/($CustomerProfileSid)/EntityAssignments")
-  let body = {ObjectSid: $ObjectSid} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({customer_profile_sid: (encode-path-segment $customer_profile_sid)} | format pattern "/v1/CustomerProfiles/{customer_profile_sid}/EntityAssignments"))
+  let req_body = {"ObjectSid": $object_sid} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # Remove an Assignment Item Instance.
 #
 # DELETE /v1/CustomerProfiles/{CustomerProfileSid}/EntityAssignments/{Sid}
 # operationId: DeleteCustomerProfileEntityAssignment
-export def "customer-profiles-entity-assignments DeleteCustomerProfileEntityAssignment" [
-  CustomerProfileSid: string
-  Sid: string
+export def "customer-profiles-entity-assignments delete" [
+  customer_profile_sid: string
+  sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -322,23 +345,24 @@ export def "customer-profiles-entity-assignments DeleteCustomerProfileEntityAssi
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://trusthub.twilio.com")
-  let full_url = (build-url $base $"/v1/CustomerProfiles/($CustomerProfileSid)/EntityAssignments/($Sid)")
+  let full_url = (build-url $base ({customer_profile_sid: (encode-path-segment $customer_profile_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/CustomerProfiles/{customer_profile_sid}/EntityAssignments/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Fetch specific Assigned Item Instance.
 #
 # GET /v1/CustomerProfiles/{CustomerProfileSid}/EntityAssignments/{Sid}
 # operationId: FetchCustomerProfileEntityAssignment
-export def "customer-profiles-entity-assignments FetchCustomerProfileEntityAssignment" [
-  CustomerProfileSid: string
-  Sid: string
+export def "customer-profiles-entity-assignments get" [
+  customer_profile_sid: string
+  sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -346,22 +370,23 @@ export def "customer-profiles-entity-assignments FetchCustomerProfileEntityAssig
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<account_sid: string, customer_profile_sid: string, date_created: string, object_sid: string, sid: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://trusthub.twilio.com")
-  let full_url = (build-url $base $"/v1/CustomerProfiles/($CustomerProfileSid)/EntityAssignments/($Sid)")
+  let full_url = (build-url $base ({customer_profile_sid: (encode-path-segment $customer_profile_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/CustomerProfiles/{customer_profile_sid}/EntityAssignments/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Retrieve a list of Evaluations associated to the customer_profile resource.
 #
 # GET /v1/CustomerProfiles/{CustomerProfileSid}/Evaluations
 # operationId: ListCustomerProfileEvaluation
-export def "customer-profiles-evaluations ListCustomerProfileEvaluation" [
-  CustomerProfileSid: string
+export def "customer-profiles-evaluations list" [
+  customer_profile_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -369,26 +394,27 @@ export def "customer-profiles-evaluations ListCustomerProfileEvaluation" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
-  --Page: int # The page index. This value is simply for client state.
-  --PageToken: string # The page token. This is provided by the API.
+  --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
+  --page: int # The page index. This value is simply for client state.
+  --page-token: string # The page token. This is provided by the API.
 ]: nothing -> record<meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>, results: table<account_sid: string, customer_profile_sid: string, date_created: string, policy_sid: string, results: list, sid: string, status: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://trusthub.twilio.com")
-  let qp = [(serialize-qp "PageSize" $PageSize "scalar") (serialize-qp "Page" $Page "scalar") (serialize-qp "PageToken" $PageToken "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/CustomerProfiles/($CustomerProfileSid)/Evaluations" $qp)
+  let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({customer_profile_sid: (encode-path-segment $customer_profile_sid)} | format pattern "/v1/CustomerProfiles/{customer_profile_sid}/Evaluations") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Create a new Evaluation
 #
 # POST /v1/CustomerProfiles/{CustomerProfileSid}/Evaluations
 # operationId: CreateCustomerProfileEvaluation
-export def "customer-profiles-evaluations CreateCustomerProfileEvaluation" [
-  CustomerProfileSid: string
+export def "customer-profiles-evaluations create" [
+  customer_profile_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -396,27 +422,29 @@ export def "customer-profiles-evaluations CreateCustomerProfileEvaluation" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  PolicySid: string # The unique string of a policy that is associated to the customer_profile resource.
+  policy_sid: string # The unique string of a policy that is associated to the customer_profile resource.
 ]: any -> record<account_sid: string, customer_profile_sid: string, date_created: string, policy_sid: string, results: list<any>, sid: string, status: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://trusthub.twilio.com")
-  let full_url = (build-url $base $"/v1/CustomerProfiles/($CustomerProfileSid)/Evaluations")
-  let body = {PolicySid: $PolicySid} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({customer_profile_sid: (encode-path-segment $customer_profile_sid)} | format pattern "/v1/CustomerProfiles/{customer_profile_sid}/Evaluations"))
+  let req_body = {"PolicySid": $policy_sid} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # Fetch specific Evaluation Instance.
 #
 # GET /v1/CustomerProfiles/{CustomerProfileSid}/Evaluations/{Sid}
 # operationId: FetchCustomerProfileEvaluation
-export def "customer-profiles-evaluations FetchCustomerProfileEvaluation" [
-  CustomerProfileSid: string
-  Sid: string
+export def "customer-profiles-evaluations get" [
+  customer_profile_sid: string
+  sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -424,22 +452,23 @@ export def "customer-profiles-evaluations FetchCustomerProfileEvaluation" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<account_sid: string, customer_profile_sid: string, date_created: string, policy_sid: string, results: list<any>, sid: string, status: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://trusthub.twilio.com")
-  let full_url = (build-url $base $"/v1/CustomerProfiles/($CustomerProfileSid)/Evaluations/($Sid)")
+  let full_url = (build-url $base ({customer_profile_sid: (encode-path-segment $customer_profile_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/CustomerProfiles/{customer_profile_sid}/Evaluations/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Delete a specific Customer-Profile.
 #
 # DELETE /v1/CustomerProfiles/{Sid}
 # operationId: DeleteCustomerProfile
-export def "customer-profiles DeleteCustomerProfile" [
-  Sid: string
+export def "customer-profiles delete" [
+  sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -447,22 +476,23 @@ export def "customer-profiles DeleteCustomerProfile" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://trusthub.twilio.com")
-  let full_url = (build-url $base $"/v1/CustomerProfiles/($Sid)")
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/CustomerProfiles/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Fetch a specific Customer-Profile instance.
 #
 # GET /v1/CustomerProfiles/{Sid}
 # operationId: FetchCustomerProfile
-export def "customer-profiles FetchCustomerProfile" [
-  Sid: string
+export def "customer-profiles get" [
+  sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -470,22 +500,23 @@ export def "customer-profiles FetchCustomerProfile" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<account_sid: string, date_created: string, date_updated: string, email: string, friendly_name: string, links: record, policy_sid: string, sid: string, status: string, status_callback: string, url: string, valid_until: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://trusthub.twilio.com")
-  let full_url = (build-url $base $"/v1/CustomerProfiles/($Sid)")
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/CustomerProfiles/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Updates a Customer-Profile in an account.
 #
 # POST /v1/CustomerProfiles/{Sid}
 # operationId: UpdateCustomerProfile
-export def "customer-profiles UpdateCustomerProfile" [
-  Sid: string
+export def "customer-profiles update" [
+  sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -493,28 +524,30 @@ export def "customer-profiles UpdateCustomerProfile" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Email: string # The email address that will receive updates when the Customer-Profile resource changes status.
-  --FriendlyName: string # The string that you assigned to describe the resource.
-  --Status: string@Status-completer
-  --StatusCallback: string # The URL we call to inform your application of status changes. (format: uri)
+  --email: string # The email address that will receive updates when the Customer-Profile resource changes status.
+  --friendly-name: string # The string that you assigned to describe the resource.
+  --status: string@status-completer
+  --status-callback: string # The URL we call to inform your application of status changes. (format: uri)
 ]: any -> record<account_sid: string, date_created: string, date_updated: string, email: string, friendly_name: string, links: record, policy_sid: string, sid: string, status: string, status_callback: string, url: string, valid_until: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://trusthub.twilio.com")
-  let full_url = (build-url $base $"/v1/CustomerProfiles/($Sid)")
-  let body = {Email: $Email, FriendlyName: $FriendlyName, Status: $Status, StatusCallback: $StatusCallback} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/CustomerProfiles/{sid}"))
+  let req_body = {"Email": $email, "FriendlyName": $friendly_name, "Status": $status, "StatusCallback": $status_callback} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # Retrieve a list of all End-User Types.
 #
 # GET /v1/EndUserTypes
 # operationId: ListEndUserType
-export def "end-user-types ListEndUserType" [
+export def "end-user-types list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -522,26 +555,27 @@ export def "end-user-types ListEndUserType" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
-  --Page: int # The page index. This value is simply for client state.
-  --PageToken: string # The page token. This is provided by the API.
+  --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
+  --page: int # The page index. This value is simply for client state.
+  --page-token: string # The page token. This is provided by the API.
 ]: nothing -> record<end_user_types: table<fields: list, friendly_name: string, machine_name: string, sid: string, url: string>, meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://trusthub.twilio.com")
-  let qp = [(serialize-qp "PageSize" $PageSize "scalar") (serialize-qp "Page" $Page "scalar") (serialize-qp "PageToken" $PageToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/EndUserTypes" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Fetch a specific End-User Type Instance.
 #
 # GET /v1/EndUserTypes/{Sid}
 # operationId: FetchEndUserType
-export def "end-user-types FetchEndUserType" [
-  Sid: string
+export def "end-user-types get" [
+  sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -549,21 +583,22 @@ export def "end-user-types FetchEndUserType" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<fields: list<any>, friendly_name: string, machine_name: string, sid: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://trusthub.twilio.com")
-  let full_url = (build-url $base $"/v1/EndUserTypes/($Sid)")
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/EndUserTypes/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Retrieve a list of all End User for an account.
 #
 # GET /v1/EndUsers
 # operationId: ListEndUser
-export def "end-users ListEndUser" [
+export def "end-users list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -571,25 +606,26 @@ export def "end-users ListEndUser" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
-  --Page: int # The page index. This value is simply for client state.
-  --PageToken: string # The page token. This is provided by the API.
+  --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
+  --page: int # The page index. This value is simply for client state.
+  --page-token: string # The page token. This is provided by the API.
 ]: nothing -> record<meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>, results: table<account_sid: string, attributes: any, date_created: string, date_updated: string, friendly_name: string, sid: string, type: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://trusthub.twilio.com")
-  let qp = [(serialize-qp "PageSize" $PageSize "scalar") (serialize-qp "Page" $Page "scalar") (serialize-qp "PageToken" $PageToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/EndUsers" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Create a new End User.
 #
 # POST /v1/EndUsers
 # operationId: CreateEndUser
-export def "end-users CreateEndUser" [
+export def "end-users create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -597,28 +633,30 @@ export def "end-users CreateEndUser" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Attributes: any # The set of parameters that are the attributes of the End User resource which are derived End User Types.
-  FriendlyName: string # The string that you assigned to describe the resource.
-  Type: string # The type of end user of the Bundle resource - can be `individual` or `business`.
+  --attributes: any # The set of parameters that are the attributes of the End User resource which are derived End User Types.
+  friendly_name: string # The string that you assigned to describe the resource.
+  type: string # The type of end user of the Bundle resource - can be `individual` or `business`.
 ]: any -> record<account_sid: string, attributes: any, date_created: string, date_updated: string, friendly_name: string, sid: string, type: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://trusthub.twilio.com")
   let full_url = (build-url $base "/v1/EndUsers")
-  let body = {Attributes: $Attributes, FriendlyName: $FriendlyName, Type: $Type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"Attributes": $attributes, "FriendlyName": $friendly_name, "Type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # Delete a specific End User.
 #
 # DELETE /v1/EndUsers/{Sid}
 # operationId: DeleteEndUser
-export def "end-users DeleteEndUser" [
-  Sid: string
+export def "end-users delete" [
+  sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -626,22 +664,23 @@ export def "end-users DeleteEndUser" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://trusthub.twilio.com")
-  let full_url = (build-url $base $"/v1/EndUsers/($Sid)")
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/EndUsers/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Fetch specific End User Instance.
 #
 # GET /v1/EndUsers/{Sid}
 # operationId: FetchEndUser
-export def "end-users FetchEndUser" [
-  Sid: string
+export def "end-users get" [
+  sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -649,22 +688,23 @@ export def "end-users FetchEndUser" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<account_sid: string, attributes: any, date_created: string, date_updated: string, friendly_name: string, sid: string, type: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://trusthub.twilio.com")
-  let full_url = (build-url $base $"/v1/EndUsers/($Sid)")
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/EndUsers/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Update an existing End User.
 #
 # POST /v1/EndUsers/{Sid}
 # operationId: UpdateEndUser
-export def "end-users UpdateEndUser" [
-  Sid: string
+export def "end-users update" [
+  sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -672,26 +712,28 @@ export def "end-users UpdateEndUser" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Attributes: any # The set of parameters that are the attributes of the End User resource which are derived End User Types.
-  --FriendlyName: string # The string that you assigned to describe the resource.
+  --attributes: any # The set of parameters that are the attributes of the End User resource which are derived End User Types.
+  --friendly-name: string # The string that you assigned to describe the resource.
 ]: any -> record<account_sid: string, attributes: any, date_created: string, date_updated: string, friendly_name: string, sid: string, type: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://trusthub.twilio.com")
-  let full_url = (build-url $base $"/v1/EndUsers/($Sid)")
-  let body = {Attributes: $Attributes, FriendlyName: $FriendlyName} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/EndUsers/{sid}"))
+  let req_body = {"Attributes": $attributes, "FriendlyName": $friendly_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # Retrieve a list of all Policys.
 #
 # GET /v1/Policies
 # operationId: ListPolicies
-export def "policies ListPolicies" [
+export def "policies list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -699,26 +741,27 @@ export def "policies ListPolicies" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
-  --Page: int # The page index. This value is simply for client state.
-  --PageToken: string # The page token. This is provided by the API.
+  --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
+  --page: int # The page index. This value is simply for client state.
+  --page-token: string # The page token. This is provided by the API.
 ]: nothing -> record<meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>, results: table<friendly_name: string, requirements: any, sid: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://trusthub.twilio.com")
-  let qp = [(serialize-qp "PageSize" $PageSize "scalar") (serialize-qp "Page" $Page "scalar") (serialize-qp "PageToken" $PageToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/Policies" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Fetch specific Policy Instance.
 #
 # GET /v1/Policies/{Sid}
 # operationId: FetchPolicies
-export def "policies FetchPolicies" [
-  Sid: string
+export def "policies get" [
+  sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -726,21 +769,22 @@ export def "policies FetchPolicies" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<friendly_name: string, requirements: any, sid: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://trusthub.twilio.com")
-  let full_url = (build-url $base $"/v1/Policies/($Sid)")
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/Policies/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Retrieve a list of all Supporting Document Types.
 #
 # GET /v1/SupportingDocumentTypes
 # operationId: ListSupportingDocumentType
-export def "supporting-document-types ListSupportingDocumentType" [
+export def "supporting-document-types list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -748,26 +792,27 @@ export def "supporting-document-types ListSupportingDocumentType" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
-  --Page: int # The page index. This value is simply for client state.
-  --PageToken: string # The page token. This is provided by the API.
+  --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
+  --page: int # The page index. This value is simply for client state.
+  --page-token: string # The page token. This is provided by the API.
 ]: nothing -> record<meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>, supporting_document_types: table<fields: list, friendly_name: string, machine_name: string, sid: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://trusthub.twilio.com")
-  let qp = [(serialize-qp "PageSize" $PageSize "scalar") (serialize-qp "Page" $Page "scalar") (serialize-qp "PageToken" $PageToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/SupportingDocumentTypes" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Fetch a specific Supporting Document Type Instance.
 #
 # GET /v1/SupportingDocumentTypes/{Sid}
 # operationId: FetchSupportingDocumentType
-export def "supporting-document-types FetchSupportingDocumentType" [
-  Sid: string
+export def "supporting-document-types get" [
+  sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -775,21 +820,22 @@ export def "supporting-document-types FetchSupportingDocumentType" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<fields: list<any>, friendly_name: string, machine_name: string, sid: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://trusthub.twilio.com")
-  let full_url = (build-url $base $"/v1/SupportingDocumentTypes/($Sid)")
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/SupportingDocumentTypes/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Retrieve a list of all Supporting Document for an account.
 #
 # GET /v1/SupportingDocuments
 # operationId: ListSupportingDocument
-export def "supporting-documents ListSupportingDocument" [
+export def "supporting-documents list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -797,25 +843,26 @@ export def "supporting-documents ListSupportingDocument" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
-  --Page: int # The page index. This value is simply for client state.
-  --PageToken: string # The page token. This is provided by the API.
+  --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
+  --page: int # The page index. This value is simply for client state.
+  --page-token: string # The page token. This is provided by the API.
 ]: nothing -> record<meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>, results: table<account_sid: string, attributes: any, date_created: string, date_updated: string, friendly_name: string, mime_type: string, sid: string, status: string, type: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://trusthub.twilio.com")
-  let qp = [(serialize-qp "PageSize" $PageSize "scalar") (serialize-qp "Page" $Page "scalar") (serialize-qp "PageToken" $PageToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/SupportingDocuments" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Create a new Supporting Document.
 #
 # POST /v1/SupportingDocuments
 # operationId: CreateSupportingDocument
-export def "supporting-documents CreateSupportingDocument" [
+export def "supporting-documents create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -823,28 +870,30 @@ export def "supporting-documents CreateSupportingDocument" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Attributes: any # The set of parameters that are the attributes of the Supporting Documents resource which are derived Supporting Document Types.
-  FriendlyName: string # The string that you assigned to describe the resource.
-  Type: string # The type of the Supporting Document.
+  --attributes: any # The set of parameters that are the attributes of the Supporting Documents resource which are derived Supporting Document Types.
+  friendly_name: string # The string that you assigned to describe the resource.
+  type: string # The type of the Supporting Document.
 ]: any -> record<account_sid: string, attributes: any, date_created: string, date_updated: string, friendly_name: string, mime_type: string, sid: string, status: string, type: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://trusthub.twilio.com")
   let full_url = (build-url $base "/v1/SupportingDocuments")
-  let body = {Attributes: $Attributes, FriendlyName: $FriendlyName, Type: $Type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"Attributes": $attributes, "FriendlyName": $friendly_name, "Type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # Delete a specific Supporting Document.
 #
 # DELETE /v1/SupportingDocuments/{Sid}
 # operationId: DeleteSupportingDocument
-export def "supporting-documents DeleteSupportingDocument" [
-  Sid: string
+export def "supporting-documents delete" [
+  sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -852,22 +901,23 @@ export def "supporting-documents DeleteSupportingDocument" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://trusthub.twilio.com")
-  let full_url = (build-url $base $"/v1/SupportingDocuments/($Sid)")
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/SupportingDocuments/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Fetch specific Supporting Document Instance.
 #
 # GET /v1/SupportingDocuments/{Sid}
 # operationId: FetchSupportingDocument
-export def "supporting-documents FetchSupportingDocument" [
-  Sid: string
+export def "supporting-documents get" [
+  sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -875,22 +925,23 @@ export def "supporting-documents FetchSupportingDocument" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<account_sid: string, attributes: any, date_created: string, date_updated: string, friendly_name: string, mime_type: string, sid: string, status: string, type: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://trusthub.twilio.com")
-  let full_url = (build-url $base $"/v1/SupportingDocuments/($Sid)")
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/SupportingDocuments/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Update an existing Supporting Document.
 #
 # POST /v1/SupportingDocuments/{Sid}
 # operationId: UpdateSupportingDocument
-export def "supporting-documents UpdateSupportingDocument" [
-  Sid: string
+export def "supporting-documents update" [
+  sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -898,26 +949,28 @@ export def "supporting-documents UpdateSupportingDocument" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Attributes: any # The set of parameters that are the attributes of the Supporting Document resource which are derived Supporting Document Types.
-  --FriendlyName: string # The string that you assigned to describe the resource.
+  --attributes: any # The set of parameters that are the attributes of the Supporting Document resource which are derived Supporting Document Types.
+  --friendly-name: string # The string that you assigned to describe the resource.
 ]: any -> record<account_sid: string, attributes: any, date_created: string, date_updated: string, friendly_name: string, mime_type: string, sid: string, status: string, type: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://trusthub.twilio.com")
-  let full_url = (build-url $base $"/v1/SupportingDocuments/($Sid)")
-  let body = {Attributes: $Attributes, FriendlyName: $FriendlyName} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/SupportingDocuments/{sid}"))
+  let req_body = {"Attributes": $attributes, "FriendlyName": $friendly_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # Retrieve a list of all Customer-Profiles for an account.
 #
 # GET /v1/TrustProducts
 # operationId: ListTrustProduct
-export def "trust-products ListTrustProduct" [
+export def "trust-products list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -925,28 +978,29 @@ export def "trust-products ListTrustProduct" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Status: string@Status-completer # The verification status of the Customer-Profile resource.
-  --FriendlyName: string # The string that you assigned to describe the resource.
-  --PolicySid: string # The unique string of a policy that is associated to the Customer-Profile resource.
-  --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
-  --Page: int # The page index. This value is simply for client state.
-  --PageToken: string # The page token. This is provided by the API.
+  --status: string@status-completer # The verification status of the Customer-Profile resource.
+  --friendly-name: string # The string that you assigned to describe the resource.
+  --policy-sid: string # The unique string of a policy that is associated to the Customer-Profile resource.
+  --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
+  --page: int # The page index. This value is simply for client state.
+  --page-token: string # The page token. This is provided by the API.
 ]: nothing -> record<meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>, results: table<account_sid: string, date_created: string, date_updated: string, email: string, friendly_name: string, links: record, policy_sid: string, sid: string, status: string, status_callback: string, url: string, valid_until: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://trusthub.twilio.com")
-  let qp = [(serialize-qp "Status" $Status "scalar") (serialize-qp "FriendlyName" $FriendlyName "scalar") (serialize-qp "PolicySid" $PolicySid "scalar") (serialize-qp "PageSize" $PageSize "scalar") (serialize-qp "Page" $Page "scalar") (serialize-qp "PageToken" $PageToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "Status" $status "scalar") (serialize-qp "FriendlyName" $friendly_name "scalar") (serialize-qp "PolicySid" $policy_sid "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/TrustProducts" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Create a new Customer-Profile.
 #
 # POST /v1/TrustProducts
 # operationId: CreateTrustProduct
-export def "trust-products CreateTrustProduct" [
+export def "trust-products create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -954,29 +1008,31 @@ export def "trust-products CreateTrustProduct" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  Email: string # The email address that will receive updates when the Customer-Profile resource changes status.
-  FriendlyName: string # The string that you assigned to describe the resource.
-  PolicySid: string # The unique string of a policy that is associated to the Customer-Profile resource.
-  --StatusCallback: string # The URL we call to inform your application of status changes. (format: uri)
+  email: string # The email address that will receive updates when the Customer-Profile resource changes status.
+  friendly_name: string # The string that you assigned to describe the resource.
+  policy_sid: string # The unique string of a policy that is associated to the Customer-Profile resource.
+  --status-callback: string # The URL we call to inform your application of status changes. (format: uri)
 ]: any -> record<account_sid: string, date_created: string, date_updated: string, email: string, friendly_name: string, links: record, policy_sid: string, sid: string, status: string, status_callback: string, url: string, valid_until: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://trusthub.twilio.com")
   let full_url = (build-url $base "/v1/TrustProducts")
-  let body = {Email: $Email, FriendlyName: $FriendlyName, PolicySid: $PolicySid, StatusCallback: $StatusCallback} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"Email": $email, "FriendlyName": $friendly_name, "PolicySid": $policy_sid, "StatusCallback": $status_callback} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # Delete a specific Customer-Profile.
 #
 # DELETE /v1/TrustProducts/{Sid}
 # operationId: DeleteTrustProduct
-export def "trust-products DeleteTrustProduct" [
-  Sid: string
+export def "trust-products delete" [
+  sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -984,22 +1040,23 @@ export def "trust-products DeleteTrustProduct" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://trusthub.twilio.com")
-  let full_url = (build-url $base $"/v1/TrustProducts/($Sid)")
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/TrustProducts/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Fetch a specific Customer-Profile instance.
 #
 # GET /v1/TrustProducts/{Sid}
 # operationId: FetchTrustProduct
-export def "trust-products FetchTrustProduct" [
-  Sid: string
+export def "trust-products get" [
+  sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1007,22 +1064,23 @@ export def "trust-products FetchTrustProduct" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<account_sid: string, date_created: string, date_updated: string, email: string, friendly_name: string, links: record, policy_sid: string, sid: string, status: string, status_callback: string, url: string, valid_until: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://trusthub.twilio.com")
-  let full_url = (build-url $base $"/v1/TrustProducts/($Sid)")
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/TrustProducts/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Updates a Customer-Profile in an account.
 #
 # POST /v1/TrustProducts/{Sid}
 # operationId: UpdateTrustProduct
-export def "trust-products UpdateTrustProduct" [
-  Sid: string
+export def "trust-products update" [
+  sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1030,29 +1088,31 @@ export def "trust-products UpdateTrustProduct" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Email: string # The email address that will receive updates when the Customer-Profile resource changes status.
-  --FriendlyName: string # The string that you assigned to describe the resource.
-  --Status: string@Status-completer
-  --StatusCallback: string # The URL we call to inform your application of status changes. (format: uri)
+  --email: string # The email address that will receive updates when the Customer-Profile resource changes status.
+  --friendly-name: string # The string that you assigned to describe the resource.
+  --status: string@status-completer
+  --status-callback: string # The URL we call to inform your application of status changes. (format: uri)
 ]: any -> record<account_sid: string, date_created: string, date_updated: string, email: string, friendly_name: string, links: record, policy_sid: string, sid: string, status: string, status_callback: string, url: string, valid_until: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://trusthub.twilio.com")
-  let full_url = (build-url $base $"/v1/TrustProducts/($Sid)")
-  let body = {Email: $Email, FriendlyName: $FriendlyName, Status: $Status, StatusCallback: $StatusCallback} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/TrustProducts/{sid}"))
+  let req_body = {"Email": $email, "FriendlyName": $friendly_name, "Status": $status, "StatusCallback": $status_callback} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # Retrieve a list of all Assigned Items for an account.
 #
 # GET /v1/TrustProducts/{TrustProductSid}/ChannelEndpointAssignments
 # operationId: ListTrustProductChannelEndpointAssignment
-export def "trust-products-channel-endpoint-assignments ListTrustProductChannelEndpointAssignment" [
-  TrustProductSid: string
+export def "trust-products-channel-endpoint-assignments list" [
+  trust_product_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1060,28 +1120,29 @@ export def "trust-products-channel-endpoint-assignments ListTrustProductChannelE
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ChannelEndpointSid: string # The SID of an channel endpoint
-  --ChannelEndpointSids: string # comma separated list of channel endpoint sids
-  --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
-  --Page: int # The page index. This value is simply for client state.
-  --PageToken: string # The page token. This is provided by the API.
+  --channel-endpoint-sid: string # The SID of an channel endpoint
+  --channel-endpoint-sids: string # comma separated list of channel endpoint sids
+  --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
+  --page: int # The page index. This value is simply for client state.
+  --page-token: string # The page token. This is provided by the API.
 ]: nothing -> record<meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>, results: table<account_sid: string, channel_endpoint_sid: string, channel_endpoint_type: string, date_created: string, sid: string, trust_product_sid: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://trusthub.twilio.com")
-  let qp = [(serialize-qp "ChannelEndpointSid" $ChannelEndpointSid "scalar") (serialize-qp "ChannelEndpointSids" $ChannelEndpointSids "scalar") (serialize-qp "PageSize" $PageSize "scalar") (serialize-qp "Page" $Page "scalar") (serialize-qp "PageToken" $PageToken "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/TrustProducts/($TrustProductSid)/ChannelEndpointAssignments" $qp)
+  let qp = [(serialize-qp "ChannelEndpointSid" $channel_endpoint_sid "scalar") (serialize-qp "ChannelEndpointSids" $channel_endpoint_sids "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({trust_product_sid: (encode-path-segment $trust_product_sid)} | format pattern "/v1/TrustProducts/{trust_product_sid}/ChannelEndpointAssignments") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Create a new Assigned Item.
 #
 # POST /v1/TrustProducts/{TrustProductSid}/ChannelEndpointAssignments
 # operationId: CreateTrustProductChannelEndpointAssignment
-export def "trust-products-channel-endpoint-assignments CreateTrustProductChannelEndpointAssignment" [
-  TrustProductSid: string
+export def "trust-products-channel-endpoint-assignments create" [
+  trust_product_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1089,28 +1150,30 @@ export def "trust-products-channel-endpoint-assignments CreateTrustProductChanne
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  ChannelEndpointSid: string # The SID of an channel endpoint
-  ChannelEndpointType: string # The type of channel endpoint. eg: phone-number
+  channel_endpoint_sid: string # The SID of an channel endpoint
+  channel_endpoint_type: string # The type of channel endpoint. eg: phone-number
 ]: any -> record<account_sid: string, channel_endpoint_sid: string, channel_endpoint_type: string, date_created: string, sid: string, trust_product_sid: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://trusthub.twilio.com")
-  let full_url = (build-url $base $"/v1/TrustProducts/($TrustProductSid)/ChannelEndpointAssignments")
-  let body = {ChannelEndpointSid: $ChannelEndpointSid, ChannelEndpointType: $ChannelEndpointType} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({trust_product_sid: (encode-path-segment $trust_product_sid)} | format pattern "/v1/TrustProducts/{trust_product_sid}/ChannelEndpointAssignments"))
+  let req_body = {"ChannelEndpointSid": $channel_endpoint_sid, "ChannelEndpointType": $channel_endpoint_type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # Remove an Assignment Item Instance.
 #
 # DELETE /v1/TrustProducts/{TrustProductSid}/ChannelEndpointAssignments/{Sid}
 # operationId: DeleteTrustProductChannelEndpointAssignment
-export def "trust-products-channel-endpoint-assignments DeleteTrustProductChannelEndpointAssignment" [
-  TrustProductSid: string
-  Sid: string
+export def "trust-products-channel-endpoint-assignments delete" [
+  trust_product_sid: string
+  sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1118,23 +1181,24 @@ export def "trust-products-channel-endpoint-assignments DeleteTrustProductChanne
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://trusthub.twilio.com")
-  let full_url = (build-url $base $"/v1/TrustProducts/($TrustProductSid)/ChannelEndpointAssignments/($Sid)")
+  let full_url = (build-url $base ({trust_product_sid: (encode-path-segment $trust_product_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/TrustProducts/{trust_product_sid}/ChannelEndpointAssignments/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Fetch specific Assigned Item Instance.
 #
 # GET /v1/TrustProducts/{TrustProductSid}/ChannelEndpointAssignments/{Sid}
 # operationId: FetchTrustProductChannelEndpointAssignment
-export def "trust-products-channel-endpoint-assignments FetchTrustProductChannelEndpointAssignment" [
-  TrustProductSid: string
-  Sid: string
+export def "trust-products-channel-endpoint-assignments get" [
+  trust_product_sid: string
+  sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1142,22 +1206,23 @@ export def "trust-products-channel-endpoint-assignments FetchTrustProductChannel
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<account_sid: string, channel_endpoint_sid: string, channel_endpoint_type: string, date_created: string, sid: string, trust_product_sid: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://trusthub.twilio.com")
-  let full_url = (build-url $base $"/v1/TrustProducts/($TrustProductSid)/ChannelEndpointAssignments/($Sid)")
+  let full_url = (build-url $base ({trust_product_sid: (encode-path-segment $trust_product_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/TrustProducts/{trust_product_sid}/ChannelEndpointAssignments/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Retrieve a list of all Assigned Items for an account.
 #
 # GET /v1/TrustProducts/{TrustProductSid}/EntityAssignments
 # operationId: ListTrustProductEntityAssignment
-export def "trust-products-entity-assignments ListTrustProductEntityAssignment" [
-  TrustProductSid: string
+export def "trust-products-entity-assignments list" [
+  trust_product_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1165,26 +1230,27 @@ export def "trust-products-entity-assignments ListTrustProductEntityAssignment" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
-  --Page: int # The page index. This value is simply for client state.
-  --PageToken: string # The page token. This is provided by the API.
+  --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
+  --page: int # The page index. This value is simply for client state.
+  --page-token: string # The page token. This is provided by the API.
 ]: nothing -> record<meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>, results: table<account_sid: string, date_created: string, object_sid: string, sid: string, trust_product_sid: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://trusthub.twilio.com")
-  let qp = [(serialize-qp "PageSize" $PageSize "scalar") (serialize-qp "Page" $Page "scalar") (serialize-qp "PageToken" $PageToken "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/TrustProducts/($TrustProductSid)/EntityAssignments" $qp)
+  let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({trust_product_sid: (encode-path-segment $trust_product_sid)} | format pattern "/v1/TrustProducts/{trust_product_sid}/EntityAssignments") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Create a new Assigned Item.
 #
 # POST /v1/TrustProducts/{TrustProductSid}/EntityAssignments
 # operationId: CreateTrustProductEntityAssignment
-export def "trust-products-entity-assignments CreateTrustProductEntityAssignment" [
-  TrustProductSid: string
+export def "trust-products-entity-assignments create" [
+  trust_product_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1192,27 +1258,29 @@ export def "trust-products-entity-assignments CreateTrustProductEntityAssignment
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  ObjectSid: string # The SID of an object bag that holds information of the different items.
+  object_sid: string # The SID of an object bag that holds information of the different items.
 ]: any -> record<account_sid: string, date_created: string, object_sid: string, sid: string, trust_product_sid: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://trusthub.twilio.com")
-  let full_url = (build-url $base $"/v1/TrustProducts/($TrustProductSid)/EntityAssignments")
-  let body = {ObjectSid: $ObjectSid} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({trust_product_sid: (encode-path-segment $trust_product_sid)} | format pattern "/v1/TrustProducts/{trust_product_sid}/EntityAssignments"))
+  let req_body = {"ObjectSid": $object_sid} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # Remove an Assignment Item Instance.
 #
 # DELETE /v1/TrustProducts/{TrustProductSid}/EntityAssignments/{Sid}
 # operationId: DeleteTrustProductEntityAssignment
-export def "trust-products-entity-assignments DeleteTrustProductEntityAssignment" [
-  TrustProductSid: string
-  Sid: string
+export def "trust-products-entity-assignments delete" [
+  trust_product_sid: string
+  sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1220,23 +1288,24 @@ export def "trust-products-entity-assignments DeleteTrustProductEntityAssignment
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://trusthub.twilio.com")
-  let full_url = (build-url $base $"/v1/TrustProducts/($TrustProductSid)/EntityAssignments/($Sid)")
+  let full_url = (build-url $base ({trust_product_sid: (encode-path-segment $trust_product_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/TrustProducts/{trust_product_sid}/EntityAssignments/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Fetch specific Assigned Item Instance.
 #
 # GET /v1/TrustProducts/{TrustProductSid}/EntityAssignments/{Sid}
 # operationId: FetchTrustProductEntityAssignment
-export def "trust-products-entity-assignments FetchTrustProductEntityAssignment" [
-  TrustProductSid: string
-  Sid: string
+export def "trust-products-entity-assignments get" [
+  trust_product_sid: string
+  sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1244,22 +1313,23 @@ export def "trust-products-entity-assignments FetchTrustProductEntityAssignment"
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<account_sid: string, date_created: string, object_sid: string, sid: string, trust_product_sid: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://trusthub.twilio.com")
-  let full_url = (build-url $base $"/v1/TrustProducts/($TrustProductSid)/EntityAssignments/($Sid)")
+  let full_url = (build-url $base ({trust_product_sid: (encode-path-segment $trust_product_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/TrustProducts/{trust_product_sid}/EntityAssignments/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Retrieve a list of Evaluations associated to the trust_product resource.
 #
 # GET /v1/TrustProducts/{TrustProductSid}/Evaluations
 # operationId: ListTrustProductEvaluation
-export def "trust-products-evaluations ListTrustProductEvaluation" [
-  TrustProductSid: string
+export def "trust-products-evaluations list" [
+  trust_product_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1267,26 +1337,27 @@ export def "trust-products-evaluations ListTrustProductEvaluation" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
-  --Page: int # The page index. This value is simply for client state.
-  --PageToken: string # The page token. This is provided by the API.
+  --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
+  --page: int # The page index. This value is simply for client state.
+  --page-token: string # The page token. This is provided by the API.
 ]: nothing -> record<meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>, results: table<account_sid: string, date_created: string, policy_sid: string, results: list, sid: string, status: string, trust_product_sid: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://trusthub.twilio.com")
-  let qp = [(serialize-qp "PageSize" $PageSize "scalar") (serialize-qp "Page" $Page "scalar") (serialize-qp "PageToken" $PageToken "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/TrustProducts/($TrustProductSid)/Evaluations" $qp)
+  let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({trust_product_sid: (encode-path-segment $trust_product_sid)} | format pattern "/v1/TrustProducts/{trust_product_sid}/Evaluations") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Create a new Evaluation
 #
 # POST /v1/TrustProducts/{TrustProductSid}/Evaluations
 # operationId: CreateTrustProductEvaluation
-export def "trust-products-evaluations CreateTrustProductEvaluation" [
-  TrustProductSid: string
+export def "trust-products-evaluations create" [
+  trust_product_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1294,27 +1365,29 @@ export def "trust-products-evaluations CreateTrustProductEvaluation" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  PolicySid: string # The unique string of a policy that is associated to the customer_profile resource.
+  policy_sid: string # The unique string of a policy that is associated to the customer_profile resource.
 ]: any -> record<account_sid: string, date_created: string, policy_sid: string, results: list<any>, sid: string, status: string, trust_product_sid: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://trusthub.twilio.com")
-  let full_url = (build-url $base $"/v1/TrustProducts/($TrustProductSid)/Evaluations")
-  let body = {PolicySid: $PolicySid} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({trust_product_sid: (encode-path-segment $trust_product_sid)} | format pattern "/v1/TrustProducts/{trust_product_sid}/Evaluations"))
+  let req_body = {"PolicySid": $policy_sid} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # Fetch specific Evaluation Instance.
 #
 # GET /v1/TrustProducts/{TrustProductSid}/Evaluations/{Sid}
 # operationId: FetchTrustProductEvaluation
-export def "trust-products-evaluations FetchTrustProductEvaluation" [
-  TrustProductSid: string
-  Sid: string
+export def "trust-products-evaluations get" [
+  trust_product_sid: string
+  sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1322,12 +1395,13 @@ export def "trust-products-evaluations FetchTrustProductEvaluation" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<account_sid: string, date_created: string, policy_sid: string, results: list<any>, sid: string, status: string, trust_product_sid: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://trusthub.twilio.com")
-  let full_url = (build-url $base $"/v1/TrustProducts/($TrustProductSid)/Evaluations/($Sid)")
+  let full_url = (build-url $base ({trust_product_sid: (encode-path-segment $trust_product_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/TrustProducts/{trust_product_sid}/Evaluations/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }

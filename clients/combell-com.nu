@@ -17,21 +17,32 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 }
 
 # Serialize a single query parameter based on collection style
+# Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
+# ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = ($name | url encode)
+  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
-  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
-    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
-    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
+    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
+    _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
+}
+
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Build URL from base, path, and optional query string
@@ -43,7 +54,7 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
@@ -52,13 +63,13 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
     "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "put" => { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "patch" => { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
   if ($method in ["head" "options"]) { return $resp }
-  if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
+  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
 def base-url-completer [] { ["http://localhost/v2"] }
@@ -73,8 +84,8 @@ def file-format-completer [] { ["pfx"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "accounts GetAccounts" } } | get name | first)
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "accounts list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -98,7 +109,7 @@ export def commands []: nothing -> table {
 #
 # GET /accounts
 # operationId: GetAccounts
-export def "accounts GetAccounts" [
+export def "accounts list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -106,6 +117,7 @@ export def "accounts GetAccounts" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --skip: int # The number of items to skip in the resultset. (format: int32)
   --take: int # The number of items to return in the resultset. The returned count can be equal or less than this number. (format: int32)
@@ -118,14 +130,14 @@ export def "accounts GetAccounts" [
   let full_url = (build-url $base "/accounts" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Create a new account
 #
 # POST /accounts
 # operationId: CreateAccount
-export def "accounts CreateAccount" [
+export def "accounts create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -133,28 +145,29 @@ export def "accounts CreateAccount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ftp-password: string # Ftp password for the account.<br /> Applies only if the servicepack contains hosting.<br /> Passwords have to adhere to following rules:<br /><ul><li>Between 8-20 characters.</li><li>Must be a mix of letters and digits.</li><li>Must contain at least one digit (0-9).</li><li>Must contain at least one letter (a-z).</li><li>Cannot contain spaces.</li><li>Cannot contain characters: * € $ & + } { ' " \ </li></ul>
-  --identifier: string # An identifier for the account.<br /> Should be a domain name for hosting accounts.
+  --ftp-password: string # Ftp password for the account. Applies only if the servicepack contains hosting. Passwords have to adhere to following rules:Between 8-20 characters.Must be a mix of letters and digits.Must contain at least one digit (0-9).Must contain at least one letter (a-z).Cannot contain spaces.Cannot contain characters: * € $ & + } { ' " \
+  --identifier: string # An identifier for the account. Should be a domain name for hosting accounts.
   --servicepack-id: int # The servicepack id that defines the account. (format: int32)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/accounts")
-  let body = {ftp_password: $ftp_password, identifier: $identifier, servicepack_id: $servicepack_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"ftp_password": $ftp_password, "identifier": $identifier, "servicepack_id": $servicepack_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Get a specific account
 #
 # GET /accounts/{accountId}
 # operationId: GetAccount
-export def "accounts GetAccount" [
-  accountId: string
+export def "accounts get" [
+  account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -162,23 +175,24 @@ export def "accounts GetAccount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --account-id: int # The id of the account. (format: int32)
 ]: nothing -> record<addons: table<id: int, name: string>, id: int, identifier: string, servicepack: record<id: int, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "account_id" $account_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/accounts/($accountId)" $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/accounts/{account_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get records
 #
 # GET /dns/{domainName}/records
 export def "dns-records list" [
-  domainName: string
+  domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -186,6 +200,7 @@ export def "dns-records list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --domain-name: string # The domain name.
   --skip: int # The number of items to skip in the resultset. (format: int32)
@@ -197,17 +212,17 @@ export def "dns-records list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "domain_name" $domain_name "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "take" $take "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "record_name" $record_name "scalar") (serialize-qp "service" $service "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/dns/($domainName)/records" $qp)
+  let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name)} | format pattern "/dns/{domain_name}/records") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Create a record
 #
 # POST /dns/{domainName}/records
-export def "dns-records post" [
-  domainName: string
+export def "dns-records create" [
+  domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -215,38 +230,39 @@ export def "dns-records post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --domain-name: string # The domain name.
-  --content: string # Variable data depending on the record type. <ul><li>A: the IPv4 address.</li><li>CNAME: canonical name of an alias.</li><li>MX: fully qualified domain name of a mail host.</li><li>SRV: does not apply. Data for the SRV records can be found in specific properties.</li><li>TXT: free form text data.</li><li>CAA: format should match specific values for flag, tag and ca: "{flag} {tag} {ca}".         <ul><li>The flag. The values 128 (critical) or 0 (non-critical) are expected, with 0 as the default.</li><li>The tag. A tag specifies which actions an authorized CA can take in terms of issuing SSL/TLS certificates.<br /><ul><li>The value "issue": explicitly authorizes a single certificate authority to issue a certificate (any type) for the hostname.</li><li>The value "issuewild": explicitly authorizes a single certificate authority to issue a wildcard certificate (and only wildcard) for the hostname.</li><li>The value "iodef": specifies a URL to which a certificate authority may report policy violations.</li></ul></li><li>The ca. This is the domain of the CA (Certification Authority) that has the authority to issue certificates for the domain in question. If the value is a semicolon (;), it means that no CA has the authority to issue a certificate for that domain.</li></ul></li><li>ALIAS: canonical name of an alias.</li><li>TLSA: format should match specific values for usage, selector, matching type and data: "{usage} {selector} {matching_type} {data}"         <ul><li>The usage. The first field after the TLSA text in the DNS RR, specifies how to verify the certificate.<br /><ul><li>A value of 0 is for what is commonly called CA constraint (and PKIX-TA). The certificate provided when establishing TLS must be issued by the listed root-CA or one of its intermediate CAs, with a valid certification path to a root-CA already trusted by the application doing the verification.</li><li>A value of 1 is for what is commonly called Service certificate constraint (and PKIX-EE). The certificate used must match the TLSA record exactly, and it must also pass PKIX certification path validation to a trusted root-CA.</li><li>A value of 2 is for what is commonly called Trust Anchor Assertion (and DANE-TA). The certificate used has a valid certification path pointing back to the certificate mention in this record, but there is no need for it to pass the PKIX certification path validation to a trusted root-CA.</li><li>A value of 3 is for what is commonly called Domain issued certificate (and DANE-EE). The services uses a self-signed certificate. It is not signed by anyone else, and is exactly this record.</li></ul></li><li>The selector. When connecting to the service and a certificate is received, the selector field specifies which parts of it should be checked.<br /><ul><li>A value of 0 means to select the entire certificate for matching.</li><li>A value of 1 means to select just the public key for certificate matching. Matching the public key is often sufficient, as this is likely to be unique.</li></ul></li><li>The matching type.<br /><ul><li>A type of 0 means the entire information selected is present in the certificate association data.</li><li>A type of 1 means to do a SHA-256 hash of the selected data.</li><li>A type of 2 means to do a SHA-512 hash of the selected data.</li></ul></li><li>The actual data to be matched given the settings of the other fields. This is a long text string of hexadecimal data.</li></ul></li></ul>
+  --content: string # Variable data depending on the record type. A: the IPv4 address.CNAME: canonical name of an alias.MX: fully qualified domain name of a mail host.SRV: does not apply. Data for the SRV records can be found in specific properties.TXT: free form text data.CAA: format should match specific values for flag, tag and ca: "{flag} {tag} {ca}". The flag. The values 128 (critical) or 0 (non-critical) are expected, with 0 as the default.The tag. A tag specifies which actions an authorized CA can take in terms of issuing SSL/TLS certificates.The value "issue": explicitly authorizes a single certificate authority to issue a certificate (any type) for the hostname.The value "issuewild": explicitly authorizes a single certificate authority to issue a wildcard certificate (and only wildcard) for the hostname.The value "iodef": specifies a URL to which a certificate authority may report policy violations.The ca. This is the domain of the CA (Certification Authority) that has the authority to issue certificates for the domain in question. If the value is a semicolon (;), it means that no CA has the authority to issue a certificate for that domain.ALIAS: canonical name of an alias.TLSA: format should match specific values for usage, selector, matching type and data: "{usage} {selector} {matching_type} {data}" The usage. The first field after the TLSA text in the DNS RR, specifies how to verify the certificate.A value of 0 is for what is commonly called CA constraint (and PKIX-TA). The certificate provided when establishing TLS must be issued by the listed root-CA or one of its intermediate CAs, with a valid certification path to a root-CA already trusted by the application doing the verification.A value of 1 is for what is commonly called Service certificate constraint (and PKIX-EE). The certificate used must match the TLSA record exactly, and it must also pass PKIX certification path validation to a trusted root-CA.A value of 2 is for what is commonly called Trust Anchor Assertion (and DANE-TA). The certificate used has a valid certification path pointing back to the certificate mention in this record, but there is no need for it to pass the PKIX certification path validation to a trusted root-CA.A value of 3 is for what is commonly called Domain issued certificate (and DANE-EE). The services uses a self-signed certificate. It is not signed by anyone else, and is exactly this record.The selector. When connecting to the service and a certificate is received, the selector field specifies which parts of it should be checked.A value of 0 means to select the entire certificate for matching.A value of 1 means to select just the public key for certificate matching. Matching the public key is often sufficient, as this is likely to be unique.The matching type.A type of 0 means the entire information selected is present in the certificate association data.A type of 1 means to do a SHA-256 hash of the selected data.A type of 2 means to do a SHA-512 hash of the selected data.The actual data to be matched given the settings of the other fields. This is a long text string of hexadecimal data.
   --id: string # The id of the record This value is ignored for creation of new records.
-  --port: int # The port for SRV records.<br /> The value MUST be a positive integer.<br /> Editing the value is not possible. You should add a new SRV record and delete the existing record. (format: int32)
-  --priority: int # The priority for MX or SRV records.<br /> A lower value means more preferred.<br /> The value MUST be a positive integer less or equal to 9999. (format: int32, default: 10)
-  --protocol: string # Used for the creation of SRV records. Possible options: TCP, UDP, ...<br /> Editing the value is not possible. You should add a new SRV record and delete the existing record. (default: TCP)
-  --record-name: string # The name of the record.<br /> This is the host name, alias defined by the record.<br /> An empty record or '@' is equal to the domain name.<br /> Applies to A, MX, CNAME, TXT, CAA, ALIAS and TLSA records.<br /> When type is TLSA the recommended value format is port number, protocol and host: _25._tcp.<br /> Does not apply for SRV records.
-  --service: string # The symbolic name of the desired service for SRV records.<br /> Editing the value is not possible. You should add a new SRV record and can delete the existing record.
-  --target: string # The canonical hostname of the machine providing the service for SRV records.<br /> Editing the value is not possible. You should add a new SRV record and delete the existing record.
-  --ttl: int # Time to live of the record in seconds.<br /> It defines the time frame that clients can cache the information.<br /> The value MUST be between 60 and 86400. The default value is 3600 (= 1 hour). (format: int32, default: 3600)
+  --port: int # The port for SRV records. The value MUST be a positive integer. Editing the value is not possible. You should add a new SRV record and delete the existing record. (format: int32)
+  --priority: int # The priority for MX or SRV records. A lower value means more preferred. The value MUST be a positive integer less or equal to 9999. (format: int32, default: 10)
+  --protocol: string # Used for the creation of SRV records. Possible options: TCP, UDP, ... Editing the value is not possible. You should add a new SRV record and delete the existing record. (default: TCP)
+  --record-name: string # The name of the record. This is the host name, alias defined by the record. An empty record or '@' is equal to the domain name. Applies to A, MX, CNAME, TXT, CAA, ALIAS and TLSA records. When type is TLSA the recommended value format is port number, protocol and host: _25._tcp. Does not apply for SRV records.
+  --service: string # The symbolic name of the desired service for SRV records. Editing the value is not possible. You should add a new SRV record and can delete the existing record.
+  --target: string # The canonical hostname of the machine providing the service for SRV records. Editing the value is not possible. You should add a new SRV record and delete the existing record.
+  --ttl: int # Time to live of the record in seconds. It defines the time frame that clients can cache the information. The value MUST be between 60 and 86400. The default value is 3600 (= 1 hour). (format: int32, default: 3600)
   --type: string # The type of the record (A, MX, CNAME, SRV, TXT, CAA, ALIAS and TLSA).
-  --weight: int # The weight for SRV records with the same priority.<br /> A higher value means more preferred. (format: int32, default: 0)
+  --weight: int # The weight for SRV records with the same priority. A higher value means more preferred. (format: int32, default: 0)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "domain_name" $domain_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/dns/($domainName)/records" $qp)
-  let body = {content: $content, id: $id, port: $port, priority: $priority, protocol: $protocol, record_name: $record_name, service: $service, target: $target, ttl: $ttl, type: $type, weight: $weight} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name)} | format pattern "/dns/{domain_name}/records") $qp)
+  let req_body = {"content": $content, "id": $id, "port": $port, "priority": $priority, "protocol": $protocol, "record_name": $record_name, "service": $service, "target": $target, "ttl": $ttl, "type": $type, "weight": $weight} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Delete a record
 #
 # DELETE /dns/{domainName}/records/{recordId}
 export def "dns-records delete" [
-  domainName: string
-  recordId: string
+  domain_name: string
+  record_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -254,6 +270,7 @@ export def "dns-records delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --domain-name: string # The domain name.
   --record-id: string # The id of the record.
@@ -261,18 +278,18 @@ export def "dns-records delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "domain_name" $domain_name "scalar") (serialize-qp "record_id" $record_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/dns/($domainName)/records/($recordId)" $qp)
+  let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name), record_id: (encode-path-segment $record_id)} | format pattern "/dns/{domain_name}/records/{record_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get specific record
 #
 # GET /dns/{domainName}/records/{recordId}
 export def "dns-records get" [
-  domainName: string
-  recordId: string
+  domain_name: string
+  record_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -280,6 +297,7 @@ export def "dns-records get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --domain-name: string # The domain name.
   --record-id: string # The id of the record.
@@ -287,18 +305,18 @@ export def "dns-records get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "domain_name" $domain_name "scalar") (serialize-qp "record_id" $record_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/dns/($domainName)/records/($recordId)" $qp)
+  let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name), record_id: (encode-path-segment $record_id)} | format pattern "/dns/{domain_name}/records/{record_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Edit a record
 #
 # PUT /dns/{domainName}/records/{recordId}
-export def "dns-records put" [
-  domainName: string
-  recordId: string
+export def "dns-records update" [
+  domain_name: string
+  record_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -306,38 +324,39 @@ export def "dns-records put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --domain-name: string # The domain name.
   --record-id: string # The id of the record.
-  --content: string # Variable data depending on the record type. <ul><li>A: the IPv4 address.</li><li>CNAME: canonical name of an alias.</li><li>MX: fully qualified domain name of a mail host.</li><li>SRV: does not apply. Data for the SRV records can be found in specific properties.</li><li>TXT: free form text data.</li><li>CAA: format should match specific values for flag, tag and ca: "{flag} {tag} {ca}".         <ul><li>The flag. The values 128 (critical) or 0 (non-critical) are expected, with 0 as the default.</li><li>The tag. A tag specifies which actions an authorized CA can take in terms of issuing SSL/TLS certificates.<br /><ul><li>The value "issue": explicitly authorizes a single certificate authority to issue a certificate (any type) for the hostname.</li><li>The value "issuewild": explicitly authorizes a single certificate authority to issue a wildcard certificate (and only wildcard) for the hostname.</li><li>The value "iodef": specifies a URL to which a certificate authority may report policy violations.</li></ul></li><li>The ca. This is the domain of the CA (Certification Authority) that has the authority to issue certificates for the domain in question. If the value is a semicolon (;), it means that no CA has the authority to issue a certificate for that domain.</li></ul></li><li>ALIAS: canonical name of an alias.</li><li>TLSA: format should match specific values for usage, selector, matching type and data: "{usage} {selector} {matching_type} {data}"         <ul><li>The usage. The first field after the TLSA text in the DNS RR, specifies how to verify the certificate.<br /><ul><li>A value of 0 is for what is commonly called CA constraint (and PKIX-TA). The certificate provided when establishing TLS must be issued by the listed root-CA or one of its intermediate CAs, with a valid certification path to a root-CA already trusted by the application doing the verification.</li><li>A value of 1 is for what is commonly called Service certificate constraint (and PKIX-EE). The certificate used must match the TLSA record exactly, and it must also pass PKIX certification path validation to a trusted root-CA.</li><li>A value of 2 is for what is commonly called Trust Anchor Assertion (and DANE-TA). The certificate used has a valid certification path pointing back to the certificate mention in this record, but there is no need for it to pass the PKIX certification path validation to a trusted root-CA.</li><li>A value of 3 is for what is commonly called Domain issued certificate (and DANE-EE). The services uses a self-signed certificate. It is not signed by anyone else, and is exactly this record.</li></ul></li><li>The selector. When connecting to the service and a certificate is received, the selector field specifies which parts of it should be checked.<br /><ul><li>A value of 0 means to select the entire certificate for matching.</li><li>A value of 1 means to select just the public key for certificate matching. Matching the public key is often sufficient, as this is likely to be unique.</li></ul></li><li>The matching type.<br /><ul><li>A type of 0 means the entire information selected is present in the certificate association data.</li><li>A type of 1 means to do a SHA-256 hash of the selected data.</li><li>A type of 2 means to do a SHA-512 hash of the selected data.</li></ul></li><li>The actual data to be matched given the settings of the other fields. This is a long text string of hexadecimal data.</li></ul></li></ul>
+  --content: string # Variable data depending on the record type. A: the IPv4 address.CNAME: canonical name of an alias.MX: fully qualified domain name of a mail host.SRV: does not apply. Data for the SRV records can be found in specific properties.TXT: free form text data.CAA: format should match specific values for flag, tag and ca: "{flag} {tag} {ca}". The flag. The values 128 (critical) or 0 (non-critical) are expected, with 0 as the default.The tag. A tag specifies which actions an authorized CA can take in terms of issuing SSL/TLS certificates.The value "issue": explicitly authorizes a single certificate authority to issue a certificate (any type) for the hostname.The value "issuewild": explicitly authorizes a single certificate authority to issue a wildcard certificate (and only wildcard) for the hostname.The value "iodef": specifies a URL to which a certificate authority may report policy violations.The ca. This is the domain of the CA (Certification Authority) that has the authority to issue certificates for the domain in question. If the value is a semicolon (;), it means that no CA has the authority to issue a certificate for that domain.ALIAS: canonical name of an alias.TLSA: format should match specific values for usage, selector, matching type and data: "{usage} {selector} {matching_type} {data}" The usage. The first field after the TLSA text in the DNS RR, specifies how to verify the certificate.A value of 0 is for what is commonly called CA constraint (and PKIX-TA). The certificate provided when establishing TLS must be issued by the listed root-CA or one of its intermediate CAs, with a valid certification path to a root-CA already trusted by the application doing the verification.A value of 1 is for what is commonly called Service certificate constraint (and PKIX-EE). The certificate used must match the TLSA record exactly, and it must also pass PKIX certification path validation to a trusted root-CA.A value of 2 is for what is commonly called Trust Anchor Assertion (and DANE-TA). The certificate used has a valid certification path pointing back to the certificate mention in this record, but there is no need for it to pass the PKIX certification path validation to a trusted root-CA.A value of 3 is for what is commonly called Domain issued certificate (and DANE-EE). The services uses a self-signed certificate. It is not signed by anyone else, and is exactly this record.The selector. When connecting to the service and a certificate is received, the selector field specifies which parts of it should be checked.A value of 0 means to select the entire certificate for matching.A value of 1 means to select just the public key for certificate matching. Matching the public key is often sufficient, as this is likely to be unique.The matching type.A type of 0 means the entire information selected is present in the certificate association data.A type of 1 means to do a SHA-256 hash of the selected data.A type of 2 means to do a SHA-512 hash of the selected data.The actual data to be matched given the settings of the other fields. This is a long text string of hexadecimal data.
   --id: string # The id of the record This value is ignored for creation of new records.
-  --port: int # The port for SRV records.<br /> The value MUST be a positive integer.<br /> Editing the value is not possible. You should add a new SRV record and delete the existing record. (format: int32)
-  --priority: int # The priority for MX or SRV records.<br /> A lower value means more preferred.<br /> The value MUST be a positive integer less or equal to 9999. (format: int32, default: 10)
-  --protocol: string # Used for the creation of SRV records. Possible options: TCP, UDP, ...<br /> Editing the value is not possible. You should add a new SRV record and delete the existing record. (default: TCP)
-  --record-name: string # The name of the record.<br /> This is the host name, alias defined by the record.<br /> An empty record or '@' is equal to the domain name.<br /> Applies to A, MX, CNAME, TXT, CAA, ALIAS and TLSA records.<br /> When type is TLSA the recommended value format is port number, protocol and host: _25._tcp.<br /> Does not apply for SRV records.
-  --service: string # The symbolic name of the desired service for SRV records.<br /> Editing the value is not possible. You should add a new SRV record and can delete the existing record.
-  --target: string # The canonical hostname of the machine providing the service for SRV records.<br /> Editing the value is not possible. You should add a new SRV record and delete the existing record.
-  --ttl: int # Time to live of the record in seconds.<br /> It defines the time frame that clients can cache the information.<br /> The value MUST be between 60 and 86400. The default value is 3600 (= 1 hour). (format: int32, default: 3600)
+  --port: int # The port for SRV records. The value MUST be a positive integer. Editing the value is not possible. You should add a new SRV record and delete the existing record. (format: int32)
+  --priority: int # The priority for MX or SRV records. A lower value means more preferred. The value MUST be a positive integer less or equal to 9999. (format: int32, default: 10)
+  --protocol: string # Used for the creation of SRV records. Possible options: TCP, UDP, ... Editing the value is not possible. You should add a new SRV record and delete the existing record. (default: TCP)
+  --record-name: string # The name of the record. This is the host name, alias defined by the record. An empty record or '@' is equal to the domain name. Applies to A, MX, CNAME, TXT, CAA, ALIAS and TLSA records. When type is TLSA the recommended value format is port number, protocol and host: _25._tcp. Does not apply for SRV records.
+  --service: string # The symbolic name of the desired service for SRV records. Editing the value is not possible. You should add a new SRV record and can delete the existing record.
+  --target: string # The canonical hostname of the machine providing the service for SRV records. Editing the value is not possible. You should add a new SRV record and delete the existing record.
+  --ttl: int # Time to live of the record in seconds. It defines the time frame that clients can cache the information. The value MUST be between 60 and 86400. The default value is 3600 (= 1 hour). (format: int32, default: 3600)
   --type: string # The type of the record (A, MX, CNAME, SRV, TXT, CAA, ALIAS and TLSA).
-  --weight: int # The weight for SRV records with the same priority.<br /> A higher value means more preferred. (format: int32, default: 0)
+  --weight: int # The weight for SRV records with the same priority. A higher value means more preferred. (format: int32, default: 0)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "domain_name" $domain_name "scalar") (serialize-qp "record_id" $record_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/dns/($domainName)/records/($recordId)" $qp)
-  let body = {content: $content, id: $id, port: $port, priority: $priority, protocol: $protocol, record_name: $record_name, service: $service, target: $target, ttl: $ttl, type: $type, weight: $weight} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name), record_id: (encode-path-segment $record_id)} | format pattern "/dns/{domain_name}/records/{record_id}") $qp)
+  let req_body = {"content": $content, "id": $id, "port": $port, "priority": $priority, "protocol": $protocol, "record_name": $record_name, "service": $service, "target": $target, "ttl": $ttl, "type": $type, "weight": $weight} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Overviews of domains
 #
 # GET /domains
 # operationId: GetDomains
-export def "domains GetDomains" [
+export def "domains list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -345,6 +364,7 @@ export def "domains GetDomains" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --skip: int # The number of items to skip in the resultset. (format: int32)
   --take: int # The number of items to return in the resultset. The returned count can be equal or less than this number. (format: int32)
@@ -355,7 +375,7 @@ export def "domains GetDomains" [
   let full_url = (build-url $base "/domains" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Register a domain
@@ -363,7 +383,7 @@ export def "domains GetDomains" [
 # POST /domains/registrations
 # operationId: Register
 # --registrant shape: {address?: string, city?: string, company_name?: string, country_code?: string, email?: string, enterprise_number?: string, extra_fields?: list, fax?: string, first_name?: string, language_code?: string, last_name?: string, phone?: string, postal_code?: string}
-export def "domains-registrations Register" [
+export def "domains-registrations create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -371,20 +391,21 @@ export def "domains-registrations Register" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --domain-name: string # The domain name to register.<br /> Only pass the domain part and the tld.<br /><i>For abc.com, abc is the domain part, com is the tld.</i>
-  --name-servers: list # List of name servers. When empty, the registation will be done on default name servers.
+  --domain-name: string # The domain name to register. Only pass the domain part and the tld.For abc.com, abc is the domain part, com is the tld.
+  --name-servers: list<string> # List of name servers. When empty, the registation will be done on default name servers.
   --registrant: record # shape: {address?: string, city?: string, company_name?: string, country_code?: string, email?: string, enterprise_number?: string, extra_fields?: list, fax?: string, first_name?: string, language_code?: string, last_name?: string, phone?: string, postal_code?: string}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/domains/registrations")
-  let body = {domain_name: $domain_name, name_servers: $name_servers, registrant: $registrant} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"domain_name": $domain_name, "name_servers": $name_servers, "registrant": $registrant} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Transfer a domain
@@ -392,7 +413,7 @@ export def "domains-registrations Register" [
 # POST /domains/transfers
 # operationId: Transfer
 # --registrant shape: {address?: string, city?: string, company_name?: string, country_code?: string, email?: string, enterprise_number?: string, extra_fields?: list, fax?: string, first_name?: string, language_code?: string, last_name?: string, phone?: string, postal_code?: string}
-export def "domains-transfers Transfer" [
+export def "domains-transfers create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -400,29 +421,30 @@ export def "domains-transfers Transfer" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --auth-code: string # Authorization code which allows the transfer to execute.
-  --domain-name: string # The domain name to transfer.<br /> Only pass the domain part and the tld.<br /><i>For abc.com, abc is the domain part, com is the tld.</i>
-  --name-servers: list # List of name servers. When empty, the transfer will be done on default name servers.
+  --domain-name: string # The domain name to transfer. Only pass the domain part and the tld.For abc.com, abc is the domain part, com is the tld.
+  --name-servers: list<string> # List of name servers. When empty, the transfer will be done on default name servers.
   --registrant: record # shape: {address?: string, city?: string, company_name?: string, country_code?: string, email?: string, enterprise_number?: string, extra_fields?: list, fax?: string, first_name?: string, language_code?: string, last_name?: string, phone?: string, postal_code?: string}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/domains/transfers")
-  let body = {auth_code: $auth_code, domain_name: $domain_name, name_servers: $name_servers, registrant: $registrant} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"auth_code": $auth_code, "domain_name": $domain_name, "name_servers": $name_servers, "registrant": $registrant} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Details of a domain
 #
 # GET /domains/{domainName}
 # operationId: GetDomain
-export def "domains GetDomain" [
-  domainName: string
+export def "domains get" [
+  domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -430,24 +452,25 @@ export def "domains GetDomain" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --domain-name: string # The domain name
 ]: nothing -> record<can_toggle_renew: bool, domain_name: string, expiration_date: string, name_servers: table<ip: string, name: string>, registrant: record<address: string, city: string, company_name: string, country_code: string, email: string, enterprise_number: string, fax: string, first_name: string, language_code: string, last_name: string, phone: string, postal_code: string>, will_renew: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "domain_name" $domain_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/domains/($domainName)" $qp)
+  let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name)} | format pattern "/domains/{domain_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Edit domain name servers
 #
 # PUT /domains/{domainName}/nameservers
 # operationId: EditNameServers
-export def "domains-nameservers EditNameServers" [
-  domainName: string
+export def "domains-nameservers update-edit-name-servers" [
+  domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -455,29 +478,30 @@ export def "domains-nameservers EditNameServers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --domain-name: string # The domain name
-  --domain-name: string # The domain name to register.
-  --name-servers: list # List of name servers.
+  --body-domain-name: string # The domain name to register.
+  --name-servers: list<string> # List of name servers.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "domain_name" $domain_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/domains/($domainName)/nameservers" $qp)
-  let body = {domain_name: $domain_name, name_servers: $name_servers} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name)} | format pattern "/domains/{domain_name}/nameservers") $qp)
+  let req_body = {"domain_name": $body_domain_name, "name_servers": $name_servers} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Edit domain name renew state
 #
 # PUT /domains/{domainName}/renew
 # operationId: ConfigureDomain
-export def "domains-renew ConfigureDomain" [
-  domainName: string
+export def "domains-renew update-configure" [
+  domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -485,6 +509,7 @@ export def "domains-renew ConfigureDomain" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --domain-name: string # The domain name
   --will-renew: oneof<nothing, bool> # Indication of renewal.
@@ -493,19 +518,19 @@ export def "domains-renew ConfigureDomain" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "domain_name" $domain_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/domains/($domainName)/renew" $qp)
-  let body = {will_renew: $will_renew} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name)} | format pattern "/domains/{domain_name}/renew") $qp)
+  let req_body = {"will_renew": $will_renew} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Overview of linux hostings
 #
 # GET /linuxhostings
 # operationId: GetLinuxHostings
-export def "linuxhostings GetLinuxHostings" [
+export def "linuxhostings get-linux-hostings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -513,6 +538,7 @@ export def "linuxhostings GetLinuxHostings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --skip: int # The number of items to skip in the resultset. (format: int32)
   --take: int # The number of items to return in the resultset. The returned count can be equal or less than this number. (format: int32)
@@ -523,15 +549,15 @@ export def "linuxhostings GetLinuxHostings" [
   let full_url = (build-url $base "/linuxhostings" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Linux hosting detail
 #
 # GET /linuxhostings/{domainName}
 # operationId: GetLinuxHosting
-export def "linuxhostings GetLinuxHosting" [
-  domainName: string
+export def "linuxhostings get-linux-hosting" [
+  domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -539,24 +565,25 @@ export def "linuxhostings GetLinuxHosting" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --domain-name: string # The Linux hosting domain name.
 ]: nothing -> record<actual_size: int, domain_name: string, ftp_enabled: bool, ftp_username: string, ip: string, ip_type: string, max_size: int, max_webspace_size: int, mysql_database_names: list<string>, php_version: string, servicepack_id: int, sites: table<host_headers: list, http2_enabled: bool, https_redirect_enabled: bool, name: string, path: string, ssl_enabled: bool>, ssh_host: string, ssh_username: string, webspace_usage: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "domain_name" $domain_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/linuxhostings/($domainName)" $qp)
+  let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name)} | format pattern "/linuxhostings/{domain_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Configure FTP
 #
 # PUT /linuxhostings/{domainName}/ftp/configuration
 # operationId: ConfigureFtp
-export def "linuxhostings-ftp-configuration ConfigureFtp" [
-  domainName: string
+export def "linuxhostings-ftp-configuration update-configure" [
+  domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -564,6 +591,7 @@ export def "linuxhostings-ftp-configuration ConfigureFtp" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --domain-name: string # Linux hosting domain name.
   --enabled: oneof<nothing, bool> # Enable or disable FTP.
@@ -572,20 +600,20 @@ export def "linuxhostings-ftp-configuration ConfigureFtp" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "domain_name" $domain_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/linuxhostings/($domainName)/ftp/configuration" $qp)
-  let body = {enabled: $enabled} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name)} | format pattern "/linuxhostings/{domain_name}/ftp/configuration") $qp)
+  let req_body = {"enabled": $enabled} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Configure PHP APCu setting
 #
 # PUT /linuxhostings/{domainName}/phpsettings/apcu
 # operationId: ChangeApcu
-export def "linuxhostings-phpsettings-apcu ChangeApcu" [
-  domainName: string
+export def "linuxhostings-phpsettings-apcu update-change" [
+  domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -593,6 +621,7 @@ export def "linuxhostings-phpsettings-apcu ChangeApcu" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --domain-name: string # Linux hosting domain name
   --apcu-size: int # The APcu size. (format: int32)
@@ -602,20 +631,20 @@ export def "linuxhostings-phpsettings-apcu ChangeApcu" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "domain_name" $domain_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/linuxhostings/($domainName)/phpsettings/apcu" $qp)
-  let body = {apcu_size: $apcu_size, enabled: $enabled} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name)} | format pattern "/linuxhostings/{domain_name}/phpsettings/apcu") $qp)
+  let req_body = {"apcu_size": $apcu_size, "enabled": $enabled} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Get the available PHP versions.
 #
 # GET /linuxhostings/{domainName}/phpsettings/availableversions
 # operationId: GetAvailablePhpVersions
-export def "linuxhostings-phpsettings-availableversions GetAvailablePhpVersions" [
-  domainName: string
+export def "linuxhostings-phpsettings-availableversions get-available-php-versions" [
+  domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -623,24 +652,25 @@ export def "linuxhostings-phpsettings-availableversions GetAvailablePhpVersions"
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --domain-name: string # Linux hosting domain name.
 ]: nothing -> table<version: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "domain_name" $domain_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/linuxhostings/($domainName)/phpsettings/availableversions" $qp)
+  let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name)} | format pattern "/linuxhostings/{domain_name}/phpsettings/availableversions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Configure PHP memory limit
 #
 # PUT /linuxhostings/{domainName}/phpsettings/memorylimit
 # operationId: ChangePhpMemoryLimit
-export def "linuxhostings-phpsettings-memorylimit ChangePhpMemoryLimit" [
-  domainName: string
+export def "linuxhostings-phpsettings-memorylimit update-change-php-memory-limit" [
+  domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -648,6 +678,7 @@ export def "linuxhostings-phpsettings-memorylimit ChangePhpMemoryLimit" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --domain-name: string # Linux hosting domain name.
   --memory-limit: int # The php memory limit (format: int32)
@@ -656,20 +687,20 @@ export def "linuxhostings-phpsettings-memorylimit ChangePhpMemoryLimit" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "domain_name" $domain_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/linuxhostings/($domainName)/phpsettings/memorylimit" $qp)
-  let body = {memory_limit: $memory_limit} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name)} | format pattern "/linuxhostings/{domain_name}/phpsettings/memorylimit") $qp)
+  let req_body = {"memory_limit": $memory_limit} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Change the Linux hosting PHP version.
 #
 # PUT /linuxhostings/{domainName}/phpsettings/version
 # operationId: ChangePhpVersion
-export def "linuxhostings-phpsettings-version ChangePhpVersion" [
-  domainName: string
+export def "linuxhostings-phpsettings-version version-change-php" [
+  domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -677,6 +708,7 @@ export def "linuxhostings-phpsettings-version ChangePhpVersion" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --domain-name: string # Linux hosting domain name.
   --version: string # Php version
@@ -685,20 +717,20 @@ export def "linuxhostings-phpsettings-version ChangePhpVersion" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "domain_name" $domain_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/linuxhostings/($domainName)/phpsettings/version" $qp)
-  let body = {version: $version} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name)} | format pattern "/linuxhostings/{domain_name}/phpsettings/version") $qp)
+  let req_body = {"version": $version} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Overview of scheduled tasks
 #
 # GET /linuxhostings/{domainName}/scheduledtasks
 # operationId: GetScheduledTasks
-export def "linuxhostings-scheduledtasks GetScheduledTasks" [
-  domainName: string
+export def "linuxhostings-scheduledtasks get-scheduled-tasks" [
+  domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -706,24 +738,25 @@ export def "linuxhostings-scheduledtasks GetScheduledTasks" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --domain-name: string # Linux hosting domain name.
 ]: nothing -> table<cron_expression: string, enabled: bool, id: string, script_location: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "domain_name" $domain_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/linuxhostings/($domainName)/scheduledtasks" $qp)
+  let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name)} | format pattern "/linuxhostings/{domain_name}/scheduledtasks") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Add a scheduled task
 #
 # POST /linuxhostings/{domainName}/scheduledtasks
 # operationId: AddScheduledTasks
-export def "linuxhostings-scheduledtasks AddScheduledTasks" [
-  domainName: string
+export def "linuxhostings-scheduledtasks create-scheduled-tasks" [
+  domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -731,32 +764,33 @@ export def "linuxhostings-scheduledtasks AddScheduledTasks" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --domain-name: string # Linux hosting domain name.
-  --cron-expression: string # Cron expression of scheduled task.<br /> 5-digit expressions (*/5 * * * *) are required in the following sequence:<br /><ul><li>Minute (0 - 59, also */5, */10, */15 and */30 as every 5 minutes, every 10 minutes, every quarter or every half-hour are allowed)</li><li>Hour (0 - 23, also * as every hour is allowed)</li><li>Day of the month (1 - 31, also * as every day is allowed)</li><li>Month (1 - 12 as January to December, also * as every month is allowed)</li><li>Day of the week (1 - 7 as Monday to Sunday, also * as every day is allowed)</li></ul>
+  --cron-expression: string # Cron expression of scheduled task. 5-digit expressions (*/5 * * * *) are required in the following sequence:Minute (0 - 59, also */5, */10, */15 and */30 as every 5 minutes, every 10 minutes, every quarter or every half-hour are allowed)Hour (0 - 23, also * as every hour is allowed)Day of the month (1 - 31, also * as every day is allowed)Month (1 - 12 as January to December, also * as every month is allowed)Day of the week (1 - 7 as Monday to Sunday, also * as every day is allowed)
   --enabled: oneof<nothing, bool> # Enabled.
-  --id: string # The id of the scheduled task.<br /> This value is ignored for creation of new scheduled tasks.
+  --id: string # The id of the scheduled task. This value is ignored for creation of new scheduled tasks.
   --script-location: string # Absolute path from this linux hosting to execute.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "domain_name" $domain_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/linuxhostings/($domainName)/scheduledtasks" $qp)
-  let body = {cron_expression: $cron_expression, enabled: $enabled, id: $id, script_location: $script_location} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name)} | format pattern "/linuxhostings/{domain_name}/scheduledtasks") $qp)
+  let req_body = {"cron_expression": $cron_expression, "enabled": $enabled, "id": $id, "script_location": $script_location} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Delete a scheduled task
 #
 # DELETE /linuxhostings/{domainName}/scheduledtasks/{scheduledTaskId}
 # operationId: DeleteScheduledTask
-export def "linuxhostings-scheduledtasks DeleteScheduledTask" [
-  domainName: string
-  scheduledTaskId: string
+export def "linuxhostings-scheduledtasks delete-scheduled-task" [
+  domain_name: string
+  scheduled_task_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -764,6 +798,7 @@ export def "linuxhostings-scheduledtasks DeleteScheduledTask" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --domain-name: string # Linux hosting domain name.
   --scheduled-task-id: string # Id of the scheduled task.
@@ -771,19 +806,19 @@ export def "linuxhostings-scheduledtasks DeleteScheduledTask" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "domain_name" $domain_name "scalar") (serialize-qp "scheduled_task_id" $scheduled_task_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/linuxhostings/($domainName)/scheduledtasks/($scheduledTaskId)" $qp)
+  let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name), scheduled_task_id: (encode-path-segment $scheduled_task_id)} | format pattern "/linuxhostings/{domain_name}/scheduledtasks/{scheduled_task_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get scheduled task detail
 #
 # GET /linuxhostings/{domainName}/scheduledtasks/{scheduledTaskId}
 # operationId: GetScheduledTask
-export def "linuxhostings-scheduledtasks GetScheduledTask" [
-  domainName: string
-  scheduledTaskId: string
+export def "linuxhostings-scheduledtasks get-scheduled-task" [
+  domain_name: string
+  scheduled_task_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -791,6 +826,7 @@ export def "linuxhostings-scheduledtasks GetScheduledTask" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --domain-name: string # Linux hosting domain name.
   --scheduled-task-id: string # Id of the scheduled task.
@@ -798,19 +834,19 @@ export def "linuxhostings-scheduledtasks GetScheduledTask" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "domain_name" $domain_name "scalar") (serialize-qp "scheduled_task_id" $scheduled_task_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/linuxhostings/($domainName)/scheduledtasks/($scheduledTaskId)" $qp)
+  let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name), scheduled_task_id: (encode-path-segment $scheduled_task_id)} | format pattern "/linuxhostings/{domain_name}/scheduledtasks/{scheduled_task_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Configure a scheduled task
 #
 # PUT /linuxhostings/{domainName}/scheduledtasks/{scheduledTaskId}
 # operationId: ConfigureScheduledTask
-export def "linuxhostings-scheduledtasks ConfigureScheduledTask" [
-  domainName: string
-  scheduledTaskId: string
+export def "linuxhostings-scheduledtasks update-configure-scheduled-task" [
+  domain_name: string
+  scheduled_task_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -818,32 +854,33 @@ export def "linuxhostings-scheduledtasks ConfigureScheduledTask" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --domain-name: string # Linux hosting domain name.
   --scheduled-task-id: string # Id of the scheduled task.
-  --cron-expression: string # Cron expression of scheduled task.<br /> 5-digit expressions (*/5 * * * *) are required in the following sequence:<br /><ul><li>Minute (0 - 59, also */5, */10, */15 and */30 as every 5 minutes, every 10 minutes, every quarter or every half-hour are allowed)</li><li>Hour (0 - 23, also * as every hour is allowed)</li><li>Day of the month (1 - 31, also * as every day is allowed)</li><li>Month (1 - 12 as January to December, also * as every month is allowed)</li><li>Day of the week (1 - 7 as Monday to Sunday, also * as every day is allowed)</li></ul>
+  --cron-expression: string # Cron expression of scheduled task. 5-digit expressions (*/5 * * * *) are required in the following sequence:Minute (0 - 59, also */5, */10, */15 and */30 as every 5 minutes, every 10 minutes, every quarter or every half-hour are allowed)Hour (0 - 23, also * as every hour is allowed)Day of the month (1 - 31, also * as every day is allowed)Month (1 - 12 as January to December, also * as every month is allowed)Day of the week (1 - 7 as Monday to Sunday, also * as every day is allowed)
   --enabled: oneof<nothing, bool> # Enabled.
-  --id: string # The id of the scheduled task.<br /> This value is ignored for creation of new scheduled tasks.
+  --id: string # The id of the scheduled task. This value is ignored for creation of new scheduled tasks.
   --script-location: string # Absolute path from this linux hosting to execute.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "domain_name" $domain_name "scalar") (serialize-qp "scheduled_task_id" $scheduled_task_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/linuxhostings/($domainName)/scheduledtasks/($scheduledTaskId)" $qp)
-  let body = {cron_expression: $cron_expression, enabled: $enabled, id: $id, script_location: $script_location} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name), scheduled_task_id: (encode-path-segment $scheduled_task_id)} | format pattern "/linuxhostings/{domain_name}/scheduledtasks/{scheduled_task_id}") $qp)
+  let req_body = {"cron_expression": $cron_expression, "enabled": $enabled, "id": $id, "script_location": $script_location} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Enable/disable GZIP compression
 #
 # PUT /linuxhostings/{domainName}/settings/gzipcompression
 # operationId: ChangeGzipCompression
-export def "linuxhostings-settings-gzipcompression ChangeGzipCompression" [
-  domainName: string
+export def "linuxhostings-settings-gzipcompression update-change-gzip-compression" [
+  domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -851,6 +888,7 @@ export def "linuxhostings-settings-gzipcompression ChangeGzipCompression" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --domain-name: string # Linux hosting domain name
   --enabled: oneof<nothing, bool> # Enabled
@@ -859,21 +897,21 @@ export def "linuxhostings-settings-gzipcompression ChangeGzipCompression" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "domain_name" $domain_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/linuxhostings/($domainName)/settings/gzipcompression" $qp)
-  let body = {enabled: $enabled} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name)} | format pattern "/linuxhostings/{domain_name}/settings/gzipcompression") $qp)
+  let req_body = {"enabled": $enabled} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Create a host header
 #
 # POST /linuxhostings/{domainName}/sites/{siteName}/hostheaders
 # operationId: CreateHostHeader
-export def "linuxhostings-sites-hostheaders CreateHostHeader" [
-  domainName: string
-  siteName: string
+export def "linuxhostings-sites-hostheaders create-host-header" [
+  domain_name: string
+  site_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -881,30 +919,31 @@ export def "linuxhostings-sites-hostheaders CreateHostHeader" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --domain-name: string # Linux hosting domain name.
   --site-name: string # Name of the site on the linux hosting.
-  --domain-name: string # Host header domain name (e.g. alias.be or alias.site.be).
+  --body-domain-name: string # Host header domain name (e.g. alias.be or alias.site.be).
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "domain_name" $domain_name "scalar") (serialize-qp "site_name" $site_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/linuxhostings/($domainName)/sites/($siteName)/hostheaders" $qp)
-  let body = {domain_name: $domain_name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name), site_name: (encode-path-segment $site_name)} | format pattern "/linuxhostings/{domain_name}/sites/{site_name}/hostheaders") $qp)
+  let req_body = {"domain_name": $body_domain_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Configure HTTP/2
 #
 # PUT /linuxhostings/{domainName}/sites/{siteName}/http2/configuration
 # operationId: ConfigureHttp2
-export def "linuxhostings-sites-http2-configuration ConfigureHttp2" [
-  domainName: string
-  siteName: string
+export def "linuxhostings-sites-http2-configuration update-configure" [
+  domain_name: string
+  site_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -912,29 +951,30 @@ export def "linuxhostings-sites-http2-configuration ConfigureHttp2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --domain-name: string # Linux hosting domain name.
-  --site-name: string # Site name where HTTP/2 should be configured.<br /> For HTTP/2 to work correctly, the site must have ssl enabled.
+  --site-name: string # Site name where HTTP/2 should be configured. For HTTP/2 to work correctly, the site must have ssl enabled.
   --enabled: oneof<nothing, bool> # Enable or disable HTTP/2.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "domain_name" $domain_name "scalar") (serialize-qp "site_name" $site_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/linuxhostings/($domainName)/sites/($siteName)/http2/configuration" $qp)
-  let body = {enabled: $enabled} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name), site_name: (encode-path-segment $site_name)} | format pattern "/linuxhostings/{domain_name}/sites/{site_name}/http2/configuration") $qp)
+  let req_body = {"enabled": $enabled} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Configure SSH
 #
 # PUT /linuxhostings/{domainName}/ssh/configuration
 # operationId: ConfigureSsh
-export def "linuxhostings-ssh-configuration ConfigureSsh" [
-  domainName: string
+export def "linuxhostings-ssh-configuration update-configure" [
+  domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -942,6 +982,7 @@ export def "linuxhostings-ssh-configuration ConfigureSsh" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --domain-name: string # Linux hosting domain name.
   --enabled: oneof<nothing, bool> # Enable or disable SSH.
@@ -950,20 +991,20 @@ export def "linuxhostings-ssh-configuration ConfigureSsh" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "domain_name" $domain_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/linuxhostings/($domainName)/ssh/configuration" $qp)
-  let body = {enabled: $enabled} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name)} | format pattern "/linuxhostings/{domain_name}/ssh/configuration") $qp)
+  let req_body = {"enabled": $enabled} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Overview of SSH keys
 #
 # GET /linuxhostings/{domainName}/ssh/keys
 # operationId: GetSshKeys
-export def "linuxhostings-ssh-keys GetSshKeys" [
-  domainName: string
+export def "linuxhostings-ssh-keys get" [
+  domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -971,24 +1012,25 @@ export def "linuxhostings-ssh-keys GetSshKeys" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --domain-name: string # Linux hosting domain name.
 ]: nothing -> table<fingerprint: string, public_key: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "domain_name" $domain_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/linuxhostings/($domainName)/ssh/keys" $qp)
+  let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name)} | format pattern "/linuxhostings/{domain_name}/ssh/keys") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Add a SSH key
 #
 # POST /linuxhostings/{domainName}/ssh/keys
 # operationId: AddSshKey
-export def "linuxhostings-ssh-keys AddSshKey" [
-  domainName: string
+export def "linuxhostings-ssh-keys create" [
+  domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -996,6 +1038,7 @@ export def "linuxhostings-ssh-keys AddSshKey" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --domain-name: string # Linux hosting domain name.
   --public-key: string # Public key
@@ -1004,21 +1047,21 @@ export def "linuxhostings-ssh-keys AddSshKey" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "domain_name" $domain_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/linuxhostings/($domainName)/ssh/keys" $qp)
-  let body = {public_key: $public_key} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name)} | format pattern "/linuxhostings/{domain_name}/ssh/keys") $qp)
+  let req_body = {"public_key": $public_key} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Delete a SSH key
 #
 # DELETE /linuxhostings/{domainName}/ssh/keys/{fingerprint}
 # operationId: DeleteSshKey
-export def "linuxhostings-ssh-keys DeleteSshKey" [
+export def "linuxhostings-ssh-keys delete" [
+  domain_name: string
   fingerprint: string
-  domainName: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1026,25 +1069,26 @@ export def "linuxhostings-ssh-keys DeleteSshKey" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --domain-name: string # Linux hosting domain name.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "domain_name" $domain_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/linuxhostings/($domainName)/ssh/keys/($fingerprint)" $qp)
+  let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name), fingerprint: (encode-path-segment $fingerprint)} | format pattern "/linuxhostings/{domain_name}/ssh/keys/{fingerprint}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Configure auto redirect
 #
 # PUT /linuxhostings/{domainName}/sslsettings/{hostname}/autoredirect
 # operationId: ChangeAutoRedirect
-export def "linuxhostings-sslsettings-autoredirect ChangeAutoRedirect" [
+export def "linuxhostings-sslsettings-autoredirect update-change-auto-redirect" [
+  domain_name: string
   hostname: string
-  domainName: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1052,6 +1096,7 @@ export def "linuxhostings-sslsettings-autoredirect ChangeAutoRedirect" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --domain-name: string # Linux hosting domain name.
   --enabled: oneof<nothing, bool> # Enabled
@@ -1060,21 +1105,21 @@ export def "linuxhostings-sslsettings-autoredirect ChangeAutoRedirect" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "domain_name" $domain_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/linuxhostings/($domainName)/sslsettings/($hostname)/autoredirect" $qp)
-  let body = {enabled: $enabled} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name), hostname: (encode-path-segment $hostname)} | format pattern "/linuxhostings/{domain_name}/sslsettings/{hostname}/autoredirect") $qp)
+  let req_body = {"enabled": $enabled} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Configure let's encrypt
 #
 # PUT /linuxhostings/{domainName}/sslsettings/{hostname}/letsencrypt
 # operationId: ChangeLetsEncrypt
-export def "linuxhostings-sslsettings-letsencrypt ChangeLetsEncrypt" [
+export def "linuxhostings-sslsettings-letsencrypt update-change-lets-encrypt" [
+  domain_name: string
   hostname: string
-  domainName: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1082,6 +1127,7 @@ export def "linuxhostings-sslsettings-letsencrypt ChangeLetsEncrypt" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --domain-name: string # Linux hosting domain name.
   --enabled: oneof<nothing, bool> # Enabled
@@ -1090,20 +1136,20 @@ export def "linuxhostings-sslsettings-letsencrypt ChangeLetsEncrypt" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "domain_name" $domain_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/linuxhostings/($domainName)/sslsettings/($hostname)/letsencrypt" $qp)
-  let body = {enabled: $enabled} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name), hostname: (encode-path-segment $hostname)} | format pattern "/linuxhostings/{domain_name}/sslsettings/{hostname}/letsencrypt") $qp)
+  let req_body = {"enabled": $enabled} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Create a subsite
 #
 # POST /linuxhostings/{domainName}/subsites
 # operationId: CreateSubsite
-export def "linuxhostings-subsites CreateSubsite" [
-  domainName: string
+export def "linuxhostings-subsites create" [
+  domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1111,30 +1157,31 @@ export def "linuxhostings-subsites CreateSubsite" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --domain-name: string # Linux hosting domain name.
-  --domain-name: string # Subsite domain name (e.g. alias.be or subsite.site.be).
-  --path: string # Folder location for the subsite (when empty we use /subsites/site (e.g. /subsites/subsite.site.be)<br /> The path MUST pre-exist on the server. It WILL NOT be created automatically.
+  --body-domain-name: string # Subsite domain name (e.g. alias.be or subsite.site.be).
+  --path: string # Folder location for the subsite (when empty we use /subsites/site (e.g. /subsites/subsite.site.be) The path MUST pre-exist on the server. It WILL NOT be created automatically.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "domain_name" $domain_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/linuxhostings/($domainName)/subsites" $qp)
-  let body = {domain_name: $domain_name, path: $path} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name)} | format pattern "/linuxhostings/{domain_name}/subsites") $qp)
+  let req_body = {"domain_name": $body_domain_name, "path": $path} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Delete a subsite
 #
 # DELETE /linuxhostings/{domainName}/subsites/{siteName}
 # operationId: DeleteSubsite
-export def "linuxhostings-subsites DeleteSubsite" [
-  domainName: string
-  siteName: string
+export def "linuxhostings-subsites delete" [
+  domain_name: string
+  site_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1142,6 +1189,7 @@ export def "linuxhostings-subsites DeleteSubsite" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --domain-name: string # Linux hosting domain name.
   --site-name: string # Name of the site on the linux hosting.
@@ -1149,17 +1197,17 @@ export def "linuxhostings-subsites DeleteSubsite" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "domain_name" $domain_name "scalar") (serialize-qp "site_name" $site_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/linuxhostings/($domainName)/subsites/($siteName)" $qp)
+  let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name), site_name: (encode-path-segment $site_name)} | format pattern "/linuxhostings/{domain_name}/subsites/{site_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Gets your mailboxes.
 #
 # GET /mailboxes
 # operationId: GetMailboxes
-export def "mailboxes GetMailboxes" [
+export def "mailboxes get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1167,6 +1215,7 @@ export def "mailboxes GetMailboxes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --domain-name: string # Obligated domain name for getting mailboxes. (nullable)
 ]: nothing -> table<actual_size: int, max_size: int, name: string> {
@@ -1176,14 +1225,14 @@ export def "mailboxes GetMailboxes" [
   let full_url = (build-url $base "/mailboxes" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Create a new mailbox.
 #
 # POST /mailboxes
 # operationId: CreateMailbox
-export def "mailboxes CreateMailbox" [
+export def "mailboxes create-mailbox" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1191,28 +1240,29 @@ export def "mailboxes CreateMailbox" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --account-id: int # Mail zone account id (format: int32)
   --email-address: string # E-mail address
-  --password: string # The password for the mailbox.<br /> Passwords have to adhere to following rules:<br /><ul><li>Between 8-20 characters.</li><li>Must be a mix of letters and digits.</li><li>Must contain at least one digit (0-9).</li><li>Must contain at least one letter (a-z).</li><li>Cannot contain spaces.</li><li>Cannot contain characters: * € $ & + } { ' " \ </li></ul>
+  --password: string # The password for the mailbox. Passwords have to adhere to following rules:Between 8-20 characters.Must be a mix of letters and digits.Must contain at least one digit (0-9).Must contain at least one letter (a-z).Cannot contain spaces.Cannot contain characters: * € $ & + } { ' " \
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/mailboxes")
-  let body = {account_id: $account_id, email_address: $email_address, password: $password} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"account_id": $account_id, "email_address": $email_address, "password": $password} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Delete a mailbox
 #
 # DELETE /mailboxes/{mailboxName}
 # operationId: DeleteMailbox
-export def "mailboxes DeleteMailbox" [
-  mailboxName: string
+export def "mailboxes delete-mailbox" [
+  mailbox_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1220,24 +1270,25 @@ export def "mailboxes DeleteMailbox" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --mailbox-name: string # Mailbox name.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "mailbox_name" $mailbox_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/mailboxes/($mailboxName)" $qp)
+  let full_url = (build-url $base ({mailbox_name: (encode-path-segment $mailbox_name)} | format pattern "/mailboxes/{mailbox_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get a specific mailbox
 #
 # GET /mailboxes/{mailboxName}
 # operationId: GetMailbox
-export def "mailboxes GetMailbox" [
-  mailboxName: string
+export def "mailboxes get-mailbox" [
+  mailbox_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1245,24 +1296,25 @@ export def "mailboxes GetMailbox" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --mailbox-name: string # Mailbox name.
 ]: nothing -> record<actual_size: int, auto_forward: record<copy_to_myself: bool, email_addresses: list<string>, enabled: bool>, auto_reply: record<enabled: bool, message: string, subject: string>, login: string, max_size: int, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "mailbox_name" $mailbox_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/mailboxes/($mailboxName)" $qp)
+  let full_url = (build-url $base ({mailbox_name: (encode-path-segment $mailbox_name)} | format pattern "/mailboxes/{mailbox_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Configure auto-forward for mailbox
 #
 # PUT /mailboxes/{mailboxName}/autoforward
 # operationId: ConfigureMailboxAutoForward
-export def "mailboxes-autoforward ConfigureMailboxAutoForward" [
-  mailboxName: string
+export def "mailboxes-autoforward update-configure-mailbox-auto-forward" [
+  mailbox_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1270,30 +1322,31 @@ export def "mailboxes-autoforward ConfigureMailboxAutoForward" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --mailbox-name: string # Mailbox name.
   --copy-to-myself: oneof<nothing, bool> # Copy to myself
-  --email-addresses: list # E-mail addresses to which e-mails are forwarded
+  --email-addresses: list<string> # E-mail addresses to which e-mails are forwarded
   --enabled: oneof<nothing, bool> # Enabled
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "mailbox_name" $mailbox_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/mailboxes/($mailboxName)/autoforward" $qp)
-  let body = {copy_to_myself: $copy_to_myself, email_addresses: $email_addresses, enabled: $enabled} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({mailbox_name: (encode-path-segment $mailbox_name)} | format pattern "/mailboxes/{mailbox_name}/autoforward") $qp)
+  let req_body = {"copy_to_myself": $copy_to_myself, "email_addresses": $email_addresses, "enabled": $enabled} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Configure auto-reply for mailbox
 #
 # PUT /mailboxes/{mailboxName}/autoreply
 # operationId: ConfigureMailboxAutoReply
-export def "mailboxes-autoreply ConfigureMailboxAutoReply" [
-  mailboxName: string
+export def "mailboxes-autoreply update-configure-mailbox-auto-reply" [
+  mailbox_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1301,6 +1354,7 @@ export def "mailboxes-autoreply ConfigureMailboxAutoReply" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --mailbox-name: string # Mailbox name.
   --enabled: oneof<nothing, bool> # Enabled
@@ -1311,20 +1365,20 @@ export def "mailboxes-autoreply ConfigureMailboxAutoReply" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "mailbox_name" $mailbox_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/mailboxes/($mailboxName)/autoreply" $qp)
-  let body = {enabled: $enabled, message: $message, subject: $subject} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({mailbox_name: (encode-path-segment $mailbox_name)} | format pattern "/mailboxes/{mailbox_name}/autoreply") $qp)
+  let req_body = {"enabled": $enabled, "message": $message, "subject": $subject} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Change password for mailbox
 #
 # PUT /mailboxes/{mailboxName}/password
 # operationId: ChangeMailboxPassword
-export def "mailboxes-password ChangeMailboxPassword" [
-  mailboxName: string
+export def "mailboxes-password update-change-mailbox" [
+  mailbox_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1332,28 +1386,29 @@ export def "mailboxes-password ChangeMailboxPassword" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --mailbox-name: string # Mailbox name.
-  --password: string # The password for the database user.<br /> Passwords have to adhere to following rules:<br /><ul><li>Between 8-20 characters.</li><li>Must be a mix of letters and digits.</li><li>Must contain at least one digit (0-9).</li><li>Must contain at least one letter (a-z).</li><li>Cannot contain spaces.</li><li>Cannot contain characters: * € $ & + } { ' " \ </li></ul>
+  --password: string # The password for the database user. Passwords have to adhere to following rules:Between 8-20 characters.Must be a mix of letters and digits.Must contain at least one digit (0-9).Must contain at least one letter (a-z).Cannot contain spaces.Cannot contain characters: * € $ & + } { ' " \
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "mailbox_name" $mailbox_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/mailboxes/($mailboxName)/password" $qp)
-  let body = {password: $password} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({mailbox_name: (encode-path-segment $mailbox_name)} | format pattern "/mailboxes/{mailbox_name}/password") $qp)
+  let req_body = {"password": $password} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Get the mail zone.
 #
 # GET /mailzones/{domainName}
 # operationId: GetMailZone
-export def "mailzones GetMailZone" [
-  domainName: string
+export def "mailzones get-mail-zone" [
+  domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1361,24 +1416,25 @@ export def "mailzones GetMailZone" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --domain-name: string # Mail zone domain name.
 ]: nothing -> record<aliases: table<destinations: list, email_address: string>, anti_spam: record<allowed_types: list<string>, type: string>, available_accounts: table<account_id: int, size: int>, catch_all: record<email_addresses: list<string>>, enabled: bool, name: string, smtp_domains: table<enabled: bool, hostname: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "domain_name" $domain_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/mailzones/($domainName)" $qp)
+  let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name)} | format pattern "/mailzones/{domain_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Create a new alias
 #
 # POST /mailzones/{domainName}/aliases
 # operationId: CreateAlias
-export def "mailzones-aliases CreateAlias" [
-  domainName: string
+export def "mailzones-aliases create-alias" [
+  domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1386,30 +1442,31 @@ export def "mailzones-aliases CreateAlias" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --domain-name: string # Mail zone domain name.
-  --destinations: list # The alias destination e-mail addresses
+  --destinations: list<string> # The alias destination e-mail addresses
   --email-address: string # The alias e-mail
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "domain_name" $domain_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/mailzones/($domainName)/aliases" $qp)
-  let body = {destinations: $destinations, email_address: $email_address} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name)} | format pattern "/mailzones/{domain_name}/aliases") $qp)
+  let req_body = {"destinations": $destinations, "email_address": $email_address} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Delete a alias
 #
 # DELETE /mailzones/{domainName}/aliases/{emailAddress}
 # operationId: DeleteAlias
-export def "mailzones-aliases DeleteAlias" [
-  domainName: string
-  emailAddress: string
+export def "mailzones-aliases delete-alias" [
+  domain_name: string
+  email_address: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1417,6 +1474,7 @@ export def "mailzones-aliases DeleteAlias" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --domain-name: string # Mail zone domain name.
   --email-address: string # Alias e-mail address.
@@ -1424,19 +1482,19 @@ export def "mailzones-aliases DeleteAlias" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "domain_name" $domain_name "scalar") (serialize-qp "email_address" $email_address "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/mailzones/($domainName)/aliases/($emailAddress)" $qp)
+  let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name), email_address: (encode-path-segment $email_address)} | format pattern "/mailzones/{domain_name}/aliases/{email_address}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Configure a alias
 #
 # PUT /mailzones/{domainName}/aliases/{emailAddress}
 # operationId: ConfigureAlias
-export def "mailzones-aliases ConfigureAlias" [
-  domainName: string
-  emailAddress: string
+export def "mailzones-aliases update-configure-alias" [
+  domain_name: string
+  email_address: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1444,29 +1502,30 @@ export def "mailzones-aliases ConfigureAlias" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --domain-name: string # Mail zone domain name.
   --email-address: string # Alias e-mail address.
-  --destinations: list # The alias destination e-mail addresses
+  --destinations: list<string> # The alias destination e-mail addresses
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "domain_name" $domain_name "scalar") (serialize-qp "email_address" $email_address "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/mailzones/($domainName)/aliases/($emailAddress)" $qp)
-  let body = {destinations: $destinations} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name), email_address: (encode-path-segment $email_address)} | format pattern "/mailzones/{domain_name}/aliases/{email_address}") $qp)
+  let req_body = {"destinations": $destinations} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Configure anti-spam for mail zone
 #
 # PUT /mailzones/{domainName}/antispam
 # operationId: ConfigureAntiSpam
-export def "mailzones-antispam ConfigureAntiSpam" [
-  domainName: string
+export def "mailzones-antispam update-configure-anti-spam" [
+  domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1474,6 +1533,7 @@ export def "mailzones-antispam ConfigureAntiSpam" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --domain-name: string # Mail zone domain name.
   --type: string@type-completer # Types of anti-spam scanning
@@ -1482,20 +1542,20 @@ export def "mailzones-antispam ConfigureAntiSpam" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "domain_name" $domain_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/mailzones/($domainName)/antispam" $qp)
-  let body = {type: $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name)} | format pattern "/mailzones/{domain_name}/antispam") $qp)
+  let req_body = {"type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Create a catch-all on the mail zone
 #
 # POST /mailzones/{domainName}/catchall
 # operationId: CreateCatchAll
-export def "mailzones-catchall CreateCatchAll" [
-  domainName: string
+export def "mailzones-catchall create-catch-list" [
+  domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1503,6 +1563,7 @@ export def "mailzones-catchall CreateCatchAll" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --domain-name: string # Mail zone domain name.
   --email-address: string # E-mail address to which all e-mails are sent to inexistent mailboxes or aliases
@@ -1511,21 +1572,21 @@ export def "mailzones-catchall CreateCatchAll" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "domain_name" $domain_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/mailzones/($domainName)/catchall" $qp)
-  let body = {email_address: $email_address} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name)} | format pattern "/mailzones/{domain_name}/catchall") $qp)
+  let req_body = {"email_address": $email_address} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Delete a catch-all on the mail zone
 #
 # DELETE /mailzones/{domainName}/catchall/{emailAddress}
 # operationId: DeleteCatchAll
-export def "mailzones-catchall DeleteCatchAll" [
-  domainName: string
-  emailAddress: string
+export def "mailzones-catchall delete-catch-list" [
+  domain_name: string
+  email_address: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1533,6 +1594,7 @@ export def "mailzones-catchall DeleteCatchAll" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --domain-name: string # Mail zone domain name.
   --email-address: string # E-mail address to which all e-mails are sent to inexistent mailboxes or aliases.
@@ -1540,18 +1602,18 @@ export def "mailzones-catchall DeleteCatchAll" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "domain_name" $domain_name "scalar") (serialize-qp "email_address" $email_address "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/mailzones/($domainName)/catchall/($emailAddress)" $qp)
+  let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name), email_address: (encode-path-segment $email_address)} | format pattern "/mailzones/{domain_name}/catchall/{email_address}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Create an extra smtp domain
 #
 # POST /mailzones/{domainName}/smtpdomains
 # operationId: CreateSmtpDomain
-export def "mailzones-smtpdomains CreateSmtpDomain" [
-  domainName: string
+export def "mailzones-smtpdomains create-smtp-domain" [
+  domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1559,6 +1621,7 @@ export def "mailzones-smtpdomains CreateSmtpDomain" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --domain-name: string # Mail zone domain name.
   --hostname: string # The smtp domain name
@@ -1567,21 +1630,21 @@ export def "mailzones-smtpdomains CreateSmtpDomain" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "domain_name" $domain_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/mailzones/($domainName)/smtpdomains" $qp)
-  let body = {hostname: $hostname} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name)} | format pattern "/mailzones/{domain_name}/smtpdomains") $qp)
+  let req_body = {"hostname": $hostname} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Delete an extra smtp domain
 #
 # DELETE /mailzones/{domainName}/smtpdomains/{hostname}
 # operationId: DeleteSmtpDomain
-export def "mailzones-smtpdomains DeleteSmtpDomain" [
+export def "mailzones-smtpdomains delete-smtp-domain" [
+  domain_name: string
   hostname: string
-  domainName: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1589,25 +1652,26 @@ export def "mailzones-smtpdomains DeleteSmtpDomain" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --domain-name: string # Mail zone domain name.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "domain_name" $domain_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/mailzones/($domainName)/smtpdomains/($hostname)" $qp)
+  let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name), hostname: (encode-path-segment $hostname)} | format pattern "/mailzones/{domain_name}/smtpdomains/{hostname}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Configure an extra smtp domain
 #
 # PUT /mailzones/{domainName}/smtpdomains/{hostname}
 # operationId: ConfigureSmtpDomain
-export def "mailzones-smtpdomains ConfigureSmtpDomain" [
+export def "mailzones-smtpdomains update-configure-smtp-domain" [
+  domain_name: string
   hostname: string
-  domainName: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1615,6 +1679,7 @@ export def "mailzones-smtpdomains ConfigureSmtpDomain" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --domain-name: string # Mail zone domain name.
   --enabled: oneof<nothing, bool> # Enabled
@@ -1623,19 +1688,19 @@ export def "mailzones-smtpdomains ConfigureSmtpDomain" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "domain_name" $domain_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/mailzones/($domainName)/smtpdomains/($hostname)" $qp)
-  let body = {enabled: $enabled} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name), hostname: (encode-path-segment $hostname)} | format pattern "/mailzones/{domain_name}/smtpdomains/{hostname}") $qp)
+  let req_body = {"enabled": $enabled} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Overview of mysql databases
 #
 # GET /mysqldatabases
 # operationId: GetMySqlDatabases
-export def "mysqldatabases GetMySqlDatabases" [
+export def "mysqldatabases get-my-sql-databases" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1643,6 +1708,7 @@ export def "mysqldatabases GetMySqlDatabases" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --skip: int # The number of items to skip in the resultset. (format: int32)
   --take: int # The number of items to return in the resultset. The returned count can be equal or less than this number. (format: int32)
@@ -1653,14 +1719,14 @@ export def "mysqldatabases GetMySqlDatabases" [
   let full_url = (build-url $base "/mysqldatabases" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Create a new mysql database
 #
 # POST /mysqldatabases
 # operationId: CreateMySqlDatabase
-export def "mysqldatabases CreateMySqlDatabase" [
+export def "mysqldatabases create-my-sql-database" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1668,28 +1734,29 @@ export def "mysqldatabases CreateMySqlDatabase" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --account-id: int # The id of the account on which to create the database. (format: int32)
   --database-name: string # The name for the database. This will be prefixed during provisioning. The provided name during creation will be different from the provisioned database name.
-  --password: string # The password for the database user.<br /> Passwords have to adhere to following rules:<br /><ul><li>Between 8-20 characters.</li><li>Must be a mix of letters and digits.</li><li>Must contain at least one digit (0-9).</li><li>Must contain at least one letter (a-z).</li><li>Cannot contain spaces.</li><li>Cannot contain characters: * € $ & + } { ' " \ </li></ul>
+  --password: string # The password for the database user. Passwords have to adhere to following rules:Between 8-20 characters.Must be a mix of letters and digits.Must contain at least one digit (0-9).Must contain at least one letter (a-z).Cannot contain spaces.Cannot contain characters: * € $ & + } { ' " \
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/mysqldatabases")
-  let body = {account_id: $account_id, database_name: $database_name, password: $password} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"account_id": $account_id, "database_name": $database_name, "password": $password} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Delete a mysql database
 #
 # DELETE /mysqldatabases/{databaseName}
 # operationId: DeleteDatabase
-export def "mysqldatabases DeleteDatabase" [
-  databaseName: string
+export def "mysqldatabases delete-database" [
+  database_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1697,24 +1764,25 @@ export def "mysqldatabases DeleteDatabase" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --database-name: string # Name of the database.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "database_name" $database_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/mysqldatabases/($databaseName)" $qp)
+  let full_url = (build-url $base ({database_name: (encode-path-segment $database_name)} | format pattern "/mysqldatabases/{database_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get a specific database
 #
 # GET /mysqldatabases/{databaseName}
 # operationId: GetMySqlDatabase
-export def "mysqldatabases GetMySqlDatabase" [
-  databaseName: string
+export def "mysqldatabases get-my-sql-database" [
+  database_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1722,24 +1790,25 @@ export def "mysqldatabases GetMySqlDatabase" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --database-name: string
 ]: nothing -> record<account_id: int, actual_size: int, hostname: string, max_size: int, name: string, user_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "database_name" $database_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/mysqldatabases/($databaseName)" $qp)
+  let full_url = (build-url $base ({database_name: (encode-path-segment $database_name)} | format pattern "/mysqldatabases/{database_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Overview of mysql users
 #
 # GET /mysqldatabases/{databaseName}/users
 # operationId: GetDatabaseUsers
-export def "mysqldatabases-users GetDatabaseUsers" [
-  databaseName: string
+export def "mysqldatabases-users get-database" [
+  database_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1747,24 +1816,25 @@ export def "mysqldatabases-users GetDatabaseUsers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --database-name: string # Name of the database.
 ]: nothing -> table<enabled: bool, name: string, rights: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "database_name" $database_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/mysqldatabases/($databaseName)/users" $qp)
+  let full_url = (build-url $base ({database_name: (encode-path-segment $database_name)} | format pattern "/mysqldatabases/{database_name}/users") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Create a new mysql user
 #
 # POST /mysqldatabases/{databaseName}/users
 # operationId: CreateMySqlUser
-export def "mysqldatabases-users CreateMySqlUser" [
-  databaseName: string
+export def "mysqldatabases-users create-my-sql" [
+  database_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1772,30 +1842,31 @@ export def "mysqldatabases-users CreateMySqlUser" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --database-name: string # Name of the database.
-  --name: string # User name<br /> User names have to adhere to following rules:<br /><ul><li>Between 2-14 characters.</li><li>Must be a mix of letters and/or digits.</li><li>Must be lower cased.</li><li>Cannot contain spaces.</li></ul>
-  --password: string # The password for the database user.<br /> Passwords have to adhere to following rules:<br /><ul><li>Between 8-20 characters.</li><li>Must be a mix of letters and digits.</li><li>Must contain at least one digit (0-9).</li><li>Must contain at least one letter (a-z).</li><li>Cannot contain spaces.</li><li>Cannot contain characters: * € $ & + } { ' " \ </li></ul>
+  --name: string # User name User names have to adhere to following rules:Between 2-14 characters.Must be a mix of letters and/or digits.Must be lower cased.Cannot contain spaces.
+  --password: string # The password for the database user. Passwords have to adhere to following rules:Between 8-20 characters.Must be a mix of letters and digits.Must contain at least one digit (0-9).Must contain at least one letter (a-z).Cannot contain spaces.Cannot contain characters: * € $ & + } { ' " \
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "database_name" $database_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/mysqldatabases/($databaseName)/users" $qp)
-  let body = {name: $name, password: $password} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({database_name: (encode-path-segment $database_name)} | format pattern "/mysqldatabases/{database_name}/users") $qp)
+  let req_body = {"name": $name, "password": $password} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Delete a mysql user
 #
 # DELETE /mysqldatabases/{databaseName}/users/{userName}
 # operationId: DeleteDatabaseUser
-export def "mysqldatabases-users DeleteDatabaseUser" [
-  databaseName: string
-  userName: string
+export def "mysqldatabases-users delete-database" [
+  database_name: string
+  user_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1803,6 +1874,7 @@ export def "mysqldatabases-users DeleteDatabaseUser" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --database-name: string # Name of the database.
   --user-name: string # Name of the user.
@@ -1810,19 +1882,19 @@ export def "mysqldatabases-users DeleteDatabaseUser" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "database_name" $database_name "scalar") (serialize-qp "user_name" $user_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/mysqldatabases/($databaseName)/users/($userName)" $qp)
+  let full_url = (build-url $base ({database_name: (encode-path-segment $database_name), user_name: (encode-path-segment $user_name)} | format pattern "/mysqldatabases/{database_name}/users/{user_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Change password for mysql user
 #
 # PUT /mysqldatabases/{databaseName}/users/{userName}/password
 # operationId: ChangeDatabaseUserPassword
-export def "mysqldatabases-users-password ChangeDatabaseUserPassword" [
-  databaseName: string
-  userName: string
+export def "mysqldatabases-users-password update-change-database" [
+  database_name: string
+  user_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1830,30 +1902,31 @@ export def "mysqldatabases-users-password ChangeDatabaseUserPassword" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --database-name: string # Name of the database.
   --user-name: string # Name of the user.
-  --password: string # The password for the database user.<br /> Passwords have to adhere to following rules:<br /><ul><li>Between 8-20 characters.</li><li>Must be a mix of letters and digits.</li><li>Must contain at least one digit (0-9).</li><li>Must contain at least one letter (a-z).</li><li>Cannot contain spaces.</li><li>Cannot contain characters: * € $ & + } { ' " \ </li></ul>
+  --password: string # The password for the database user. Passwords have to adhere to following rules:Between 8-20 characters.Must be a mix of letters and digits.Must contain at least one digit (0-9).Must contain at least one letter (a-z).Cannot contain spaces.Cannot contain characters: * € $ & + } { ' " \
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "database_name" $database_name "scalar") (serialize-qp "user_name" $user_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/mysqldatabases/($databaseName)/users/($userName)/password" $qp)
-  let body = {password: $password} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({database_name: (encode-path-segment $database_name), user_name: (encode-path-segment $user_name)} | format pattern "/mysqldatabases/{database_name}/users/{user_name}/password") $qp)
+  let req_body = {"password": $password} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Enable/disable mysql user
 #
 # PUT /mysqldatabases/{databaseName}/users/{userName}/status
 # operationId: ChangeDatabaseUserStatus
-export def "mysqldatabases-users-status ChangeDatabaseUserStatus" [
-  databaseName: string
-  userName: string
+export def "mysqldatabases-users-status update-change-database" [
+  database_name: string
+  user_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1861,6 +1934,7 @@ export def "mysqldatabases-users-status ChangeDatabaseUserStatus" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --database-name: string # Name of the database.
   --user-name: string # Name of the user.
@@ -1870,19 +1944,19 @@ export def "mysqldatabases-users-status ChangeDatabaseUserStatus" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "database_name" $database_name "scalar") (serialize-qp "user_name" $user_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/mysqldatabases/($databaseName)/users/($userName)/status" $qp)
-  let body = {enabled: $enabled} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({database_name: (encode-path-segment $database_name), user_name: (encode-path-segment $user_name)} | format pattern "/mysqldatabases/{database_name}/users/{user_name}/status") $qp)
+  let req_body = {"enabled": $enabled} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Detail of a provisioning job
 #
 # GET /provisioningjobs/{jobId}
 export def "provisioningjobs get" [
-  jobId: string
+  job_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1890,23 +1964,24 @@ export def "provisioningjobs get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --job-id: string # format: uuid
 ]: nothing -> record<completion: record<estimate: string>, id: string, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "job_id" $job_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/provisioningjobs/($jobId)" $qp)
+  let full_url = (build-url $base ({job_id: (encode-path-segment $job_id)} | format pattern "/provisioningjobs/{job_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Overview of service packs
 #
 # GET /servicepacks
 # operationId: Servicepacks
-export def "servicepacks Servicepacks" [
+export def "servicepacks get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1914,6 +1989,7 @@ export def "servicepacks Servicepacks" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<id: int, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1921,14 +1997,14 @@ export def "servicepacks Servicepacks" [
   let full_url = (build-url $base "/servicepacks")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Overview of SSH keys
 #
 # GET /ssh
 # operationId: GetAllSshKeys
-export def "ssh GetAllSshKeys" [
+export def "ssh get-list-keys" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1936,6 +2012,7 @@ export def "ssh GetAllSshKeys" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --skip: int # The number of items to skip in the resultset. (format: int32)
   --take: int # The number of items to return in the resultset. The returned count can be equal or less than this number. (format: int32)
@@ -1946,14 +2023,14 @@ export def "ssh GetAllSshKeys" [
   let full_url = (build-url $base "/ssh" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Overview of SSL certificate requests
 #
 # GET /sslcertificaterequests
 # operationId: GetSslCertificateRequests
-export def "sslcertificaterequests GetSslCertificateRequests" [
+export def "sslcertificaterequests get-ssl-certificate-requests" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1961,6 +2038,7 @@ export def "sslcertificaterequests GetSslCertificateRequests" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --skip: int # The number of items to skip in the resultset. (format: int32)
   --take: int # The number of items to return in the resultset. The returned count can be equal or less than this number. (format: int32)
@@ -1971,7 +2049,7 @@ export def "sslcertificaterequests GetSslCertificateRequests" [
   let full_url = (build-url $base "/sslcertificaterequests" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Add a SSL certificate request
@@ -1979,7 +2057,7 @@ export def "sslcertificaterequests GetSslCertificateRequests" [
 # POST /sslcertificaterequests
 # operationId: AddSslCertificateRequest
 # --additional_validation_attributes item shape: {name?: string, value?: string}
-export def "sslcertificaterequests AddSslCertificateRequest" [
+export def "sslcertificaterequests create-ssl-certificate-request" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1987,28 +2065,29 @@ export def "sslcertificaterequests AddSslCertificateRequest" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --additional-validation-attributes: list # List of additional validation attributes for the certificate when choosing organization or extended validation. <table><tr><th>Name</th><th>Info</th><th>Required</th></tr><tr><td>Firstname</td><td>Firstname of the technical contact</td><td>Yes</td></tr><tr><td>Lastname</td><td>Lastname of the technical contact</td><td>Yes</td></tr><tr><td>Phone</td><td>Phone of the technical contact</td><td>Yes</td></tr><tr><td>EmailAddress</td><td>Email address of the technical contact</td><td>Yes</td></tr><tr><td>Street</td><td>Address street of the organization</td><td>Yes</td></tr><tr><td>Number</td><td>Address house number of the organization</td><td>Yes</td></tr><tr><td>PostalCode</td><td>Address postal code of the organization</td><td>Yes</td></tr><tr><td>VatCountryCode</td><td>VAT country code of the organization, ISO 3166-1 alpha-2 country code</td><td>Yes</td></tr><tr><td>OrganizationNumber</td><td>Business number of the organization</td><td>No</td></tr></table> — item shape: {name?: string, value?: string}
-  --certificate-type: string@certificate-type-completer # The type of the certificate: <ul><li>Standard: Certificate for a single domain.</li><li>Multi domain: Certificate for multiple (sub)domains belonging to the same owner.</li><li>Wildcard: Certificate for all the subdomains.</li></ul>
-  --csr: string # The certificate signing request data.<br /> The certificate signing request subject should contain following attributes:<br /><table><tr><th>Name</th><th>Code</th><th>Format</th></tr><tr><td>CommonName</td><td>CN</td><td>Valid domain name, for example site.be, alias.site.be or *.site.be</td></tr><tr><td>Country</td><td>C</td><td>ISO 3166-1 alpha-2 country code</td></tr><tr><td>State</td><td>ST</td><td></td></tr><tr><td>Locality</td><td>L</td><td></td></tr><tr><td>Organization</td><td>O</td><td></td></tr><tr><td>EmailAddress</td><td>E</td><td>Valid email address</td></tr></table> The certificate signing request should also contain all the additional aliases and domains (SAN's) for the certificate.
-  --validation-level: string@validation-level-completer # The validation level of the certificate: <ul><li>Domain validated: Basic check of the identity of the owner of the domain name.</li><li>Organization validated: Company details are verified and integrated in the certificate.</li><li>Extended validated: A thorough verification of your domain name and company details.</li></ul>
+  --additional-validation-attributes: list # List of additional validation attributes for the certificate when choosing organization or extended validation. NameInfoRequiredFirstnameFirstname of the technical contactYesLastnameLastname of the technical contactYesPhonePhone of the technical contactYesEmailAddressEmail address of the technical contactYesStreetAddress street of the organizationYesNumberAddress house number of the organizationYesPostalCodeAddress postal code of the organizationYesVatCountryCodeVAT country code of the organization, ISO 3166-1 alpha-2 country codeYesOrganizationNumberBusiness number of the organizationNo — item shape: {name?: string, value?: string}
+  --certificate-type: string@certificate-type-completer # The type of the certificate: Standard: Certificate for a single domain.Multi domain: Certificate for multiple (sub)domains belonging to the same owner.Wildcard: Certificate for all the subdomains.
+  --csr: string # The certificate signing request data. The certificate signing request subject should contain following attributes:NameCodeFormatCommonNameCNValid domain name, for example site.be, alias.site.be or *.site.beCountryCISO 3166-1 alpha-2 country codeStateSTLocalityLOrganizationOEmailAddressEValid email address The certificate signing request should also contain all the additional aliases and domains (SAN's) for the certificate.
+  --validation-level: string@validation-level-completer # The validation level of the certificate: Domain validated: Basic check of the identity of the owner of the domain name.Organization validated: Company details are verified and integrated in the certificate.Extended validated: A thorough verification of your domain name and company details.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sslcertificaterequests")
-  let body = {additional_validation_attributes: $additional_validation_attributes, certificate_type: $certificate_type, csr: $csr, validation_level: $validation_level} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"additional_validation_attributes": $additional_validation_attributes, "certificate_type": $certificate_type, "csr": $csr, "validation_level": $validation_level} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Detail of a SSL certificate request
 #
 # GET /sslcertificaterequests/{id}
 # operationId: GetSslCertificateRequest
-export def "sslcertificaterequests GetSslCertificateRequest" [
+export def "sslcertificaterequests get-ssl-certificate-request" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2017,21 +2096,22 @@ export def "sslcertificaterequests GetSslCertificateRequest" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<certificate_type: string, common_name: string, id: int, order_code: string, subject_alt_names: table<type: string, value: string>, validation_level: string, validations: table<auto_validated: bool, cname_validation_content: string, cname_validation_name: string, dns_name: string, email_addresses: list, file_validation_content: list, file_validation_url_http: string, file_validation_url_https: string, type: string>, vendor: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/sslcertificaterequests/($id)")
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/sslcertificaterequests/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Verify the SSL certificate request domain validations
 #
 # PUT /sslcertificaterequests/{id}
 # operationId: VerifySslCertificateRequestDomainValidations
-export def "sslcertificaterequests VerifySslCertificateRequestDomainValidations" [
+export def "sslcertificaterequests verify-ssl-certificate-request-domain-validations" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2040,21 +2120,22 @@ export def "sslcertificaterequests VerifySslCertificateRequestDomainValidations"
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/sslcertificaterequests/($id)")
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/sslcertificaterequests/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Overview of SSL certificates
 #
 # GET /sslcertificates
 # operationId: GetSslCertificates
-export def "sslcertificates GetSslCertificates" [
+export def "sslcertificates get-ssl-certificates" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2062,6 +2143,7 @@ export def "sslcertificates GetSslCertificates" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --skip: int # The number of items to skip in the resultset. (format: int32)
   --take: int # The number of items to return in the resultset. The returned count can be equal or less than this number. (format: int32)
@@ -2072,15 +2154,15 @@ export def "sslcertificates GetSslCertificates" [
   let full_url = (build-url $base "/sslcertificates" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Detail of a SSL certificate
 #
 # GET /sslcertificates/{sha1Fingerprint}
 # operationId: GetSslCertificate
-export def "sslcertificates GetSslCertificate" [
-  sha1Fingerprint: string
+export def "sslcertificates get-ssl-certificate" [
+  sha1_fingerprint: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2088,24 +2170,25 @@ export def "sslcertificates GetSslCertificate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --sha1-fingerprint: string # The SHA-1 fingerprint of the certificate.
 ]: nothing -> record<common_name: string, expires_after: string, sha1_fingerprint: string, subject_alt_names: table<type: string, value: string>, type: string, validation_level: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "sha1_fingerprint" $sha1_fingerprint "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/sslcertificates/($sha1Fingerprint)" $qp)
+  let full_url = (build-url $base ({sha1_fingerprint: (encode-path-segment $sha1_fingerprint)} | format pattern "/sslcertificates/{sha1_fingerprint}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Download a SSL certificate
 #
 # GET /sslcertificates/{sha1Fingerprint}/download
 # operationId: DownloadCertificate
-export def "sslcertificates-download DownloadCertificate" [
-  sha1Fingerprint: string
+export def "sslcertificates-download download-certificate" [
+  sha1_fingerprint: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2113,25 +2196,26 @@ export def "sslcertificates-download DownloadCertificate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --sha1-fingerprint: string # The SHA-1 fingerprint of the certificate.
-  --file-format: string@file-format-completer # The file format of the returned file stream: <ul><li>PFX: Also known as PKCS #12, is a single, password protected certificate archive that contains the entire certificate chain plus the matching private key.</li></ul>
-  --password: string # The password used to protect the certificate file.<br />
+  --file-format: string@file-format-completer # The file format of the returned file stream: PFX: Also known as PKCS #12, is a single, password protected certificate archive that contains the entire certificate chain plus the matching private key.
+  --password: string # The password used to protect the certificate file.
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "sha1_fingerprint" $sha1_fingerprint "scalar") (serialize-qp "file_format" $file_format "scalar") (serialize-qp "password" $password "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/sslcertificates/($sha1Fingerprint)/download" $qp)
+  let full_url = (build-url $base ({sha1_fingerprint: (encode-path-segment $sha1_fingerprint)} | format pattern "/sslcertificates/{sha1_fingerprint}/download") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Overview of windows hostings
 #
 # GET /windowshostings
 # operationId: GetWindowsHostings
-export def "windowshostings GetWindowsHostings" [
+export def "windowshostings get-windows-hostings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2139,6 +2223,7 @@ export def "windowshostings GetWindowsHostings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --skip: int # The number of items to skip in the resultset. (format: int32)
   --take: int # The number of items to return in the resultset. The returned count can be equal or less than this number. (format: int32)
@@ -2149,15 +2234,15 @@ export def "windowshostings GetWindowsHostings" [
   let full_url = (build-url $base "/windowshostings" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Windows hosting detail
 #
 # GET /windowshostings/{domainName}
 # operationId: GetWindowsHosting
-export def "windowshostings GetWindowsHosting" [
-  domainName: string
+export def "windowshostings get-windows-hosting" [
+  domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2165,14 +2250,15 @@ export def "windowshostings GetWindowsHosting" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --domain-name: string # The Windows hosting domain name.
 ]: nothing -> record<actual_size: int, application_pool: record<installed_net_core_runtimes: list<string>, pipeline_mode: string, runtime: string>, domain_name: string, ftp_username: string, ip: string, ip_type: string, max_size: int, mssql_database_names: list<string>, servicepack_id: int, sites: table<bindings: list, name: string, path: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "domain_name" $domain_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/windowshostings/($domainName)" $qp)
+  let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name)} | format pattern "/windowshostings/{domain_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }

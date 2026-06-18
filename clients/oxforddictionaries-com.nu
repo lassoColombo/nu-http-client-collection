@@ -17,21 +17,32 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 }
 
 # Serialize a single query parameter based on collection style
+# Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
+# ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = ($name | url encode)
+  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
-  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
-    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
-    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
+    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
+    _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
+}
+
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Build URL from base, path, and optional query string
@@ -43,7 +54,7 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
@@ -52,28 +63,28 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
     "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "put" => { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "patch" => { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
   if ($method in ["head" "options"]) { return $resp }
-  if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
+  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
 def base-url-completer [] { ["https://od-api-demo.oxforddictionaries.com:443/api/v1"] }
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
-def sourceLanguage-completer [] { ["de" "en" "es" "gu" "hi" "id" "lv" "ms" "nso" "pt" "ro" "sw" "ta" "tn" "ur" "zu"] }
-def targetLanguage-completer [] { ["en" "es" "hi" "id" "lv" "ms" "nso" "ro" "sw" "tn" "ur" "zu"] }
+def source-language-completer [] { ["de" "en" "es" "gu" "hi" "id" "lv" "ms" "nso" "pt" "ro" "sw" "ta" "tn" "ur" "zu"] }
+def target-language-completer [] { ["en" "es" "hi" "id" "lv" "ms" "nso" "ro" "sw" "tn" "ur" "zu"] }
 def prefix-completer [] { ["false" "true"] }
 def accept-completer [] { ["application/json" "text/csv"] }
 def exact-completer [] { ["false" "true"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "domains get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -107,18 +118,19 @@ export def "domains get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --app-id: string # App ID Authentication Parameter
   --app-key: string # App Key Authentication Parameter
 ]: nothing -> record<metadata: record, results: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/domains/($source_domains_language)/($target_domains_language)")
-  let extra_headers = {"app_id": $app_id, "app_key": $app_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({source_domains_language: (encode-path-segment $source_domains_language), target_domains_language: (encode-path-segment $target_domains_language)} | format pattern "/domains/{source_domains_language}/{target_domains_language}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"app_id": $app_id, "app_key": $app_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Lists available domains in a monolingual dataset
@@ -133,18 +145,19 @@ export def "domains list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --app-id: string # App ID Authentication Parameter
   --app-key: string # App Key Authentication Parameter
 ]: nothing -> record<metadata: record, results: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/domains/($source_language)")
-  let extra_headers = {"app_id": $app_id, "app_key": $app_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({source_language: (encode-path-segment $source_language)} | format pattern "/domains/{source_language}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"app_id": $app_id, "app_key": $app_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Retrieve corpus sentences for a given word
@@ -161,18 +174,19 @@ export def "entries-sentences get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --app-id: string # App ID Authentication Parameter
   --app-key: string # App Key Authentication Parameter
 ]: nothing -> record<metadata: record, results: table<id: string, language: string, lexicalEntries: list, type: string, word: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/entries/($source_language)/($word_id)/sentences")
-  let extra_headers = {"app_id": $app_id, "app_key": $app_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({source_language: (encode-path-segment $source_language), word_id: (encode-path-segment $word_id)} | format pattern "/entries/{source_language}/{word_id}/sentences"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"app_id": $app_id, "app_key": $app_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Retrieve dictionary information for a given word
@@ -189,18 +203,19 @@ export def "entries list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --app-id: string # App ID Authentication Parameter
   --app-key: string # App Key Authentication Parameter
 ]: nothing -> record<metadata: record, results: table<id: string, language: string, lexicalEntries: list, pronunciations: list, type: string, word: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/entries/($source_lang)/($word_id)")
-  let extra_headers = {"app_id": $app_id, "app_key": $app_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({source_lang: (encode-path-segment $source_lang), word_id: (encode-path-segment $word_id)} | format pattern "/entries/{source_lang}/{word_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"app_id": $app_id, "app_key": $app_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Retrieve words that mean the opposite
@@ -217,18 +232,19 @@ export def "entries-antonyms get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --app-id: string # App ID Authentication Parameter
   --app-key: string # App Key Authentication Parameter
 ]: nothing -> record<metadata: record, results: table<id: string, language: string, lexicalEntries: list, type: string, word: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/entries/($source_lang)/($word_id)/antonyms")
-  let extra_headers = {"app_id": $app_id, "app_key": $app_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({source_lang: (encode-path-segment $source_lang), word_id: (encode-path-segment $word_id)} | format pattern "/entries/{source_lang}/{word_id}/antonyms"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"app_id": $app_id, "app_key": $app_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Specify GB or US dictionary for English entry search
@@ -246,18 +262,19 @@ export def "entries-regions-region get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --app-id: string # App ID Authentication Parameter
   --app-key: string # App Key Authentication Parameter
 ]: nothing -> record<metadata: record, results: table<id: string, language: string, lexicalEntries: list, pronunciations: list, type: string, word: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/entries/($source_lang)/($word_id)/regions=($region)")
-  let extra_headers = {"app_id": $app_id, "app_key": $app_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({source_lang: (encode-path-segment $source_lang), word_id: (encode-path-segment $word_id), region: (encode-path-segment $region)} | format pattern "/entries/{source_lang}/{word_id}/regions={region}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"app_id": $app_id, "app_key": $app_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Retrieve words that are similar
@@ -274,18 +291,19 @@ export def "entries-synonyms get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --app-id: string # App ID Authentication Parameter
   --app-key: string # App Key Authentication Parameter
 ]: nothing -> record<metadata: record, results: table<id: string, language: string, lexicalEntries: list, type: string, word: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/entries/($source_lang)/($word_id)/synonyms")
-  let extra_headers = {"app_id": $app_id, "app_key": $app_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({source_lang: (encode-path-segment $source_lang), word_id: (encode-path-segment $word_id)} | format pattern "/entries/{source_lang}/{word_id}/synonyms"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"app_id": $app_id, "app_key": $app_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Retrieve synonyms and antonyms for a given word
@@ -302,18 +320,19 @@ export def "entries-synonyms-antonyms get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --app-id: string # App ID Authentication Parameter
   --app-key: string # App Key Authentication Parameter
 ]: nothing -> record<metadata: record, results: table<id: string, language: string, lexicalEntries: list, type: string, word: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/entries/($source_lang)/($word_id)/synonyms;antonyms")
-  let extra_headers = {"app_id": $app_id, "app_key": $app_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({source_lang: (encode-path-segment $source_lang), word_id: (encode-path-segment $word_id)} | format pattern "/entries/{source_lang}/{word_id}/synonyms;antonyms"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"app_id": $app_id, "app_key": $app_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Apply filters to response
@@ -330,18 +349,19 @@ export def "entries get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --app-id: string # App ID Authentication Parameter
   --app-key: string # App Key Authentication Parameter
 ]: nothing -> record<metadata: record, results: table<id: string, language: string, lexicalEntries: list, pronunciations: list, type: string, word: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/entries/($source_lang)/($word_id)/($filters)")
-  let extra_headers = {"app_id": $app_id, "app_key": $app_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({source_lang: (encode-path-segment $source_lang), word_id: (encode-path-segment $word_id), filters: (encode-path-segment $filters)} | format pattern "/entries/{source_lang}/{word_id}/{filters}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"app_id": $app_id, "app_key": $app_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Retrieve translation for a given word
@@ -358,18 +378,19 @@ export def "entries-translations-target-translation-language get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --app-id: string # App ID Authentication Parameter
   --app-key: string # App Key Authentication Parameter
 ]: nothing -> record<metadata: record, results: table<id: string, language: string, lexicalEntries: list, pronunciations: list, type: string, word: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/entries/($source_translation_language)/($word_id)/translations=($target_translation_language)")
-  let extra_headers = {"app_id": $app_id, "app_key": $app_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({source_translation_language: (encode-path-segment $source_translation_language), word_id: (encode-path-segment $word_id), target_translation_language: (encode-path-segment $target_translation_language)} | format pattern "/entries/{source_translation_language}/{word_id}/translations={target_translation_language}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"app_id": $app_id, "app_key": $app_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Lists available filters
@@ -383,6 +404,7 @@ export def "filters list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --app-id: string # App ID Authentication Parameter
   --app-key: string # App Key Authentication Parameter
@@ -390,11 +412,11 @@ export def "filters list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/filters")
-  let extra_headers = {"app_id": $app_id, "app_key": $app_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"app_id": $app_id, "app_key": $app_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Lists available filters for specific endpoint
@@ -409,18 +431,19 @@ export def "filters get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --app-id: string # App ID Authentication Parameter
   --app-key: string # App Key Authentication Parameter
 ]: nothing -> record<metadata: record, results: record<entries: list<string>, inflections: list<string>, translations: list<string>, wordlist: list<string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/filters/($endpoint)")
-  let extra_headers = {"app_id": $app_id, "app_key": $app_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({endpoint: (encode-path-segment $endpoint)} | format pattern "/filters/{endpoint}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"app_id": $app_id, "app_key": $app_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Lists available grammatical features in a dataset
@@ -435,18 +458,19 @@ export def "grammatical-features get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --app-id: string # App ID Authentication Parameter
   --app-key: string # App Key Authentication Parameter
 ]: nothing -> record<metadata: record, results: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/grammaticalFeatures/($source_language)")
-  let extra_headers = {"app_id": $app_id, "app_key": $app_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({source_language: (encode-path-segment $source_language)} | format pattern "/grammaticalFeatures/{source_language}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"app_id": $app_id, "app_key": $app_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Check a word exists in the dictionary and retrieve its root form
@@ -454,8 +478,8 @@ export def "grammatical-features get" [
 # GET /inflections/{source_lang}/{word_id}/{filters}
 export def "inflections get" [
   source_lang: string
-  filters: string
   word_id: string
+  filters: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -463,18 +487,19 @@ export def "inflections get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --app-id: string # App ID Authentication Parameter
   --app-key: string # App Key Authentication Parameter
 ]: nothing -> record<metadata: record, results: table<id: string, language: string, lexicalEntries: list, type: string, word: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/inflections/($source_lang)/($word_id)/($filters)")
-  let extra_headers = {"app_id": $app_id, "app_key": $app_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({source_lang: (encode-path-segment $source_lang), word_id: (encode-path-segment $word_id), filters: (encode-path-segment $filters)} | format pattern "/inflections/{source_lang}/{word_id}/{filters}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"app_id": $app_id, "app_key": $app_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Lists available dictionaries
@@ -488,21 +513,22 @@ export def "languages get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --sourceLanguage: string@sourceLanguage-completer # IANA language code. If provided output will be filtered by sourceLanguage.
-  --targetLanguage: string@targetLanguage-completer # IANA language code. If provided output will be filtered by sourceLanguage.
+  --source-language: string@source-language-completer # IANA language code. If provided output will be filtered by sourceLanguage.
+  --target-language: string@target-language-completer # IANA language code. If provided output will be filtered by sourceLanguage.
   --app-id: string # App ID Authentication Parameter
   --app-key: string # App Key Authentication Parameter
 ]: nothing -> record<metadata: record, results: table<region: string, source: string, sourceLanguage: record, targetLanguage: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "sourceLanguage" $sourceLanguage "scalar") (serialize-qp "targetLanguage" $targetLanguage "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "sourceLanguage" $source_language "scalar") (serialize-qp "targetLanguage" $target_language "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/languages" $qp)
-  let extra_headers = {"app_id": $app_id, "app_key": $app_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"app_id": $app_id, "app_key": $app_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Lists available lexical categories in a dataset
@@ -517,18 +543,19 @@ export def "lexicalcategories get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --app-id: string # App ID Authentication Parameter
   --app-key: string # App Key Authentication Parameter
 ]: nothing -> record<metadata: record, results: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/lexicalcategories/($language)")
-  let extra_headers = {"app_id": $app_id, "app_key": $app_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({language: (encode-path-segment $language)} | format pattern "/lexicalcategories/{language}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"app_id": $app_id, "app_key": $app_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Lists available regions in a monolingual dataset
@@ -543,21 +570,22 @@ export def "regions get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --app-id: string # App ID Authentication Parameter
   --app-key: string # App Key Authentication Parameter
 ]: nothing -> record<metadata: record, results: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/regions/($source_language)")
-  let extra_headers = {"app_id": $app_id, "app_key": $app_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({source_language: (encode-path-segment $source_language)} | format pattern "/regions/{source_language}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"app_id": $app_id, "app_key": $app_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
-# Lists available registers in a  monolingual dataset
+# Lists available registers in a monolingual dataset
 #
 # GET /registers/{source_language}
 export def "registers list" [
@@ -569,18 +597,19 @@ export def "registers list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --app-id: string # App ID Authentication Parameter
   --app-key: string # App Key Authentication Parameter
 ]: nothing -> record<metadata: record, results: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/registers/($source_language)")
-  let extra_headers = {"app_id": $app_id, "app_key": $app_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({source_language: (encode-path-segment $source_language)} | format pattern "/registers/{source_language}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"app_id": $app_id, "app_key": $app_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Lists available registers in a bilingual dataset
@@ -596,18 +625,19 @@ export def "registers get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --app-id: string # App ID Authentication Parameter
   --app-key: string # App Key Authentication Parameter
 ]: nothing -> record<metadata: record, results: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/registers/($source_register_language)/($target_register_language)")
-  let extra_headers = {"app_id": $app_id, "app_key": $app_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({source_register_language: (encode-path-segment $source_register_language), target_register_language: (encode-path-segment $target_register_language)} | format pattern "/registers/{source_register_language}/{target_register_language}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"app_id": $app_id, "app_key": $app_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Retrieve possible matches to input
@@ -623,6 +653,7 @@ export def "search get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --q: string # Search string (default: eye)
   --prefix: oneof<nothing, bool> # Set prefix to true if you'd like to get results only starting with search string. (default: false)
@@ -635,12 +666,12 @@ export def "search get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "prefix" $prefix "scalar") (serialize-qp "regions" $regions "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/search/($source_lang)" $qp)
-  let extra_headers = {"app_id": $app_id, "app_key": $app_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({source_lang: (encode-path-segment $source_lang)} | format pattern "/search/{source_lang}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"app_id": $app_id, "app_key": $app_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Retrieve possible translation matches to input
@@ -657,6 +688,7 @@ export def "search-translations-target-search-language get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --q: string # Search string. (default: eye)
   --prefix: oneof<nothing, bool> # Set prefix to true if you'd like to get results only starting with search string. (default: false)
@@ -669,12 +701,12 @@ export def "search-translations-target-search-language get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "prefix" $prefix "scalar") (serialize-qp "regions" $regions "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/search/($source_search_language)/translations=($target_search_language)" $qp)
-  let extra_headers = {"app_id": $app_id, "app_key": $app_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({source_search_language: (encode-path-segment $source_search_language), target_search_language: (encode-path-segment $target_search_language)} | format pattern "/search/{source_search_language}/translations={target_search_language}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"app_id": $app_id, "app_key": $app_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Retrieve the frequency of ngrams (1-4) derived from a corpus
@@ -691,16 +723,17 @@ export def "stats-frequency-ngrams get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --tokens: string # List of tokens to filter. The tokens are separated by spaces, the list items are separated by comma (e.g., for bigrams (n=2) tokens=this is,this was, this will) (default: a word)
   --contains: string # Find ngrams containing the given token(s). Use comma or space as token separators; the order of tokens is irrelevant.
   --punctuation: string # Flag specifying whether to lookup ngrams that include punctuation or not (possible values are "true" and "false"; default is "false")
   --format: string # Option specifying whether tokens should be returned as a single string (option "google") or as a list of strings (option "oup") (default: oup)
-  --minFrequency: int # Restrict the query to entries with frequency of at least `minFrequency` (format: int64)
-  --maxFrequency: int # Restrict the query to entries with frequency of at most `maxFrequency` (format: int64)
-  --minDocumentFrequency: int # Restrict the query to entries that appear in at least `minDocumentFrequency` documents (format: int64)
-  --maxDocumentFrequency: int # Restrict the query to entries that appera in at most `maxDocumentFrequency` documents (format: int64)
+  --min-frequency: int # Restrict the query to entries with frequency of at least `minFrequency` (format: int64)
+  --max-frequency: int # Restrict the query to entries with frequency of at most `maxFrequency` (format: int64)
+  --min-document-frequency: int # Restrict the query to entries that appear in at least `minDocumentFrequency` documents (format: int64)
+  --max-document-frequency: int # Restrict the query to entries that appera in at most `maxDocumentFrequency` documents (format: int64)
   --collate: string # collate the results by wordform, trueCase, lemma, lexicalCategory. Multiple values can be separated by commas (e.g., collate=trueCase,lemma,lexicalCategory).
   --qp-sort: string # sort the resulting list by wordform, trueCase, lemma, lexicalCategory, frequency, normalizedFrequency. Descending order is achieved by prepending the value with the minus sign ('-'). Multiple values can be separated by commas (e.g., sort=lexicalCategory,-frequency)
   --offset: int # pagination - results offset (format: int64, default: 0)
@@ -710,13 +743,13 @@ export def "stats-frequency-ngrams get" [
 ]: nothing -> record<metadata: record, results: table<frequency: int, tokens: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "tokens" $tokens "scalar") (serialize-qp "contains" $contains "scalar") (serialize-qp "punctuation" $punctuation "scalar") (serialize-qp "format" $format "scalar") (serialize-qp "minFrequency" $minFrequency "scalar") (serialize-qp "maxFrequency" $maxFrequency "scalar") (serialize-qp "minDocumentFrequency" $minDocumentFrequency "scalar") (serialize-qp "maxDocumentFrequency" $maxDocumentFrequency "scalar") (serialize-qp "collate" $collate "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/stats/frequency/ngrams/($source_lang)/($corpus)/($ngram_size)/" $qp)
-  let extra_headers = {"app_id": $app_id, "app_key": $app_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let qp = [(serialize-qp "tokens" $tokens "scalar") (serialize-qp "contains" $contains "scalar") (serialize-qp "punctuation" $punctuation "scalar") (serialize-qp "format" $format "scalar") (serialize-qp "minFrequency" $min_frequency "scalar") (serialize-qp "maxFrequency" $max_frequency "scalar") (serialize-qp "minDocumentFrequency" $min_document_frequency "scalar") (serialize-qp "maxDocumentFrequency" $max_document_frequency "scalar") (serialize-qp "collate" $collate "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({source_lang: (encode-path-segment $source_lang), corpus: (encode-path-segment $corpus), ngram_size: (encode-path-segment $ngram_size)} | format pattern "/stats/frequency/ngrams/{source_lang}/{corpus}/{ngram_size}/") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"app_id": $app_id, "app_key": $app_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Retrieve the frequency of a word derived from a corpus.
@@ -731,25 +764,26 @@ export def "stats-frequency-word get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --corpus: string # For corpora other than 'nmc' (New Monitor Corpus) please contact api@oxforddictionaries.com (default: nmc)
   --wordform: string # The written form of the word to look up (preserving case e.g., Books vs books)
-  --trueCase: string # The written form of the word to look up with normalised case (Books --> books)
+  --true-case: string # The written form of the word to look up with normalised case (Books --> books)
   --lemma: string # The lemma of the word to look up (e.g., Book, booked, books all have the lemma "book") (default: test)
-  --lexicalCategory: string # The lexical category of the word(s) to look up (e.g., noun or verb)
+  --lexical-category: string # The lexical category of the word(s) to look up (e.g., noun or verb)
   --app-id: string # App ID Authentication Parameter
   --app-key: string # App Key Authentication Parameter
 ]: nothing -> record<metadata: record, result: record<frequency: int, lemma: string, lexicalCategory: string, matchCount: int, normalizedFrequency: int, trueCase: string, wordform: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "corpus" $corpus "scalar") (serialize-qp "wordform" $wordform "scalar") (serialize-qp "trueCase" $trueCase "scalar") (serialize-qp "lemma" $lemma "scalar") (serialize-qp "lexicalCategory" $lexicalCategory "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/stats/frequency/word/($source_lang)/" $qp)
-  let extra_headers = {"app_id": $app_id, "app_key": $app_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let qp = [(serialize-qp "corpus" $corpus "scalar") (serialize-qp "wordform" $wordform "scalar") (serialize-qp "trueCase" $true_case "scalar") (serialize-qp "lemma" $lemma "scalar") (serialize-qp "lexicalCategory" $lexical_category "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({source_lang: (encode-path-segment $source_lang)} | format pattern "/stats/frequency/word/{source_lang}/") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"app_id": $app_id, "app_key": $app_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Retrieve a list of frequencies of a word/words derived from a corpus.
@@ -764,20 +798,21 @@ export def "stats-frequency-words get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --corpus: string # For corpora other than 'nmc' (New Monitor Corpus) please contact api@oxforddictionaries.com (default: nmc)
   --wordform: string # The written form of the word to look up (preserving case e.g., Book vs book)
-  --trueCase: string # The written form of the word to look up with normalised case (Books --> books)
+  --true-case: string # The written form of the word to look up with normalised case (Books --> books)
   --lemma: string # The lemma of the word to look up (e.g., Book, booked, books all have the lemma "book") (default: test)
-  --lexicalCategory: string # The lexical category of the word(s) to look up (e.g., adjective or noun)
-  --grammaticalFeatures: string # The grammatical features of the word(s) to look up entered as a list of k:v (e.g., degree_type:comparative)
+  --lexical-category: string # The lexical category of the word(s) to look up (e.g., adjective or noun)
+  --grammatical-features: string # The grammatical features of the word(s) to look up entered as a list of k:v (e.g., degree_type:comparative)
   --qp-sort: string # sort the resulting list by wordform, trueCase, lemma, lexicalCategory, frequency, normalizedFrequency. Descending order is achieved by prepending the value with the minus sign ('-'). Multiple values can be separated by commas (e.g., sort=lexicalCategory,-frequency)
   --collate: string # collate the results by wordform, trueCase, lemma, lexicalCategory. Multiple values can be separated by commas (e.g., collate=trueCase,lemma,lexicalCategory).
-  --minFrequency: int # Restrict the query to entries with frequency of at least `minFrequency` (format: int64)
-  --maxFrequency: int # Restrict the query to entries with frequency of at most `maxFrequency` (format: int64)
-  --minNormalizedFrequency: float # Restrict the query to entries with frequency of at least `minNormalizedFrequency` (format: float)
-  --maxNormalizedFrequency: float # Restrict the query to entries with frequency of at most `maxNormalizedFrequency` (format: float)
+  --min-frequency: int # Restrict the query to entries with frequency of at least `minFrequency` (format: int64)
+  --max-frequency: int # Restrict the query to entries with frequency of at most `maxFrequency` (format: int64)
+  --min-normalized-frequency: float # Restrict the query to entries with frequency of at least `minNormalizedFrequency` (format: float)
+  --max-normalized-frequency: float # Restrict the query to entries with frequency of at most `maxNormalizedFrequency` (format: float)
   --offset: int # pagination - results offset (format: int64, default: 0)
   --limit: int # pagination - results limit (format: int64, default: 100)
   --app-id: string # App ID Authentication Parameter
@@ -785,13 +820,13 @@ export def "stats-frequency-words get" [
 ]: nothing -> record<metadata: record, results: table<frequency: int, lemma: string, lexicalCategory: string, normalizedFrequency: int, trueCase: string, wordform: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "corpus" $corpus "scalar") (serialize-qp "wordform" $wordform "scalar") (serialize-qp "trueCase" $trueCase "scalar") (serialize-qp "lemma" $lemma "scalar") (serialize-qp "lexicalCategory" $lexicalCategory "scalar") (serialize-qp "grammaticalFeatures" $grammaticalFeatures "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "collate" $collate "scalar") (serialize-qp "minFrequency" $minFrequency "scalar") (serialize-qp "maxFrequency" $maxFrequency "scalar") (serialize-qp "minNormalizedFrequency" $minNormalizedFrequency "scalar") (serialize-qp "maxNormalizedFrequency" $maxNormalizedFrequency "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/stats/frequency/words/($source_lang)/" $qp)
-  let extra_headers = {"app_id": $app_id, "app_key": $app_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let qp = [(serialize-qp "corpus" $corpus "scalar") (serialize-qp "wordform" $wordform "scalar") (serialize-qp "trueCase" $true_case "scalar") (serialize-qp "lemma" $lemma "scalar") (serialize-qp "lexicalCategory" $lexical_category "scalar") (serialize-qp "grammaticalFeatures" $grammatical_features "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "collate" $collate "scalar") (serialize-qp "minFrequency" $min_frequency "scalar") (serialize-qp "maxFrequency" $max_frequency "scalar") (serialize-qp "minNormalizedFrequency" $min_normalized_frequency "scalar") (serialize-qp "maxNormalizedFrequency" $max_normalized_frequency "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({source_lang: (encode-path-segment $source_lang)} | format pattern "/stats/frequency/words/{source_lang}/") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"app_id": $app_id, "app_key": $app_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Retrieve list of words for category with advanced options
@@ -807,6 +842,7 @@ export def "wordlist get-by-source_lang-filters_advanced" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --exclude: string # Semicolon separated list of parameters-value pairs (same as filters). Excludes headwords that have any senses in specified exclusion attributes (lexical categories, domains, etc.) from results.
   --exclude-senses: string # Semicolon separated list of parameters-value pairs (same as filters). Excludes only those senses of a particular headword that match specified exclusion attributes (lexical categories, domains, etc.) from results but includes the headword if it has other permitted senses.
@@ -822,12 +858,12 @@ export def "wordlist get-by-source_lang-filters_advanced" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "exclude" $exclude "scalar") (serialize-qp "exclude_senses" $exclude_senses "scalar") (serialize-qp "exclude_prime_senses" $exclude_prime_senses "scalar") (serialize-qp "word_length" $word_length "scalar") (serialize-qp "prefix" $prefix "scalar") (serialize-qp "exact" $exact "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/wordlist/($source_lang)/($filters_advanced)" $qp)
-  let extra_headers = {"app_id": $app_id, "app_key": $app_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({source_lang: (encode-path-segment $source_lang), filters_advanced: (encode-path-segment $filters_advanced)} | format pattern "/wordlist/{source_lang}/{filters_advanced}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"app_id": $app_id, "app_key": $app_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Retrieve a list of words in a category
@@ -843,6 +879,7 @@ export def "wordlist get-by-source_lang-filters_basic" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: string # Limit the number of results per response. Default and maximum limit is 5000.
   --offset: string # Offset the start number of the result
@@ -852,10 +889,10 @@ export def "wordlist get-by-source_lang-filters_basic" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/wordlist/($source_lang)/($filters_basic)" $qp)
-  let extra_headers = {"app_id": $app_id, "app_key": $app_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({source_lang: (encode-path-segment $source_lang), filters_basic: (encode-path-segment $filters_basic)} | format pattern "/wordlist/{source_lang}/{filters_basic}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  let extra_headers = {"app_id": $app_id, "app_key": $app_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
